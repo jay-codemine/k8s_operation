@@ -1,0 +1,76 @@
+Server:
+  RunMode: release
+  Port: 8080
+  ReadTimeout: 3600
+  WriteTimeout: 3600
+  IdleTimeout: 300
+  ShutdownTimeout: 300
+
+Database:
+  DBType: mysql
+  Username: root
+  Password: 123456
+  Host: localhost
+  Port: 3306
+  DBName: k8s-platform
+  Charset: utf8
+  ParseTime: true
+  MaxIdleConns: 5
+  MaxOpenConns: 30
+  MaxLifeSeconds: 300
+
+Cache:
+  Type: redis
+  Name: sk_sid
+  Address: 127.0.0.1:6379
+  Username: "root"
+  Password: "123456"
+  MaxConnect: 10
+  Network: tcp
+  Secret: "k8smana"
+
+App:
+  LogLevel: debug
+  TIMEZONE: "Asia/Shanghai"
+  LogType: single
+  LogFileName: storage/logs/app.log         # 系统日志
+  LogMaxSize: 1
+  LogMaxBackup: 3
+  LogMaxAge: 30
+  LogCompress: true
+  BusinessLogFileName: storage/logs/biz.log # 业务日志（新增）
+  MirrorBusinessToSystem: false             # 是否将业务日志镜像到系统日志（新增）
+  JWTMaxRefreshTime: 86400
+  JWTSigningKey: eoNB0%bv5M7995F1
+  JWTExpireTime: 12000
+  AppName: "k8operation"
+  GlobalKubeConfigPath: configs/k8s.yaml
+  DefaultClusterID: 1       # 可选，如走 DB 的默认集群
+  AutoInitK8s: true          # 可选，是否开机自动初始化
+
+PodLog:
+  EnableStreaming: false   # true=实时跟随（流式）；false=一次性字符串
+  TailDefault: 500         # 默认返回最后 N 行
+  TailMax: 5000            # N 的上限，防止一次拉太多
+  LimitBytes: 2097152      # 服务器端返回体上限（2MB），再保险
+  Timestamps: false        # 是否给每行带时间戳（按需）
+  Previous: false          # 是否读取上一次崩溃日志（按需）
+
+
+ErrorCode:
+  AllowOverride: true   # 是否允许错误码覆盖（true: 开发模式；false: 生产模式）
+
+ClusterClient:
+  TTL: 30m
+  TTLJitter: 3m
+
+
+Pod:
+  eviction:
+    default_grace_seconds: 30
+
+Node:
+  drain:
+    max_grace_seconds: 300
+    ignore_daemon_sets: true
+    delete_empty_dir: false

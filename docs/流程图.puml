@@ -1,0 +1,19 @@
+@startuml
+actor Client as C
+participant "Handler" as H
+participant "Services" as S
+participant "Dao" as D
+participant "Model(User)" as M
+database "DB" as DB
+
+C -> H: POST /users {username, password}
+H -> S: UserCreate(req)
+S -> D: UserCreate(name, password)
+D -> M: user.Create(db)
+M -> DB: INSERT INTO users ...
+DB --> M: result
+M --> D: error/nil
+D --> S: error/nil
+S --> H: error/nil
+H --> C: HTTP 200 {message: "用户创建成功"}
+@enduml

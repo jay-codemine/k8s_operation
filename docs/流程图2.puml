@@ -1,0 +1,45 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+package "HTTP Layer" {
+  class Handler {
+    +UserCreate(c : gin.Context)
+  }
+}
+
+package "Service Layer" {
+  class Services {
+    +UserCreate(req : requests.UserCreateRequest) : error
+    -ctx : context.Context
+    -dao : Dao
+  }
+}
+
+package "DAO Layer" {
+  class Dao {
+    +UserCreate(name : string, password : string) : error
+    -db : *gorm.DB
+  }
+}
+
+package "Model Layer" {
+  class User {
+    +Create(db : *gorm.DB) : error
+    -Username : string
+    -Password : string
+    -Base : *Base
+  }
+
+  class Base {
+    -CreatedAt  : uint32
+    -ModifiedAt : uint32
+    -IsDel      : uint8
+  }
+}
+
+Handler --> Services : calls
+Services --> Dao     : uses
+Dao --> User         : builds & calls
+User --> Base        : composition
+
+@enduml
