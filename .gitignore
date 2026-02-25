@@ -1,0 +1,20 @@
+# frontend deps
+node_modules/
+
+# build outputs
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.stackdump
+
+# logs
+*.log
+
+# local configs
+configs/*
+!configs/*.example
+storage/logs/*

@@ -1,0 +1,474 @@
+/**
+ * K8s Operation Platform - UI Enhancement Styles
+ * Version: 2.0 (Professional Edition)
+ * Date: 2026-02-07
+ * 
+ * 本文件包含专业化 UI 增强样式，可通过移除此文件导入快速回滚到 v1.0
+ */
+
+/* ========================================
+   全局变量 - 大厂色彩系统
+======================================== */
+:root {
+  /* 主色调 - 科技蓝 */
+  --primary-start: #4facfe;
+  --primary-end: #00f2fe;
+  --primary-gradient: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+  
+  /* 成功色 - 渐变绿 */
+  --success-start: #84fab0;
+  --success-end: #8fd3f4;
+  --success-gradient: linear-gradient(135deg, var(--success-start) 0%, var(--success-end) 100%);
+  
+  /* 警告色 - 渐变橙 */
+  --warning-start: #ffa751;
+  --warning-end: #ffe259;
+  --warning-gradient: linear-gradient(135deg, var(--warning-start) 0%, var(--warning-end) 100%);
+  
+  /* 危险色 - 渐变红 */
+  --danger-start: #fa709a;
+  --danger-end: #fee140;
+  --danger-gradient: linear-gradient(135deg, var(--danger-start) 0%, var(--danger-end) 100%);
+  
+  /* 中性色 */
+  --gray-start: #667eea;
+  --gray-end: #764ba2;
+  
+  /* 阴影系统 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1);
+  
+  /* 色彩阴影 */
+  --shadow-primary: 0 4px 12px rgba(79, 172, 254, 0.4);
+  --shadow-success: 0 4px 12px rgba(132, 250, 176, 0.4);
+  --shadow-warning: 0 4px 12px rgba(255, 167, 81, 0.4);
+  --shadow-danger: 0 4px 12px rgba(250, 112, 154, 0.4);
+}
+
+/* ========================================
+   按钮增强
+======================================== */
+.btn-primary {
+  background: var(--primary-gradient) !important;
+  border: none !important;
+  box-shadow: var(--shadow-primary) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(79, 172, 254, 0.5) !important;
+}
+
+.btn-primary:active {
+  transform: translateY(0) !important;
+}
+
+.btn-secondary {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--primary-start) !important;
+  color: var(--primary-start) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.btn.danger,
+.action-btn.danger {
+  background: var(--danger-gradient) !important;
+  border: none !important;
+  color: white !important;
+  box-shadow: var(--shadow-danger) !important;
+}
+
+.btn.danger:hover:not(:disabled),
+.action-btn.danger:hover:not(:disabled) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(250, 112, 154, 0.5) !important;
+}
+
+/* ========================================
+   状态指示器增强
+======================================== */
+.status-indicator {
+  position: relative;
+  font-weight: 600 !important;
+  padding: 4px 12px !important;
+  border-radius: 12px !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all 0.3s ease !important;
+}
+
+.status-indicator::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-50%) scale(1.2);
+  }
+}
+
+.status-indicator.running {
+  background: var(--success-gradient) !important;
+  color: white !important;
+  padding-left: 20px !important;
+}
+
+.status-indicator.updating {
+  background: var(--warning-gradient) !important;
+  color: white !important;
+  padding-left: 20px !important;
+}
+
+.status-indicator.stopped {
+  background: linear-gradient(135deg, #a8b2d1 0%, #c0c8e0 100%) !important;
+  color: white !important;
+  padding-left: 20px !important;
+}
+
+.status-indicator.failed,
+.status-indicator.error {
+  background: var(--danger-gradient) !important;
+  color: white !important;
+  padding-left: 20px !important;
+}
+
+.status-indicator.pending {
+  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%) !important;
+  color: #2d3436 !important;
+  padding-left: 20px !important;
+}
+
+/* ========================================
+   卡片增强
+======================================== */
+.resource-card {
+  box-shadow: var(--shadow-md) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.resource-card:hover {
+  transform: translateY(-4px) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.card-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 50%, #f8f9fa 100%) !important;
+  border-bottom: 2px solid rgba(79, 172, 254, 0.1) !important;
+}
+
+/* ========================================
+   徽章增强
+======================================== */
+.namespace-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  padding: 3px 10px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+.namespace-badge:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 6px rgba(102, 126, 234, 0.4) !important;
+}
+
+.type-badge {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all 0.2s ease !important;
+}
+
+.type-badge:hover {
+  transform: translateY(-1px) !important;
+}
+
+/* ========================================
+   表格增强
+======================================== */
+.resource-table thead {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.resource-table thead th {
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 11px !important;
+  letter-spacing: 1px !important;
+  color: #495057 !important;
+  border-bottom: 2px solid rgba(79, 172, 254, 0.2) !important;
+}
+
+.resource-table tbody tr {
+  transition: all 0.2s ease !important;
+}
+
+.resource-table tbody tr:hover {
+  background: rgba(79, 172, 254, 0.03) !important;
+  box-shadow: inset 0 0 0 1px rgba(79, 172, 254, 0.1) !important;
+}
+
+/* ========================================
+   分页增强
+======================================== */
+.pagination-wrapper {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+  box-shadow: var(--shadow-md) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.pagination-btn.page-number.active {
+  background: var(--primary-gradient) !important;
+  border: none !important;
+  box-shadow: var(--shadow-primary) !important;
+  transform: scale(1.1) !important;
+}
+
+.pagination-btn:hover:not(:disabled):not(.active) {
+  background: rgba(79, 172, 254, 0.1) !important;
+  border-color: var(--primary-start) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ========================================
+   输入框增强
+======================================== */
+.search-box input,
+.page-jump-input,
+.page-size-select {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 2px solid #e5e7eb !important;
+}
+
+.search-box input:focus,
+.page-jump-input:focus,
+.page-size-select:focus {
+  border-color: var(--primary-start) !important;
+  box-shadow: 0 0 0 4px rgba(79, 172, 254, 0.1) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ========================================
+   模态框增强
+======================================== */
+.modal-overlay {
+  backdrop-filter: blur(8px) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+  animation: fadeIn 0.3s ease !important;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  box-shadow: var(--shadow-xl) !important;
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+  border-bottom: 2px solid rgba(79, 172, 254, 0.1) !important;
+}
+
+/* ========================================
+   批量操作栏增强
+======================================== */
+.batch-action-bar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  box-shadow: var(--shadow-lg) !important;
+  animation: slideDown 0.3s ease !important;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.batch-btn {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  backdrop-filter: blur(10px) !important;
+  transition: all 0.3s ease !important;
+}
+
+.batch-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ========================================
+   加载动画增强
+======================================== */
+.loading-spinner {
+  border: 3px solid rgba(79, 172, 254, 0.1) !important;
+  border-top-color: var(--primary-start) !important;
+  animation: spin 0.8s linear infinite !important;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   操作按钮图标增强（替代 Emoji）
+======================================== */
+.action-btn.icon-only {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.action-btn.icon-only:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.1) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ========================================
+   统计栏增强
+======================================== */
+.stats-bar {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+  box-shadow: var(--shadow-sm) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.stat-item {
+  transition: all 0.2s ease !important;
+}
+
+.stat-item:hover {
+  transform: translateY(-2px) !important;
+}
+
+.stat-value {
+  font-weight: 700 !important;
+  color: var(--primary-start) !important;
+}
+
+/* ========================================
+   自动刷新指示器增强
+======================================== */
+.refresh-indicator {
+  color: var(--success-start) !important;
+  animation: blink 1.5s infinite !important;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ========================================
+   视图切换按钮增强
+======================================== */
+.view-toggle .btn-view.active {
+  background: var(--primary-gradient) !important;
+  color: white !important;
+  box-shadow: var(--shadow-primary) !important;
+  transform: scale(1.1) !important;
+}
+
+/* ========================================
+   副本数控制增强
+======================================== */
+.replica-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.replica-btn:hover:not(:disabled) {
+  background: var(--primary-gradient) !important;
+  color: white !important;
+  border: none !important;
+  transform: scale(1.2) !important;
+  box-shadow: var(--shadow-primary) !important;
+}
+
+/* ========================================
+   标签标签增强
+======================================== */
+.label-tag {
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all 0.2s ease !important;
+}
+
+.label-tag:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ========================================
+   响应式优化
+======================================== */
+@media (max-width: 768px) {
+  .modal-content {
+    max-width: 95% !important;
+  }
+  
+  .batch-action-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+}
