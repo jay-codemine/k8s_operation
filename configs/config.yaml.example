@@ -74,3 +74,11 @@ Node:
     max_grace_seconds: 300
     ignore_daemon_sets: true
     delete_empty_dir: false
+
+# Jenkins 配置（平台驱动 CI/CD）
+Jenkins:
+  URL: "http://jenkins.example.com:8080"    # Jenkins 服务器地址
+  Username: "admin"                          # Jenkins 用户名
+  APIToken: "your-jenkins-api-token"         # Jenkins API Token（在用户设置中生成）
+  TriggerTimeout: 60                         # 触发构建等待超时(秒)
+  CallbackURL: "http://platform.example.com:8080/api/v1/k8s/cicd/pipeline/callback"  # 平台回调地址

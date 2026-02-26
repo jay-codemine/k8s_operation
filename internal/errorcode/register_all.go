@@ -24,5 +24,6 @@ func Register() {
 	registerPVC()
 	// CICD
 	register_cicd()
+	register_pipeline()
 	// 后续可以继续扩展
 }

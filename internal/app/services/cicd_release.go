@@ -303,9 +303,76 @@ func (s *Services) CicdTasksByRelease(ctx context.Context, releaseID int64) ([]*
 }
 
 // CicdBuildCallback 处理 Jenkins 构建回调
+// 当 Jenkins 构建完成后，会调用此接口通知后端，后端根据构建结果决定是否触发发布
 func (s *Services) CicdBuildCallback(ctx context.Context, req *requests.CicdBuildCallbackRequest) error {
-	// TODO: 根据 build_id 关联到 release，触发发布流程
-	// 这里需要根据你的实际业务逻辑补充
+	// 1. 根据 build_id 查找关联的发布单
+	rel, err := s.dao.CicdReleaseGetByBuildID(ctx, req.BuildID)
+	if err != nil {
+		// 如果没有关联的发布单，说明是独立的 CI 构建，记录日志即可
+		return fmt.Errorf("未找到关联的发布单: build_id=%d", req.BuildID)
+	}
+
+	// 2. 检查构建状态
+	if req.Status != "SUCCESS" {
+		// 构建失败，更新发布单状态
+		_, _ = s.dao.CicdReleaseUpdateStatusCAS(
+			ctx,
+			rel.ID,
+			[]string{models.CicdReleaseStatusPending, models.CicdReleaseStatusQueued},
+			models.CicdReleaseStatusFailed,
+			fmt.Sprintf("Jenkins构建失败: %s", req.Message),
+		)
+		return fmt.Errorf("构建失败: %s", req.Message)
+	}
+
+	// 3. 更新镜像信息（如果回调中包含新镜像信息）
+	if req.ImageRepo != "" && req.ImageTag != "" {
+		if err := s.dao.CicdReleaseUpdateImage(ctx, rel.ID, req.ImageRepo, req.ImageTag, req.ImageDigest); err != nil {
+			return fmt.Errorf("更新镜像信息失败: %w", err)
+		}
+	}
+
+	// 4. 获取任务列表并更新目标镜像
+	tasks, err := s.dao.CicdTasksByReleaseID(ctx, rel.ID)
+	if err != nil {
+		return fmt.Errorf("获取任务列表失败: %w", err)
+	}
+
+	// 5. 构建新的目标镜像
+	targetImage := builder.BuildTargetImage(req.ImageRepo, req.ImageTag, req.ImageDigest)
+	if targetImage == "" {
+		targetImage = builder.BuildTargetImage(rel.ImageRepo, rel.ImageTag, "")
+	}
+
+	// 6. 更新所有任务的目标镜像并入队
+	for _, task := range tasks {
+		if task.Status != models.CicdTaskStatusPending {
+			continue
+		}
+
+		// 更新目标镜像
+		if err := s.dao.CicdTaskUpdateTargetImage(ctx, task.ID, targetImage); err != nil {
+			continue
+		}
+
+		// 入队执行
+		if _, err := s.stream.XAdd(ctx, infra.CicdDeployStream, map[string]any{
+			"task_id":    task.ID,
+			"release_id": rel.ID,
+		}); err != nil {
+			return fmt.Errorf("任务入队失败: task_id=%d, err=%w", task.ID, err)
+		}
+	}
+
+	// 7. 更新发布单状态为 Queued
+	_, _ = s.dao.CicdReleaseUpdateStatusCAS(
+		ctx,
+		rel.ID,
+		[]string{models.CicdReleaseStatusPending},
+		models.CicdReleaseStatusQueued,
+		"Jenkins构建成功，任务已入队",
+	)
+
 	return nil
 }
 

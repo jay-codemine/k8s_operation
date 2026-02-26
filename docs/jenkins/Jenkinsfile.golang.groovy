@@ -1,0 +1,166 @@
+// =============================================================================
+// Jenkinsfile - Go 项目完整 CICD 流水线
+// =============================================================================
+// 功能：代码拉取 → 编译 → 测试 → 构建镜像 → 推送仓库 → 部署 K8s → 回调平台
+// =============================================================================
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: golang
+    image: golang:1.21-alpine
+    command: ['cat']
+    tty: true
+    env:
+    - name: GOPROXY
+      value: "https://goproxy.cn,direct"
+    - name: CGO_ENABLED
+      value: "0"
+    volumeMounts:
+    - name: go-cache
+      mountPath: /go/pkg
+  - name: buildkit
+    image: moby/buildkit:latest
+    command: ['cat']
+    tty: true
+    securityContext:
+      privileged: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ['cat']
+    tty: true
+  volumes:
+  - name: go-cache
+    emptyDir: {}
+'''
+        }
+    }
+    
+    parameters {
+        string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
+        string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '镜像标签')
+        string(name: 'NAMESPACE', defaultValue: 'default', description: 'K8s 命名空间')
+        string(name: 'DEPLOYMENT_NAME', defaultValue: '', description: 'Deployment 名称')
+        string(name: 'CONTAINER_NAME', defaultValue: '', description: '容器名称')
+        string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
+        string(name: 'PLATFORM_TOKEN', defaultValue: '', description: '平台认证Token')
+        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '是否跳过测试')
+    }
+    
+    environment {
+        REGISTRY_CREDS = credentials('harbor-registry')
+        KUBECONFIG_CREDS = credentials('k8s-kubeconfig')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "📦 拉取代码: ${params.GIT_REPO}"
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${params.GIT_BRANCH}"]],
+                    userRemoteConfigs: [[url: params.GIT_REPO]]
+                ])
+                script {
+                    env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                container('golang') {
+                    echo "🔨 Go 编译..."
+                    sh '''
+                        go mod download
+                        go build -ldflags="-s -w" -o app ./cmd/main.go
+                    '''
+                }
+            }
+        }
+        
+        stage('Test') {
+            when { expression { return !params.SKIP_TESTS } }
+            steps {
+                container('golang') {
+                    echo "🧪 运行测试..."
+                    sh 'go test -v -cover ./...'
+                }
+            }
+        }
+        
+        stage('Build Image') {
+            steps {
+                container('buildkit') {
+                    echo "🐳 构建镜像: ${params.IMAGE_REPO}:${params.IMAGE_TAG}"
+                    sh '''
+                        buildctl build \
+                            --frontend dockerfile.v0 \
+                            --local context=. \
+                            --local dockerfile=. \
+                            --output type=image,name=${IMAGE_REPO}:${IMAGE_TAG},push=true
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            when { expression { return params.DEPLOYMENT_NAME != '' } }
+            steps {
+                container('kubectl') {
+                    echo "🚀 部署到 K8s..."
+                    writeFile file: '/tmp/kubeconfig', text: env.KUBECONFIG_CREDS
+                    sh """
+                        export KUBECONFIG=/tmp/kubeconfig
+                        kubectl set image deployment/${params.DEPLOYMENT_NAME} \
+                            ${params.CONTAINER_NAME}=${params.IMAGE_REPO}:${params.IMAGE_TAG} \
+                            -n ${params.NAMESPACE}
+                        kubectl rollout status deployment/${params.DEPLOYMENT_NAME} \
+                            -n ${params.NAMESPACE} --timeout=300s
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                if (params.PLATFORM_CALLBACK_URL) {
+                    httpRequest(
+                        url: params.PLATFORM_CALLBACK_URL,
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_JSON',
+                        customHeaders: [[name: 'Authorization', value: "Bearer ${params.PLATFORM_TOKEN}"]],
+                        requestBody: """{
+                            "job_name": "${env.JOB_NAME}",
+                            "build_number": ${env.BUILD_NUMBER},
+                            "status": "SUCCESS",
+                            "image": "${params.IMAGE_REPO}:${params.IMAGE_TAG}"
+                        }"""
+                    )
+                }
+            }
+        }
+        failure {
+            script {
+                if (params.PLATFORM_CALLBACK_URL) {
+                    httpRequest(
+                        url: params.PLATFORM_CALLBACK_URL,
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_JSON',
+                        customHeaders: [[name: 'Authorization', value: "Bearer ${params.PLATFORM_TOKEN}"]],
+                        requestBody: """{"job_name": "${env.JOB_NAME}", "build_number": ${env.BUILD_NUMBER}, "status": "FAILURE"}"""
+                    )
+                }
+            }
+        }
+    }
+}

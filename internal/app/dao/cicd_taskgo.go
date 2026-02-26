@@ -113,3 +113,14 @@ func (d *Dao) CicdTasksByReleaseID(ctx context.Context, releaseID int64) ([]*mod
 		Find(&tasks).Error
 	return tasks, err
 }
+
+// CicdTaskUpdateTargetImage 更新任务的目标镜像
+func (d *Dao) CicdTaskUpdateTargetImage(ctx context.Context, taskID int64, targetImage string) error {
+	return d.db.WithContext(ctx).
+		Model(&models.CicdReleaseTask{}).
+		Where("id = ? AND is_del = 0", taskID).
+		Updates(map[string]any{
+			"target_image": targetImage,
+			"modified_at":  time.Now().Unix(),
+		}).Error
+}

@@ -544,6 +544,527 @@
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/callback": {
+            "post": {
+                "description": "Jenkins 构建完成后调用此接口通知平台更新状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "Jenkins 构建状态回调",
+                "parameters": [
+                    {
+                        "description": "回调参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.JenkinsBuildStatusCallback"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "回调处理成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/create": {
+            "post": {
+                "description": "创建新的 CI/CD 流水线配置，关联 Git 仓库和 Jenkins Job",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "创建流水线",
+                "parameters": [
+                    {
+                        "description": "创建参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回 pipeline_id",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/delete": {
+            "post": {
+                "description": "软删除流水线（运行中的流水线无法删除）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "删除流水线",
+                "parameters": [
+                    {
+                        "description": "删除参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineIDRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/detail": {
+            "get": {
+                "description": "获取流水线的完整配置信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回流水线详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/history": {
+            "get": {
+                "description": "分页获取流水线的历史运行记录",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线运行历史",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认10",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回历史记录列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/list": {
+            "get": {
+                "description": "分页查询流水线列表，支持关键字和状态筛选",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认10",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字（名称/描述/Git仓库）",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态筛选（idle/running/disabled）",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回列表和总数",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/logs": {
+            "get": {
+                "description": "获取 Jenkins 构建的控制台日志，支持增量获取",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线日志",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "构建号（不传则获取最新的）",
+                        "name": "build_number",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "起始行号（用于增量获取）",
+                        "name": "start_line",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回日志内容",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/run": {
+            "post": {
+                "description": "触发 Jenkins 构建，开始执行流水线",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "运行流水线",
+                "parameters": [
+                    {
+                        "description": "运行参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回运行记录ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/status": {
+            "get": {
+                "description": "获取流水线和当前构建的实时状态",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线实时状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回状态信息",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/stop": {
+            "post": {
+                "description": "停止正在运行的 Jenkins 构建",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "停止流水线",
+                "parameters": [
+                    {
+                        "description": "停止参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineStopRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "停止成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/update": {
+            "post": {
+                "description": "更新流水线配置信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "更新流水线",
+                "parameters": [
+                    {
+                        "description": "更新参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/release/cancel": {
             "post": {
                 "description": "智能取消：已部署成功/运行中的会触发回滚，未部署的直接取消",
@@ -9250,6 +9771,17 @@
         "errorcode.Error": {
             "type": "object"
         },
+        "models.EnvVar": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "requests.AuthForgotPasswordRequest": {
             "type": "object",
             "properties": {
@@ -9576,6 +10108,27 @@
                     }
                 },
                 "secret_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.JenkinsBuildStatusCallback": {
+            "type": "object",
+            "properties": {
+                "build_number": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "job_name": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "SUCCESS / FAILURE / ABORTED",
                     "type": "string"
                 }
             }
@@ -10778,6 +11331,117 @@
                     "type": "string"
                 },
                 "new_image": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.PipelineCreateRequest": {
+            "type": "object",
+            "properties": {
+                "deploy_config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "description": {
+                    "type": "string"
+                },
+                "env_vars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvVar"
+                    }
+                },
+                "git_branch": {
+                    "type": "string"
+                },
+                "git_repo": {
+                    "type": "string"
+                },
+                "jenkins_job": {
+                    "type": "string"
+                },
+                "jenkins_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.PipelineIDRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.PipelineRunRequest": {
+            "type": "object",
+            "properties": {
+                "branch": {
+                    "description": "可选：覆盖默认分支",
+                    "type": "string"
+                },
+                "env_vars": {
+                    "description": "可选：覆盖环境变量",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.PipelineStopRequest": {
+            "type": "object",
+            "properties": {
+                "build_number": {
+                    "description": "可选：指定构建号，不传则停止最新的",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.PipelineUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "deploy_config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "description": {
+                    "type": "string"
+                },
+                "env_vars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvVar"
+                    }
+                },
+                "git_branch": {
+                    "type": "string"
+                },
+                "git_repo": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "jenkins_job": {
+                    "type": "string"
+                },
+                "jenkins_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

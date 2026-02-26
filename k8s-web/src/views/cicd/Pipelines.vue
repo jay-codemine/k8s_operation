@@ -93,9 +93,9 @@
       </table>
 
       <Pagination
-        v-if="filteredPipelines.length > 0"
+        v-if="total > 0"
         v-model:currentPage="currentPage"
-        :totalItems="filteredPipelines.length"
+        :totalItems="total"
         :itemsPerPage="pageSize"
       />
     </div>
@@ -103,64 +103,15 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
-
-// 静态模拟数据
-const MOCK_PIPELINES = [
-  {
-    id: 1,
-    name: 'k8s-web-frontend',
-    description: '前端项目 CI/CD 流水线',
-    status: 'idle',
-    lastRunStatus: 'success',
-    lastRunTime: '2024-02-09 14:30:00',
-    gitRepo: 'https://github.com/example/k8s-web.git',
-    branch: 'main'
-  },
-  {
-    id: 2,
-    name: 'k8s-operation-backend',
-    description: '后端服务构建部署流水线',
-    status: 'idle',
-    lastRunStatus: 'success',
-    lastRunTime: '2024-02-09 10:15:00',
-    gitRepo: 'https://github.com/example/k8s-operation.git',
-    branch: 'main'
-  },
-  {
-    id: 3,
-    name: 'microservice-order',
-    description: '订单微服务流水线',
-    status: 'running',
-    lastRunStatus: 'running',
-    lastRunTime: '2024-02-10 09:20:00',
-    gitRepo: 'https://github.com/example/order-service.git',
-    branch: 'develop'
-  },
-  {
-    id: 4,
-    name: 'microservice-payment',
-    description: '支付微服务流水线',
-    status: 'idle',
-    lastRunStatus: 'failed',
-    lastRunTime: '2024-02-08 16:45:00',
-    gitRepo: 'https://github.com/example/payment-service.git',
-    branch: 'hotfix'
-  },
-  {
-    id: 5,
-    name: 'database-migration',
-    description: '数据库迁移流水线',
-    status: 'disabled',
-    lastRunStatus: 'pending',
-    lastRunTime: null,
-    gitRepo: 'https://github.com/example/db-migration.git',
-    branch: 'main'
-  }
-]
+import {
+  getPipelines as fetchPipelines,
+  runPipeline as triggerPipeline,
+  deletePipeline as removePipeline
+} from '@/api/platform/pipeline'
 
 export default {
   name: 'Pipelines',
@@ -173,53 +124,61 @@ export default {
     const searchQuery = ref('')
     const currentPage = ref(1)
     const pageSize = ref(10)
+    const total = ref(0)
     const loading = ref(false)
     const errorMsg = ref('')
 
+    // 调用后端 API 加载流水线列表
     const loadPipelines = async () => {
       loading.value = true
       errorMsg.value = ''
       try {
-        // 模拟 API 调用延迟
-        await new Promise(resolve => setTimeout(resolve, 500))
+        const response = await fetchPipelines({
+          page: currentPage.value,
+          page_size: pageSize.value,
+          keyword: searchQuery.value || undefined
+        })
         
-        // 使用静态数据
-        pipelines.value = MOCK_PIPELINES
-        
-        // 如果需要调用真实 API，取消下面注释
-        // const response = await getPipelines()
-        // if (response.code === 0) {
-        //   pipelines.value = response.data
-        // } else {
-        //   throw new Error(response.msg || '获取流水线列表失败')
-        // }
+        if (response.code === 0) {
+          // 后端返回的数据结构转换为前端所需格式
+          pipelines.value = (response.data?.list || []).map(item => ({
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            status: item.status,
+            lastRunStatus: item.last_run_status || 'pending',
+            lastRunTime: item.last_run_time ? new Date(item.last_run_time * 1000).toISOString() : null,
+            gitRepo: item.git_repo,
+            branch: item.git_branch
+          }))
+          total.value = response.data?.total || 0
+        } else {
+          throw new Error(response.msg || '获取流水线列表失败')
+        }
       } catch (error) {
         console.error('加载流水线失败:', error)
-        errorMsg.value = error.message || '获取流水线列表失败，显示模拟数据'
-        // 出错时也显示模拟数据
-        pipelines.value = MOCK_PIPELINES
+        errorMsg.value = error.message || '获取流水线列表失败'
+        pipelines.value = []
+        total.value = 0
       } finally {
         loading.value = false
       }
     }
 
-    const filteredPipelines = computed(() => {
-      if (!searchQuery.value) {
-        return pipelines.value
-      }
-      const query = searchQuery.value.toLowerCase()
-      return pipelines.value.filter(pipeline =>
-        pipeline.name.toLowerCase().includes(query) ||
-        pipeline.description.toLowerCase().includes(query) ||
-        pipeline.gitRepo.toLowerCase().includes(query)
-      )
+    // 搜索时重置页码并重新加载
+    watch(searchQuery, () => {
+      currentPage.value = 1
+      loadPipelines()
     })
 
-    const paginatedPipelines = computed(() => {
-      const startIndex = (currentPage.value - 1) * pageSize.value
-      const endIndex = startIndex + pageSize.value
-      return filteredPipelines.value.slice(startIndex, endIndex)
+    // 页码变化时重新加载
+    watch(currentPage, () => {
+      loadPipelines()
     })
+
+    const filteredPipelines = computed(() => pipelines.value)
+
+    const paginatedPipelines = computed(() => pipelines.value)
 
     const formatDate = (dateString) => {
       if (!dateString) return '-'
@@ -249,52 +208,41 @@ export default {
         failed: '失败',
         running: '运行中',
         pending: '等待中',
+        aborted: '已中止',
         cancelled: '已取消'
       }
       return statusMap[status] || status
     }
 
     const createPipeline = () => {
-      // 修复路由跳转路径
       router.push('/cicd/pipelines/create')
     }
 
     const viewPipeline = (id) => {
-      // 修复路由跳转路径
       router.push(`/cicd/pipelines/${id}`)
     }
 
+    // 调用后端 API 运行流水线（触发 Jenkins 构建）
     const runPipeline = async (id) => {
       try {
         Message.info({ content: `正在启动流水线 #${id}...` })
         
-        // 模拟运行
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        const response = await triggerPipeline(id)
         
-        // 更新本地状态
-        const pipeline = pipelines.value.find(p => p.id === id)
-        if (pipeline) {
-          pipeline.status = 'running'
-          pipeline.lastRunStatus = 'running'
-          pipeline.lastRunTime = new Date().toLocaleString('zh-CN')
+        if (response.code === 0) {
+          Message.success({ content: '流水线启动成功，正在触发 Jenkins 构建' })
+          // 重新加载列表以更新状态
+          setTimeout(() => loadPipelines(), 1000)
+        } else {
+          throw new Error(response.msg || '启动流水线失败')
         }
-        
-        Message.success({ content: '流水线启动成功' })
-        
-        // 如果需要调用真实 API，取消下面注释
-        // const response = await runPipelineApi(id)
-        // if (response.code === 0) {
-        //   Message.success({ content: '流水线启动成功' })
-        //   loadPipelines()
-        // } else {
-        //   throw new Error(response.msg)
-        // }
       } catch (error) {
         console.error('启动流水线失败:', error)
         Message.error({ content: error.message || '启动流水线失败' })
       }
     }
 
+    // 调用后端 API 删除流水线
     const deletePipeline = async (id) => {
       if (!confirm('确定要删除这条流水线吗？此操作不可恢复！')) {
         return
@@ -303,25 +251,14 @@ export default {
       try {
         Message.info({ content: `正在删除流水线 #${id}...` })
         
-        // 模拟删除
-        await new Promise(resolve => setTimeout(resolve, 500))
+        const response = await removePipeline(id)
         
-        // 从本地移除
-        const index = pipelines.value.findIndex(p => p.id === id)
-        if (index !== -1) {
-          pipelines.value.splice(index, 1)
+        if (response.code === 0) {
+          Message.success({ content: '删除流水线成功' })
+          loadPipelines()
+        } else {
+          throw new Error(response.msg || '删除流水线失败')
         }
-        
-        Message.success({ content: '删除流水线成功' })
-        
-        // 如果需要调用真实 API，取消下面注释
-        // const response = await deletePipelineApi(id)
-        // if (response.code === 0) {
-        //   Message.success({ content: '删除流水线成功' })
-        //   loadPipelines()
-        // } else {
-        //   throw new Error(response.msg)
-        // }
       } catch (error) {
         console.error('删除流水线失败:', error)
         Message.error({ content: error.message || '删除流水线失败' })
@@ -337,6 +274,7 @@ export default {
       searchQuery,
       currentPage,
       pageSize,
+      total,
       loading,
       errorMsg,
       filteredPipelines,

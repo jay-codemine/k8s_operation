@@ -1,7 +1,42 @@
-# 🚀 k8soperation · Kubernetes 后台管理系统（后端）
+# 🚀 k8soperation · Kubernetes 多集群运维与 CI/CD 控制平台
 
-一个基于 **Go + Gin + Gorm + Zap** 的企业级 Kubernetes 后台管理系统后端，提供对 Kubernetes 各类资源的可视化运维能力，包括 Pod、Deployment、StatefulSet、Node、Ingress、Service、Job、CronJob、PVC、PV、Secret 等资源的完整生命周期管理。
+一个基于 **Go + Gin + Gorm + Zap + Redis Stream + client-go** 构建的企业级 Kubernetes 多集群运维与发布控制平台后端系统。
 
+平台以 **Kubernetes 控制平面（Control Plane）架构思想** 为核心，构建统一的 Kubernetes 运维与发布控制中心，支撑生产级高频交付与规模化运维场景。
+
+------
+
+## 🎯 平台定位
+
+围绕以下核心能力构建：
+
+- 🌐 **多集群资源治理**
+- 🔄 **CI/CD 发布编排**
+- 🔐 **RBAC 精细化权限控制**
+- ♻ **声明式自动化运维**
+- ⚙ **发布状态机与一致性控制**
+
+通过平台化控制能力，实现从“人工 kubectl 运维”向“自动化、可审计、可回滚”的企业级运维体系升级。
+
+------
+
+## 🏗 架构核心思想
+
+平台遵循 Control Plane 设计理念，将：
+
+- 构建（CI）
+- 部署（CD）
+- 资源治理
+- 权限控制
+- 一致性保障
+
+统一纳入平台控制域，实现：
+
+- 构建与部署解耦
+- 多集群统一管理
+- 发布流程可追踪
+- 状态迁移可控
+- 运维操作可审计
 ## 🔗 项目地址
 
 - Gitee（主仓库）：https://gitee.com/jay-kim/k8s_operation

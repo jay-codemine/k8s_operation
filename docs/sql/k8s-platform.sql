@@ -58,4 +58,68 @@ CREATE TABLE IF NOT EXISTS `user` (
   COMMENT='用户表'
   ROW_FORMAT=DYNAMIC;
 
+-- ----------------------------
+-- Table structure for cicd_release
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `cicd_release` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '发布单ID',
+  `app_name` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '应用名称',
+  `namespace` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'default' COMMENT '命名空间',
+  `workload_kind` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'Deployment' COMMENT '工作负载类型(Deployment/StatefulSet/DaemonSet)',
+  `workload_name` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '工作负载名称',
+  `container_name` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '容器名称',
+  `strategy` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'rolling' COMMENT '发布策略(rolling/recreate/canary)',
+  `timeout_sec` int UNSIGNED NOT NULL DEFAULT 300 COMMENT '超时时间(秒)',
+  `concurrency` int UNSIGNED NOT NULL DEFAULT 3 COMMENT '并发数',
+  `status` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'Pending' COMMENT '状态(Pending/Queued/Running/Succeeded/Failed/Canceled/Rollback)',
+  `message` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '状态消息',
+  `created_user_id` bigint NOT NULL DEFAULT 0 COMMENT '创建用户ID',
+  `request_id` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '请求ID(幂等校验)',
+  `build_id` bigint NOT NULL DEFAULT 0 COMMENT 'Jenkins构建ID',
+  `image_repo` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '镜像仓库地址',
+  `image_tag` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '镜像标签',
+  `image_digest` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '镜像摘要(可选)',
+  `created_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '创建时间(Unix时间戳)',
+  `modified_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '修改时间(Unix时间戳)',
+  `deleted_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '删除时间(Unix时间戳)',
+  `is_del` tinyint UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除:0未删除,1删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_request_id` (`request_id` ASC) USING BTREE,
+  INDEX `idx_app_name` (`app_name` ASC) USING BTREE,
+  INDEX `idx_status` (`status` ASC) USING BTREE,
+  INDEX `idx_build_id` (`build_id` ASC) USING BTREE,
+  INDEX `idx_created_at` (`created_at` ASC) USING BTREE,
+  INDEX `idx_is_del` (`is_del` ASC) USING BTREE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='CICD发布单表'
+  ROW_FORMAT=DYNAMIC;
+
+-- ----------------------------
+-- Table structure for cicd_release_task
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `cicd_release_task` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务ID',
+  `release_id` bigint NOT NULL DEFAULT 0 COMMENT '发布单ID',
+  `cluster_id` bigint NOT NULL DEFAULT 0 COMMENT '目标集群ID',
+  `status` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'Pending' COMMENT '状态(Pending/Running/Succeeded/Failed/Canceled)',
+  `message` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '状态消息',
+  `prev_image` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '更新前镜像(用于回滚)',
+  `target_image` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '目标镜像',
+  `started_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '开始执行时间(Unix时间戳)',
+  `finished_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '完成时间(Unix时间戳)',
+  `created_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '创建时间(Unix时间戳)',
+  `modified_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '修改时间(Unix时间戳)',
+  `deleted_at` bigint UNSIGNED NOT NULL DEFAULT 0 COMMENT '删除时间(Unix时间戳)',
+  `is_del` tinyint UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除:0未删除,1删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_release_id` (`release_id` ASC) USING BTREE,
+  INDEX `idx_cluster_id` (`cluster_id` ASC) USING BTREE,
+  INDEX `idx_status` (`status` ASC) USING BTREE,
+  INDEX `idx_is_del` (`is_del` ASC) USING BTREE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='CICD发布任务表'
+  ROW_FORMAT=DYNAMIC;
+
 SET FOREIGN_KEY_CHECKS = 1;

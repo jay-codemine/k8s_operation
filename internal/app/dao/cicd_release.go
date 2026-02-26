@@ -98,3 +98,31 @@ func (d *Dao) CicdReleaseCancel(ctx context.Context, releaseID int64) (bool, err
 		"user canceled",
 	)
 }
+
+// CicdReleaseGetByBuildID 根据 Jenkins 构建 ID 获取发布单
+func (d *Dao) CicdReleaseGetByBuildID(ctx context.Context, buildID int64) (*models.CicdRelease, error) {
+	var rel models.CicdRelease
+	err := d.db.WithContext(ctx).
+		Where("build_id = ? AND is_del = 0", buildID).
+		First(&rel).Error
+	if err != nil {
+		return nil, err
+	}
+	return &rel, nil
+}
+
+// CicdReleaseUpdateImage 更新发布单的镜像信息
+func (d *Dao) CicdReleaseUpdateImage(ctx context.Context, releaseID int64, imageRepo, imageTag, imageDigest string) error {
+	updates := map[string]any{
+		"image_repo":  imageRepo,
+		"image_tag":   imageTag,
+		"modified_at": time.Now().Unix(),
+	}
+	if imageDigest != "" {
+		updates["image_digest"] = imageDigest
+	}
+	return d.db.WithContext(ctx).
+		Model(&models.CicdRelease{}).
+		Where("id = ? AND is_del = 0", releaseID).
+		Updates(updates).Error
+}
