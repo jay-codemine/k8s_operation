@@ -81,4 +81,10 @@ Jenkins:
   Username: "admin"                          # Jenkins 用户名
   APIToken: "your-jenkins-api-token"         # Jenkins API Token（在用户设置中生成）
   TriggerTimeout: 60                         # 触发构建等待超时(秒)
-  CallbackURL: "http://platform.example.com:8080/api/v1/k8s/cicd/pipeline/callback"  # 平台回调地址
+  # 回调机制配置（生产级）
+  CallbackURL: "http://platform.example.com:8080"  # 平台基础地址（不带路径）
+  HMACSecret: "your-hmac-secret-key"         # HMAC 签名密钥（用于验证回调请求）
+  PollInterval: 15                           # 轮询间隔(秒)，默认15
+  MaxBuildTime: 30                           # 最大构建时间(分钟)，超时判定失败，默认30
+  # 通知配置
+  DingTalkWebhook: "https://oapi.dingtalk.com/robot/send?access_token=xxx"  # 钉钉机器人 Webhook

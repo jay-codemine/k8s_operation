@@ -16,16 +16,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    host: 'localhost',
+    host: '0.0.0.0', // 监听所有网络接口，支持外网访问
+    allowedHosts: ['james521.gnway.cc', 'localhost'], // 允许的域名
 
     // ✅ 关键：开发代理
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080', // 你的 Gin 后端
+        target: 'http://james521.gnway.cc:10537', // Gin 后端
         changeOrigin: true,
-
-        // 如果你后端路径本身就带 /api，可以不 rewrite
-        // rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },

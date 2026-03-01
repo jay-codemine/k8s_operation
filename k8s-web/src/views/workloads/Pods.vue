@@ -1523,12 +1523,13 @@ const createPodFromYaml = async () => {
       await refresh()
       startTrackingStatus()
     } else {
-      Message.error({ content: res.msg || '创建失败' })
-      yamlError.value = res.msg || '创建失败'
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '创建失败')
+      Message.error({ content: errorMsg, duration: 5000 })
+      yamlError.value = errorMsg
     }
   } catch (e) {
-    const errorMsg = e?.msg || e?.message || '创建失败'
-    Message.error({ content: errorMsg })
+    const errorMsg = e?.details ? `${e?.msg || '创建失败'}: ${e.details}` : (e?.msg || e?.message || '创建失败')
+    Message.error({ content: errorMsg, duration: 5000 })
     yamlError.value = errorMsg
   } finally {
     creating.value = false

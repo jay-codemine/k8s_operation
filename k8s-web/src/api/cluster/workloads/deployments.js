@@ -104,7 +104,7 @@ const deploymentsApi = {
    * @param {string} data.image - 新镜像地址
    */
   updateImage(data) {
-    return http.put(`${K8S_BASE}/deployment/update-image`, data)
+    return http.post(`${K8S_BASE}/deployment/update-image`, data)
   },
 
   // =========================

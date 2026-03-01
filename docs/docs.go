@@ -518,6 +518,188 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/approval/action": {
+            "post": {
+                "description": "通过或拒绝审批申请",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "审批操作",
+                "parameters": [
+                    {
+                        "description": "操作参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.ApprovalActionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/approval/create": {
+            "post": {
+                "description": "创建部署审批申请",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "创建审批申请",
+                "parameters": [
+                    {
+                        "description": "创建参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.ApprovalCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回审批ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/approval/detail": {
+            "get": {
+                "description": "获取单个审批记录的详细信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "获取审批详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "审批ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回审批详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/approval/list": {
+            "get": {
+                "description": "分页查询审批记录",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "获取审批列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认10",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "流水线ID筛选",
+                        "name": "pipeline_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态筛选（pending/approved/rejected/expired）",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回审批列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/approval/pending": {
+            "get": {
+                "description": "获取当前用户待审批的申请列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "获取待审批列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认10",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回待审批列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/callback/build": {
             "post": {
                 "consumes": [
@@ -552,6 +734,276 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/environment/create": {
+            "post": {
+                "description": "创建新的部署环境配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Environment"
+                ],
+                "summary": "创建环境",
+                "parameters": [
+                    {
+                        "description": "创建参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.EnvironmentCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回环境ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/environment/delete": {
+            "post": {
+                "description": "删除部署环境配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Environment"
+                ],
+                "summary": "删除环境",
+                "parameters": [
+                    {
+                        "description": "删除参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.EnvironmentIDRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/environment/detail": {
+            "get": {
+                "description": "获取单个部署环境的详细信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Environment"
+                ],
+                "summary": "获取环境详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "环境ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回环境详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/environment/list": {
+            "get": {
+                "description": "分页查询部署环境列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Environment"
+                ],
+                "summary": "获取环境列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认20",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回环境列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/environment/update": {
+            "post": {
+                "description": "更新部署环境配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Environment"
+                ],
+                "summary": "更新环境",
+                "parameters": [
+                    {
+                        "description": "更新参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.EnvironmentUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/git/branches": {
+            "post": {
+                "description": "获取指定 Git 仓库的所有远程分支",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Git"
+                ],
+                "summary": "获取 Git 仓库分支列表",
+                "parameters": [
+                    {
+                        "description": "仓库信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.GitBranchesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回分支列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/git/validate": {
+            "post": {
+                "description": "测试 Git 仓库是否可访问",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Git"
+                ],
+                "summary": "验证 Git 仓库连接",
+                "parameters": [
+                    {
+                        "description": "仓库信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.GitValidateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "验证结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/callback": {
             "post": {
                 "description": "Jenkins 构建完成后调用此接口通知平台更新状态",
@@ -564,15 +1016,21 @@ const docTemplate = `{
                 "tags": [
                     "CICD Pipeline"
                 ],
-                "summary": "Jenkins 构建状态回调",
+                "summary": "Jenkins 构建状态回调（生产级）",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "HMAC-SHA256 签名（用于验证请求真实性）",
+                        "name": "X-Signature",
+                        "in": "header"
+                    },
                     {
                         "description": "回调参数",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/requests.JenkinsBuildStatusCallback"
+                            "$ref": "#/definitions/requests.PipelineCallbackRequest"
                         }
                     }
                 ],
@@ -586,6 +1044,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "签名验证失败",
                         "schema": {
                             "$ref": "#/definitions/errorcode.Error"
                         }
@@ -917,6 +1381,54 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "返回运行记录ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/errorcode.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/stages": {
+            "get": {
+                "description": "获取 Jenkins Pipeline 的阶段执行数据（来自 Jenkins Workflow API）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线阶段数据",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "构建号（不传则获取最新的）",
+                        "name": "build_number",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回阶段数据",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1276,6 +1788,173 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/approve": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "审批通过/拒绝阶段",
+                "parameters": [
+                    {
+                        "description": "审批请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.StageApproveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/callback": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "Jenkins 阶段回调",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "HMAC-SHA256 签名",
+                        "name": "X-Signature",
+                        "in": "header"
+                    },
+                    {
+                        "description": "阶段回调请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.StageCallbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/deploy": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "执行部署阶段",
+                "parameters": [
+                    {
+                        "description": "部署请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.StageDeployRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/list": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "获取流水线运行阶段列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "运行记录ID",
+                        "name": "run_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/logs": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "获取阶段执行日志",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "阶段ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
                         }
                     }
                 }
@@ -9790,6 +10469,45 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.ApprovalActionRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "approve/reject",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "description": "审批意见",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.ApprovalCreateRequest": {
+            "type": "object",
+            "properties": {
+                "env_name": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "image_digest": {
+                    "type": "string"
+                },
+                "pipeline_id": {
+                    "type": "integer"
+                },
+                "pipeline_run_id": {
+                    "type": "integer"
+                },
+                "request_reason": {
+                    "type": "string"
+                }
+            }
+        },
         "requests.AuthForgotPasswordRequest": {
             "type": "object",
             "properties": {
@@ -9984,6 +10702,96 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.EnvironmentCreateRequest": {
+            "type": "object",
+            "properties": {
+                "approval_user_ids": {
+                    "description": "审批人员ID列表",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "cluster_id": {
+                    "description": "关联集群ID",
+                    "type": "integer"
+                },
+                "color": {
+                    "description": "环境颜色标识",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "描述",
+                    "type": "string"
+                },
+                "display_name": {
+                    "description": "显示名称",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "环境名称(dev/staging/prod)",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "默认命名空间",
+                    "type": "string"
+                },
+                "require_approval": {
+                    "description": "是否需要审批",
+                    "type": "boolean"
+                },
+                "sort_order": {
+                    "description": "排序",
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.EnvironmentIDRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.EnvironmentUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "approval_user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "cluster_id": {
+                    "type": "integer"
+                },
+                "color": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "require_approval": {
+                    "type": "boolean"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
         "requests.EnvironmentVariable": {
             "type": "object",
             "properties": {
@@ -10013,6 +10821,30 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.GitBranchesRequest": {
+            "type": "object",
+            "properties": {
+                "credential_id": {
+                    "description": "可选：Jenkins凭证ID",
+                    "type": "string"
+                },
+                "repo_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.GitValidateRequest": {
+            "type": "object",
+            "properties": {
+                "credential_id": {
+                    "description": "可选：Jenkins凭证ID",
+                    "type": "string"
+                },
+                "repo_url": {
                     "type": "string"
                 }
             }
@@ -10116,27 +10948,6 @@ const docTemplate = `{
                     }
                 },
                 "secret_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "requests.JenkinsBuildStatusCallback": {
-            "type": "object",
-            "properties": {
-                "build_number": {
-                    "type": "integer"
-                },
-                "duration": {
-                    "type": "integer"
-                },
-                "job_name": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "SUCCESS / FAILURE / ABORTED",
                     "type": "string"
                 }
             }
@@ -11343,12 +12154,65 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.PipelineCallbackRequest": {
+            "type": "object",
+            "properties": {
+                "build_number": {
+                    "description": "构建号",
+                    "type": "integer"
+                },
+                "duration": {
+                    "description": "额外信息",
+                    "type": "integer"
+                },
+                "image": {
+                    "description": "构建产物 - 支持 image 或 image_url",
+                    "type": "string"
+                },
+                "image_digest": {
+                    "description": "镜像 digest (e.g., sha256:xxx)",
+                    "type": "string"
+                },
+                "image_url": {
+                    "description": "构建产出的镜像地址（兼容旧字段）",
+                    "type": "string"
+                },
+                "job_name": {
+                    "description": "必须字段",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "错误或补充信息",
+                    "type": "string"
+                },
+                "pipeline_id": {
+                    "description": "平台关联字段",
+                    "type": "integer"
+                },
+                "request_id": {
+                    "description": "请求ID（用于日志追踪）",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "SUCCESS / FAILURE / ABORTED",
+                    "type": "string"
+                }
+            }
+        },
         "requests.PipelineCreateRequest": {
             "type": "object",
             "properties": {
+                "auto_deploy": {
+                    "description": "部署配置",
+                    "type": "boolean"
+                },
                 "deploy_config": {
                     "type": "object",
                     "additionalProperties": {}
+                },
+                "deploy_env": {
+                    "description": "部署环境",
+                    "type": "string"
                 },
                 "description": {
                     "type": "string"
@@ -11373,6 +12237,30 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "require_approval": {
+                    "description": "是否需要审批",
+                    "type": "boolean"
+                },
+                "target_cluster_id": {
+                    "description": "目标集群ID",
+                    "type": "integer"
+                },
+                "target_container": {
+                    "description": "容器名称",
+                    "type": "string"
+                },
+                "target_namespace": {
+                    "description": "目标命名空间",
+                    "type": "string"
+                },
+                "target_workload_kind": {
+                    "description": "工作负载类型",
+                    "type": "string"
+                },
+                "target_workload_name": {
+                    "description": "工作负载名称",
+                    "type": "string"
                 }
             }
         },
@@ -11387,6 +12275,10 @@ const docTemplate = `{
         "requests.PipelineRunRequest": {
             "type": "object",
             "properties": {
+                "auto_deploy": {
+                    "description": "运行时部署配置（可覆盖流水线默认配置）",
+                    "type": "boolean"
+                },
                 "branch": {
                     "description": "可选：覆盖默认分支",
                     "type": "string"
@@ -11398,8 +12290,32 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "force": {
+                    "description": "强制运行：自动清理旧的失败/运行中构建",
+                    "type": "boolean"
+                },
                 "id": {
                     "type": "integer"
+                },
+                "target_cluster_id": {
+                    "description": "目标集群ID",
+                    "type": "integer"
+                },
+                "target_container": {
+                    "description": "容器名称",
+                    "type": "string"
+                },
+                "target_namespace": {
+                    "description": "目标命名空间",
+                    "type": "string"
+                },
+                "target_workload_kind": {
+                    "description": "工作负载类型",
+                    "type": "string"
+                },
+                "target_workload_name": {
+                    "description": "工作负载名称",
+                    "type": "string"
                 }
             }
         },
@@ -11418,9 +12334,17 @@ const docTemplate = `{
         "requests.PipelineUpdateRequest": {
             "type": "object",
             "properties": {
+                "auto_deploy": {
+                    "description": "部署配置",
+                    "type": "boolean"
+                },
                 "deploy_config": {
                     "type": "object",
                     "additionalProperties": {}
+                },
+                "deploy_env": {
+                    "description": "部署环境",
+                    "type": "string"
                 },
                 "description": {
                     "type": "string"
@@ -11449,7 +12373,31 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "require_approval": {
+                    "description": "是否需要审批",
+                    "type": "boolean"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "target_cluster_id": {
+                    "description": "目标集群ID",
+                    "type": "integer"
+                },
+                "target_container": {
+                    "description": "容器名称",
+                    "type": "string"
+                },
+                "target_namespace": {
+                    "description": "目标命名空间",
+                    "type": "string"
+                },
+                "target_workload_kind": {
+                    "description": "工作负载类型",
+                    "type": "string"
+                },
+                "target_workload_name": {
+                    "description": "工作负载名称",
                     "type": "string"
                 }
             }
@@ -11538,6 +12486,79 @@ const docTemplate = `{
                 },
                 "target_port": {
                     "description": "指向 Pod 的容器端口；为兼容命名端口，这里用字符串（Swagger 友好）",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.StageApproveRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "approve/reject",
+                    "type": "string"
+                },
+                "comment": {
+                    "description": "审批意见",
+                    "type": "string"
+                },
+                "stage_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.StageCallbackRequest": {
+            "type": "object",
+            "properties": {
+                "build_number": {
+                    "description": "构建号",
+                    "type": "integer"
+                },
+                "job_name": {
+                    "description": "Jenkins Job 名称",
+                    "type": "string"
+                },
+                "pipeline_id": {
+                    "description": "流水线ID",
+                    "type": "integer"
+                },
+                "stage_type": {
+                    "description": "阶段类型: checkout/build/test/push",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "阶段状态: running/success/failed",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.StageDeployRequest": {
+            "type": "object",
+            "properties": {
+                "cluster_id": {
+                    "description": "可覆盖默认集群",
+                    "type": "integer"
+                },
+                "container": {
+                    "description": "可覆盖默认容器",
+                    "type": "string"
+                },
+                "image": {
+                    "description": "可覆盖默认镜像",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "可覆盖默认命名空间",
+                    "type": "string"
+                },
+                "stage_id": {
+                    "type": "integer"
+                },
+                "workload_kind": {
+                    "description": "可覆盖默认工作负载类型",
+                    "type": "string"
+                },
+                "workload_name": {
+                    "description": "可覆盖默认工作负载名称",
                     "type": "string"
                 }
             }

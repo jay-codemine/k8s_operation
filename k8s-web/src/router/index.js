@@ -77,10 +77,16 @@ const router = createRouter({
         // 平台功能（不需要 clusterId）
         {path: 'users', component: () => import('@/views/platform/Users.vue')},
 
+        // CICD 流水线
         {path: 'cicd/pipelines', component: () => import('@/views/cicd/Pipelines.vue')},
         {path: 'cicd/pipelines/create', component: () => import('@/views/cicd/PipelineCreate.vue')},
         {path: 'cicd/pipelines/:id', component: () => import('@/views/cicd/PipelineDetail.vue')},
+        {path: 'cicd/pipelines/:id/edit', component: () => import('@/views/cicd/PipelineCreate.vue')},
         {path: 'cicd/templates', component: () => import('@/views/cicd/PipelineTemplates.vue')},
+        // CICD 发布管理
+        {path: 'cicd/releases', component: () => import('@/views/cicd/Releases.vue')},
+        // CICD 审批管理
+        {path: 'cicd/approvals', component: () => import('@/views/cicd/Approvals.vue')},
 
         {
           path: 'images/repositories',
@@ -107,8 +113,13 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
   const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  if (requiresAuth && !token) next('/login')
-  else next()
+  
+  if (requiresAuth && !token) {
+    // 未登录时，带上原目标路径跳转到登录页
+    next({ path: '/login', query: { redirect: to.fullPath } })
+  } else {
+    next()
+  }
 })
 
 export default router

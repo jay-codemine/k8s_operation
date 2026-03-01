@@ -291,7 +291,7 @@ func (c *PipelineController) Status(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
-	pipeline, buildInfo, err := svc.PipelineStatus(ctx.Request.Context(), id)
+	pipeline, buildInfo, latestRun, err := svc.PipelineStatusWithRun(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("PipelineStatus error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
@@ -303,6 +303,10 @@ func (c *PipelineController) Status(ctx *gin.Context) {
 	}
 	if buildInfo != nil {
 		result["build_info"] = buildInfo
+	}
+	// 返回最新运行记录（包含错误信息）
+	if latestRun != nil {
+		result["latest_run"] = latestRun
 	}
 
 	rsp.Success(result)
@@ -339,32 +343,94 @@ func (c *PipelineController) History(ctx *gin.Context) {
 	rsp.SuccessList(list, total)
 }
 
-// JenkinsCallback godoc
-// @Summary Jenkins 构建状态回调
+// Callback godoc
+// @Summary Jenkins 构建状态回调（生产级）
 // @Description Jenkins 构建完成后调用此接口通知平台更新状态
 // @Tags CICD Pipeline
 // @Accept json
 // @Produce json
-// @Param body body requests.JenkinsBuildStatusCallback true "回调参数"
+// @Param X-Signature header string false "HMAC-SHA256 签名（用于验证请求真实性）"
+// @Param body body requests.PipelineCallbackRequest true "回调参数"
 // @Success 200 {object} map[string]any "回调处理成功"
 // @Failure 400 {object} errorcode.Error "参数错误"
+// @Failure 401 {object} errorcode.Error "签名验证失败"
 // @Failure 500 {object} errorcode.Error "内部错误"
 // @Router /api/v1/k8s/cicd/pipeline/callback [post]
-func (c *PipelineController) JenkinsCallback(ctx *gin.Context) {
-	param := &requests.JenkinsBuildStatusCallback{}
+func (c *PipelineController) Callback(ctx *gin.Context) {
+	param := &requests.PipelineCallbackRequest{}
 	rsp := response.NewResponse(ctx)
 
-	if ok := valid.Validate(ctx, param, requests.ValidJenkinsBuildStatusCallback); !ok {
+	if ok := valid.Validate(ctx, param, requests.ValidPipelineCallbackRequest); !ok {
 		return
 	}
 
+	// HMAC 签名验证
+	// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
 	svc := services.NewServices()
-	err := svc.PipelineJenkinsCallback(ctx.Request.Context(), param)
+	signature := ctx.GetHeader("X-Signature")
+	if !svc.VerifyHMACSignature(signature, param.JobName, param.BuildNumber, param.Status) {
+		global.Logger.Warn("[回调] HMAC 签名验证失败",
+			zap.String("job_name", param.JobName),
+			zap.Int("build_number", param.BuildNumber),
+			zap.String("status", param.Status),
+			zap.String("signature", signature),
+		)
+		rsp.ToErrorResponse(errorcode.UnauthorizedTokenError.WithDetails("回调签名验证失败"))
+		return
+	}
+
+	result, err := svc.PipelineCallback(ctx.Request.Context(), param)
 	if err != nil {
-		global.Logger.Error("JenkinsCallback error", zap.Error(err))
+		global.Logger.Error("Callback error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorPipelineCallbackFail.WithDetails(err.Error()))
 		return
 	}
 
-	rsp.Success(gin.H{"message": "回调处理成功"})
+	// 返回部署结果给 Jenkins，让用户在 Jenkins 看到最终状态
+	rsp.Success(gin.H{
+		"message":        result.Message,
+		"deploy_enabled": result.DeployEnabled,
+		"deploy_success": result.DeploySuccess,
+		"deploy_message": result.DeployMessage,
+		"namespace":      result.Namespace,
+		"deployment":     result.Deployment,
+		"image":          result.Image,
+	})
+}
+
+// Stages godoc
+// @Summary 获取流水线阶段数据
+// @Description 获取 Jenkins Pipeline 的阶段执行数据（来自 Jenkins Workflow API）
+// @Tags CICD Pipeline
+// @Produce json
+// @Param id query int true "流水线ID"
+// @Param build_number query int false "构建号（不传则获取最新的）"
+// @Success 200 {object} map[string]any "返回阶段数据"
+// @Failure 400 {object} errorcode.Error "参数错误"
+// @Failure 500 {object} errorcode.Error "内部错误"
+// @Router /api/v1/k8s/cicd/pipeline/stages [get]
+func (c *PipelineController) Stages(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的流水线ID"))
+		return
+	}
+
+	buildNumber := 0
+	if bn := ctx.Query("build_number"); bn != "" {
+		buildNumber, _ = strconv.Atoi(bn)
+	}
+
+	svc := services.NewServices()
+	stages, err := svc.PipelineStages(ctx.Request.Context(), id, buildNumber)
+	if err != nil {
+		global.Logger.Error("PipelineStages error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{"stages": stages})
 }

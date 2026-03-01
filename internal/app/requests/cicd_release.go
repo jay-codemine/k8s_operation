@@ -71,6 +71,7 @@ func NewCicdReleaseListRequest() *CicdReleaseListRequest {
 type CicdReleaseListRequest struct {
 	Page     int    `form:"page" valid:"page"`
 	PageSize int    `form:"page_size" valid:"page_size"`
+	Keyword  string `form:"keyword" valid:"keyword"` // 模糊搜索：应用名、工作负载名、镜像等
 	AppName  string `form:"app_name" valid:"app_name"`
 	Status   string `form:"status" valid:"status"`
 }

@@ -24,6 +24,10 @@ var (
 	// ========== CICD Security（可选：签名/SBOM）==========
 	ErrorCicdSbomGenerateFail *Error // 生成/上传 SBOM 失败
 	ErrorCicdSignFail         *Error // 镜像签名失败
+
+	// ========== CICD Git（仓库操作）==========
+	ErrorGitBranchesFail *Error // 获取Git分支失败
+	ErrorGitValidateFail *Error // 验证Git仓库失败
 )
 
 func register_cicd() {
@@ -50,4 +54,8 @@ func register_cicd() {
 	// 50014x：Security（可选）
 	ErrorCicdSbomGenerateFail = NewError(500140, "生成/上传SBOM失败")
 	ErrorCicdSignFail = NewError(500141, "镜像签名失败")
+
+	// 50015x：Git仓库操作
+	ErrorGitBranchesFail = NewError(500150, "获取Git分支列表失败")
+	ErrorGitValidateFail = NewError(500151, "验证Git仓库连接失败")
 }

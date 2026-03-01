@@ -22,7 +22,7 @@ export const getPipelines = (params = {}) => {
  * @param {number} id - 流水线ID
  */
 export const getPipelineDetail = (id) => {
-  return http.get(`${BASE_URL}/detail`, { params: { id } })
+  return http.get(`${BASE_URL}/detail`, { params: { id: Number(id) } })
 }
 
 /**
@@ -64,7 +64,7 @@ export const updatePipeline = (data) => {
  * @param {number} id - 流水线ID
  */
 export const deletePipeline = (id) => {
-  return http.post(`${BASE_URL}/delete`, { id })
+  return http.post(`${BASE_URL}/delete`, { id: Number(id) })
 }
 
 /**
@@ -75,7 +75,7 @@ export const deletePipeline = (id) => {
  * @param {Object} options.env_vars - 覆盖环境变量 {KEY: VALUE}
  */
 export const runPipeline = (id, options = {}) => {
-  return http.post(`${BASE_URL}/run`, { id, ...options })
+  return http.post(`${BASE_URL}/run`, { id: Number(id), ...options })
 }
 
 /**
@@ -84,9 +84,9 @@ export const runPipeline = (id, options = {}) => {
  * @param {number} buildNumber - 可选：指定构建号
  */
 export const stopPipeline = (id, buildNumber = null) => {
-  const data = { id }
+  const data = { id: Number(id) }
   if (buildNumber) {
-    data.build_number = buildNumber
+    data.build_number = Number(buildNumber)
   }
   return http.post(`${BASE_URL}/stop`, data)
 }
@@ -98,9 +98,9 @@ export const stopPipeline = (id, buildNumber = null) => {
  * @param {number} startLine - 可选：起始行号（增量获取）
  */
 export const getPipelineLogs = (id, buildNumber = null, startLine = 0) => {
-  const params = { id }
+  const params = { id: Number(id) }
   if (buildNumber) {
-    params.build_number = buildNumber
+    params.build_number = Number(buildNumber)
   }
   if (startLine > 0) {
     params.start_line = startLine
@@ -113,7 +113,7 @@ export const getPipelineLogs = (id, buildNumber = null, startLine = 0) => {
  * @param {number} id - 流水线ID
  */
 export const getPipelineStatus = (id) => {
-  return http.get(`${BASE_URL}/status`, { params: { id } })
+  return http.get(`${BASE_URL}/status`, { params: { id: Number(id) } })
 }
 
 /**
@@ -124,8 +124,21 @@ export const getPipelineStatus = (id) => {
  */
 export const getPipelineHistory = (id, page = 1, pageSize = 10) => {
   return http.get(`${BASE_URL}/history`, {
-    params: { id, page, page_size: pageSize }
+    params: { id: Number(id), page, page_size: pageSize }
   })
+}
+
+/**
+ * 获取流水线阶段数据
+ * @param {number} id - 流水线ID
+ * @param {number} buildNumber - 构建号（可选）
+ */
+export const getPipelineStages = (id, buildNumber = null) => {
+  const params = { id: Number(id) }
+  if (buildNumber) {
+    params.build_number = Number(buildNumber)
+  }
+  return http.get(`${BASE_URL}/stages`, { params })
 }
 
 // ==================== 兼容旧API名称（方便迁移） ====================
@@ -134,3 +147,49 @@ export const getPipelineHistory = (id, page = 1, pageSize = 10) => {
 export const getPipelineById = getPipelineDetail
 export const triggerPipeline = runPipeline
 export const cancelPipeline = stopPipeline
+
+// ==================== 流水线阶段 API ====================
+
+const STAGE_URL = '/api/v1/k8s/cicd/stage'
+
+/**
+ * 获取运行记录的阶段列表
+ * @param {number} runId - 运行记录ID
+ */
+export const getRunStages = (runId) => {
+  return http.get(`${STAGE_URL}/list`, { params: { run_id: Number(runId) } })
+}
+
+/**
+ * 获取阶段日志
+ * @param {number} stageId - 阶段ID
+ */
+export const getStageLogs = (stageId) => {
+  return http.get(`${STAGE_URL}/logs`, { params: { id: Number(stageId) } })
+}
+
+/**
+ * 审批阶段
+ * @param {number} stageId - 阶段ID
+ * @param {string} action - 操作类型: approve/reject
+ * @param {string} comment - 审批意见
+ */
+export const approveStage = (stageId, action, comment = '') => {
+  return http.post(`${STAGE_URL}/approve`, {
+    stage_id: Number(stageId),
+    action,
+    comment
+  })
+}
+
+/**
+ * 执行部署阶段
+ * @param {number} stageId - 阶段ID
+ * @param {Object} options - 可选部署参数
+ */
+export const executeDeployStage = (stageId, options = {}) => {
+  return http.post(`${STAGE_URL}/deploy`, {
+    stage_id: Number(stageId),
+    ...options
+  })
+}

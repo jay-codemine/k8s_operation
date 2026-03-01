@@ -88,6 +88,13 @@ func (j *JSONMap) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
+// 部署环境常量
+const (
+	DeployEnvDev     = "dev"     // 开发环境
+	DeployEnvStaging = "staging" // 测试环境
+	DeployEnvProd    = "prod"    // 生产环境
+)
+
 // CicdPipeline 对应表：cicd_pipeline
 type CicdPipeline struct {
 	ID          int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
@@ -102,6 +109,23 @@ type CicdPipeline struct {
 	JenkinsURL          string `gorm:"column:jenkins_url" json:"jenkins_url"`
 	JenkinsJob          string `gorm:"column:jenkins_job" json:"jenkins_job"`
 	JenkinsCredentialID string `gorm:"column:jenkins_credential_id" json:"jenkins_credential_id"`
+
+	// 部署配置（构建成功后自动部署）
+	AutoDeploy         bool   `gorm:"column:auto_deploy" json:"auto_deploy"`                    // 是否自动部署
+	TargetClusterID    int64  `gorm:"column:target_cluster_id" json:"target_cluster_id"`        // 目标集群ID
+	TargetNamespace    string `gorm:"column:target_namespace" json:"target_namespace"`          // 目标命名空间
+	TargetWorkloadKind string `gorm:"column:target_workload_kind" json:"target_workload_kind"` // 工作负载类型(Deployment/StatefulSet/DaemonSet)
+	TargetWorkloadName string `gorm:"column:target_workload_name" json:"target_workload_name"` // 工作负载名称
+	TargetContainer    string `gorm:"column:target_container" json:"target_container"`         // 容器名称
+	DeployEnv          string `gorm:"column:deploy_env" json:"deploy_env"`                      // 部署环境(dev/staging/prod)
+	RequireApproval    bool   `gorm:"column:require_approval" json:"require_approval"`          // 是否需要审批
+
+	// 最新部署信息
+	LastDeployImage   string `gorm:"column:last_deploy_image" json:"last_deploy_image"`     // 最新部署镜像
+	LastDeployDigest  string `gorm:"column:last_deploy_digest" json:"last_deploy_digest"`   // 最新部署镜像摘要
+	LastDeployTime    uint64 `gorm:"column:last_deploy_time" json:"last_deploy_time"`       // 最新部署时间
+	LastDeployStatus  string `gorm:"column:last_deploy_status" json:"last_deploy_status"`   // 最新部署状态
+	LastDeployVersion string `gorm:"column:last_deploy_version" json:"last_deploy_version"` // 最新部署版本
 
 	// 状态
 	Status          string `gorm:"column:status" json:"status"`
@@ -138,9 +162,17 @@ type CicdPipelineRun struct {
 	GitCommit string `gorm:"column:git_commit" json:"git_commit"`
 	GitBranch string `gorm:"column:git_branch" json:"git_branch"`
 
+	// 构建产物
+	ImageURL    string `gorm:"column:image_url" json:"image_url,omitempty"`       // 构建产出的镜像地址
+	ImageDigest string `gorm:"column:image_digest" json:"image_digest,omitempty"` // 镜像 digest
+
+	// 回调状态
+	CallbackReceived uint8 `gorm:"column:callback_received" json:"callback_received"` // 是否已收到回调
+
 	DurationSec  int     `gorm:"column:duration_sec" json:"duration_sec"`
 	ConsoleLog   string  `gorm:"column:console_log" json:"console_log,omitempty"`
 	StagesResult JSONMap `gorm:"column:stages_result;type:json" json:"stages_result"`
+	ErrorMessage string  `gorm:"column:error_message" json:"error_message,omitempty"` // 错误信息
 
 	StartedAt  uint64 `gorm:"column:started_at" json:"started_at"`
 	FinishedAt uint64 `gorm:"column:finished_at" json:"finished_at"`
@@ -149,6 +181,115 @@ type CicdPipelineRun struct {
 }
 
 func (CicdPipelineRun) TableName() string { return "cicd_pipeline_run" }
+
+// ==================== 流水线阶段执行记录 ====================
+
+// 阶段类型常量
+const (
+	StageTypeCheckout = "checkout" // 代码检出
+	StageTypeBuild    = "build"    // 构建
+	StageTypeTest     = "test"     // 测试
+	StageTypePush     = "push"     // 推送镜像
+	StageTypeApproval = "approval" // 人工审批
+	StageTypeDeploy   = "deploy"   // 部署
+)
+
+// 阶段状态常量
+const (
+	StageStatusPending   = "pending"   // 等待中
+	StageStatusRunning   = "running"   // 执行中
+	StageStatusSuccess   = "success"   // 成功
+	StageStatusFailed    = "failed"    // 失败
+	StageStatusSkipped   = "skipped"   // 跳过
+	StageStatusWaiting   = "waiting"   // 等待审批
+	StageStatusAborted   = "aborted"   // 已中止
+)
+
+// CicdPipelineStage 流水线阶段执行记录表
+type CicdPipelineStage struct {
+	ID         int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	RunID      int64  `gorm:"column:run_id;index" json:"run_id"`       // 关联流水线运行记录
+	PipelineID int64  `gorm:"column:pipeline_id;index" json:"pipeline_id"` // 关联流水线
+	StageOrder int    `gorm:"column:stage_order" json:"stage_order"` // 阶段顺序 (1,2,3...)
+	StageType  string `gorm:"column:stage_type" json:"stage_type"`   // 阶段类型
+	StageName  string `gorm:"column:stage_name" json:"stage_name"`   // 阶段名称
+	Status     string `gorm:"column:status" json:"status"`           // 执行状态
+
+	// 执行信息
+	StartedAt   uint64 `gorm:"column:started_at" json:"started_at"`     // 开始时间
+	FinishedAt  uint64 `gorm:"column:finished_at" json:"finished_at"`   // 结束时间
+	DurationSec int    `gorm:"column:duration_sec" json:"duration_sec"` // 执行时长(秒)
+	Logs        string `gorm:"column:logs;type:longtext" json:"logs"`   // 阶段日志
+
+	// Jenkins 构建信息（适用于 build/test/push 类型）
+	JenkinsStageID string `gorm:"column:jenkins_stage_id" json:"jenkins_stage_id,omitempty"` // Jenkins 阶段ID
+
+	// 审批信息（适用于 approval 类型）
+	ApprovalUserID   int64  `gorm:"column:approval_user_id" json:"approval_user_id,omitempty"`     // 审批人
+	ApprovalComment  string `gorm:"column:approval_comment" json:"approval_comment,omitempty"`   // 审批评论
+	ApprovalDecision string `gorm:"column:approval_decision" json:"approval_decision,omitempty"` // 审批决定: approved/rejected
+
+	// 部署信息（适用于 deploy 类型）
+	DeployClusterID    int64  `gorm:"column:deploy_cluster_id" json:"deploy_cluster_id,omitempty"`       // 目标集群
+	DeployNamespace    string `gorm:"column:deploy_namespace" json:"deploy_namespace,omitempty"`       // 目标命名空间
+	DeployWorkloadKind string `gorm:"column:deploy_workload_kind" json:"deploy_workload_kind,omitempty"` // 工作负载类型
+	DeployWorkloadName string `gorm:"column:deploy_workload_name" json:"deploy_workload_name,omitempty"` // 工作负载名称
+	DeployContainer    string `gorm:"column:deploy_container" json:"deploy_container,omitempty"`       // 容器名称
+	DeployImage        string `gorm:"column:deploy_image" json:"deploy_image,omitempty"`               // 部署镜像
+	DeployReplicas     int    `gorm:"column:deploy_replicas" json:"deploy_replicas,omitempty"`         // 副本数
+
+	// 错误信息
+	ErrorMessage string `gorm:"column:error_message" json:"error_message,omitempty"`
+
+	// 元数据
+	CreatedAt  uint64 `gorm:"column:created_at" json:"created_at"`
+	ModifiedAt uint64 `gorm:"column:modified_at" json:"modified_at"`
+}
+
+func (CicdPipelineStage) TableName() string { return "cicd_pipeline_stage" }
+
+// StageDisplayInfo 阶段展示信息（前端使用）
+type StageDisplayInfo struct {
+	ID           int64  `json:"id"`
+	Order        int    `json:"order"`
+	Type         string `json:"type"`          // checkout/build/test/push/approval/deploy
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Duration     string `json:"duration"`      // 格式化后的时长
+	StartedAt    uint64 `json:"started_at"`
+	FinishedAt   uint64 `json:"finished_at"`
+	CanOperate   bool   `json:"can_operate"`   // 是否可操作(审批/部署)
+	HasLogs      bool   `json:"has_logs"`      // 是否有日志
+	Logs         string `json:"logs,omitempty"`         // 部署日志（仅部署阶段返回）
+	ErrorMsg     string `json:"error_msg,omitempty"`
+	ErrorMessage string `json:"error_message,omitempty"` // 错误信息（部署失败时）
+	
+	// 审批信息
+	ApprovalInfo *StageApprovalInfo `json:"approval_info,omitempty"`
+	// 部署信息
+	DeployInfo   *StageDeployInfo   `json:"deploy_info,omitempty"`
+}
+
+// StageApprovalInfo 审批信息
+type StageApprovalInfo struct {
+	ApproverID   int64  `json:"approver_id,omitempty"`
+	ApproverName string `json:"approver_name,omitempty"`
+	Decision     string `json:"decision,omitempty"` // approved/rejected
+	Comment      string `json:"comment,omitempty"`
+	ApprovedAt   uint64 `json:"approved_at,omitempty"`
+}
+
+// StageDeployInfo 部署信息
+type StageDeployInfo struct {
+	ClusterID    int64  `json:"cluster_id"`
+	ClusterName  string `json:"cluster_name,omitempty"`
+	Namespace    string `json:"namespace"`
+	WorkloadKind string `json:"workload_kind"`
+	WorkloadName string `json:"workload_name"`
+	Container    string `json:"container"`
+	Image        string `json:"image"`
+	Replicas     int    `json:"replicas,omitempty"`
+}
 
 // PipelineListItem 列表查询返回结构（去除敏感字段）
 type PipelineListItem struct {

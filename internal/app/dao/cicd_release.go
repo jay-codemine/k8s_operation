@@ -63,12 +63,21 @@ func (d *Dao) CicdReleaseGetByID(ctx context.Context, releaseID int64) (*models.
 }
 
 // CicdReleaseList 发布单列表查询
-func (d *Dao) CicdReleaseList(ctx context.Context, appName, status string, page, pageSize int) ([]*models.CicdRelease, int64, error) {
+func (d *Dao) CicdReleaseList(ctx context.Context, keyword, appName, status string, page, pageSize int) ([]*models.CicdRelease, int64, error) {
 	var list []*models.CicdRelease
 	var total int64
 
 	query := d.db.WithContext(ctx).Model(&models.CicdRelease{}).Where("is_del = 0")
 
+	// keyword 模糊搜索：应用名、工作负载名、镜像等
+	if keyword != "" {
+		likePattern := "%" + keyword + "%"
+		query = query.Where(
+			"app_name LIKE ? OR workload_name LIKE ? OR image_repo LIKE ? OR image_tag LIKE ?",
+			likePattern, likePattern, likePattern, likePattern,
+		)
+	}
+	// 精确匹配 app_name（兼容旧参数）
 	if appName != "" {
 		query = query.Where("app_name LIKE ?", "%"+appName+"%")
 	}

@@ -2614,8 +2614,14 @@ const createStatefulset = async () => {
       // 创建后启动自动刷新 15 秒，观察 Pod 启动状态
       autoRefresh.value = true
       setTimeout(() => { autoRefresh.value = false }, 15000)
-    } else { Message.error({ content: res.msg || '创建失败' }) }
-  } catch (e) { Message.error({ content: e?.msg || '创建失败' }) }
+    } else {
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '创建失败')
+      Message.error({ content: errorMsg, duration: 5000 })
+    }
+  } catch (e) {
+    const errorMsg = e?.details ? `${e?.msg || '创建失败'}: ${e.details}` : (e?.msg || '创建失败')
+    Message.error({ content: errorMsg, duration: 5000 })
+  }
 }
 
 const resetForm = () => {
@@ -2718,12 +2724,13 @@ const createStatefulSetFromYaml = async () => {
       resetForm()
       await fetchStatefulsets()
     } else {
-      Message.error({ content: res.msg || '创建失败' })
-      yamlError.value = res.msg || '创建失败'
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '创建失败')
+      Message.error({ content: errorMsg, duration: 5000 })
+      yamlError.value = errorMsg
     }
   } catch (e) {
-    const errorMsg = e?.msg || e?.message || '创建失败'
-    Message.error({ content: errorMsg })
+    const errorMsg = e?.details ? `${e?.msg || '创建失败'}: ${e.details}` : (e?.msg || e?.message || '创建失败')
+    Message.error({ content: errorMsg, duration: 5000 })
     yamlError.value = errorMsg
   }
 }

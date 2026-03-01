@@ -1,575 +1,1123 @@
-<template>
-  <div class="pipeline-detail">
-    <h2>流水线详情</h2>
-
-    <!-- 流水线基本信息 -->
-    <div class="info-card">
-      <div class="info-header">
-        <h3>{{ pipeline.name }}</h3>
-        <div class="status-badge" :class="`status-${pipeline.status}`">
-          {{ pipeline.status }}
-        </div>
-      </div>
-      <div class="info-content">
-        <div class="info-item">
-          <span class="label">描述：</span>
-          <span class="value">{{ pipeline.description }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">Git仓库：</span>
-          <span class="value">{{ pipeline.gitRepo }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">分支：</span>
-          <span class="value">{{ pipeline.branch }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">上次运行时间：</span>
-          <span class="value">{{ formatDate(pipeline.lastRunTime) }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">上次运行状态：</span>
-          <span class="status-badge" :class="`status-${pipeline.lastRunStatus}`">
-            {{ pipeline.lastRunStatus }}
-          </span>
-        </div>
-      </div>
-      <div class="info-actions">
-        <button class="btn btn-primary" @click="runPipeline">运行流水线</button>
-        <button class="btn btn-danger" @click="stopPipeline" v-if="pipeline.status === 'running'">停止流水线</button>
-        <div class="auto-refresh">
-          <input type="checkbox" id="auto-refresh" v-model="autoRefreshEnabled" />
-          <label for="auto-refresh">自动刷新 ({{ refreshInterval / 1000 }}秒)</label>
-        </div>
-      </div>
+“<template>
+  ：
+  <div class="pipeline-detail-view">
+    <!-- 顶部导航 -->
+    <div class="breadcrumb">
+      <router-link to="/cicd/pipelines" class="breadcrumb-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        流水线列表
+      </router-link>
+      <span class="separator">/</span>
+      <span class="current">{{ pipeline.name || '加载中...' }}</span>
     </div>
 
-    <!-- 流水线阶段 -->
-    <div class="stages-card">
-      <div class="stage-header">
-        <h3>流水线阶段</h3>
-        <div class="stage-actions">
-          <button class="btn btn-primary" @click="runPipeline" v-if="pipeline.status !== 'running'">
-            开始流水线
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>正在加载流水线详情...</p>
+    </div>
+
+    <template v-else-if="pipeline.id">
+      <!-- 流水线头部 -->
+      <div class="pipeline-header">
+        <div class="header-left">
+          <div class="title-row">
+            <span :class="['status-indicator', `status-${pipeline.status}`]"></span>
+            <h1 class="pipeline-title">{{ pipeline.name }}</h1>
+            <span :class="['status-badge', `status-${pipeline.status}`]">
+              {{ statusText(pipeline.status) }}
+            </span>
+          </div>
+          <p class="pipeline-desc">{{ pipeline.description || '暂无描述' }}</p>
+          <div class="pipeline-meta">
+            <div class="meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77"/>
+              </svg>
+              <span>{{ pipeline.git_repo }}</span>
+            </div>
+            <div class="meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="6" y1="3" x2="6" y2="15"/>
+                <circle cx="18" cy="6" r="3"/>
+                <circle cx="6" cy="18" r="3"/>
+                <path d="M18 9a9 9 0 0 1-9 9"/>
+              </svg>
+              <span>{{ pipeline.git_branch }}</span>
+            </div>
+            <div class="meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <span>{{ pipeline.jenkins_job || '未配置' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button
+            class="btn btn-success"
+            @click="showRunDialog = true"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            {{ pipeline.status === 'running' ? '重新运行' : '运行' }}
           </button>
-          <button class="btn btn-danger" @click="stopPipeline" v-else>
-            停止流水线
+          <button
+            v-if="pipeline.status === 'running' || pipeline.last_run_status === 'pending'"
+            class="btn btn-warning"
+            @click="handleStop"
+          >
+            <svg v-if="pipeline.last_run_status === 'pending'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+            {{ pipeline.last_run_status === 'pending' ? '取消构建' : '停止构建' }}
           </button>
-          <button class="btn btn-secondary" @click="resetPipeline" v-if="pipeline.status !== 'running'">
-            重置流水线
+          <button class="btn btn-outline" @click="handleEdit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            编辑
           </button>
         </div>
       </div>
-      <div class="stages-container">
-        <div
-          v-for="(stage, index) in pipeline.stages"
-          :key="stage.name"
-          class="stage-item"
-          :class="{
-            'stage-active': stage.status === 'running',
-            'stage-completed': stage.status === 'success',
-            'stage-failed': stage.status === 'failed',
-            'stage-pending': stage.status === 'pending',
-            'stage-skipped': stage.status === 'skipped',
-            'stage-next': canRunNextStage(index)
-          }"
+
+      <!-- Tab 导航 -->
+      <div class="tab-nav">
+        <button
+          :class="['tab-btn', { active: activeTab === 'overview' }]"
+          @click="activeTab = 'overview'"
         >
-          <div class="stage-number" :class="stage.status">
-            <span v-if="stage.status === 'success'" class="status-icon">✓</span>
-            <span v-else-if="stage.status === 'failed'" class="status-icon">✗</span>
-            <span v-else-if="stage.status === 'running'" class="status-icon">⚡</span>
-            <span v-else-if="stage.status === 'skipped'" class="status-icon">➤</span>
-            <span v-else>{{ index + 1 }}</span>
-          </div>
-          <div class="stage-content">
-            <div class="stage-name">{{ stage.name }}</div>
-            <div class="stage-description">{{ stage.description }}</div>
-            <div class="stage-meta">
-              <span class="stage-status" :class="stage.status">{{ stage.status }}</span>
-              <span class="stage-time" v-if="stage.startTime">
-                {{ formatDate(stage.startTime) }} - {{ stage.endTime ? formatDate(stage.endTime) : '进行中' }}
-                <span class="stage-duration" v-if="stage.endTime">
-                  ({{ calculateStageDuration(stage.startTime, stage.endTime) }})
-                </span>
-              </span>
-            </div>
-            <div class="stage-actions" style="margin-top: 12px;">
-              <!-- 运行/重跑按钮 -->
-              <button
-                class="btn btn-small btn-primary"
-                @click="runStage(index)"
-                :disabled="!canRunStage(index)"
-                title="运行此阶段"
-              >
-                <span v-if="stage.status === 'pending'">运行</span>
-                <span v-else-if="stage.status === 'running'">运行中</span>
-                <span v-else>重新运行</span>
-              </button>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M9 21V9"/>
+          </svg>
+          概览
+        </button>
+        <button
+          :class="['tab-btn', { active: activeTab === 'stages' }]"
+          @click="activeTab = 'stages'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          执行阶段
+        </button>
+        <button
+          :class="['tab-btn', { active: activeTab === 'logs' }]"
+          @click="activeTab = 'logs'; loadLogs()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          构建日志
+        </button>
+        <button
+          :class="['tab-btn', { active: activeTab === 'history' }]"
+          @click="activeTab = 'history'; loadHistory()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          运行历史
+        </button>
+        <button
+          :class="['tab-btn', { active: activeTab === 'config' }]"
+          @click="activeTab = 'config'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          配置
+        </button>
+      </div>
 
-              <!-- 停止按钮 -->
-              <button
-                class="btn btn-small btn-danger"
-                @click="stopStage(index)"
-                :disabled="stage.status !== 'running'"
-                title="停止此阶段"
-              >
-                停止
-              </button>
-
-              <!-- 跳过按钮 -->
-              <button
-                class="btn btn-small btn-warning"
-                @click="skipStage(index)"
-                :disabled="!canSkipStage(index)"
-                title="跳过此阶段"
-              >
-                跳过
-              </button>
-
-              <!-- 继续按钮 -->
-              <button
-                class="btn btn-small btn-success"
-                @click="continuePipeline(index)"
-                :disabled="!canContinuePipeline(index)"
-                title="继续流水线"
-              >
-                继续
-              </button>
-
-              <!-- 查看阶段详情/日志按钮 -->
-              <button
-                class="btn btn-small btn-secondary"
-                @click="viewStageDetail(index)"
-                title="查看阶段详情和日志"
-              >
-                查看日志
-              </button>
-            </div>
-
-            <!-- 阶段进度条 -->
-            <div class="stage-progress" v-if="stage.status === 'running'">
-              <div class="progress-bar">
-                <div class="progress-fill"></div>
+      <!-- Tab 内容 -->
+      <div class="tab-content">
+        <!-- 概览 -->
+        <div v-if="activeTab === 'overview'" class="overview-tab">
+          <!-- 最近运行状态 -->
+          <div class="section">
+            <h3 class="section-title">最近运行状态</h3>
+            <div class="status-cards">
+              <div class="status-card">
+                <div class="card-icon" :class="`status-${pipeline.last_run_status}`">
+                  <svg v-if="pipeline.last_run_status === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <svg v-else-if="pipeline.last_run_status === 'failed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                  <svg v-else-if="pipeline.last_run_status === 'running'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                </div>
+                <div class="card-content">
+                  <span class="card-label">运行状态</span>
+                  <span class="card-value">{{ runStatusText(pipeline.last_run_status) }}</span>
+                </div>
               </div>
-              <div class="progress-text">运行中...</div>
+              <div class="status-card">
+                <div class="card-icon neutral">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                </div>
+                <div class="card-content">
+                  <span class="card-label">运行时间</span>
+                  <span class="card-value">{{ formatDate(pipeline.last_run_time) }}</span>
+                </div>
+              </div>
+              <div class="status-card">
+                <div class="card-icon neutral">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                </div>
+                <div class="card-content">
+                  <span class="card-label">构建号</span>
+                  <span class="card-value">#{{ pipeline.last_build_number || '-' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最近部署版本信息 -->
+          <div v-if="pipeline.auto_deploy || pipeline.last_deploy_image" class="section">
+            <h3 class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="title-icon">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              最近部署版本
+            </h3>
+            <div class="version-info-card">
+              <div class="version-grid">
+                <div class="version-item">
+                  <span class="version-label">部署状态</span>
+                  <span :class="['version-value', 'deploy-status', `status-${pipeline.last_deploy_status || 'pending'}`]">
+                    {{ deployStatusText(pipeline.last_deploy_status) }}
+                  </span>
+                </div>
+                <div class="version-item">
+                  <span class="version-label">部署时间</span>
+                  <span class="version-value">{{ pipeline.last_deploy_time ? formatFullDate(pipeline.last_deploy_time) : '-' }}</span>
+                </div>
+                <div class="version-item full">
+                  <span class="version-label">镜像地址</span>
+                  <span class="version-value code-text">{{ pipeline.last_deploy_image || '-' }}</span>
+                </div>
+                <div v-if="pipeline.last_deploy_digest" class="version-item full">
+                  <span class="version-label">镜像 Digest</span>
+                  <span class="version-value code-text digest">{{ pipeline.last_deploy_digest }}</span>
+                </div>
+                <div v-if="pipeline.last_deploy_version" class="version-item">
+                  <span class="version-label">版本号</span>
+                  <span class="version-value tag">{{ pipeline.last_deploy_version }}</span>
+                </div>
+              </div>
+              <div v-if="pipeline.auto_deploy" class="deploy-target-info">
+                <div class="target-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="22" y1="12" x2="18" y2="12"/>
+                    <line x1="6" y1="12" x2="2" y2="12"/>
+                    <line x1="12" y1="6" x2="12" y2="2"/>
+                    <line x1="12" y1="22" x2="12" y2="18"/>
+                  </svg>
+                  部署目标
+                </div>
+                <div class="target-value">
+                  {{ pipeline.target_namespace || '-' }} /
+                  {{ pipeline.target_workload_kind || 'Deployment' }} /
+                  {{ pipeline.target_workload_name || '-' }}
+                  <span v-if="pipeline.target_container" class="container-name">
+                    (容器: {{ pipeline.target_container }})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 错误信息展示（只在失败时显示） -->
+          <div v-if="latestRun && latestRun.error_message && (latestRun.status === 'failed' || pipeline.last_run_status === 'failed')" class="section error-section">
+            <h3 class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="error-icon">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              错误信息
+            </h3>
+            <div class="error-box">
+              <div class="error-content">
+                <p class="error-message">{{ latestRun.error_message }}</p>
+                <p class="error-time">失败时间: {{ formatFullDate(latestRun.finished_at) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 快速操作 -->
+          <div class="section">
+            <h3 class="section-title">快速操作</h3>
+            <div class="quick-actions">
+              <button class="quick-action-btn" @click="handleRun" :disabled="pipeline.status === 'running'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>运行流水线</span>
+              </button>
+              <button class="quick-action-btn" @click="activeTab = 'logs'; loadLogs()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>查看日志</span>
+              </button>
+              <button class="quick-action-btn" @click="activeTab = 'history'; loadHistory()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span>运行历史</span>
+              </button>
+              <button class="quick-action-btn" @click="handleEdit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                <span>编辑配置</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 执行阶段 -->
+        <div v-if="activeTab === 'stages'" class="stages-tab">
+          <!-- 阶段筛选和操作栏 -->
+          <div class="stages-toolbar">
+            <div class="filter-tabs">
+              <button
+                :class="['filter-tab', { active: stageFilter === '' }]"
+                @click="stageFilter = ''"
+              >
+                全部
+                <span class="filter-count">{{ pipelineStages.length }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: stageFilter === 'success' }]"
+                @click="stageFilter = 'success'"
+              >
+                <span class="status-dot success"></span>
+                成功
+                <span class="filter-count">{{ getStageStatusCount('success') }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: stageFilter === 'failed' }]"
+                @click="stageFilter = 'failed'"
+              >
+                <span class="status-dot failed"></span>
+                失败
+                <span class="filter-count">{{ getStageStatusCount('failed') }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: stageFilter === 'running' }]"
+                @click="stageFilter = 'running'"
+              >
+                <span class="status-dot running"></span>
+                运行中
+                <span class="filter-count">{{ getStageStatusCount('running') }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: stageFilter === 'pending' }]"
+                @click="stageFilter = 'pending'"
+              >
+                <span class="status-dot pending"></span>
+                待执行
+                <span class="filter-count">{{ getStageStatusCount('pending') }}</span>
+              </button>
+            </div>
+            <button class="toolbar-btn" @click="loadStages" :disabled="stagesLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              {{ stagesLoading ? '加载中...' : '刷新' }}
+            </button>
+          </div>
+
+          <!-- 加载状态 -->
+          <div v-if="stagesLoading && pipelineStages.length === 0" class="stages-loading">
+            <div class="loading-spinner"></div>
+            <p>正在加载阶段数据...</p>
+          </div>
+
+          <!-- 阶段流水线视图 -->
+          <div v-else-if="filteredStages.length > 0" class="stages-pipeline">
+            <div
+              v-for="(stage, index) in filteredStages"
+              :key="stage.name"
+              :class="['stage-node', `status-${stage.status}`]"
+            >
+              <div class="stage-connector" v-if="index > 0"></div>
+              <div class="stage-content">
+                <div class="stage-icon">
+                  <svg v-if="stage.status === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <svg v-else-if="stage.status === 'failed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                  <svg v-else-if="stage.status === 'running'" class="spinning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  <svg v-else-if="stage.status === 'waiting'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                  </svg>
+                </div>
+                <div class="stage-info">
+                  <span class="stage-name">{{ stage.name }}</span>
+                  <span class="stage-duration">{{ stage.duration || '-' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div v-else class="stages-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            <p>{{ stageFilter ? '没有匹配的阶段' : '暂无阶段数据，请运行流水线' }}</p>
+          </div>
+
+          <!-- 阶段详情 -->
+          <div v-if="filteredStages.length > 0" class="stage-details">
+            <div v-for="stage in filteredStages" :key="stage.name" class="stage-detail-card">
+              <div class="detail-header" @click="toggleStageExpand(stage.name)">
+                <span :class="['status-dot', `status-${stage.status}`]"></span>
+                <span class="stage-title">{{ stage.name }}</span>
+                <!-- 阶段类型标签 -->
+                <span v-if="stage.type === 'approval'" :class="['stage-type-badge', 'approval', `approval-${stage.status}`]">{{ approvalBadgeText(stage.status) }}</span>
+                <span v-if="stage.type === 'deploy'" class="stage-type-badge deploy">部署</span>
+                <span class="stage-status">{{ stageStatusText(stage.status) }}</span>
+                <svg :class="['expand-icon', { expanded: expandedStages.includes(stage.name) }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div v-show="expandedStages.includes(stage.name)" class="detail-body">
+                <!-- 审批阶段操作 - 参考 KubeSphere/Rancher 设计 -->
+                <div v-if="stage.type === 'approval' && (stage.status === 'waiting' || stage.status === 'pending')" class="stage-action-panel approval-panel-enhanced">
+                  <div class="approval-header">
+                    <div class="approval-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      </svg>
+                    </div>
+                    <div class="approval-title">
+                      <h4>人工审批</h4>
+                      <p>该阶段需要人工审批确认才能继续部署</p>
+                    </div>
+                  </div>
+
+                  <!-- 审批选项 -->
+                  <div class="approval-options">
+                    <label :class="['approval-option', { selected: approvalDecision === 'approve' }]" @click="approvalDecision = 'approve'">
+                      <div class="option-radio">
+                        <span class="radio-inner"></span>
+                      </div>
+                      <div class="option-content">
+                        <span class="option-icon approve">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        </span>
+                        <span class="option-label">通过</span>
+                        <span class="option-desc">确认并继续执行部署</span>
+                      </div>
+                    </label>
+                    <label :class="['approval-option', { selected: approvalDecision === 'reject' }]" @click="approvalDecision = 'reject'">
+                      <div class="option-radio">
+                        <span class="radio-inner"></span>
+                      </div>
+                      <div class="option-content">
+                        <span class="option-icon reject">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </span>
+                        <span class="option-label">拒绝</span>
+                        <span class="option-desc">取消本次部署</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <!-- 审批备注 -->
+                  <div class="approval-comment">
+                    <label class="comment-label">审批备注 <span class="optional">(可选)</span></label>
+                    <textarea
+                      v-model="approvalComment"
+                      class="comment-input"
+                      placeholder="请输入审批备注..."
+                      rows="3"
+                    ></textarea>
+                  </div>
+
+                  <!-- 提交按钮 -->
+                  <div class="approval-actions">
+                    <button
+                      :class="['btn', 'btn-approval', approvalDecision === 'approve' ? 'approve' : 'reject']"
+                      @click.stop="submitApproval(stage.id)"
+                      :disabled="approving"
+                    >
+                      <svg v-if="approving" class="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                      </svg>
+                      <svg v-else-if="approvalDecision === 'approve'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                      {{ approving ? '处理中...' : (approvalDecision === 'approve' ? '确认通过' : '确认拒绝') }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 审批已通过状态展示 -->
+                <div v-if="stage.type === 'approval' && (stage.status === 'success' || stage.status === 'approved')" class="stage-action-panel approval-result-panel approved">
+                  <div class="approval-result-header">
+                    <div class="result-icon approved">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                      </svg>
+                    </div>
+                    <div class="result-content">
+                      <h4>审批已通过</h4>
+                      <p>该阶段已经审批通过，可以继续执行部署</p>
+                    </div>
+                  </div>
+                  <div v-if="stage.approval_info" class="approval-meta">
+                    <span v-if="stage.approval_info.approver_name">审批人: {{ stage.approval_info.approver_name }}</span>
+                    <span v-if="stage.approval_info.approved_at">审批时间: {{ formatFullDate(stage.approval_info.approved_at) }}</span>
+                  </div>
+                  <div v-if="stage.approval_info && stage.approval_info.comment" class="approval-comment-display">
+                    <span class="comment-label">审批备注:</span>
+                    <span class="comment-text">{{ stage.approval_info.comment }}</span>
+                  </div>
+                </div>
+
+                <!-- 审批已拒绝状态展示 -->
+                <div v-if="stage.type === 'approval' && (stage.status === 'failed' || stage.status === 'rejected')" class="stage-action-panel approval-result-panel rejected">
+                  <div class="approval-result-header">
+                    <div class="result-icon rejected">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                      </svg>
+                    </div>
+                    <div class="result-content">
+                      <h4>审批已拒绝</h4>
+                      <p>该阶段审批被拒绝，部署已取消</p>
+                    </div>
+                  </div>
+                  <div v-if="stage.approval_info" class="approval-meta">
+                    <span v-if="stage.approval_info.approver_name">拒绝人: {{ stage.approval_info.approver_name }}</span>
+                    <span v-if="stage.approval_info.approved_at">拒绝时间: {{ formatFullDate(stage.approval_info.approved_at) }}</span>
+                  </div>
+                  <div v-if="stage.approval_info && stage.approval_info.comment" class="approval-comment-display">
+                    <span class="comment-label">拒绝原因:</span>
+                    <span class="comment-text">{{ stage.approval_info.comment }}</span>
+                  </div>
+                </div>
+
+                <!-- 部署阶段操作 -->
+                <div v-if="stage.type === 'deploy' && stage.can_operate" class="stage-action-panel deploy-panel">
+                  <div class="action-info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                      <line x1="8" y1="21" x2="16" y2="21"/>
+                      <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    <span>点击执行部署到 K8s 集群</span>
+                  </div>
+                  <div v-if="stage.deploy_info" class="deploy-info">
+                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
+                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
+                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
+                    <span>镜像: {{ stage.deploy_info.image }}</span>
+                  </div>
+                  <div class="action-buttons">
+                    <button class="btn btn-primary" @click.stop="handleDeployStage(stage.id)" :disabled="deploying">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      </svg>
+                      {{ deploying ? '部署中...' : '执行部署' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 部署成功信息 -->
+                <div v-if="stage.type === 'deploy' && stage.status === 'success' && stage.deploy_info" class="deploy-success-info">
+                  <div class="success-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    部署成功
+                  </div>
+                  <div class="deploy-details">
+                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
+                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
+                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
+                    <span>镜像: {{ stage.deploy_info.image }}</span>
+                  </div>
+                </div>
+
+                <!-- 部署进行中状态 -->
+                <div v-if="stage.type === 'deploy' && stage.status === 'running'" class="deploy-progress-panel">
+                  <div class="progress-header">
+                    <div class="progress-spinner"></div>
+                    <span>部署进行中...</span>
+                  </div>
+                  <div v-if="stage.deploy_info" class="deploy-info-mini">
+                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
+                    <span>镜像: {{ stage.deploy_info.image }}</span>
+                  </div>
+                </div>
+
+                <!-- 部署失败信息 -->
+                <div v-if="stage.type === 'deploy' && stage.status === 'failed'" class="deploy-failed-info">
+                  <div class="failed-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="15" y1="9" x2="9" y2="15"/>
+                      <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    部署失败
+                  </div>
+                  <div v-if="stage.error_message" class="failed-reason">
+                    <span class="reason-label">失败原因:</span>
+                    <span class="reason-text">{{ stage.error_message }}</span>
+                  </div>
+                  <div v-if="stage.deploy_info" class="deploy-details">
+                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
+                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
+                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
+                    <span>镜像: {{ stage.deploy_info.image }}</span>
+                  </div>
+                  <!-- 重新部署按钮 -->
+                  <div class="retry-deploy-actions">
+                    <button class="btn btn-retry" @click.stop="handleRetryDeploy(stage.id)" :disabled="deploying">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                      {{ deploying ? '部署中...' : '重新部署' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 部署日志展示（Rollout 步骤） -->
+                <div v-if="stage.type === 'deploy' && stage.logs && (stage.status === 'success' || stage.status === 'failed' || stage.status === 'running')" class="deploy-logs-panel">
+                  <div class="logs-toggle" @click="stage.showLogs = !stage.showLogs">
+                    <svg :class="['toggle-icon', { expanded: stage.showLogs }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                    <span>查看部署日志</span>
+                  </div>
+                  <pre v-show="stage.showLogs" class="deploy-logs-content">{{ stage.logs }}</pre>
+                </div>
+
+                <!-- Jenkins 构建阶段步骤 -->
+                <div v-if="stage.steps && stage.steps.length > 0" class="stage-steps">
+                  <div v-for="step in stage.steps" :key="step.name" class="step-item">
+                    <svg v-if="step.status === 'success'" class="step-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <svg v-else-if="step.status === 'failed'" class="step-icon failed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    <svg v-else class="step-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                    <span class="step-name">{{ step.name }}</span>
+                    <span class="step-duration">{{ step.duration || '-' }}</span>
+                  </div>
+                </div>
+
+                <!-- 错误信息 -->
+                <div v-if="stage.error_msg" class="stage-error">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span>{{ stage.error_msg }}</span>
+                </div>
+
+                <!-- 查看日志按钮 -->
+                <div class="stage-actions">
+                  <button v-if="stage.has_logs" class="view-log-btn" @click.stop="viewStageLog(stage)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    查看阶段日志
+                  </button>
+                  <button class="view-log-btn" @click.stop="activeTab = 'logs'; loadLogs()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    查看构建日志
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 构建日志 -->
+        <div v-if="activeTab === 'logs'" class="logs-tab">
+          <div class="logs-toolbar">
+            <div class="toolbar-left">
+              <span class="log-label">构建号: #{{ pipeline.last_build_number || '-' }}</span>
+            </div>
+            <div class="toolbar-right">
+              <button class="toolbar-btn" @click="refreshLogs" :disabled="logsLoading">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                刷新
+              </button>
+              <button class="toolbar-btn" @click="copyLogs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                复制
+              </button>
+              <button class="toolbar-btn" @click="downloadLogs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载
+              </button>
+              <label class="auto-scroll">
+                <input type="checkbox" v-model="autoScroll" />
+                自动滚动
+              </label>
+            </div>
+          </div>
+          <div class="logs-container" ref="logsContainer">
+            <div v-if="logsLoading" class="logs-loading">
+              <div class="loading-spinner small"></div>
+              正在加载日志...
+            </div>
+            <pre v-else-if="logs" class="logs-content">{{ logs }}</pre>
+            <!-- 错误状态：显示友好提示和重新构建按钮 -->
+            <div v-else-if="logsError" class="logs-error">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <p class="error-message">{{ logsError }}</p>
+              <button class="btn btn-primary" @click="handleRun" :disabled="pipeline.status === 'running'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                重新运行流水线
+              </button>
+            </div>
+            <div v-else class="logs-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p>暂无日志，请先运行流水线</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 运行历史 -->
+        <div v-if="activeTab === 'history'" class="history-tab">
+          <div class="history-toolbar">
+            <!-- 状态筛选按钮 -->
+            <div class="filter-tabs">
+              <button
+                :class="['filter-tab', { active: historyFilter === '' }]"
+                @click="historyFilter = ''"
+              >
+                全部
+                <span class="filter-count">{{ history.length }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: historyFilter === 'success' }]"
+                @click="historyFilter = 'success'"
+              >
+                <span class="status-dot success"></span>
+                成功
+                <span class="filter-count">{{ getHistoryStatusCount('success') }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: historyFilter === 'failed' }]"
+                @click="historyFilter = 'failed'"
+              >
+                <span class="status-dot failed"></span>
+                失败
+                <span class="filter-count">{{ getHistoryStatusCount('failed') }}</span>
+              </button>
+              <button
+                :class="['filter-tab', { active: historyFilter === 'running' }]"
+                @click="historyFilter = 'running'"
+              >
+                <span class="status-dot running"></span>
+                运行中
+                <span class="filter-count">{{ getHistoryStatusCount('running') }}</span>
+              </button>
+            </div>
+            <button class="toolbar-btn" @click="loadHistory" :disabled="historyLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              刷新
+            </button>
+          </div>
+          <div v-if="historyLoading" class="history-loading">
+            <div class="loading-spinner small"></div>
+            正在加载运行历史...
+          </div>
+          <div v-else-if="filteredHistory.length === 0" class="history-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <p>{{ historyFilter ? '没有匹配的运行记录' : '暂无运行历史' }}</p>
+          </div>
+          <div v-else class="history-list">
+            <div
+              v-for="run in filteredHistory"
+              :key="run.id"
+              :class="['history-item', `status-${run.status}`]"
+            >
+              <div class="history-icon">
+                <svg v-if="run.status === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <svg v-else-if="run.status === 'failed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                <svg v-else-if="run.status === 'running'" class="spinning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                </svg>
+              </div>
+              <div class="history-info">
+                <div class="history-title">
+                  <span class="build-number">#{{ run.build_number || run.id }}</span>
+                  <span :class="['history-status', `status-${run.status}`]">{{ runStatusText(run.status) }}</span>
+                </div>
+                <div class="history-meta">
+                  <span>{{ formatDate(run.started_at || run.created_at) }}</span>
+                  <span v-if="run.duration_sec">· 耗时 {{ formatDuration(run.duration_sec) }}</span>
+                  <span v-if="run.git_branch">· {{ run.git_branch }}</span>
+                </div>
+              </div>
+              <div class="history-actions">
+                <button class="action-btn" @click="viewRunLogs(run)" title="查看日志">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                </button>
+                <button
+                  v-if="run.status === 'failed'"
+                  class="action-btn retry"
+                  @click="retryRun(run)"
+                  title="重试"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 配置 -->
+        <div v-if="activeTab === 'config'" class="config-tab">
+          <div class="config-section">
+            <h3 class="config-title">基本信息</h3>
+            <div class="config-grid">
+              <div class="config-item">
+                <span class="config-label">流水线名称</span>
+                <span class="config-value">{{ pipeline.name }}</span>
+              </div>
+              <div class="config-item">
+                <span class="config-label">描述</span>
+                <span class="config-value">{{ pipeline.description || '-' }}</span>
+              </div>
+              <div class="config-item">
+                <span class="config-label">创建时间</span>
+                <span class="config-value">{{ formatFullDate(pipeline.created_at) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section">
+            <h3 class="config-title">Git 配置</h3>
+            <div class="config-grid">
+              <div class="config-item">
+                <span class="config-label">仓库地址</span>
+                <span class="config-value code">{{ pipeline.git_repo }}</span>
+              </div>
+              <div class="config-item">
+                <span class="config-label">分支</span>
+                <span class="config-value">{{ pipeline.git_branch }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section">
+            <h3 class="config-title">Jenkins 配置</h3>
+            <div class="config-grid">
+              <div class="config-item">
+                <span class="config-label">Jenkins URL</span>
+                <span class="config-value code">{{ pipeline.jenkins_url || '使用全局配置' }}</span>
+              </div>
+              <div class="config-item">
+                <span class="config-label">Job 名称</span>
+                <span class="config-value">{{ pipeline.jenkins_job }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section" v-if="pipeline.env_vars && pipeline.env_vars.length">
+            <h3 class="config-title">环境变量</h3>
+            <div class="env-vars-list">
+              <div v-for="env in pipeline.env_vars" :key="env.name" class="env-var-item">
+                <span class="env-name">{{ env.name }}</span>
+                <span class="env-value">{{ env.value }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section" v-if="pipeline.deploy_config">
+            <h3 class="config-title">部署策略配置</h3>
+            <pre class="config-json">{{ JSON.stringify(pipeline.deploy_config, null, 2) }}</pre>
+          </div>
+
+          <!-- 自动部署配置 -->
+          <div class="config-section" v-if="pipeline.auto_deploy">
+            <h3 class="config-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="title-icon">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+              自动部署配置
+            </h3>
+            <div class="auto-deploy-config-display">
+              <div class="config-grid">
+                <div class="config-item">
+                  <span class="config-label">自动部署</span>
+                  <span class="config-value">
+                    <span class="status-badge enabled">已启用</span>
+                  </span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">部署环境</span>
+                  <span :class="['config-value', 'env-badge', `env-${pipeline.deploy_env}`]">
+                    {{ envLabel(pipeline.deploy_env) }}
+                  </span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">目标集群 ID</span>
+                  <span class="config-value">{{ pipeline.target_cluster_id || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">目标命名空间</span>
+                  <span class="config-value">{{ pipeline.target_namespace || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">工作负载类型</span>
+                  <span class="config-value">{{ pipeline.target_workload_kind || 'Deployment' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">工作负载名称</span>
+                  <span class="config-value">{{ pipeline.target_workload_name || '-' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">容器名称</span>
+                  <span class="config-value">{{ pipeline.target_container || '默认第一个' }}</span>
+                </div>
+                <div class="config-item">
+                  <span class="config-label">需要审批</span>
+                  <span class="config-value">
+                    <span v-if="pipeline.require_approval" class="status-badge warning">是</span>
+                    <span v-else class="status-badge">否</span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+    </template>
 
-      <!-- 阶段控制提示 -->
-      <div class="stage-control-tips" v-if="pipeline.status === 'running'">
-        <p>流水线正在运行中，您可以：</p>
-        <ul>
-          <li>查看各个阶段的执行状态和日志</li>
-          <li>手动运行等待中的阶段</li>
-          <li>查看阶段详情</li>
-          <li>跳过不需要执行的阶段</li>
-        </ul>
-      </div>
+    <!-- 错误状态 -->
+    <div v-else class="error-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <h3>加载失败</h3>
+      <p>{{ errorMsg || '无法加载流水线详情' }}</p>
+      <button class="btn btn-primary" @click="loadPipeline">重试</button>
     </div>
 
-    <!-- 阶段详情模态框 -->
-    <div class="modal-overlay" v-if="showStageDetail" @click="closeStageDetail">
-      <div class="modal stage-detail-modal" @click.stop>
+    <!-- 运行配置弹窗 -->
+    <div v-if="showRunDialog" class="modal-overlay" @click.self="showRunDialog = false">
+      <div class="modal-content run-dialog">
         <div class="modal-header">
-          <h3>{{ selectedStage ? selectedStage.name : '阶段详情' }} 详情</h3>
-          <button class="close-btn" @click="closeStageDetail">&times;</button>
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            运行流水线
+          </h3>
+          <button class="close-btn" @click="showRunDialog = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
         <div class="modal-body">
-          <div v-if="selectedStage" class="stage-detail-content">
-            <div class="detail-section">
-              <h4>基本信息</h4>
-              <div class="detail-item">
-                <span class="label">阶段名称：</span>
-                <span class="value">{{ selectedStage.name }}</span>
-              </div>
-              <div class="detail-item">
-                <span class="label">描述：</span>
-                <span class="value">{{ selectedStage.description }}</span>
-              </div>
-              <div class="detail-item">
-                <span class="label">状态：</span>
-                <span class="status-badge" :class="`status-${selectedStage.status}`">
-                  {{ selectedStage.status }}
-                </span>
-              </div>
-              <div class="detail-item" v-if="selectedStage.startTime">
-                <span class="label">开始时间：</span>
-                <span class="value">{{ formatDate(selectedStage.startTime) }}</span>
-              </div>
-              <div class="detail-item" v-if="selectedStage.endTime">
-                <span class="label">结束时间：</span>
-                <span class="value">{{ formatDate(selectedStage.endTime) }}</span>
-              </div>
-              <div class="detail-item" v-if="selectedStage.startTime && selectedStage.endTime">
-                <span class="label">执行耗时：</span>
-                <span class="value">{{ calculateStageDuration(selectedStage.startTime, selectedStage.endTime) }}</span>
-              </div>
+          <!-- 基本信息 -->
+          <div class="run-info">
+            <div class="info-item">
+              <span class="info-label">流水线</span>
+              <span class="info-value">{{ pipeline.name }}</span>
             </div>
-
-            <div class="detail-section">
-              <h4>阶段输出</h4>
-              <div class="stage-output">
-                <pre>{{ getStageOutput(selectedStage.name) }}</pre>
-              </div>
+            <div class="info-item">
+              <span class="info-label">Git 分支</span>
+              <span class="info-value">{{ pipeline.git_branch }}</span>
             </div>
+          </div>
 
-            <div class="detail-section">
-              <h4>操作</h4>
-              <div class="stage-actions">
-                <button
-                  class="btn btn-primary"
-                  @click="runStage(selectedStageIndex)"
-                  :disabled="!canRunStage(selectedStageIndex)"
-                >
-                  {{ selectedStage.status === 'pending' ? '运行此阶段' : '重新运行' }}
-                </button>
-                <button
-                  class="btn btn-secondary"
-                  @click="skipStage(selectedStageIndex)"
-                  :disabled="!canSkipStage(selectedStageIndex)"
-                >
-                  跳过此阶段
-                </button>
-                <button
-                  class="btn btn-secondary"
-                  @click="closeStageDetail"
-                >
-                  关闭
-                </button>
+          <!-- 自动部署配置展示 -->
+          <div v-if="pipeline.auto_deploy" class="deploy-config-section">
+            <h4 class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+              自动部署配置
+            </h4>
+            <div class="deploy-config-info">
+              <div class="config-row">
+                <span class="config-key">部署环境</span>
+                <span :class="['config-val', `env-${pipeline.deploy_env}`]">{{ envLabel(pipeline.deploy_env) }}</span>
+              </div>
+              <div class="config-row">
+                <span class="config-key">目标集群</span>
+                <span class="config-val">{{ pipeline.target_cluster_id || '默认集群' }}</span>
+              </div>
+              <div class="config-row">
+                <span class="config-key">命名空间</span>
+                <span class="config-val">{{ pipeline.target_namespace || '-' }}</span>
+              </div>
+              <div class="config-row">
+                <span class="config-key">工作负载</span>
+                <span class="config-val">{{ pipeline.target_workload_kind || 'Deployment' }} / {{ pipeline.target_workload_name || '-' }}</span>
+              </div>
+              <div v-if="pipeline.require_approval" class="approval-notice">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                生产环境部署需要审批确认
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- 部署配置 -->
-    <div class="deploy-config-card">
-      <h3>部署配置</h3>
-
-      <!-- 部署前检查 -->
-      <div class="pre-deploy-checks" v-if="showPreDeployChecks">
-        <h4>部署前检查</h4>
-        <div class="check-list">
-          <div
-            v-for="check in preDeployChecks"
-            :key="check.id"
-            class="check-item"
-            :class="{ 'check-passed': check.passed }"
-          >
-            <input type="checkbox" v-model="check.passed" disabled />
-            <label>{{ check.description }}</label>
-            <span class="check-status" v-if="check.passed">✓</span>
+          <div v-else class="no-deploy-notice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>未配置自动部署，构建完成后需手动部署</span>
           </div>
         </div>
-        <div class="check-actions" style="margin-top: 12px;">
-          <button type="button" class="btn btn-small btn-primary" @click="runPreDeployChecks">运行检查</button>
-          <button type="button" class="btn btn-small btn-outline" @click="togglePreDeployChecks">
-            {{ showPreDeployChecks ? '隐藏' : '显示' }}部署前检查
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showRunDialog = false">取消</button>
+          <button class="btn btn-success" @click="confirmRun" :disabled="runSubmitting">
+            <svg v-if="!runSubmitting" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span v-else class="loading-spinner small"></span>
+            {{ runSubmitting ? '启动中...' : '确认运行' }}
           </button>
-        </div>
-      </div>
-
-      <form class="deploy-form" @submit.prevent="deploy">
-        <!-- 项目/分支配置 -->
-        <h4>项目配置</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Git仓库 <span class="required">*</span></label>
-            <input
-              type="text"
-              v-model="pipeline.gitRepo"
-              class="form-input"
-              required
-              placeholder="https://github.com/example/project.git"
-            />
-            <div class="form-help-text">项目的Git仓库URL</div>
-          </div>
-          <div class="form-group">
-            <label>分支 <span class="required">*</span></label>
-            <input
-              type="text"
-              v-model="pipeline.branch"
-              class="form-input"
-              required
-              placeholder="main 或 develop"
-            />
-            <div class="form-help-text">要构建的Git分支</div>
-          </div>
-        </div>
-
-        <!-- 部署配置表单 -->
-        <h4>部署配置</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label>K8s环境 <span class="required">*</span></label>
-            <select
-              v-model="selectedEnvironmentId"
-              class="form-select"
-              required
-              @change="onEnvironmentChange"
-            >
-              <option value="">请选择K8s环境</option>
-              <option
-                v-for="env in k8sEnvironments"
-                :key="env.id"
-                :value="env.id"
-              >
-                {{ env.name }} - {{ env.description }} ({{ env.clusterName }})
-                <span class="env-type" :class="`type-${env.type || env.envType}`">
-                  [{{ getEnvTypeName(env.type || env.envType) }}]
-                </span>
-              </option>
-            </select>
-            <div class="form-help-text">选择要部署到的K8s集群环境</div>
-          </div>
-          <div class="form-group">
-            <label>部署名称 <span class="required">*</span></label>
-            <input
-              type="text"
-              v-model="deployConfig.deploymentName"
-              class="form-input"
-              required
-              placeholder="例如: frontend-deployment"
-            />
-            <div class="form-help-text">K8s中Deployment的名称</div>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>镜像名称 <span class="required">*</span></label>
-            <input
-              type="text"
-              v-model="deployConfig.image"
-              class="form-input"
-              required
-              placeholder="例如: nginx:latest 或 registry.example.com/nginx:latest"
-            />
-            <div class="form-help-text">要部署的Docker镜像名称和标签</div>
-          </div>
-          <div class="form-group">
-            <label>副本数量 <span class="required">*</span></label>
-            <input
-              type="number"
-              v-model.number="deployConfig.replicas"
-              class="form-input"
-              min="1"
-              required
-              placeholder="例如: 3"
-            />
-            <div class="form-help-text">要部署的Pod副本数量</div>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>部署策略 <span class="required">*</span></label>
-            <select v-model="deployConfig.strategy" class="form-select">
-              <option value="rollingUpdate">滚动更新</option>
-              <option value="recreate">重新创建</option>
-              <option value="blueGreen">蓝绿部署</option>
-              <option value="canary">金丝雀发布</option>
-            </select>
-            <div class="form-help-text">
-              <strong>滚动更新</strong>: 逐步替换现有Pod，零停机时间<br/>
-              <strong>重新创建</strong>: 先删除所有现有Pod，再创建新Pod<br/>
-              <strong>蓝绿部署</strong>: 同时运行新旧版本，切换流量<br/>
-              <strong>金丝雀发布</strong>: 先发布少量新Pod，验证后逐步扩大
-            </div>
-          </div>
-        </div>
-
-        <!-- 部署确认 -->
-        <div class="deploy-confirmation" v-if="selectedEnvironmentId">
-          <h4>部署确认</h4>
-          <div class="confirmation-details">
-            <div class="detail-item">
-              <span class="detail-label">环境:</span>
-              <span class="detail-value">{{ selectedEnv.name }} ({{ getEnvTypeName(selectedEnv.type || selectedEnv.envType) }})</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">部署名称:</span>
-              <span class="detail-value">{{ deployConfig.deploymentName }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">镜像:</span>
-              <span class="detail-value">{{ deployConfig.image }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">副本数:</span>
-              <span class="detail-value">{{ deployConfig.replicas }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">策略:</span>
-              <span class="detail-value">{{ deployConfig.strategy }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 高级配置 -->
-        <div class="advanced-config" v-if="showAdvancedConfig">
-          <div class="advanced-header" @click="toggleAdvancedConfig">
-            <h4>高级配置</h4>
-            <span class="toggle-icon">{{ showAdvancedConfig ? '▼' : '▶' }}</span>
-          </div>
-          <div class="advanced-content" style="margin-top: 12px;">
-            <div class="form-row">
-              <div class="form-group">
-                <label>CPU请求</label>
-                <input
-                  type="text"
-                  v-model="deployConfig.resources.requests.cpu"
-                  class="form-input"
-                  placeholder="例如: 200m"
-                />
-                <div class="form-help-text">每个Pod请求的CPU资源</div>
-              </div>
-              <div class="form-group">
-                <label>内存请求</label>
-                <input
-                  type="text"
-                  v-model="deployConfig.resources.requests.memory"
-                  class="form-input"
-                  placeholder="例如: 256Mi"
-                />
-                <div class="form-help-text">每个Pod请求的内存资源</div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>CPU限制</label>
-                <input
-                  type="text"
-                  v-model="deployConfig.resources.limits.cpu"
-                  class="form-input"
-                  placeholder="例如: 500m"
-                />
-                <div class="form-help-text">每个Pod允许使用的最大CPU资源</div>
-              </div>
-              <div class="form-group">
-                <label>内存限制</label>
-                <input
-                  type="text"
-                  v-model="deployConfig.resources.limits.memory"
-                  class="form-input"
-                  placeholder="例如: 512Mi"
-                />
-                <div class="form-help-text">每个Pod允许使用的最大内存资源</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-small btn-outline" @click="toggleAdvancedConfig">
-            {{ showAdvancedConfig ? '隐藏' : '显示' }}高级配置
-          </button>
-          <button type="button" class="btn btn-secondary" @click="loadDeploymentHistory">查看部署历史</button>
-          <button type="submit" class="btn btn-primary" :disabled="!canDeploy">
-            {{ deploying ? '部署中...' : '部署到K8s' }}
-          </button>
-        </div>
-      </form>
-
-      <!-- 部署输出结果 -->
-      <div class="deploy-output" v-if="deployOutput.show">
-        <h4>部署结果</h4>
-        <div class="output-content">
-          <div class="output-header">
-            <span class="output-status" :class="deployOutput.success ? 'success' : 'error'">
-              {{ deployOutput.success ? '部署成功' : '部署失败' }}
-            </span>
-            <span class="output-time">{{ deployOutput.timestamp }}</span>
-          </div>
-          <div class="output-logs">
-            <pre>{{ deployOutput.logs }}</pre>
-          </div>
-          <div class="output-actions" style="margin-top: 12px;">
-            <button type="button" class="btn btn-small btn-primary" @click="deployOutput.show = false">关闭</button>
-            <button type="button" class="btn btn-small btn-secondary" @click="copyDeployOutput">复制输出</button>
-            <button type="button" class="btn btn-small btn-primary" @click="verifyDeployment" v-if="deployOutput.success">验证部署</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 部署历史 -->
-    <div class="history-card" v-if="showHistory">
-      <h3>部署历史</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>版本</th>
-            <th>镜像</th>
-            <th>副本数量</th>
-            <th>部署策略</th>
-            <th>部署时间</th>
-            <th>状态</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="history in deploymentHistory" :key="history.revision">
-            <td>{{ history.revision }}</td>
-            <td>{{ history.image }}</td>
-            <td>{{ history.replicas }}</td>
-            <td>{{ history.strategy }}</td>
-            <td>{{ formatDate(history.deploymentTime) }}</td>
-            <td>
-              <span class="status-badge" :class="`status-${history.status}`">
-                {{ history.status }}
-              </span>
-            </td>
-            <td>
-              <button class="btn btn-view" @click="rollback(history.revision)">回滚</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 流水线日志 -->
-    <div class="logs-card">
-      <div class="logs-header">
-        <h3>流水线日志</h3>
-        <div class="logs-actions">
-          <input
-            type="text"
-            v-model="logSearchQuery"
-            placeholder="搜索日志"
-            class="log-search-input"
-          />
-          <button class="btn btn-small btn-secondary" @click="clearLogs">清除日志</button>
-          <button class="btn btn-small btn-primary" @click="loadLogs" :disabled="loadingLogs">
-            <span v-if="loadingLogs">加载中...</span>
-            <span v-else>刷新日志</span>
-          </button>
-        </div>
-      </div>
-      <div class="logs-container">
-        <div
-          v-for="(log, index) in filteredLogs"
-          :key="index"
-          class="log-item"
-          :class="{
-            'log-error': log.includes('error') || log.includes('ERROR') || log.includes('Failed'),
-            'log-warning': log.includes('warning') || log.includes('WARNING'),
-            'log-info': log.includes('info') || log.includes('INFO')
-          }"
-        >
-          {{ log }}
-        </div>
-      </div>
-      <div class="logs-footer">
-        <div class="log-stats">
-          显示 {{ filteredLogs.length }} / {{ logs.length }} 条日志
-        </div>
-        <div class="log-controls">
-          <button class="btn btn-small" @click="scrollToTop">滚动到顶部</button>
-          <button class="btn btn-small" @click="scrollToBottom">滚动到底部</button>
         </div>
       </div>
     </div>
@@ -577,1714 +1125,3252 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Message } from '@arco-design/web-vue'
 import {
   getPipelineDetail,
-  runPipeline as runPipelineApi,
-  stopPipeline as stopPipelineApi,
+  runPipeline,
+  stopPipeline,
   getPipelineLogs,
-  deployToK8s,
-  getDeploymentHistory,
-  getK8sEnvironments
-} from '@/api/cicd.js'
+  getPipelineHistory,
+  getPipelineStages,
+  getPipelineStatus,
+  getRunStages,
+  getStageLogs,
+  approveStage,
+  executeDeployStage
+} from '@/api/platform/pipeline'
 
 export default {
   name: 'PipelineDetail',
   setup() {
+    const router = useRouter()
     const route = useRoute()
-    const pipelineId = ref(route.params.id || 1)
+    const pipelineId = computed(() => route.params.id)
 
-    const pipeline = ref({
-      id: 0,
-      name: '',
-      description: '',
-      status: '',
-      lastRunTime: '',
-      lastRunStatus: '',
-      gitRepo: '',
-      branch: '',
-      stages: [],
-      envVars: [],
-      deploymentConfig: {
-        namespace: 'default',
-        deploymentName: '',
-        image: '',
-        replicas: 1,
-        strategy: 'rollingUpdate'
-      }
+    const pipeline = ref({})
+    const loading = ref(true)
+    const errorMsg = ref('')
+    const activeTab = ref('overview')
+    const latestRun = ref(null) // 最新运行记录（包含错误信息）
+
+    // 日志相关
+    const logs = ref('')
+    const logsLoading = ref(false)
+    const logsError = ref('')  // 日志加载错误信息
+    const autoScroll = ref(true)
+    const logsContainer = ref(null)
+    const logLineCount = ref(0)  // 已加载的行数（用于增量获取）
+    const isFirstLoad = ref(true)  // 是否首次加载
+
+    // 历史相关
+    const history = ref([])
+    const historyLoading = ref(false)
+    const historyFilter = ref('')
+
+    // 筛选后的历史记录
+    const filteredHistory = computed(() => {
+      if (!historyFilter.value) return history.value
+      return history.value.filter(run => run.status === historyFilter.value)
     })
 
-    const k8sEnvironments = ref([])
-    const selectedEnvironmentId = ref('')
+    // 获取历史状态计数
+    const getHistoryStatusCount = (status) => {
+      return history.value.filter(run => run.status === status).length
+    }
 
-    const deployConfig = ref({
-      namespace: 'default',
-      deploymentName: '',
-      image: '',
-      replicas: 1,
-      strategy: 'rollingUpdate',
-      environmentId: '',
-      environmentName: ''
-    })
+    // 阶段数据（从 Jenkins API 获取）
+    // 注意：初始状态为模拟数据，实际数据从 API 获取
+    const pipelineStages = ref([
+      { name: '代码检出', status: 'success', duration: '3s', type: 'checkout', steps: [{ name: 'Git Clone', status: 'success' }] },
+      { name: '构建', status: 'success', duration: '5s', type: 'build', steps: [{ name: 'Compile', status: 'success' }, { name: 'Package', status: 'success' }] },
+      { name: '测试', status: 'success', duration: '2s', type: 'test', steps: [{ name: 'Unit Test', status: 'success' }] },
+      { name: '推送镜像', status: 'success', duration: '8s', type: 'push', steps: [{ name: 'Push Image', status: 'success' }] },
+      { name: '人工审批', status: 'pending', duration: '-', type: 'approval', steps: [] },
+      { name: '部署', status: 'pending', duration: '-', type: 'deploy', steps: [] }
+    ])
+    const stagesLoading = ref(false)
+    const expandedStages = ref([]) // 展开的阶段列表
+    const stageFilter = ref('')
 
-    const logs = ref([])
-    const logSearchQuery = ref('')
-    const loadingLogs = ref(false)
-    const deploymentHistory = ref([])
-    const showHistory = ref(false)
-    const autoRefreshEnabled = ref(true)
-    const refreshInterval = ref(90000) // 90秒自动刷新
-    let refreshTimer = null
+    // 运行弹窗相关
+    const showRunDialog = ref(false)
+    const runSubmitting = ref(false)
 
-    // 部署状态和输出
+    // 审批和部署操作相关
+    const approving = ref(false)
     const deploying = ref(false)
-    const canDeploy = computed(() => {
-      return deployConfig.value.deploymentName && deployConfig.value.image && selectedEnvironmentId.value
-    })
-    const deployOutput = ref({
-      show: false,
-      success: false,
-      logs: '',
-      timestamp: ''
-    })
+    const approvalDecision = ref('approve')  // 默认通过
+    const approvalComment = ref('')  // 审批备注
 
-    // 阶段交互相关
-    const showStageDetail = ref(false)
-    const selectedStage = ref(null)
-    const selectedStageIndex = ref(-1)
-    const stageOutputs = ref({})
-    const stageExecutionStatus = ref('idle') // idle, running, paused, completed, failed
-
-    const filteredLogs = computed(() => {
-      if (!logSearchQuery.value) {
-        return logs.value
-      }
-      return logs.value.filter(log =>
-        log.toLowerCase().includes(logSearchQuery.value.toLowerCase())
-      )
+    // 筛选后的阶段
+    const filteredStages = computed(() => {
+      if (!stageFilter.value) return pipelineStages.value
+      return pipelineStages.value.filter(stage => stage.status === stageFilter.value)
     })
 
-    const loadPipelineDetail = async () => {
+    // 获取阶段状态计数
+    const getStageStatusCount = (status) => {
+      return pipelineStages.value.filter(stage => stage.status === status).length
+    }
+
+    // 轮询定时器
+    let statusPollingTimer = null
+    let logsPollingTimer = null
+
+    // 加载流水线阶段数据
+    const loadStages = async () => {
+      stagesLoading.value = true
       try {
-        const response = await getPipelineDetail(pipelineId.value)
-        if (response.code === 0) {
-          pipeline.value = response.data
-          // 初始化部署配置
-          deployConfig.value = {
-            namespace: pipeline.value.deploymentConfig.namespace,
-            deploymentName: pipeline.value.deploymentConfig.deploymentName,
-            image: pipeline.value.deploymentConfig.image,
-            replicas: pipeline.value.deploymentConfig.replicas,
-            strategy: pipeline.value.deploymentConfig.strategy,
-            environmentId: '',
-            environmentName: ''
+        let stages = null
+
+        // 优先从数据库获取阶段数据（包含审批/部署阶段）
+        if (latestRun.value && latestRun.value.id) {
+          const response = await getRunStages(latestRun.value.id)
+          if (response.code === 0 && response.data && response.data.stages) {
+            stages = response.data.stages
+            console.log('[loadStages] 从数据库获取阶段数据:', stages.map(s => ({ name: s.name, type: s.type, status: s.status })))
           }
-        } else {
-          alert(response.msg)
         }
-      } catch (error) {
-        alert('获取流水线详情失败')
-      }
-    }
 
-    const loadK8sEnvironments = async () => {
-      try {
-        const response = await getK8sEnvironments()
-        if (response.code === 0) {
-          k8sEnvironments.value = response.data
-        } else {
-          alert(response.msg)
+        // 回退到从 Jenkins 获取阶段数据
+        if (!stages) {
+          const response = await getPipelineStages(pipelineId.value)
+          if (response.code === 0 && response.data && response.data.stages) {
+            stages = response.data.stages
+            console.log('[loadStages] 从 Jenkins 获取阶段数据:', stages.map(s => ({ name: s.name, type: s.type, status: s.status })))
+          }
         }
-      } catch (error) {
-        alert('获取K8s环境列表失败')
-      }
-    }
 
-    const runPipeline = async () => {
-      try {
-        const response = await runPipelineApi(pipelineId.value)
-        if (response.code === 0) {
-          alert('流水线启动成功')
-          loadPipelineDetail()
-          loadLogs()
-        } else {
-          alert(response.msg)
+        // 如果获取到阶段数据，根据流水线状态智能推断阶段状态
+        if (stages && stages.length > 0) {
+          pipelineStages.value = inferStageStatus(stages)
+          console.log('[loadStages] 处理后的阶段数据:', pipelineStages.value.map(s => ({ name: s.name, type: s.type, status: s.status })))
         }
       } catch (error) {
-        alert('启动流水线失败')
-      }
-    }
-
-    const stopPipeline = async () => {
-      try {
-        const response = await stopPipelineApi(pipelineId.value)
-        if (response.code === 0) {
-          alert('流水线停止成功')
-          loadPipelineDetail()
-          loadLogs()
-        } else {
-          alert(response.msg)
-        }
-      } catch (error) {
-        alert('停止流水线失败')
-      }
-    }
-
-    const loadLogs = async () => {
-      try {
-        loadingLogs.value = true
-        const response = await getPipelineLogs(pipelineId.value, Date.now())
-        if (response.code === 0) {
-          // 只添加新日志，不覆盖现有日志
-          const newLogs = response.data.logs
-          const existingLogSet = new Set(logs.value)
-          const uniqueNewLogs = newLogs.filter(log => !existingLogSet.has(log))
-          logs.value = [...logs.value, ...uniqueNewLogs]
-        } else {
-          alert(response.msg)
-        }
-      } catch (error) {
-        alert('获取日志失败')
+        console.error('加载阶段数据失败:', error)
       } finally {
-        loadingLogs.value = false
+        stagesLoading.value = false
       }
     }
 
-    const clearLogs = () => {
-      logs.value = []
+    // 智能推断阶段状态（参考 Rancher/KubeSphere 设计）
+    // 当 API 返回的状态都是 pending 时，根据流水线整体状态推断
+    const inferStageStatus = (stages) => {
+      // 获取流水线状态（优先级：latest_run > pipeline）
+      const runStatus = latestRun.value?.status || pipeline.value.last_run_status || pipeline.value.status
+      const buildStageTypes = ['checkout', 'build', 'test', 'push']
+
+      console.log('[inferStageStatus] runStatus:', runStatus, 'stages:', stages.length)
+
+      return stages.map((stage, index) => {
+        const stageType = stage.type || stage.stage_type || ''
+        const isBuildStage = buildStageTypes.includes(stageType)
+        const currentStatus = stage.status || 'pending'
+
+        // 审批阶段：保持后端返回的实际状态，不覆盖
+        // 如果后端已经返回 success/approved/failed/rejected，直接使用
+        if (stageType === 'approval') {
+          if (['success', 'approved', 'failed', 'rejected'].includes(currentStatus)) {
+            return stage  // 保持后端返回的实际状态
+          }
+          // 只有当状态是 pending 且构建成功时，才推断为 waiting
+          if (currentStatus === 'pending' && (runStatus === 'success' || runStatus === 'SUCCESS')) {
+            return { ...stage, status: 'waiting' }
+          }
+          return stage
+        }
+
+        // 如果阶段已经有明确状态（非 pending），不覆盖
+        if (currentStatus && currentStatus !== 'pending') {
+          return stage
+        }
+
+        // 根据流水线状态推断构建阶段状态
+        if (runStatus === 'success' || runStatus === 'SUCCESS') {
+          // 构建成功：所有构建阶段都成功
+          if (isBuildStage) {
+            return { ...stage, status: 'success', duration: stage.duration || getDemoStageDuration(stageType) }
+          }
+          // 部署阶段
+          if (stageType === 'deploy') {
+            return { ...stage, status: 'pending' }
+          }
+        } else if (runStatus === 'failed' || runStatus === 'FAILURE') {
+          // 构建失败：最后一个构建阶段失败
+          if (isBuildStage) {
+            const buildStages = stages.filter(s => buildStageTypes.includes(s.type || s.stage_type || ''))
+            const currentBuildIndex = buildStages.findIndex(s => s.name === stage.name)
+            if (currentBuildIndex < buildStages.length - 1) {
+              return { ...stage, status: 'success', duration: stage.duration || getDemoStageDuration(stageType) }
+            } else {
+              return { ...stage, status: 'failed', duration: stage.duration || '-' }
+            }
+          }
+        } else if (runStatus === 'running' || runStatus === 'IN_PROGRESS') {
+          // 运行中：最后一个构建阶段运行中
+          if (isBuildStage) {
+            const buildStages = stages.filter(s => buildStageTypes.includes(s.type || s.stage_type || ''))
+            const currentBuildIndex = buildStages.findIndex(s => s.name === stage.name)
+            if (currentBuildIndex < buildStages.length - 1) {
+              return { ...stage, status: 'success', duration: stage.duration || getDemoStageDuration(stageType) }
+            } else {
+              return { ...stage, status: 'running', duration: '-' }
+            }
+          }
+        }
+
+        return stage
+      })
     }
 
-    const deploy = async () => {
+    // 获取演示用的阶段耗时
+    const getDemoStageDuration = (stageType) => {
+      const durations = {
+        'checkout': '3s',
+        'build': '15s',
+        'test': '8s',
+        'push': '12s'
+      }
+      return durations[stageType] || '-'
+    }
+
+    // 加载流水线详情
+    const loadPipeline = async () => {
+      loading.value = true
+      errorMsg.value = ''
       try {
-        // 获取选中的环境信息
-        const selectedEnv = k8sEnvironments.value.find(env => env.id === parseInt(selectedEnvironmentId.value))
-        if (!selectedEnv) {
-          alert('请选择K8s环境')
-          return
-        }
-
-        // 更新部署配置中的环境信息
-        deployConfig.value.environmentId = selectedEnv.id
-        deployConfig.value.environmentName = selectedEnv.name
-        deployConfig.value.namespace = selectedEnv.namespace
-
-        deploying.value = true
-
-        // 准备部署输出
-        const startTime = new Date()
-        let deployLogs = `[${startTime.toISOString()}] 开始部署到K8s环境...\n`
-        deployLogs += `[${startTime.toISOString()}] 环境: ${selectedEnv.name} (${getEnvTypeName(selectedEnv.type || selectedEnv.envType)})\n`
-        deployLogs += `[${startTime.toISOString()}] 命名空间: ${deployConfig.value.namespace}\n`
-        deployLogs += `[${startTime.toISOString()}] 部署名称: ${deployConfig.value.deploymentName}\n`
-        deployLogs += `[${startTime.toISOString()}] 镜像: ${deployConfig.value.image}\n`
-        deployLogs += `[${startTime.toISOString()}] 副本数: ${deployConfig.value.replicas}\n`
-        deployLogs += `[${startTime.toISOString()}] 策略: ${deployConfig.value.strategy}\n\n`
-
-        // 模拟部署步骤
-        deployLogs += `[${new Date().toISOString()}] 1. 验证部署配置...\n`
-        await new Promise(resolve => setTimeout(resolve, 500))
-        deployLogs += `[${new Date().toISOString()}] ✓ 部署配置验证通过\n\n`
-
-        deployLogs += `[${new Date().toISOString()}] 2. 连接到K8s集群...\n`
-        await new Promise(resolve => setTimeout(resolve, 800))
-        deployLogs += `[${new Date().toISOString()}] ✓ 成功连接到K8s集群: ${selectedEnv.clusterName}\n\n`
-
-        deployLogs += `[${new Date().toISOString()}] 3. 检查命名空间 ${deployConfig.value.namespace}...\n`
-        await new Promise(resolve => setTimeout(resolve, 500))
-        deployLogs += `[${new Date().toISOString()}] ✓ 命名空间存在\n\n`
-
-        deployLogs += `[${new Date().toISOString()}] 4. 开始部署应用...\n`
-        deployLogs += `[${new Date().toISOString()}] 执行命令: kubectl apply -f deployment.yaml -n ${deployConfig.value.namespace}\n`
-        await new Promise(resolve => setTimeout(resolve, 1500))
-
-        const response = await deployToK8s(deployConfig.value)
+        // 使用 status API 获取完整信息（包含 latest_run）
+        const response = await getPipelineStatus(pipelineId.value)
         if (response.code === 0) {
-          deployLogs += `[${new Date().toISOString()}] ✓ 部署成功!\n\n`
-          deployLogs += `[${new Date().toISOString()}] 部署详情: ${JSON.stringify(response.data, null, 2)}\n\n`
-          deployLogs += `[${new Date().toISOString()}] 5. 验证Pod状态...\n`
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          deployLogs += `[${new Date().toISOString()}] ✓ Pod 1/2 运行中\n`
-          await new Promise(resolve => setTimeout(resolve, 800))
-          deployLogs += `[${new Date().toISOString()}] ✓ Pod 2/2 运行中\n\n`
-          deployLogs += `[${new Date().toISOString()}] 6. 验证服务状态...\n`
-          await new Promise(resolve => setTimeout(resolve, 800))
-          deployLogs += `[${new Date().toISOString()}] ✓ 服务已就绪，可正常访问\n\n`
-          deployLogs += `[${new Date().toISOString()}] 部署完成! 总耗时: ${Math.round((new Date() - startTime) / 1000)}秒\n`
-
-          deployOutput.value = {
-            show: true,
-            success: true,
-            logs: deployLogs,
-            timestamp: new Date().toLocaleString()
+          pipeline.value = response.data.pipeline || response.data
+          // 获取最新运行记录（包含阶段信息）
+          if (response.data.latest_run) {
+            latestRun.value = response.data.latest_run
           }
-
-          loadDeploymentHistory()
+          // 加载阶段数据 - 使用 await 确保数据加载完成后再渲染
+          await loadStages()
+          // 如果正在运行，开始轮询
+          if (pipeline.value.status === 'running') {
+            startPolling()
+          }
         } else {
-          deployLogs += `[${new Date().toISOString()}] ✗ 部署失败: ${response.msg}\n`
-          deployOutput.value = {
-            show: true,
-            success: false,
-            logs: deployLogs,
-            timestamp: new Date().toLocaleString()
-          }
+          throw new Error(response.msg || '获取详情失败')
         }
       } catch (error) {
-        console.error('部署错误:', error)
-        deployOutput.value = {
-          show: true,
-          success: false,
-          logs: `[${new Date().toISOString()}] 部署失败: ${error.message}\n\n${error.stack}`,
-          timestamp: new Date().toLocaleString()
+        errorMsg.value = error.message
+        pipeline.value = {}
+      } finally {
+        loading.value = false
+      }
+    }
+
+    // 开始轮询状态和日志
+    const startPolling = () => {
+      // 清理旧的定时器
+      stopPolling()
+
+      // 每 5 秒轮询状态和阶段（参考 Jenkins 默认设计）
+      statusPollingTimer = setInterval(async () => {
+        try {
+          const response = await getPipelineStatus(pipelineId.value)
+          if (response.code === 0) {
+            const newPipeline = response.data.pipeline || response.data
+            pipeline.value = { ...pipeline.value, ...newPipeline }
+
+            // 更新最新运行记录（包含错误信息）
+            if (response.data.latest_run) {
+              latestRun.value = response.data.latest_run
+            }
+
+            // 加载阶段数据 - 使用 await 确保状态即时更新
+            if (newPipeline.last_build_number) {
+              await loadStages()
+            }
+
+            // 如果不再运行，停止轮询
+            if (newPipeline.status !== 'running') {
+              stopPolling()
+              // 最后再获取一次完整日志
+              if (activeTab.value === 'logs') {
+                await loadLogs()
+              }
+              // 如果有错误信息，显示错误
+              if (response.data.latest_run && response.data.latest_run.error_message) {
+                Message.error({ content: response.data.latest_run.error_message, duration: 5000 })
+              } else {
+                Message.info({ content: `流水线执行完成，状态: ${runStatusText(newPipeline.last_run_status)}` })
+              }
+            }
+          }
+        } catch (error) {
+          console.error('轮询状态失败:', error)
         }
+      }, 5000)
+
+      // 每 5 秒轮询日志（如果在日志 Tab，参考 Jenkins 默认设计）
+      logsPollingTimer = setInterval(async () => {
+        if (activeTab.value === 'logs' && pipeline.value.status === 'running') {
+          await loadLogs()
+        }
+      }, 5000)
+    }
+
+    // 停止轮询
+    const stopPolling = () => {
+      if (statusPollingTimer) {
+        clearInterval(statusPollingTimer)
+        statusPollingTimer = null
+      }
+      if (logsPollingTimer) {
+        clearInterval(logsPollingTimer)
+        logsPollingTimer = null
+      }
+    }
+
+    // 加载日志（支持增量加载，避免闪烁）
+    const loadLogs = async (forceRefresh = false) => {
+      // 首次加载或强制刷新时显示 loading
+      if (isFirstLoad.value || forceRefresh) {
+        logsLoading.value = true
+        logsError.value = ''
+        logs.value = ''
+        logLineCount.value = 0
+      }
+
+      try {
+        // 增量获取：从上次加载的行数开始
+        const startLine = forceRefresh ? 0 : logLineCount.value
+        const response = await getPipelineLogs(pipelineId.value, null, startLine)
+
+        if (response.code === 0) {
+          const newLogs = response.data.logs || ''
+          const totalLines = response.data.total_lines || 0
+
+          if (newLogs) {
+            if (isFirstLoad.value || forceRefresh) {
+              // 首次加载：直接设置
+              logs.value = newLogs
+              isFirstLoad.value = false
+            } else {
+              // 增量加载：追加新内容
+              logs.value += newLogs
+            }
+
+            // 更新已加载行数
+            if (totalLines > 0) {
+              logLineCount.value = totalLines
+            } else {
+              // 如果后端没返回总行数，自己计算
+              logLineCount.value += newLogs.split('\n').filter(line => line).length
+            }
+
+            // 平滑滚动到底部
+            if (autoScroll.value) {
+              nextTick(() => {
+                if (logsContainer.value) {
+                  logsContainer.value.scrollTo({
+                    top: logsContainer.value.scrollHeight,
+                    behavior: 'smooth'
+                  })
+                }
+              })
+            }
+          }
+        } else {
+          // 处理后端返回的错误
+          logsError.value = response.msg || '加载日志失败'
+          logs.value = ''
+        }
+      } catch (error) {
+        console.error('加载日志失败:', error)
+        logsError.value = error.message || '加载日志失败'
+        logs.value = ''
+      } finally {
+        logsLoading.value = false
+      }
+    }
+
+    // 刷新日志（强制重新加载）
+    const refreshLogs = () => {
+      isFirstLoad.value = true
+      loadLogs(true)
+    }
+
+    // 加载历史
+    const loadHistory = async () => {
+      historyLoading.value = true
+      try {
+        const response = await getPipelineHistory(pipelineId.value)
+        if (response.code === 0) {
+          history.value = response.data.list || response.data || []
+        }
+      } catch (error) {
+        console.error('加载历史失败:', error)
+      } finally {
+        historyLoading.value = false
+      }
+    }
+
+    // 操作
+    const handleRun = async () => {
+      try {
+        Message.info({ content: '正在启动流水线...' })
+        // 传入 force: true 自动清理旧的失败/运行中构建
+        const response = await runPipeline(pipelineId.value, { force: true })
+        if (response.code === 0) {
+          Message.success({ content: '流水线启动成功，正在执行中...' })
+          // 重置日志状态（新构建）
+          isFirstLoad.value = true
+          logs.value = ''
+          logLineCount.value = 0
+          logsError.value = ''
+          // 刷新状态并开始轮询
+          await loadPipeline()
+          // 自动切换到日志 Tab
+          activeTab.value = 'logs'
+          loadLogs(true)
+        } else {
+          throw new Error(response.msg)
+        }
+      } catch (error) {
+        Message.error({ content: error.message || '启动失败' })
+      }
+    }
+
+    // 确认运行（从弹窗）
+    const confirmRun = async () => {
+      runSubmitting.value = true
+      try {
+        await handleRun()
+        showRunDialog.value = false
+      } finally {
+        runSubmitting.value = false
+      }
+    }
+
+    const handleStop = async () => {
+      const isPending = pipeline.value.last_run_status === 'pending'
+      const actionText = isPending ? '取消' : '停止'
+      try {
+        Message.info({ content: `正在${actionText}构建...` })
+        const response = await stopPipeline(pipelineId.value)
+        if (response.code === 0) {
+          Message.success({ content: `构建已${actionText}` })
+          stopPolling()
+          loadPipeline()
+        } else {
+          throw new Error(response.msg)
+        }
+      } catch (error) {
+        Message.error({ content: error.message || `${actionText}失败` })
+      }
+    }
+
+    const handleEdit = () => {
+      router.push(`/cicd/pipelines/${pipelineId.value}/edit`)
+    }
+
+    const viewRunLogs = (run) => {
+      // 查看历史日志时重新加载
+      isFirstLoad.value = true
+      activeTab.value = 'logs'
+      loadLogs(true)
+    }
+
+    // 切换阶段展开/收起
+    const toggleStageExpand = (stageName) => {
+      const index = expandedStages.value.indexOf(stageName)
+      if (index === -1) {
+        expandedStages.value.push(stageName)
+      } else {
+        expandedStages.value.splice(index, 1)
+      }
+    }
+
+    // 查看阶段日志
+    const viewStageLog = (stage) => {
+      activeTab.value = 'logs'
+      loadLogs()
+      Message.info({ content: `已跳转到构建日志，当前阶段: ${stage.name}` })
+    }
+
+    const retryRun = async (run) => {
+      await handleRun()
+    }
+
+    // 审批阶段操作（旧版方法保留）
+    const handleApproveStage = async (stageId, action) => {
+      approving.value = true
+      try {
+        const actionText = action === 'approve' ? '通过' : '拒绝'
+        Message.info({ content: `正在处理审批${actionText}...` })
+        const response = await approveStage(stageId, action, '')
+        if (response.code === 0) {
+          Message.success({ content: `审批${actionText}成功` })
+          // 刷新阶段数据
+          await loadStages()
+          await loadPipeline()
+        } else {
+          throw new Error(response.msg)
+        }
+      } catch (error) {
+        Message.error({ content: error.message || '审批操作失败' })
+      } finally {
+        approving.value = false
+      }
+    }
+
+    // 提交审批（新版，支持备注）
+    // 优化：审批通过后自动触发部署，无需用户手动点击
+    const submitApproval = async (stageId) => {
+      approving.value = true
+      try {
+        const action = approvalDecision.value
+        const comment = approvalComment.value
+        const actionText = action === 'approve' ? '通过' : '拒绝'
+
+        Message.info({ content: `正在处理审批${actionText}...` })
+        const response = await approveStage(stageId, action, comment)
+
+        if (response.code === 0) {
+          Message.success({ content: `审批${actionText}成功` })
+          // 重置表单
+          approvalDecision.value = 'approve'
+          approvalComment.value = ''
+          // 刷新阶段数据
+          await loadStages()
+          await loadPipeline()
+
+          // 审批通过后自动触发部署
+          if (action === 'approve') {
+            // 找到下一个待执行的部署阶段
+            const deployStage = pipelineStages.value.find(
+              s => s.type === 'deploy' && (s.status === 'pending' || s.can_operate)
+            )
+            if (deployStage) {
+              Message.info({ content: '审批通过，正在自动启动部署...' })
+              // 自动触发部署
+              await handleDeployStage(deployStage.id)
+            }
+          }
+        } else {
+          throw new Error(response.msg)
+        }
+      } catch (error) {
+        Message.error({ content: error.message || '审批操作失败' })
+      } finally {
+        approving.value = false
+      }
+    }
+
+    // 部署阶段操作
+    // 优化：启动部署后立即轮询状态，直到完成
+    const handleDeployStage = async (stageId) => {
+      deploying.value = true
+      try {
+        Message.info({ content: '正在启动部署...' })
+        const response = await executeDeployStage(stageId)
+        if (response.code === 0) {
+          Message.success({ content: '部署已启动，正在监控部署状态...' })
+          // 刷新阶段数据
+          await loadStages()
+          // 启动部署状态轮询
+          startDeployPolling(stageId)
+        } else {
+          throw new Error(response.msg)
+        }
+      } catch (error) {
+        Message.error({ content: error.message || '启动部署失败' })
       } finally {
         deploying.value = false
       }
     }
 
-    const copyDeployOutput = () => {
-      navigator.clipboard.writeText(deployOutput.value.logs)
-        .then(() => {
-          alert('部署输出已复制到剪贴板')
-        })
-        .catch(err => {
-          console.error('复制失败:', err)
-          alert('复制失败，请手动复制')
-        })
-    }
-
-    const verifyDeployment = async () => {
+    // 重新部署（失败后重试）
+    // 优化：重试后立即轮询状态
+    const handleRetryDeploy = async (stageId) => {
+      deploying.value = true
       try {
-        const selectedEnv = k8sEnvironments.value.find(env => env.id === parseInt(selectedEnvironmentId.value))
-        if (!selectedEnv) {
-          alert('请选择K8s环境')
-          return
-        }
-
-        let verifyLogs = `[${new Date().toISOString()}] 开始验证部署...\n`
-        verifyLogs += `[${new Date().toISOString()}] 环境: ${selectedEnv.name}\n`
-        verifyLogs += `[${new Date().toISOString()}] 部署名称: ${deployConfig.value.deploymentName}\n\n`
-
-        verifyLogs += `[${new Date().toISOString()}] 1. 检查Deployment状态...\n`
-        await new Promise(resolve => setTimeout(resolve, 800))
-        verifyLogs += `[${new Date().toISOString()}] ✓ Deployment 状态正常\n\n`
-
-        verifyLogs += `[${new Date().toISOString()}] 2. 检查Pod状态...\n`
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        verifyLogs += `[${new Date().toISOString()}] ✓ 所有 ${deployConfig.value.replicas} 个Pod 运行正常\n\n`
-
-        verifyLogs += `[${new Date().toISOString()}] 3. 验证服务端点...\n`
-        await new Promise(resolve => setTimeout(resolve, 800))
-        verifyLogs += `[${new Date().toISOString()}] ✓ 服务端点可访问\n\n`
-
-        verifyLogs += `[${new Date().toISOString()}] 4. 运行健康检查...\n`
-        await new Promise(resolve => setTimeout(resolve, 1200))
-        verifyLogs += `[${new Date().toISOString()}] ✓ 健康检查通过\n\n`
-
-        verifyLogs += `[${new Date().toISOString()}] 部署验证完成！应用运行正常。\n`
-
-        deployOutput.value.logs += `\n\n--- 部署验证结果 ---\n${verifyLogs}`
-      } catch (error) {
-        deployOutput.value.logs += `
-
---- 部署验证失败 ---
-[${new Date().toISOString()}] 验证失败: ${error.message}
-`
-      }
-    }
-
-    const loadDeploymentHistory = async () => {
-      try {
-        const response = await getDeploymentHistory(deployConfig.value.namespace, deployConfig.value.deploymentName)
+        Message.info({ content: '正在重新部署...' })
+        const response = await executeDeployStage(stageId, { retry: true })
         if (response.code === 0) {
-          deploymentHistory.value = response.data
-          showHistory.value = true
+          Message.success({ content: '重新部署已启动，正在监控部署状态...' })
+          // 刷新阶段数据
+          await loadStages()
+          // 启动部署状态轮询
+          startDeployPolling(stageId)
         } else {
-          alert(response.msg)
+          throw new Error(response.msg)
         }
       } catch (error) {
-        alert('获取部署历史失败')
+        Message.error({ content: error.message || '重新部署失败' })
+      } finally {
+        deploying.value = false
       }
     }
 
-    const rollback = (revision) => {
-      alert(`回滚到版本 ${revision} 功能开发中`)
-    }
+    // 部署状态轮询（3秒间隔，更快响应）
+    let deployPollingTimer = null
+    const startDeployPolling = (stageId) => {
+      // 先停止之前的轮询
+      stopDeployPolling()
 
-    const getEnvTypeName = (type) => {
-      const typeMap = {
-        production: '生产环境',
-        staging: '预发布环境',
-        'pre-production': '预发布环境',
-        preprod: '预发布环境',
-        testing: '测试环境',
-        development: '开发环境'
-      }
-      return typeMap[type] || type
-    }
+      // 每 3 秒轮询部署状态
+      deployPollingTimer = setInterval(async () => {
+        try {
+          await loadStages()
 
-    const formatDate = (dateString) => {
-      if (!dateString) return ''
-      const date = new Date(dateString)
-      return date.toLocaleString()
-    }
+          // 检查部署阶段状态
+          const deployStage = pipelineStages.value.find(s => s.id === stageId)
+          if (deployStage) {
+            console.log('[deployPolling] 部署状态:', deployStage.status)
 
-
-
-    // 获取阶段输出
-    const getStageOutput = (stageName) => {
-      return stageOutputs.value[stageName] || `[${new Date().toISOString()}] 暂无输出\n`
-    }
-
-    // 检查阶段是否可以运行
-    const canRunStage = (index) => {
-      const stage = pipeline.value.stages[index]
-      if (!stage) return false
-
-      // 阶段处于pending状态才能运行
-      if (stage.status !== 'pending') return false
-
-      // 如果不是第一个阶段，需要前一个阶段成功
-      if (index > 0) {
-        const prevStage = pipeline.value.stages[index - 1]
-        return prevStage && (prevStage.status === 'success' || prevStage.status === 'skipped')
-      }
-
-      return true
-    }
-
-    // 检查是否可以运行下一个阶段
-    const canRunNextStage = (index) => {
-      const stage = pipeline.value.stages[index]
-      if (!stage) return false
-
-      // 当前阶段成功或跳过，下一个阶段可以运行
-      return (stage.status === 'success' || stage.status === 'skipped') &&
-             index < pipeline.value.stages.length - 1 &&
-             pipeline.value.stages[index + 1].status === 'pending'
-    }
-
-    // 检查是否可以跳过阶段
-    const canSkipStage = (index) => {
-      const stage = pipeline.value.stages[index]
-      if (!stage) return false
-
-      // 只有pending状态的阶段可以跳过
-      if (stage.status !== 'pending') return false
-
-      // 如果不是第一个阶段，需要前一个阶段成功
-      if (index > 0) {
-        const prevStage = pipeline.value.stages[index - 1]
-        return prevStage && (prevStage.status === 'success' || prevStage.status === 'skipped')
-      }
-
-      return true
-    }
-
-    // 运行单个阶段
-    const runStage = async (index) => {
-      if (!canRunStage(index)) {
-        alert('当前阶段无法运行，请检查前序阶段状态')
-        return
-      }
-
-      const stage = pipeline.value.stages[index]
-      if (!stage) return
-
-      try {
-        // 更新阶段状态为running
-        stage.status = 'running'
-        stage.startTime = new Date().toISOString()
-        stage.endTime = null
-
-        // 清空阶段输出
-        stageOutputs.value[stage.name] = `[${stage.startTime}] 开始执行阶段: ${stage.name}\n`
-        stageOutputs.value[stage.name] += `[${stage.startTime}] 描述: ${stage.description}\n\n`
-
-        // 模拟阶段执行
-        const startTime = new Date()
-        let stageLogs = ''
-
-        // 根据阶段类型执行不同的模拟逻辑
-        switch (stage.name) {
-          case 'checkout':
-            stageLogs += await simulateCheckoutStage()
-            break
-          case 'install':
-            stageLogs += await simulateInstallStage()
-            break
-          case 'test':
-            stageLogs += await simulateTestStage()
-            break
-          case 'build':
-            // 根据流水线类型执行不同的构建逻辑
-            if (pipeline.value.name.includes('java') || pipeline.value.type === 'java') {
-              stageLogs += await simulateJavaBuildStage()
-            } else {
-              stageLogs += await simulateBuildStage()
+            if (deployStage.status === 'success') {
+              stopDeployPolling()
+              Message.success({ content: '部署成功！', duration: 5000 })
+            } else if (deployStage.status === 'failed') {
+              stopDeployPolling()
+              const errorMsg = deployStage.error_message || '部署失败'
+              Message.error({ content: errorMsg, duration: 5000 })
             }
-            break
-          case 'code-quality':
-            stageLogs += await simulateCodeQualityStage()
-            break
-          case 'package':
-            stageLogs += await simulatePackageStage()
-            break
-          case 'build-image':
-            stageLogs += await simulateBuildImageStage()
-            break
-          case 'deploy':
-            stageLogs += await simulateDeployStage()
-            break
-          default:
-            stageLogs += await simulateGenericStage(stage.name)
-        }
-
-        // 更新阶段输出
-        stageOutputs.value[stage.name] += stageLogs
-
-        // 更新阶段状态为success
-        stage.status = 'success'
-        stage.endTime = new Date().toISOString()
-
-        // 添加到流水线日志
-        const duration = calculateStageDuration(stage.startTime, stage.endTime)
-        logs.value.push(`[${stage.endTime}] 阶段 ${stage.name} 执行成功，耗时: ${duration}`)
-
-        // 自动运行下一个阶段（如果设置了自动执行）
-        if (index < pipeline.value.stages.length - 1) {
-          const nextStage = pipeline.value.stages[index + 1]
-          if (nextStage.status === 'pending') {
-            // 自动执行下一个阶段
-            runStage(index + 1)
+            // running 状态继续轮询
           }
+        } catch (error) {
+          console.error('[deployPolling] 轮询出错:', error)
         }
-      } catch (error) {
-        // 更新阶段状态为failed
-        stage.status = 'failed'
-        stage.endTime = new Date().toISOString()
+      }, 3000)  // 3秒间隔，比构建轮询更频繁
+    }
 
-        // 更新阶段输出
-        stageOutputs.value[stage.name] += `[${stage.endTime}] 阶段执行失败: ${error.message}\n`
-
-        // 添加到流水线日志
-        logs.value.push(`[${stage.endTime}] 阶段 ${stage.name} 执行失败: ${error.message}`)
+    const stopDeployPolling = () => {
+      if (deployPollingTimer) {
+        clearInterval(deployPollingTimer)
+        deployPollingTimer = null
       }
     }
 
-    // 模拟Java项目构建阶段
-    const simulateJavaBuildStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始构建Java项目: mvn clean compile -DskipTests\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 下载依赖中...\n`
-      await new Promise(resolve => setTimeout(resolve, 2500))
-      logs += `[${new Date().toISOString()}] ✓ 依赖下载完成\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ 编译成功，生成class文件\n`
-      await new Promise(resolve => setTimeout(resolve, 500))
-      logs += `[${new Date().toISOString()}] ✓ 构建完成\n\n`
-      return logs
-    }
-
-    // 模拟代码质量检查阶段
-    const simulateCodeQualityStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始代码质量检查: mvn sonar:sonar\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 连接到SonarQube服务器...\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ 连接成功\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] 分析代码...\n`
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      logs += `[${new Date().toISOString()}] ✓ 代码质量检查完成\n`
-      logs += `[${new Date().toISOString()}] 质量评分: A (95/100)\n`
-      logs += `[${new Date().toISOString()}] 问题数量: 0 严重, 0 主要, 2 次要\n\n`
-      return logs
-    }
-
-    // 模拟打包阶段
-    const simulatePackageStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始打包应用: mvn package -DskipTests\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 编译资源文件...\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 编译Java代码...\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] 执行测试（跳过）...\n`
-      await new Promise(resolve => setTimeout(resolve, 500))
-      logs += `[${new Date().toISOString()}] 打包成JAR文件...\n`
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      logs += `[${new Date().toISOString()}] ✓ 打包完成\n`
-      logs += `[${new Date().toISOString()}] 生成文件: target/java-app-1.0.0.jar\n`
-      logs += `[${new Date().toISOString()}] 文件大小: 25MB\n\n`
-      return logs
-    }
-
-    // 模拟checkout阶段
-    const simulateCheckoutStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始拉取代码...\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 执行命令: git clone https://github.com/example/hello-app.git\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] 拉取成功，检出分支: main\n`
-      await new Promise(resolve => setTimeout(resolve, 500))
-      logs += `[${new Date().toISOString()}] 代码拉取完成\n\n`
-      return logs
-    }
-
-    // 模拟install阶段
-    const simulateInstallStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始安装依赖...\n`
-      await new Promise(resolve => setTimeout(resolve, 800))
-      logs += `[${new Date().toISOString()}] 执行命令: npm install\n`
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      logs += `[${new Date().toISOString()}] ✓ 依赖安装成功\n\n`
-      return logs
-    }
-
-    // 模拟test阶段
-    const simulateTestStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始运行单元测试...\n`
-      await new Promise(resolve => setTimeout(resolve, 600))
-      logs += `[${new Date().toISOString()}] 执行命令: npm test\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ 测试用例: testGetHelloMessage 执行成功\n`
-      await new Promise(resolve => setTimeout(resolve, 800))
-      logs += `[${new Date().toISOString()}] ✓ 测试用例: testServerStart 执行成功\n`
-      await new Promise(resolve => setTimeout(resolve, 600))
-      logs += `[${new Date().toISOString()}] ✓ 所有2个测试用例通过\n\n`
-      return logs
-    }
-
-    // 模拟build阶段
-    const simulateBuildStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始构建应用...\n`
-      await new Promise(resolve => setTimeout(resolve, 800))
-      logs += `[${new Date().toISOString()}] 执行命令: npm run build\n`
-      await new Promise(resolve => setTimeout(resolve, 2500))
-      logs += `[${new Date().toISOString()}] ✓ 应用构建成功，生成dist目录\n\n`
-      return logs
-    }
-
-    // 模拟build-image阶段
-    const simulateBuildImageStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始构建Docker镜像...\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] 执行命令: docker build -t example/hello-app:v1.0.0 .\n`
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      logs += `[${new Date().toISOString()}] ✓ 镜像构建完成，大小: 120MB\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ 镜像推送成功\n\n`
-      return logs
-    }
-
-    // 模拟deploy阶段
-    const simulateDeployStage = async () => {
-      let logs = `[${new Date().toISOString()}] 开始部署到K8s集群...\n`
-      await new Promise(resolve => setTimeout(resolve, 800))
-      logs += `[${new Date().toISOString()}] 执行命令: kubectl apply -f deployment.yaml\n`
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      logs += `[${new Date().toISOString()}] ✓ 部署创建成功\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ Pod 1/2 运行中\n`
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      logs += `[${new Date().toISOString()}] ✓ Pod 2/2 运行中\n`
-      await new Promise(resolve => setTimeout(resolve, 800))
-      logs += `[${new Date().toISOString()}] ✓ 服务已就绪，可正常访问\n\n`
-      return logs
-    }
-
-    // 模拟通用阶段
-    const simulateGenericStage = async (stageName) => {
-      let logs = `[${new Date().toISOString()}] 开始执行阶段: ${stageName}...\n`
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      logs += `[${new Date().toISOString()}] ✓ 阶段执行成功\n\n`
-      return logs
-    }
-
-    // 查看阶段详情
-    const viewStageDetail = (index) => {
-      const stage = pipeline.value.stages[index]
-      if (stage) {
-        selectedStage.value = stage
-        selectedStageIndex.value = index
-        showStageDetail.value = true
+    const copyLogs = () => {
+      if (logs.value) {
+        navigator.clipboard.writeText(logs.value)
+        Message.success({ content: '日志已复制' })
       }
     }
 
-    // 关闭阶段详情
-    const closeStageDetail = () => {
-      showStageDetail.value = false
-      selectedStage.value = null
-      selectedStageIndex.value = -1
-    }
-
-    // 跳过阶段
-    const skipStage = (index) => {
-      if (!canSkipStage(index)) {
-        alert('当前阶段无法跳过，请检查前序阶段状态')
-        return
-      }
-
-      const stage = pipeline.value.stages[index]
-      if (!stage) return
-
-      // 确认跳过
-      if (confirm(`确定要跳过阶段 "${stage.name}" 吗？`)) {
-        stage.status = 'skipped'
-        stage.startTime = new Date().toISOString()
-        stage.endTime = new Date().toISOString()
-
-        // 添加到流水线日志
-        logs.value.push(`[${stage.endTime}] 阶段 ${stage.name} 已跳过`)
+    const downloadLogs = () => {
+      if (logs.value) {
+        const blob = new Blob([logs.value], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `pipeline-${pipelineId.value}-logs.txt`
+        a.click()
+        URL.revokeObjectURL(url)
       }
     }
 
-    // 停止阶段
-    const stopStage = (index) => {
-      const stage = pipeline.value.stages[index]
-      if (!stage || stage.status !== 'running') return
+    // 格式化
+    const statusText = (status) => {
+      const map = { idle: '空闲', running: '运行中', disabled: '已禁用', error: '错误' }
+      return map[status] || status
+    }
 
-      if (confirm(`确定要停止阶段 "${stage.name}" 吗？`)) {
-        // 更新阶段状态为failed
-        stage.status = 'failed'
-        stage.endTime = new Date().toISOString()
+    const runStatusText = (status) => {
+      const map = { success: '成功', failed: '失败', running: '运行中', pending: '等待中', aborted: '已中止', '': '未运行' }
+      return map[status] || status
+    }
 
-        // 更新阶段输出
-        if (!stageOutputs.value[stage.name]) {
-          stageOutputs.value[stage.name] = ''
-        }
-        stageOutputs.value[stage.name] += `[${stage.endTime}] 阶段执行被手动停止\n`
-
-        // 添加到流水线日志
-        logs.value.push(`[${stage.endTime}] 阶段 ${stage.name} 已被手动停止`)
+    const deployStatusText = (status) => {
+      const map = {
+        success: '部署成功',
+        failed: '部署失败',
+        pending: '等待部署',
+        deploying: '部署中',
+        approval_pending: '待审批',
+        '': '未部署'
       }
+      return map[status] || status
     }
 
-    // 继续流水线
-    const continuePipeline = (index) => {
-      if (!canContinuePipeline(index)) {
-        alert('当前无法继续流水线，请检查前序阶段状态')
-        return
+    const envLabel = (env) => {
+      const map = { dev: '开发环境', staging: '预发环境', prod: '生产环境' }
+      return map[env] || env
+    }
+
+    const stageStatusText = (status) => {
+      const map = {
+        success: '完成',
+        failed: '失败',
+        running: '执行中',
+        pending: '等待',
+        waiting: '待通过',
+        skipped: '已跳过',
+        aborted: '已中止',
+        approved: '已通过',
+        rejected: '已拒绝'
       }
-
-      // 运行下一个阶段
-      runStage(index + 1)
+      return map[status] || status
     }
 
-    // 检查是否可以继续流水线
-    const canContinuePipeline = (index) => {
-      if (index >= pipeline.value.stages.length - 1) return false
-
-      const currentStage = pipeline.value.stages[index]
-      const nextStage = pipeline.value.stages[index + 1]
-
-      // 当前阶段已完成，下一个阶段处于等待状态
-      return (currentStage.status === 'success' || currentStage.status === 'skipped') && nextStage.status === 'pending'
-    }
-
-    // 计算阶段执行时长
-    const calculateStageDuration = (startTime, endTime) => {
-      if (!startTime || !endTime) return ''
-
-      const start = new Date(startTime)
-      const end = new Date(endTime)
-      const durationMs = end - start
-
-      const seconds = Math.floor(durationMs / 1000)
-      const minutes = Math.floor(seconds / 60)
-
-      if (minutes > 0) {
-        return `${minutes}分${seconds % 60}秒`
-      } else {
-        return `${seconds}秒`
+    // 审批阶段标签文本
+    const approvalBadgeText = (status) => {
+      const map = {
+        waiting: '待通过',
+        pending: '待通过',
+        success: '已通过',
+        approved: '已通过',
+        failed: '已拒绝',
+        rejected: '已拒绝'
       }
+      return map[status] || '审批'
     }
 
-    // 重置流水线
-    const resetPipeline = () => {
-      if (confirm('确定要重置流水线吗？这将清除所有执行状态。')) {
-        // 重置所有阶段状态
-        pipeline.value.stages.forEach(stage => {
-          stage.status = 'pending'
-          stage.startTime = null
-          stage.endTime = null
-        })
-
-        // 清空日志
-        logs.value = []
-
-        // 清空阶段输出
-        stageOutputs.value = {}
-
-        // 重置流水线状态
-        pipeline.value.status = 'idle'
-
-        alert('流水线已重置')
-      }
+    const formatDate = (timestamp) => {
+      if (!timestamp) return '-'
+      const date = new Date(typeof timestamp === 'number' && timestamp < 10000000000 ? timestamp * 1000 : timestamp)
+      const now = new Date()
+      const diff = now - date
+      if (diff < 60000) return '刚刚'
+      if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
+      return date.toLocaleDateString('zh-CN')
     }
 
-    // 环境变化处理
-    const onEnvironmentChange = () => {
-      // 可以在这里添加环境变化时的处理逻辑
-      console.log('环境变化:', selectedEnvironmentId.value)
+    const formatFullDate = (timestamp) => {
+      if (!timestamp) return '-'
+      const date = new Date(typeof timestamp === 'number' && timestamp < 10000000000 ? timestamp * 1000 : timestamp)
+      return date.toLocaleString('zh-CN')
     }
 
-    const scrollToTop = () => {
-      const logsContainer = document.querySelector('.logs-container')
-      if (logsContainer) {
-        logsContainer.scrollTop = 0
-      }
+    const formatDuration = (seconds) => {
+      if (!seconds) return '-'
+      if (seconds < 60) return `${seconds}秒`
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
+      return `${Math.floor(seconds / 3600)}时${Math.floor((seconds % 3600) / 60)}分`
     }
 
-    const scrollToBottom = () => {
-      const logsContainer = document.querySelector('.logs-container')
-      if (logsContainer) {
-        logsContainer.scrollTop = logsContainer.scrollHeight
-      }
-    }
+    // URL 参数处理
+    watch(() => route.query.tab, (tab) => {
+      if (tab) activeTab.value = tab
+    }, { immediate: true })
 
-    // 设置自动刷新
-    const setupAutoRefresh = () => {
-      if (refreshTimer) {
-        clearInterval(refreshTimer)
-      }
-
-      if (autoRefreshEnabled.value) {
-        refreshTimer = setInterval(() => {
-          loadLogs()
-          // 如果流水线正在运行，也刷新流水线详情
-          if (pipeline.value.status === 'running') {
-            loadPipelineDetail()
-          }
-        }, refreshInterval.value)
-      }
-    }
-
-    // 监听自动刷新开关变化
-    watch(autoRefreshEnabled, () => {
-      setupAutoRefresh()
-    })
-
-    // 页面加载时设置自动刷新
     onMounted(() => {
-      loadPipelineDetail()
-      loadK8sEnvironments()
-      loadLogs()
-      setupAutoRefresh()
+      loadPipeline()
     })
 
-    // 页面卸载时清除定时器
-    onUnmounted(() => {
-      if (refreshTimer) {
-        clearInterval(refreshTimer)
-      }
+    // 清理定时器
+    onBeforeUnmount(() => {
+      stopPolling()
+      stopDeployPolling()
     })
 
     return {
       pipeline,
-      k8sEnvironments,
-      selectedEnvironmentId,
-      deployConfig,
+      loading,
+      errorMsg,
+      activeTab,
+      latestRun, // 最新运行记录（包含错误信息）
       logs,
-      logSearchQuery,
-      filteredLogs,
-      loadingLogs,
-      deploymentHistory,
-      showHistory,
-      autoRefreshEnabled,
-      refreshInterval,
-      runPipeline,
-      stopPipeline,
+      logsLoading,
+      logsError,
+      autoScroll,
+      logsContainer,
+      history,
+      historyLoading,
+      historyFilter,
+      filteredHistory,
+      getHistoryStatusCount,
+      pipelineStages,
+      stagesLoading,
+      expandedStages,
+      stageFilter,
+      filteredStages,
+      getStageStatusCount,
+      loadPipeline,
       loadLogs,
-      clearLogs,
-      deploy,
-      loadDeploymentHistory,
-      rollback,
-      formatDate,
-      scrollToTop,
-      scrollToBottom,
-      getEnvTypeName,
-      deployOutput,
+      refreshLogs,
+      loadHistory,
+      loadStages,
+      handleRun,
+      confirmRun,
+      showRunDialog,
+      runSubmitting,
+      handleStop,
+      handleEdit,
+      viewRunLogs,
+      toggleStageExpand,
+      viewStageLog,
+      retryRun,
+      handleApproveStage,
+      handleDeployStage,
+      handleRetryDeploy,
+      submitApproval,
+      approving,
       deploying,
-      canDeploy,
-      copyDeployOutput,
-      verifyDeployment,
-      onEnvironmentChange,
-      // 阶段交互相关
-      showStageDetail,
-      selectedStage,
-      selectedStageIndex,
-      stageOutputs,
-      canRunStage,
-      canRunNextStage,
-      canSkipStage,
-      canContinuePipeline,
-      runStage,
-      viewStageDetail,
-      closeStageDetail,
-      skipStage,
-      stopStage,
-      continuePipeline,
-      resetPipeline,
-      calculateStageDuration,
-      getStageOutput
+      approvalDecision,
+      approvalComment,
+      copyLogs,
+      downloadLogs,
+      statusText,
+      runStatusText,
+      deployStatusText,
+      envLabel,
+      stageStatusText,
+      approvalBadgeText,
+      formatDate,
+      formatFullDate,
+      formatDuration
     }
   }
 }
 </script>
 
 <style scoped>
-.pipeline-detail {
-  padding: 20px;
-  background-color: var(--bg-color);
+.pipeline-detail-view {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
   min-height: 100vh;
+  background: #f5f7fa;
 }
 
-.info-card, .stages-card, .deploy-config-card, .logs-card, .history-card {
-  background-color: white;
+/* 面包屑 */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.breadcrumb-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #4299e1;
+  text-decoration: none;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.separator {
+  color: #cbd5e0;
+}
+
+.current {
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* 加载状态 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px;
+  color: #718096;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #4299e1;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loading-spinner.small {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 头部 */
+.pipeline-header {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.status-indicator.status-idle { background: #3182ce; }
+.status-indicator.status-running { background: #d97706; animation: pulse 1.5s infinite; }
+.status-indicator.status-disabled { background: #a0aec0; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pipeline-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.status-idle { background: #ebf8ff; color: #3182ce; }
+.status-badge.status-running { background: #fef3c7; color: #d97706; }
+.status-badge.status-disabled { background: #f1f5f9; color: #64748b; }
+
+.pipeline-desc {
+  color: #718096;
+  margin: 0 0 16px 0;
+  font-size: 14px;
+}
+
+.pipeline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.meta-item svg {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Tab 导航 */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  background: white;
+  padding: 8px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #f1f5f9;
+}
+
+.tab-btn.active {
+  background: #4299e1;
+  color: white;
+}
+
+.tab-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Tab 内容 */
+.tab-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* 概览 */
+.section {
+  margin-bottom: 32px;
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 16px 0;
+}
+
+.status-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding: 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.card-icon.status-success { background: #d1fae5; color: #059669; }
+.card-icon.status-failed { background: #fee2e2; color: #dc2626; }
+.card-icon.status-running { background: #fef3c7; color: #d97706; }
+.card-icon.neutral { background: #e2e8f0; color: #64748b; }
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-label {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.card-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-action-btn:hover:not(:disabled) {
+  border-color: #4299e1;
+  background: #ebf8ff;
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-action-btn svg {
+  width: 32px;
+  height: 32px;
+  color: #4299e1;
+}
+
+.quick-action-btn span {
+  font-size: 14px;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* 阶段 */
+/* 阶段筛选工具栏 */
+.stages-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+/* 阶段加载和空状态 */
+.stages-loading, .stages-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 12px;
   margin-bottom: 20px;
 }
 
-.info-header {
+.stages-loading p, .stages-empty p {
+  margin: 16px 0 0 0;
+  font-size: 14px;
+}
+
+.stages-empty svg {
+  width: 48px;
+  height: 48px;
+  color: #94a3b8;
+}
+
+/* ==================== Jenkins Blue Ocean 风格阶段视图 ==================== */
+.stages-pipeline {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 24px;
+  margin-bottom: 32px;
+  overflow-x: auto;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  gap: 0;
+}
+
+/* 阶段节点容器 */
+.stage-node {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  flex: 1;
+  min-width: 140px;
+  max-width: 200px;
+}
+
+/* 连接线 - Jenkins 风格 */
+.stage-connector {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.stage-connector::before {
+  content: '';
+  width: 100%;
+  height: 3px;
+  background: #e2e8f0;
+  position: absolute;
+}
+
+/* 连接线状态颜色 */
+.stage-node.status-success .stage-connector::before {
+  background: #10b981;
+}
+
+.stage-node.status-running .stage-connector::before {
+  background: linear-gradient(90deg, #10b981 0%, #3b82f6 50%, #e2e8f0 100%);
+  animation: connectorFlow 1.5s ease-in-out infinite;
+}
+
+.stage-node.status-failed .stage-connector::before {
+  background: linear-gradient(90deg, #10b981 0%, #ef4444 100%);
+}
+
+@keyframes connectorFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+/* 阶段内容 - Jenkins 方块卡片风格 */
+.stage-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 16px;
+  min-width: 120px;
+  background: white;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+/* 成功状态 - 绿色背景（参考 Jenkins） */
+.stage-node.status-success .stage-content {
+  background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%);
+  border-color: #22c55e;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+}
+
+/* 失败状态 - 红色背景 */
+.stage-node.status-failed .stage-content {
+  background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #ef4444;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+/* 运行中状态 - 蓝色脉冲 */
+.stage-node.status-running .stage-content {
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  animation: runningPulse 2s ease-in-out infinite;
+}
+
+/* 等待状态 */
+.stage-node.status-pending .stage-content {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+/* 等待审批状态 - 橙色闪烁 */
+.stage-node.status-waiting .stage-content {
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+  animation: waitingPulse 2s ease-in-out infinite;
+}
+
+@keyframes waitingPulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4); }
+}
+
+@keyframes runningPulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2); }
+  50% { box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4); }
+}
+
+/* 阶段图标 - 更紧凑 */
+.stage-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.stage-icon svg {
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+}
+
+/* 成功图标 */
+.stage-node.status-success .stage-icon {
+  background: #22c55e;
+  border-color: #16a34a;
+}
+
+.stage-node.status-success .stage-icon svg {
+  color: white;
+}
+
+/* 失败图标 */
+.stage-node.status-failed .stage-icon {
+  background: #ef4444;
+  border-color: #dc2626;
+}
+
+.stage-node.status-failed .stage-icon svg {
+  color: white;
+}
+
+/* 运行中图标 */
+.stage-node.status-running .stage-icon {
+  background: #3b82f6;
+  border-color: #2563eb;
+}
+
+.stage-node.status-running .stage-icon svg {
+  color: white;
+}
+
+/* 等待图标 */
+.stage-node.status-pending .stage-icon {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+/* 等待审批图标 - 橙色 */
+.stage-node.status-waiting .stage-icon {
+  background: #f59e0b;
+  border-color: #d97706;
+}
+
+.stage-node.status-waiting .stage-icon svg {
+  color: white;
+}
+
+/* 等待审批文字颜色 */
+.stage-node.status-waiting .stage-name { color: #92400e; }
+.stage-node.status-waiting .stage-duration { color: #b45309; }
+
+/* 旋转动画 */
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 阶段信息 */
+.stage-info {
+  text-align: center;
+}
+
+.stage-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+
+.stage-duration {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 状态对应的文字颜色 */
+.stage-node.status-success .stage-name { color: #166534; }
+.stage-node.status-success .stage-duration { color: #15803d; }
+.stage-node.status-failed .stage-name { color: #991b1b; }
+.stage-node.status-failed .stage-duration { color: #b91c1c; }
+.stage-node.status-running .stage-name { color: #1e40af; }
+.stage-node.status-running .stage-duration { color: #2563eb; }
+
+.stage-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.stage-detail-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.detail-header:hover {
+  background: #f1f5f9;
+}
+
+.expand-icon {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+  margin-left: auto;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.status-success { background: #059669; }
+.status-dot.status-failed { background: #dc2626; }
+.status-dot.status-running { background: #3b82f6; animation: pulse 1.5s infinite; }
+.status-dot.status-waiting { background: #f59e0b; animation: pulse 1.5s infinite; }
+.status-dot.status-pending { background: #94a3b8; }
+
+.stage-title {
+  flex: 1;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.stage-status {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.detail-body {
+  padding: 12px 16px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.step-item:not(:last-child) {
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.step-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.step-icon.success { color: #059669; }
+.step-icon.failed { color: #dc2626; }
+.step-icon.pending { color: #94a3b8; }
+
+.step-name {
+  flex: 1;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.step-duration {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.stage-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.view-log-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.view-log-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.view-log-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 日志 */
+.logs-toolbar, .history-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
 
-.info-header h3 {
-  margin: 0;
-  font-size: 20px;
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.status-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+.log-label {
+  font-size: 14px;
+  color: #4a5568;
   font-weight: 500;
 }
 
-/* 环境类型标签样式 */
-.env-type {
-  display: inline-block;
-  padding: 2px 6px;
-  margin-left: 8px;
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #4a5568;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+}
+
+.toolbar-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.auto-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.logs-container {
+  background: #1e293b;
   border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: capitalize;
-  vertical-align: middle;
+  min-height: 400px;
+  max-height: 600px;
+  overflow: auto;
 }
 
-.type-production {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+.logs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 100px;
+  color: #94a3b8;
 }
 
-.type-staging {
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
+.logs-content {
+  padding: 20px;
+  margin: 0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
-.type-pre-production {
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
+.logs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #64748b;
 }
 
-.type-testing {
-  background-color: #d1ecf1;
-  color: #0c5460;
-  border: 1px solid #bee5eb;
-}
-
-.type-development {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.type-preprod {
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
-}
-
-.status-running {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.status-idle {
-  background-color: #d1ecf1;
-  color: #0c5460;
-}
-
-.status-success {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.status-failed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.status-pending {
-  background-color: #e2e3e5;
-  color: #383d41;
-}
-
-.info-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
+.logs-empty svg {
+  width: 48px;
+  height: 48px;
   margin-bottom: 16px;
+  color: #475569;
+}
+
+/* 日志错误状态 */
+.logs-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  text-align: center;
+}
+
+.logs-error svg {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  color: #f59e0b;
+}
+
+.logs-error .error-message {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0 0 24px 0;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.logs-error .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logs-error .btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+}
+
+.logs-error .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.logs-error .btn svg {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  color: white;
+}
+
+/* 历史筛选按钮 */
+.history-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.filter-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-tab:hover {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.filter-tab.active {
+  border-color: #4299e1;
+  background: #ebf8ff;
+  color: #2b6cb0;
+}
+
+.filter-tab .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.filter-tab .status-dot.success { background: #10b981; }
+.filter-tab .status-dot.failed { background: #ef4444; }
+.filter-tab .status-dot.running { background: #f59e0b; animation: pulse 1.5s infinite; }
+
+.filter-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  color: #64748b;
+}
+
+.filter-tab.active .filter-count {
+  background: #bee3f8;
+  color: #2b6cb0;
+}
+
+/* 历史 */
+.history-loading, .history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: #64748b;
+}
+
+.history-empty svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  color: #94a3b8;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.history-item:hover {
+  border-color: #cbd5e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.history-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.history-item.status-success .history-icon { background: #d1fae5; color: #059669; }
+.history-item.status-failed .history-icon { background: #fee2e2; color: #dc2626; }
+.history-item.status-running .history-icon { background: #fef3c7; color: #d97706; }
+.history-item.status-pending .history-icon { background: #f1f5f9; color: #64748b; }
+
+.history-info {
+  flex: 1;
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.build-number {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.history-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.history-status.status-success { background: #d1fae5; color: #059669; }
+.history-status.status-failed { background: #fee2e2; color: #dc2626; }
+.history-status.status-running { background: #fef3c7; color: #d97706; }
+.history-status.status-pending { background: #f1f5f9; color: #64748b; }
+
+.history-meta {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.history-actions .action-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.history-actions .action-btn:hover {
+  border-color: #4299e1;
+  color: #4299e1;
+}
+
+.history-actions .action-btn.retry:hover {
+  border-color: #d97706;
+  color: #d97706;
+}
+
+.history-actions .action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 配置 */
+.config-section {
+  margin-bottom: 32px;
+}
+
+.config-section:last-child {
+  margin-bottom: 0;
+}
+
+.config-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-label {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.config-value {
+  font-size: 14px;
+  color: #1a202c;
+}
+
+.config-value.code {
+  font-family: 'Consolas', monospace;
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.env-vars-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.env-var-item {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.env-name {
+  font-weight: 600;
+  color: #4a5568;
+  min-width: 150px;
+}
+
+.env-value {
+  color: #64748b;
+  font-family: monospace;
+}
+
+.config-json {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+/* 错误状态 */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px;
+  text-align: center;
+}
+
+.error-state svg {
+  width: 64px;
+  height: 64px;
+  color: #dc2626;
+  margin-bottom: 20px;
+}
+
+.error-state h3 {
+  font-size: 20px;
+  color: #1a202c;
+  margin: 0 0 8px 0;
+}
+
+.error-state p {
+  color: #64748b;
+  margin: 0 0 24px 0;
+}
+
+/* 按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #4299e1, #3182ce);
+  color: white;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #48bb78, #38a169);
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #ed8936, #dd6b20);
+  color: white;
+}
+
+.btn-warning:hover {
+  box-shadow: 0 4px 12px rgba(237, 137, 54, 0.4);
+}
+
+.btn-outline {
+  background: white;
+  color: #4a5568;
+  border-color: #e2e8f0;
+}
+
+.btn-outline:hover {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .status-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stage-details {
+    grid-template-columns: 1fr;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 错误信息样式 */
+.error-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e53e3e;
+}
+
+.error-section .error-icon {
+  width: 20px;
+  height: 20px;
+  stroke: #e53e3e;
+}
+
+.error-box {
+  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border: 1px solid #fc8181;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 12px;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.error-message {
+  color: #c53030;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+  margin: 0;
+  word-break: break-word;
+}
+
+.error-time {
+  color: #9b2c2c;
+  font-size: 12px;
+  margin: 0;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .pipeline-header {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+  }
+
+  .tab-nav {
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+  }
+}
+
+/* ==================== 版本信息展示 ==================== */
+.section-title .title-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.version-info-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 12px;
+}
+
+.version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.version-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-item.full {
+  grid-column: span 2;
+}
+
+.version-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.version-value {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.version-value.code-text {
+  font-family: 'JetBrains Mono', Monaco, Consolas, monospace;
+  font-size: 13px;
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.version-value.digest {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.version-value.tag {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.deploy-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deploy-status.status-success {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.deploy-status.status-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.deploy-status.status-pending {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.deploy-status.status-deploying {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.deploy-status.status-approval_pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.deploy-target-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #bae6fd;
+}
+
+.target-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.target-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+.target-value {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.container-name {
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* 自动部署配置展示 */
+.auto-deploy-config-display {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 12px;
+}
+
+.config-title .title-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.status-badge.enabled {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.env-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.env-badge.env-dev {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.env-badge.env-staging {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.env-badge.env-prod {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+@media (max-width: 640px) {
+  .version-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .version-item.full {
+    grid-column: span 1;
+  }
+}
+
+/* ==================== 运行弹窗样式 ==================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 500px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.modal-header h3 svg {
+  width: 22px;
+  height: 22px;
+  color: #48bb78;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f7fafc;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #e2e8f0;
+}
+
+.close-btn svg {
+  width: 18px;
+  height: 18px;
+  color: #718096;
+}
+
+.modal-body {
+  padding: 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.run-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
-.info-item .label {
+.info-label {
+  font-size: 12px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #1a202c;
   font-weight: 600;
-  color: #4a5568;
-  font-size: 14px;
-  margin-bottom: 4px;
 }
 
-.info-item .value {
-  color: #2d3748;
-  font-size: 14px;
+.deploy-config-section {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 16px;
 }
 
-.info-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.auto-refresh {
+.deploy-config-section .section-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: 0 0 12px 0;
   font-size: 14px;
-  color: #4a5568;
+  font-weight: 600;
+  color: #0369a1;
 }
 
-.stages-container {
+.deploy-config-section .section-title svg {
+  width: 18px;
+  height: 18px;
+}
+
+.deploy-config-info {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
-.stage-header {
+.config-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.config-key {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.config-val {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.config-val.env-dev {
+  color: #16a34a;
+}
+
+.config-val.env-staging {
+  color: #d97706;
+}
+
+.config-val.env-prod {
+  color: #dc2626;
+}
+
+.approval-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fef3c7;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.approval-notice svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.no-deploy-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.no-deploy-notice svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #f7fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-footer .btn {
+  min-width: 100px;
+}
+
+/* 阶段类型标签 */
+.stage-type-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.stage-type-badge.approval {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* 审批标签状态变体 */
+.stage-type-badge.approval.approval-waiting,
+.stage-type-badge.approval.approval-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.stage-type-badge.approval.approval-success,
+.stage-type-badge.approval.approval-approved {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.stage-type-badge.approval.approval-failed,
+.stage-type-badge.approval.approval-rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.stage-type-badge.deploy {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* 阶段操作面板 */
+.stage-action-panel {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.stage-action-panel .action-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.stage-action-panel .action-info svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.stage-action-panel.approval-panel {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.stage-action-panel.approval-panel .action-info svg {
+  color: #d97706;
+}
+
+/* 优化后的审批面板 - 参考 KubeSphere/Rancher 设计 */
+.approval-panel-enhanced {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 2px solid #fcd34d;
+  border-radius: 12px;
+  padding: 20px;
   margin-bottom: 16px;
 }
 
-.stage-actions {
+.approval-header {
   display: flex;
-  gap: 12px;
-}
-
-.stage-item {
-  display: flex;
+  align-items: flex-start;
   gap: 16px;
-  padding: 16px;
-  border-radius: 8px;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  border-left: 4px solid #e2e8f0;
+  margin-bottom: 20px;
 }
 
-.stage-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-.stage-active {
-  border-left-color: #f6ad55;
-  background-color: #fffaf0;
-}
-
-.stage-completed {
-  border-left-color: #48bb78;
-  background-color: #f0fff4;
-}
-
-.stage-failed {
-  border-left-color: #f56565;
-  background-color: #fff5f5;
-}
-
-.stage-pending {
-  border-left-color: #4299e1;
-  background-color: #ebf8ff;
-}
-
-.stage-next {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
-  }
-}
-
-.stage-number {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #e2e8f0;
-  color: #4a5568;
+.approval-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 16px;
   flex-shrink: 0;
-  transition: all 0.3s ease;
 }
 
-.stage-active .stage-number {
-  background-color: #f6ad55;
+.approval-icon svg {
+  width: 24px;
+  height: 24px;
   color: white;
 }
 
-.stage-completed .stage-number {
-  background-color: #48bb78;
-  color: white;
-}
-
-.stage-failed .stage-number {
-  background-color: #f56565;
-  color: white;
-}
-
-.stage-pending .stage-number {
-  background-color: #4299e1;
-  color: white;
-}
-
-.stage-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.stage-name {
-  font-weight: 600;
-  color: #2d3748;
+.approval-title h4 {
+  margin: 0 0 4px 0;
   font-size: 16px;
-  margin-bottom: 4px;
-}
-
-.stage-description {
-  font-size: 13px;
-  color: #718096;
-  margin-bottom: 8px;
-}
-
-.stage-status {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
   font-weight: 600;
-  margin-bottom: 8px;
+  color: #92400e;
 }
 
-.stage-active .stage-status {
-  background-color: #f6ad55;
-  color: white;
-}
-
-.stage-completed .stage-status {
-  background-color: #48bb78;
-  color: white;
-}
-
-.stage-failed .stage-status {
-  background-color: #f56565;
-  color: white;
-}
-
-.stage-pending .stage-status {
-  background-color: #4299e1;
-  color: white;
-}
-
-.stage-time {
-  font-size: 12px;
-  color: #718096;
-  margin-bottom: 8px;
-}
-
-.stage-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.stage-control-tips {
-  background-color: #ebf8ff;
-  border: 1px solid #bee3f8;
-  border-radius: 6px;
-  padding: 16px;
-  margin-top: 16px;
-}
-
-.stage-control-tips p {
-  margin: 0 0 8px 0;
-  font-weight: 600;
-  color: #2b6cb0;
-}
-
-.stage-control-tips ul {
+.approval-title p {
   margin: 0;
-  padding-left: 20px;
-}
-
-.stage-control-tips li {
-  margin-bottom: 4px;
-  color: #2b6cb0;
-}
-
-/* 阶段详情模态框样式 */
-.stage-detail-modal {
-  max-width: 800px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.stage-detail-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.detail-section {
-  background-color: #f7fafc;
-  padding: 16px;
-  border-radius: 6px;
-}
-
-.detail-section h4 {
-  margin: 0 0 12px 0;
-  color: #2d3748;
-  font-size: 16px;
-}
-
-.detail-item {
-  display: flex;
-  margin-bottom: 8px;
-}
-
-.detail-item .label {
-  width: 100px;
-  font-weight: 600;
-  color: #4a5568;
-}
-
-.detail-item .value {
-  flex: 1;
-  color: #2d3748;
-}
-
-.stage-output {
-  background-color: #2d3748;
-  color: #e2e8f0;
-  padding: 12px;
-  border-radius: 4px;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.stage-output pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
+  color: #a16207;
 }
 
-/* 按钮样式增强 */
-.btn-small {
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.btn-outline {
-  background-color: transparent;
-  border: 1px solid #e2e8f0;
-  color: #4a5568;
-}
-
-.btn-outline:hover {
-  background-color: #f7fafc;
-  border-color: #cbd5e0;
-}
-
-.stage-active {
-  border-left: 4px solid #f6ad55;
-  background-color: #fffaf0;
-}
-
-.stage-active .stage-number {
-  background-color: #f6ad55;
-  color: white;
-}
-
-.stage-completed {
-  border-left: 4px solid #48bb78;
-  background-color: #f0fff4;
-}
-
-.stage-completed .stage-number {
-  background-color: #48bb78;
-  color: white;
-}
-
-.stage-failed {
-  border-left: 4px solid #f56565;
-  background-color: #fff5f5;
-}
-
-.stage-failed .stage-number {
-  background-color: #f56565;
-  color: white;
-}
-
-.stage-pending {
-  border-left: 4px solid #a0aec0;
-  background-color: #f7fafc;
-}
-
-.stage-pending .stage-number {
-  background-color: #a0aec0;
-  color: white;
-}
-
-.deploy-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-row {
+/* 审批选项卡片 */
+.approval-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.approval-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approval-option:hover {
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.approval-option.selected {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.approval-option.selected .option-radio .radio-inner {
+  transform: scale(1);
+}
+
+.option-radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d1d5db;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.approval-option.selected .option-radio {
+  border-color: #10b981;
+  background: #10b981;
+}
+
+.radio-inner {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 0.2s;
+}
+
+.option-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option-icon.approve {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.option-icon.reject {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.option-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.option-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.option-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: auto;
+}
+
+/* 审批备注 */
+.approval-comment {
+  margin-bottom: 16px;
+}
+
+.comment-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.comment-label .optional {
+  font-weight: 400;
+  color: #9ca3af;
+}
+
+.comment-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  resize: vertical;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.comment-input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+/* 审批按钮 */
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-approval {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+
+.btn-approval.approve {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.btn-approval.approve:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.btn-approval.reject {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.btn-approval.reject:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.btn-approval:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-approval svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-approval .loading-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 审批结果面板样式 */
+.approval-result-panel {
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.approval-result-panel.approved {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 2px solid #34d399;
+}
+
+.approval-result-panel.rejected {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border: 2px solid #f87171;
+}
+
+.approval-result-header {
+  display: flex;
+  align-items: center;
   gap: 16px;
 }
 
-.form-group {
+.result-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-weight: 600;
-  color: #4a5568;
-  font-size: 14px;
-}
-
-.form-input, .form-select {
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: border-color 0.3s ease;
-}
-
-.form-input:focus, .form-select:focus {
-  outline: none;
-  border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
-}
-
-.form-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.logs-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.logs-header h3 {
+.result-icon.approved {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.result-icon.rejected {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.result-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.result-content h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.approval-result-panel.approved .result-content h4 {
+  color: #059669;
+}
+
+.approval-result-panel.rejected .result-content h4 {
+  color: #dc2626;
+}
+
+.result-content p {
   margin: 0;
-  font-size: 18px;
-}
-
-.logs-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.log-search-input {
-  padding: 6px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
   font-size: 13px;
-  width: 200px;
+  color: #6b7280;
 }
 
-.log-search-input:focus {
-  outline: none;
-  border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
-}
-
-.logs-container {
-  background-color: #2d3748;
-  color: #e2e8f0;
-  padding: 16px;
-  border-radius: 4px;
-  max-height: 400px;
-  overflow-y: auto;
-  margin-bottom: 16px;
-  font-family: monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.log-item {
-  margin-bottom: 4px;
-  padding: 2px 0;
-}
-
-.log-error {
-  color: #f56565;
-  font-weight: 500;
-}
-
-.log-warning {
-  color: #ed8936;
-  font-weight: 500;
-}
-
-.log-info {
-  color: #4299e1;
-  font-weight: 500;
-}
-
-.logs-footer {
+.approval-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: #718096;
-}
-
-.logs-actions, .log-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.log-stats {
-  font-size: 12px;
-  color: #718096;
-}
-
-.btn {
-  padding: 8px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.btn-small {
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.btn-primary {
-  background-color: #326ce5;
-  color: white;
-  border-color: #326ce5;
-}
-
-.btn-primary:hover {
-  background-color: #2554c7;
-}
-
-.btn-danger {
-  background-color: #e53e3e;
-  color: white;
-  border-color: #e53e3e;
-}
-
-.btn-danger:hover {
-  background-color: #c53030;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-  border-color: #6c757d;
-}
-
-.btn-secondary:hover {
-  background-color: #5a6268;
-}
-
-.btn-view {
-  background-color: #6c757d;
-  color: white;
-  border-color: #6c757d;
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.btn-view:hover {
-  background-color: #5a6268;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 16px;
-}
-
-.data-table th,
-.data-table td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.data-table th {
-  background-color: #f7fafc;
-  font-weight: 600;
-  color: #4a5568;
-  font-size: 14px;
-}
-
-.data-table tr:hover {
-  background-color: #f7fafc;
-}
-
-/* 新增样式 */
-/* 阶段元信息样式 */
-.stage-meta {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.stage-status {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.stage-status.success {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.stage-status.failed {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.stage-status.running {
-  background-color: #cce5ff;
-  color: #004085;
-}
-
-.stage-status.pending {
-  background-color: #e2e3e5;
-  color: #383d41;
-}
-
-.stage-status.skipped {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.stage-time {
-  color: #718096;
-}
-
-.stage-duration {
-  color: #a0aec0;
-  font-style: italic;
-}
-
-/* 阶段进度条样式 */
-.stage-progress {
+  gap: 20px;
   margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 13px;
+  color: #6b7280;
 }
 
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background-color: #e2e8f0;
-  border-radius: 4px;
+.approval-comment-display {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.approval-comment-display .comment-label {
+  display: inline;
+  font-weight: 500;
+  color: #374151;
+  margin-right: 8px;
+}
+
+.approval-comment-display .comment-text {
+  color: #4b5563;
+}
+
+.stage-action-panel.deploy-panel {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.stage-action-panel.deploy-panel .action-info svg {
+  color: #2563eb;
+}
+
+.stage-action-panel .action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.stage-action-panel .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stage-action-panel .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stage-action-panel .btn.btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.stage-action-panel .btn.btn-success:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.stage-action-panel .btn.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.stage-action-panel .btn.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.stage-action-panel .btn.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.stage-action-panel .btn.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.stage-action-panel .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* 部署信息 */
+.deploy-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.deploy-info span {
+  display: flex;
+  align-items: center;
+}
+
+/* 部署成功信息 */
+.deploy-success-info {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+}
+
+.deploy-success-info .success-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.deploy-success-info .success-badge svg {
+  width: 20px;
+  height: 20px;
+}
+
+.deploy-success-info .deploy-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: #15803d;
+}
+
+/* 部署进行中状态 */
+.deploy-progress-panel {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.deploy-progress-panel .progress-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #d97706;
+}
+
+.deploy-progress-panel .progress-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fde68a;
+  border-top-color: #d97706;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.deploy-progress-panel .deploy-info-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+/* 部署失败信息 */
+.deploy-failed-info {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.deploy-failed-info .failed-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.deploy-failed-info .failed-badge svg {
+  width: 20px;
+  height: 20px;
+}
+
+.deploy-failed-info .failed-reason {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #fee2e2;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.deploy-failed-info .failed-reason .reason-label {
+  font-weight: 500;
+  color: #991b1b;
+  margin-right: 8px;
+}
+
+.deploy-failed-info .failed-reason .reason-text {
+  color: #dc2626;
+  word-break: break-all;
+}
+
+.deploy-failed-info .deploy-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: #7f1d1d;
+}
+
+/* 重新部署按钮 */
+.retry-deploy-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #fecaca;
+}
+
+.btn-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-retry:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-retry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-retry svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 部署日志展示 */
+.deploy-logs-panel {
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   overflow: hidden;
 }
 
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #326ce5 0%, #667eea 100%);
-  animation: progressAnimation 2s ease-in-out infinite;
-  width: 70%; /* 模拟进度 */
-}
-
-@keyframes progressAnimation {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.progress-text {
-  font-size: 12px;
-  color: #718096;
-  margin-top: 4px;
-  text-align: center;
-}
-
-/* 阶段编号样式 */
-.stage-number {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  color: white;
+.deploy-logs-panel .logs-toggle {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 16px;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  transition: background 0.15s;
 }
 
-.stage-number.success {
-  background-color: #48bb78;
+.deploy-logs-panel .logs-toggle:hover {
+  background: #f1f5f9;
 }
 
-.stage-number.failed {
-  background-color: #f56565;
+.deploy-logs-panel .toggle-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s;
 }
 
-.stage-number.running {
-  background-color: #4299e1;
-  animation: pulse 1.5s ease-in-out infinite;
+.deploy-logs-panel .toggle-icon.expanded {
+  transform: rotate(180deg);
 }
 
-.stage-number.skipped {
-  background-color: #ed8936;
-}
-
-.stage-number.pending {
-  background-color: #a0aec0;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-/* 状态图标样式 */
-.status-icon {
-  font-size: 18px;
-  font-weight: bold;
-}
-
-/* 按钮样式增强 */
-.btn-small {
-  padding: 6px 12px;
+.deploy-logs-panel .deploy-logs-content {
+  margin: 0;
+  padding: 14px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 12px;
-  min-width: 80px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
-.btn-warning {
-  background-color: #f59e0b;
-  border-color: #f59e0b;
-  color: white;
+/* 阶段错误信息 */
+.stage-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #dc2626;
 }
 
-.btn-warning:hover {
-  background-color: #d97706;
+.stage-error svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.btn-success {
-  background-color: #10b981;
-  border-color: #10b981;
-  color: white;
-}
-
-.btn-success:hover {
-  background-color: #059669;
-}
-
-/* 阶段卡片样式增强 */
-.stage-item {
+/* 阶段步骤 */
+.stage-steps {
   margin-bottom: 12px;
 }
 
-.stage-next {
-  border-left: 4px solid #f6ad55;
-  background-color: #fffaf0;
-  animation: stageNextPulse 2s ease-in-out infinite;
+/* 等待审批状态 */
+.status-dot.status-waiting {
+  background: #f59e0b;
+  animation: pulse 1.5s infinite;
 }
 
-@keyframes stageNextPulse {
-  0%, 100% {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    box-shadow: 0 4px 12px rgba(246, 173, 85, 0.3);
-  }
-}
-
-.stage-skipped {
-  border-left: 4px solid #ed8936;
-  background-color: #fffaf0;
-}
-
-/* 必填字段标记 */
-.required {
-  color: #ef4444;
-  font-weight: bold;
+/* 已跳过状态 */
+.status-dot.status-skipped {
+  background: #94a3b8;
 }
 </style>

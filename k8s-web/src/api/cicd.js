@@ -33,119 +33,166 @@ export const initK8sCluster = (data) => {
 }
 
 // =======================
-// CI/CD 流水线管理（静态Mock数据）
+// CI/CD 流水线管理（统一使用 platform/pipeline.js）
+// 对应后端路由: /api/v1/k8s/cicd/pipeline/*
 // =======================
 
-// Mock 流水线数据
-const mockPipelines = [
-  {
-    id: 1,
-    name: 'frontend-deploy',
-    description: '前端项目部署流水线',
-    status: 'success',
-    lastRunTime: '2024-01-15 10:30:00',
-    lastRunStatus: 'success',
-    gitRepo: 'https://github.com/example/frontend.git',
-    branch: 'main',
-    stages: [
-      { name: '代码拉取', description: '从git仓库拉取代码', status: 'success', startTime: '2024-01-15 10:30:00', endTime: '2024-01-15 10:30:30' },
-      { name: '构建', description: '编译构建项目', status: 'success', startTime: '2024-01-15 10:30:30', endTime: '2024-01-15 10:32:00' },
-      { name: '测试', description: '运行单元测试', status: 'success', startTime: '2024-01-15 10:32:00', endTime: '2024-01-15 10:33:00' },
-      { name: '部署', description: '部署到K8s集群', status: 'success', startTime: '2024-01-15 10:33:00', endTime: '2024-01-15 10:35:00' }
-    ],
-    envVars: [{ name: 'NODE_ENV', value: 'production' }],
-    deploymentConfig: { namespace: 'default', deploymentName: 'frontend', image: 'frontend:latest', replicas: 3, strategy: 'rollingUpdate' }
-  },
-  {
-    id: 2,
-    name: 'backend-api',
-    description: '后端API服务部署',
-    status: 'running',
-    lastRunTime: '2024-01-15 11:00:00',
-    lastRunStatus: 'running',
-    gitRepo: 'https://github.com/example/backend.git',
-    branch: 'develop',
-    stages: [
-      { name: '代码拉取', description: '从git仓库拉取代码', status: 'success', startTime: '2024-01-15 11:00:00', endTime: '2024-01-15 11:00:20' },
-      { name: '构建', description: '编译Go项目', status: 'running', startTime: '2024-01-15 11:00:20', endTime: null },
-      { name: '测试', description: '运行单元测试', status: 'pending', startTime: null, endTime: null },
-      { name: '部署', description: '部署到K8s集群', status: 'pending', startTime: null, endTime: null }
-    ],
-    envVars: [{ name: 'GO_ENV', value: 'production' }],
-    deploymentConfig: { namespace: 'default', deploymentName: 'backend-api', image: 'backend:latest', replicas: 2, strategy: 'rollingUpdate' }
-  }
-]
+// 统一从 pipeline.js 导出，避免重复定义
+export {
+  getPipelines,
+  getPipelineDetail,
+  createPipeline,
+  updatePipeline,
+  deletePipeline,
+  runPipeline,
+  stopPipeline,
+  getPipelineLogs,
+  getPipelineStatus,
+  getPipelineHistory
+} from './platform/pipeline'
 
-const mockTemplates = [
-  { id: 1, name: 'Node.js标准流水线', description: '适用于Node.js项目的CI/CD模板' },
-  { id: 2, name: 'Go微服务流水线', description: '适用于Go微服务的CI/CD模板' },
-  { id: 3, name: 'Java Spring Boot', description: '适用于Spring Boot项目的CI/CD模板' }
-]
-
-// 创建流水线
-export const createPipeline = (data) => {
-  return Promise.resolve({ code: 0, msg: 'success', data: { id: Date.now(), ...data } })
-}
-
-// 更新流水线
-export const updatePipeline = (id, data) => {
-  return Promise.resolve({ code: 0, msg: 'success', data: { id, ...data } })
-}
-
-// 获取流水线详情
-export const getPipelineDetail = (id) => {
-  const pipeline = mockPipelines.find(p => p.id === parseInt(id)) || mockPipelines[0]
-  return Promise.resolve({ code: 0, msg: 'success', data: pipeline })
-}
-
-// 获取流水线模板列表
+/**
+ * 获取流水线模板列表（TODO: 后端需实现）
+ */
 export const getPipelineTemplates = () => {
-  return Promise.resolve({ code: 0, msg: 'success', data: mockTemplates })
+  return Promise.resolve({ code: 0, msg: 'success', data: [] })
 }
 
-// 运行流水线
-export const runPipeline = (id) => {
-  return Promise.resolve({ code: 0, msg: '流水线已启动' })
+// 部署到K8s（兼容旧接口）
+export { runPipeline as deployToK8s } from './platform/pipeline'
+
+// 获取部署历史（兼容旧接口）
+export { getPipelineHistory as getDeploymentHistory } from './platform/pipeline'
+
+// =======================
+// CI/CD 发布单管理（CICD Release）
+// 对应后端路由: /api/v1/k8s/cicd/release/*
+// =======================
+
+const RELEASE_BASE = `${API_BASE}/k8s/cicd/release`
+
+/**
+ * 获取发布单列表
+ * @param {Object} params - 查询参数
+ * @param {number} params.page - 页码
+ * @param {number} params.page_size - 每页数量
+ * @param {string} params.keyword - 搜索关键字
+ * @param {string} params.status - 状态筛选
+ */
+export const getReleases = (params = {}) => {
+  return http.get(`${RELEASE_BASE}/list`, { params })
 }
 
-// 停止流水线
-export const stopPipeline = (id) => {
-  return Promise.resolve({ code: 0, msg: '流水线已停止' })
+/**
+ * 获取发布单详情
+ * @param {number} id - 发布单ID
+ */
+export const getReleaseDetail = (id) => {
+  return http.get(`${RELEASE_BASE}/detail`, { params: { id } })
 }
 
-// 获取流水线日志
-export const getPipelineLogs = (id, timestamp) => {
-  return Promise.resolve({
-    code: 0,
-    msg: 'success',
-    data: {
-      logs: [
-        '[2024-01-15 10:30:00] 开始执行流水线...',
-        '[2024-01-15 10:30:05] 拉取代码中...',
-        '[2024-01-15 10:30:20] 代码拉取完成',
-        '[2024-01-15 10:30:25] 开始构建...',
-        '[2024-01-15 10:31:00] 构建完成',
-        '[2024-01-15 10:31:05] 运行测试...',
-        '[2024-01-15 10:32:00] 测试通过'
-      ]
-    }
+/**
+ * 创建发布单
+ * @param {Object} data - 创建参数
+ * @param {number} data.pipeline_id - 流水线ID
+ * @param {string} data.name - 发布单名称
+ * @param {string} data.description - 描述
+ * @param {string} data.version - 版本号
+ * @param {string} data.image - 镜像地址
+ * @param {string} data.namespace - 目标命名空间
+ * @param {Object} data.deploy_config - 部署配置
+ */
+export const createRelease = (data) => {
+  return http.post(`${RELEASE_BASE}/create`, data)
+}
+
+/**
+ * 取消发布单
+ * @param {number} id - 发布单ID
+ */
+export const cancelRelease = (id) => {
+  return http.post(`${RELEASE_BASE}/cancel`, { id })
+}
+
+/**
+ * 重试发布单
+ * @param {number} id - 发布单ID
+ */
+export const retryRelease = (id) => {
+  return http.post(`${RELEASE_BASE}/retry`, { id })
+}
+
+/**
+ * 回滚发布单
+ * @param {number} id - 发布单ID
+ * @param {number} target_version - 目标版本（可选）
+ */
+export const rollbackRelease = (id, targetVersion = null) => {
+  const data = { id }
+  if (targetVersion) {
+    data.target_version = targetVersion
+  }
+  return http.post(`${RELEASE_BASE}/rollback`, data)
+}
+
+/**
+ * 获取发布单下的任务列表
+ * @param {number} id - 发布单ID
+ */
+export const getReleaseTasks = (id) => {
+  return http.get(`${RELEASE_BASE}/tasks`, { params: { id } })
+}
+
+// =======================
+// CI/CD 回调接口（CICD Callback）
+// 对应后端路由: /api/v1/k8s/cicd/callback/*
+// =======================
+
+const CALLBACK_BASE = `${API_BASE}/k8s/cicd/callback`
+
+/**
+ * Jenkins 构建回调（通常由 Jenkins 调用，前端一般不使用）
+ * @param {Object} data - 回调数据
+ * @param {string} data.job_name - Jenkins Job名称
+ * @param {number} data.build_number - 构建号
+ * @param {string} data.status - 构建状态 (SUCCESS/FAILURE/ABORTED)
+ * @param {number} data.duration - 构建时长(毫秒)
+ * @param {string} data.message - 构建信息
+ */
+export const jenkinsBuildCallback = (data) => {
+  return http.post(`${CALLBACK_BASE}/build`, data)
+}
+
+// Pipeline 回调（兼容旧路径）
+export const pipelineCallback = (data) => {
+  return http.post(`${API_BASE}/k8s/cicd/pipeline/callback`, data)
+}
+
+// =======================
+// Git 仓库操作
+// =======================
+
+/**
+ * 获取 Git 仓库的远程分支列表
+ * @param {string} repoUrl - Git 仓库地址
+ * @param {string} credentialId - 凭证ID（可选）
+ */
+export const getGitBranches = (repoUrl, credentialId = '') => {
+  return http.post(`${API_BASE}/k8s/cicd/git/branches`, {
+    repo_url: repoUrl,
+    credential_id: credentialId
   })
 }
 
-// 部署到K8s
-export const deployToK8s = (data) => {
-  return Promise.resolve({ code: 0, msg: '部署成功', data: { deploymentId: Date.now() } })
-}
-
-// 获取部署历史
-export const getDeploymentHistory = (pipelineId) => {
-  return Promise.resolve({
-    code: 0,
-    msg: 'success',
-    data: [
-      { id: 1, version: 'v1.0.0', status: 'success', deployTime: '2024-01-15 10:35:00', operator: 'admin' },
-      { id: 2, version: 'v0.9.0', status: 'success', deployTime: '2024-01-14 15:20:00', operator: 'admin' }
-    ]
+/**
+ * 验证 Git 仓库连接
+ * @param {string} repoUrl - Git 仓库地址
+ * @param {string} credentialId - 凭证ID（可选）
+ */
+export const validateGitRepo = (repoUrl, credentialId = '') => {
+  return http.post(`${API_BASE}/k8s/cicd/git/validate`, {
+    repo_url: repoUrl,
+    credential_id: credentialId
   })
 }
 

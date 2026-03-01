@@ -552,6 +552,8 @@ const templateForm = ref({
 })
 
 // 获取模板列表
+// TODO: 后端尚未实现模板管理接口，当前使用静态 Mock 数据
+// 后端实现后请取消下方注释并删除 MOCK_TEMPLATES
 const loadTemplates = async () => {
   loading.value = true
   errorMsg.value = ''
@@ -559,13 +561,14 @@ const loadTemplates = async () => {
     // 模拟 API 调用延迟
     await new Promise(resolve => setTimeout(resolve, 500))
     
-    // 使用静态数据
+    // 使用静态数据（后端待实现）
     pipelineTemplates.value = MOCK_TEMPLATES
     
-    // 如果需要调用真实 API，取消下面注释
+    // === 后端实现后启用以下代码 ===
+    // import { getPipelineTemplates } from '@/api/cicd'
     // const response = await getPipelineTemplates()
     // if (response.code === 0) {
-    //   pipelineTemplates.value = response.data
+    //   pipelineTemplates.value = response.data || []
     // } else {
     //   throw new Error(response.msg || '获取模板列表失败')
     // }

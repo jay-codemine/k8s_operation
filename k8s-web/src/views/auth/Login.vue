@@ -154,10 +154,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { login, register, forgotPassword } from '@/api/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 const mode = ref('login') // login | register
 
@@ -332,7 +333,9 @@ const handleSubmit = async () => {
       const loginData = await loginRequest(form.value.username, form.value.password)
       if (loginData) {
         storeAuth(loginData.token, loginData.user, true)
-        router.push('/dashboard')
+        // 跳转到原目标页面或默认首页
+        const redirect = route.query.redirect || '/dashboard'
+        router.push(redirect)
       }
       return
     }
@@ -341,7 +344,9 @@ const handleSubmit = async () => {
     const loginData = await loginRequest(form.value.username, form.value.password)
     if (loginData) {
       storeAuth(loginData.token, loginData.user, form.value.remember)
-      router.push('/dashboard')
+      // 跳转到原目标页面或默认首页
+      const redirect = route.query.redirect || '/dashboard'
+      router.push(redirect)
     }
   } catch (e) {
     error.value = e?.response?.data?.msg || e?.response?.data?.message || e?.message || '请求失败'

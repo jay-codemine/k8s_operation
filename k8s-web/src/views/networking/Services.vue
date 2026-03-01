@@ -1039,12 +1039,13 @@ const viewRelatedDeployments = async (service) => {
       })
     }).map(dep => {
       // 转换为前端需要的格式
+      // 后端字段: replicas(期望), ready_replicas(就绪)
       return {
         name: dep.name,
         namespace: dep.namespace,
         status: dep.status,
         readyReplicas: dep.readyReplicas || dep.ready_replicas || 0,
-        desiredReplicas: dep.desiredReplicas || dep.desired_replicas || 0,
+        desiredReplicas: dep.desiredReplicas || dep.desired_replicas || dep.replicas || 0,
         image: dep.image,
         selector: dep.selector,
         createdAt: dep.createdAt || dep.created_at,

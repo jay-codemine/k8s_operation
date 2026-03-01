@@ -120,7 +120,7 @@ func (s *Services) CicdReleaseDetail(ctx context.Context, releaseID int64) (*mod
 
 // CicdReleaseList 发布单列表
 func (s *Services) CicdReleaseList(ctx context.Context, req *requests.CicdReleaseListRequest) ([]*models.CicdRelease, int64, error) {
-	return s.dao.CicdReleaseList(ctx, req.AppName, req.Status, req.Page, req.PageSize)
+	return s.dao.CicdReleaseList(ctx, req.Keyword, req.AppName, req.Status, req.Page, req.PageSize)
 }
 
 // CicdReleaseCancelResult 取消操作结果

@@ -6,7 +6,7 @@ import {pinia} from '@/stores'
 
 const http = axios.create({
   baseURL: '',
-  timeout: 15000,
+  timeout: 45000,
   withCredentials: false, // JWT Header 模式：不走 Cookie
 })
 

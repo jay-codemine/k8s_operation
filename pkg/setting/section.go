@@ -123,3 +123,20 @@ type ClusterClientConfig struct {
 	TTL       time.Duration `mapstructure:"TTL" yaml:"TTL"`
 	TTLJitter time.Duration `mapstructure:"TTLJitter" yaml:"TTLJitter"`
 }
+
+// JenkinsSettingS Jenkins 配置结构体
+// 用于平台驱动 CI/CD 流水线
+type JenkinsSettingS struct {
+	URL            string `mapstructure:"URL"`            // Jenkins 服务器地址
+	Username       string `mapstructure:"Username"`       // Jenkins 用户名
+	APIToken       string `mapstructure:"APIToken"`       // Jenkins API Token
+	TriggerTimeout int    `mapstructure:"TriggerTimeout"` // 触发构建等待超时(秒)
+	CallbackURL    string `mapstructure:"CallbackURL"`    // 平台回调地址（后端 API）
+	PlatformURL    string `mapstructure:"PlatformURL"`    // 前端页面地址（用于通知链接）
+	// 回调机制配置
+	HMACSecret   string `mapstructure:"HMACSecret"`   // HMAC 签名密钥（用于验证回调请求）
+	PollInterval int    `mapstructure:"PollInterval"` // 轮询间隔(秒)，默认15
+	MaxBuildTime int    `mapstructure:"MaxBuildTime"` // 最大构建时间(分钟)，超时判定失败，默认30
+	// 通知配置
+	DingTalkWebhook string `mapstructure:"DingTalkWebhook"` // 钉钉机器人 Webhook URL
+}

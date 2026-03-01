@@ -1,6 +1,8 @@
 package initialize
 
 import (
+	"log"
+
 	"k8soperation/global"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/setting"
@@ -86,6 +88,30 @@ func SetupSetting() error {
 	// ClusterClient:
 	if err = s.ReadSection("ClusterClient", &global.ClusterTTL); err != nil {
 		return err
+	}
+
+	// 读取 Jenkins 配置
+	// 对应 config.yaml 中的：
+	// Jenkins:
+	if err = s.ReadSection("Jenkins", &global.JenkinsSetting); err != nil {
+		// Jenkins 配置可选，不存在时不报错
+		log.Println("[Jenkins] 配置块未找到，CI/CD 功能将不可用")
+		global.JenkinsSetting = nil
+	} else if global.JenkinsSetting != nil {
+		// 校验关键字段：如果 URL 为空则表示未启用，置为 nil
+		if global.JenkinsSetting.URL == "" {
+			log.Println("[Jenkins] URL 未配置，CI/CD 功能将不可用")
+			global.JenkinsSetting = nil
+		} else {
+			log.Printf("[Jenkins] 配置加载成功: url=%s, username=%s, has_token=%v\n",
+				global.JenkinsSetting.URL,
+				global.JenkinsSetting.Username,
+				global.JenkinsSetting.APIToken != "",
+			)
+			if global.JenkinsSetting.Username == "" || global.JenkinsSetting.APIToken == "" {
+				log.Println("[Jenkins] 凭据不完整，请配置 Username 和 APIToken")
+			}
+		}
 	}
 
 	// 将 ErrorCode 配置注入 errorcode 包

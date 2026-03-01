@@ -544,20 +544,31 @@ nginx-project/
 
 ---
 
-## 六、通用 Jenkinsfile（平台 Worker 模式）
+## 六、通用 Jenkinsfile（平台 Worker 模式 + containerd + digest 部署）
+
+> **说明**：
+> - Jenkins 虚拟机使用 containerd + nerdctl 构建镜像
+> - 镜像标签自动生成：`{branch}-{commit}-{timestamp}`
+> - 推送后自动获取 digest，回调时携带 `image@digest` 用于部署
 
 ### 6.1 Go 项目 Jenkinsfile
 
 ```groovy
-// Jenkinsfile.build-only - Go 项目（平台 Worker 部署模式）
+// Jenkinsfile.build-only - Go 项目（containerd + nerdctl + digest 部署）
 pipeline {
     agent any
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
     
     parameters {
         string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库')
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '镜像标签')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
         string(name: 'BUILD_ID', defaultValue: '', description: '发布单 ID')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
@@ -575,10 +586,18 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: "*/${params.GIT_BRANCH}"]],
-                    userRemoteConfigs: [[url: params.GIT_REPO]]
+                    userRemoteConfigs: [[url: params.GIT_REPO]],
+                    extensions: [[$class: 'CleanBeforeCheckout']]
                 ])
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_SAFE = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    
+                    // 自动生成标签：branch-commit-timestamp
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_BRANCH_SAFE}-${env.GIT_COMMIT}-${env.BUILD_TS}"
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+                    echo "Image: ${env.FULL_IMAGE}"
                 }
             }
         }
@@ -592,57 +611,73 @@ pipeline {
         
         stage('Build & Push Image') {
             steps {
-                sh """
-                    docker login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} \$(echo ${params.IMAGE_REPO} | cut -d'/' -f1)
-                    docker build -t ${params.IMAGE_REPO}:${params.IMAGE_TAG} .
-                    docker push ${params.IMAGE_REPO}:${params.IMAGE_TAG}
-                """
                 script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+                    sh """
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl build -t ${env.FULL_IMAGE} \
+                            --label git.commit=${env.GIT_COMMIT} \
+                            --label build.timestamp=${env.BUILD_TS} \
+                            .
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+                    
+                    // 获取 digest
                     env.IMAGE_DIGEST = sh(
-                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${params.IMAGE_REPO}:${params.IMAGE_TAG} | cut -d'@' -f2 || echo ''",
+                        script: """nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{.}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''""",
                         returnStdout: true
                     ).trim()
+                    
+                    // 构建 digest 部署地址
+                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}" : env.FULL_IMAGE
+                    echo "Deploy Image: ${env.IMAGE_WITH_DIGEST}"
                 }
             }
         }
-        
-        // ⚠️ 没有 Deploy 阶段
     }
     
     post {
         success {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{
-                            "build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER},
-                            "status": "SUCCESS",
-                            "image_repo": "${params.IMAGE_REPO}",
-                            "image_tag": "${params.IMAGE_TAG}",
-                            "image_digest": "${env.IMAGE_DIGEST ?: ''}",
-                            "message": "Go 项目构建成功",
-                            "git_commit": "${env.GIT_COMMIT}"
-                        }"""
-                    )
-                }
+                callbackPlatform('SUCCESS', 'Go 项目构建成功')
             }
         }
         failure {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{"build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER}, "status": "FAILURE", "message": "Go 项目构建失败"}"""
-                    )
-                }
+                callbackPlatform('FAILURE', 'Go 项目构建失败')
             }
         }
-        always { cleanWs() }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+def callbackPlatform(String status, String message) {
+    if (!params.PLATFORM_CALLBACK_URL) return
+    
+    def payload = [
+        build_id: params.BUILD_ID ?: env.BUILD_NUMBER,
+        status: status,
+        message: message,
+        git_commit: env.GIT_COMMIT ?: '',
+        image: env.FULL_IMAGE ?: '',
+        image_tag: env.FINAL_TAG ?: '',
+        image_digest: env.IMAGE_DIGEST ?: '',
+        image_with_digest: env.IMAGE_WITH_DIGEST ?: ''  // 用于部署
+    ]
+    
+    try {
+        httpRequest(
+            url: params.PLATFORM_CALLBACK_URL,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: groovy.json.JsonOutput.toJson(payload),
+            validResponseCodes: '200:299'
+        )
+    } catch (Exception e) {
+        echo "回调失败: ${e.message}"
     }
 }
 ```
@@ -650,15 +685,21 @@ pipeline {
 ### 6.2 Java Maven 项目 Jenkinsfile
 
 ```groovy
-// Jenkinsfile.build-only - Java Maven 项目（平台 Worker 部署模式）
+// Jenkinsfile.build-only - Java Maven 项目（containerd + nerdctl + digest 部署）
 pipeline {
     agent any
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
     
     parameters {
         string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库')
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '镜像标签')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
         string(name: 'BUILD_ID', defaultValue: '', description: '发布单 ID')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
@@ -679,10 +720,17 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: "*/${params.GIT_BRANCH}"]],
-                    userRemoteConfigs: [[url: params.GIT_REPO]]
+                    userRemoteConfigs: [[url: params.GIT_REPO]],
+                    extensions: [[$class: 'CleanBeforeCheckout']]
                 ])
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_SAFE = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_BRANCH_SAFE}-${env.GIT_COMMIT}-${env.BUILD_TS}"
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+                    echo "Image: ${env.FULL_IMAGE}"
                 }
             }
         }
@@ -713,57 +761,71 @@ pipeline {
         
         stage('Build & Push Image') {
             steps {
-                sh """
-                    docker login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} \$(echo ${params.IMAGE_REPO} | cut -d'/' -f1)
-                    docker build -t ${params.IMAGE_REPO}:${params.IMAGE_TAG} .
-                    docker push ${params.IMAGE_REPO}:${params.IMAGE_TAG}
-                """
                 script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+                    sh """
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl build -t ${env.FULL_IMAGE} \
+                            --label git.commit=${env.GIT_COMMIT} \
+                            --label build.timestamp=${env.BUILD_TS} \
+                            .
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+                    
                     env.IMAGE_DIGEST = sh(
-                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${params.IMAGE_REPO}:${params.IMAGE_TAG} | cut -d'@' -f2 || echo ''",
+                        script: """nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{.}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''""",
                         returnStdout: true
                     ).trim()
+                    
+                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}" : env.FULL_IMAGE
+                    echo "Deploy Image: ${env.IMAGE_WITH_DIGEST}"
                 }
             }
         }
-        
-        // ⚠️ 没有 Deploy 阶段
     }
     
     post {
         success {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{
-                            "build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER},
-                            "status": "SUCCESS",
-                            "image_repo": "${params.IMAGE_REPO}",
-                            "image_tag": "${params.IMAGE_TAG}",
-                            "image_digest": "${env.IMAGE_DIGEST ?: ''}",
-                            "message": "Java 项目构建成功",
-                            "git_commit": "${env.GIT_COMMIT}"
-                        }"""
-                    )
-                }
+                callbackPlatform('SUCCESS', 'Java 项目构建成功')
             }
         }
         failure {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{"build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER}, "status": "FAILURE", "message": "Java 项目构建失败"}"""
-                    )
-                }
+                callbackPlatform('FAILURE', 'Java 项目构建失败')
             }
         }
-        always { cleanWs() }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+def callbackPlatform(String status, String message) {
+    if (!params.PLATFORM_CALLBACK_URL) return
+    
+    def payload = [
+        build_id: params.BUILD_ID ?: env.BUILD_NUMBER,
+        status: status,
+        message: message,
+        git_commit: env.GIT_COMMIT ?: '',
+        image: env.FULL_IMAGE ?: '',
+        image_tag: env.FINAL_TAG ?: '',
+        image_digest: env.IMAGE_DIGEST ?: '',
+        image_with_digest: env.IMAGE_WITH_DIGEST ?: ''
+    ]
+    
+    try {
+        httpRequest(
+            url: params.PLATFORM_CALLBACK_URL,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: groovy.json.JsonOutput.toJson(payload),
+            validResponseCodes: '200:299'
+        )
+    } catch (Exception e) {
+        echo "回调失败: ${e.message}"
     }
 }
 ```
@@ -771,15 +833,21 @@ pipeline {
 ### 6.3 Python 项目 Jenkinsfile
 
 ```groovy
-// Jenkinsfile.build-only - Python 项目（平台 Worker 部署模式）
+// Jenkinsfile.build-only - Python 项目（containerd + nerdctl + digest 部署）
 pipeline {
     agent any
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
     
     parameters {
         string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库')
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '镜像标签')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
         string(name: 'BUILD_ID', defaultValue: '', description: '发布单 ID')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
@@ -796,10 +864,17 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: "*/${params.GIT_BRANCH}"]],
-                    userRemoteConfigs: [[url: params.GIT_REPO]]
+                    userRemoteConfigs: [[url: params.GIT_REPO]],
+                    extensions: [[$class: 'CleanBeforeCheckout']]
                 ])
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_SAFE = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_BRANCH_SAFE}-${env.GIT_COMMIT}-${env.BUILD_TS}"
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+                    echo "Image: ${env.FULL_IMAGE}"
                 }
             }
         }
@@ -826,57 +901,71 @@ pipeline {
         
         stage('Build & Push Image') {
             steps {
-                sh """
-                    docker login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} \$(echo ${params.IMAGE_REPO} | cut -d'/' -f1)
-                    docker build -t ${params.IMAGE_REPO}:${params.IMAGE_TAG} .
-                    docker push ${params.IMAGE_REPO}:${params.IMAGE_TAG}
-                """
                 script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+                    sh """
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl build -t ${env.FULL_IMAGE} \
+                            --label git.commit=${env.GIT_COMMIT} \
+                            --label build.timestamp=${env.BUILD_TS} \
+                            .
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+                    
                     env.IMAGE_DIGEST = sh(
-                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${params.IMAGE_REPO}:${params.IMAGE_TAG} | cut -d'@' -f2 || echo ''",
+                        script: """nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{.}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''""",
                         returnStdout: true
                     ).trim()
+                    
+                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}" : env.FULL_IMAGE
+                    echo "Deploy Image: ${env.IMAGE_WITH_DIGEST}"
                 }
             }
         }
-        
-        // ⚠️ 没有 Deploy 阶段
     }
     
     post {
         success {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{
-                            "build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER},
-                            "status": "SUCCESS",
-                            "image_repo": "${params.IMAGE_REPO}",
-                            "image_tag": "${params.IMAGE_TAG}",
-                            "image_digest": "${env.IMAGE_DIGEST ?: ''}",
-                            "message": "Python 项目构建成功",
-                            "git_commit": "${env.GIT_COMMIT}"
-                        }"""
-                    )
-                }
+                callbackPlatform('SUCCESS', 'Python 项目构建成功')
             }
         }
         failure {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{"build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER}, "status": "FAILURE", "message": "Python 项目构建失败"}"""
-                    )
-                }
+                callbackPlatform('FAILURE', 'Python 项目构建失败')
             }
         }
-        always { cleanWs() }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+def callbackPlatform(String status, String message) {
+    if (!params.PLATFORM_CALLBACK_URL) return
+    
+    def payload = [
+        build_id: params.BUILD_ID ?: env.BUILD_NUMBER,
+        status: status,
+        message: message,
+        git_commit: env.GIT_COMMIT ?: '',
+        image: env.FULL_IMAGE ?: '',
+        image_tag: env.FINAL_TAG ?: '',
+        image_digest: env.IMAGE_DIGEST ?: '',
+        image_with_digest: env.IMAGE_WITH_DIGEST ?: ''
+    ]
+    
+    try {
+        httpRequest(
+            url: params.PLATFORM_CALLBACK_URL,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: groovy.json.JsonOutput.toJson(payload),
+            validResponseCodes: '200:299'
+        )
+    } catch (Exception e) {
+        echo "回调失败: ${e.message}"
     }
 }
 ```
@@ -884,15 +973,21 @@ pipeline {
 ### 6.4 Nginx 项目 Jenkinsfile
 
 ```groovy
-// Jenkinsfile.build-only - Nginx 项目（平台 Worker 部署模式）
+// Jenkinsfile.build-only - Nginx 项目（containerd + nerdctl + digest 部署）
 pipeline {
     agent any
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
     
     parameters {
         string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库')
-        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '镜像标签')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
         string(name: 'BUILD_ID', defaultValue: '', description: '发布单 ID')
         booleanParam(name: 'BUILD_FRONTEND', defaultValue: false, description: '是否需要 npm build')
@@ -908,10 +1003,17 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: "*/${params.GIT_BRANCH}"]],
-                    userRemoteConfigs: [[url: params.GIT_REPO]]
+                    userRemoteConfigs: [[url: params.GIT_REPO]],
+                    extensions: [[$class: 'CleanBeforeCheckout']]
                 ])
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_SAFE = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_BRANCH_SAFE}-${env.GIT_COMMIT}-${env.BUILD_TS}"
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+                    echo "Image: ${env.FULL_IMAGE}"
                 }
             }
         }
@@ -928,57 +1030,71 @@ pipeline {
         
         stage('Build & Push Image') {
             steps {
-                sh """
-                    docker login -u ${REGISTRY_CREDS_USR} -p ${REGISTRY_CREDS_PSW} \$(echo ${params.IMAGE_REPO} | cut -d'/' -f1)
-                    docker build -t ${params.IMAGE_REPO}:${params.IMAGE_TAG} .
-                    docker push ${params.IMAGE_REPO}:${params.IMAGE_TAG}
-                """
                 script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+                    sh """
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl build -t ${env.FULL_IMAGE} \
+                            --label git.commit=${env.GIT_COMMIT} \
+                            --label build.timestamp=${env.BUILD_TS} \
+                            .
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+                    
                     env.IMAGE_DIGEST = sh(
-                        script: "docker inspect --format='{{index .RepoDigests 0}}' ${params.IMAGE_REPO}:${params.IMAGE_TAG} | cut -d'@' -f2 || echo ''",
+                        script: """nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{.}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''""",
                         returnStdout: true
                     ).trim()
+                    
+                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}" : env.FULL_IMAGE
+                    echo "Deploy Image: ${env.IMAGE_WITH_DIGEST}"
                 }
             }
         }
-        
-        // ⚠️ 没有 Deploy 阶段
     }
     
     post {
         success {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{
-                            "build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER},
-                            "status": "SUCCESS",
-                            "image_repo": "${params.IMAGE_REPO}",
-                            "image_tag": "${params.IMAGE_TAG}",
-                            "image_digest": "${env.IMAGE_DIGEST ?: ''}",
-                            "message": "Nginx 项目构建成功",
-                            "git_commit": "${env.GIT_COMMIT}"
-                        }"""
-                    )
-                }
+                callbackPlatform('SUCCESS', 'Nginx 项目构建成功')
             }
         }
         failure {
             script {
-                if (params.PLATFORM_CALLBACK_URL) {
-                    httpRequest(
-                        url: params.PLATFORM_CALLBACK_URL,
-                        httpMode: 'POST',
-                        contentType: 'APPLICATION_JSON',
-                        requestBody: """{"build_id": ${params.BUILD_ID ?: env.BUILD_NUMBER}, "status": "FAILURE", "message": "Nginx 项目构建失败"}"""
-                    )
-                }
+                callbackPlatform('FAILURE', 'Nginx 项目构建失败')
             }
         }
-        always { cleanWs() }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+def callbackPlatform(String status, String message) {
+    if (!params.PLATFORM_CALLBACK_URL) return
+    
+    def payload = [
+        build_id: params.BUILD_ID ?: env.BUILD_NUMBER,
+        status: status,
+        message: message,
+        git_commit: env.GIT_COMMIT ?: '',
+        image: env.FULL_IMAGE ?: '',
+        image_tag: env.FINAL_TAG ?: '',
+        image_digest: env.IMAGE_DIGEST ?: '',
+        image_with_digest: env.IMAGE_WITH_DIGEST ?: ''
+    ]
+    
+    try {
+        httpRequest(
+            url: params.PLATFORM_CALLBACK_URL,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: groovy.json.JsonOutput.toJson(payload),
+            validResponseCodes: '200:299'
+        )
+    } catch (Exception e) {
+        echo "回调失败: ${e.message}"
     }
 }
 ```
@@ -996,26 +1112,29 @@ pipeline {
 
 ---
 
-## 八、验证命令
+## 八、验证命令（nerdctl）
 
 ```bash
 # Go 项目本地测试
-docker build -t go-demo:test .
-docker run -p 8080:8080 go-demo:test
+nerdctl build -t go-demo:test .
+nerdctl run -p 8080:8080 go-demo:test
 curl http://localhost:8080/health
 
 # Java 项目本地测试
-docker build -t java-demo:test .
-docker run -p 8080:8080 java-demo:test
+nerdctl build -t java-demo:test .
+nerdctl run -p 8080:8080 java-demo:test
 curl http://localhost:8080/actuator/health
 
 # Python 项目本地测试
-docker build -t python-demo:test .
-docker run -p 8000:8000 python-demo:test
+nerdctl build -t python-demo:test .
+nerdctl run -p 8000:8000 python-demo:test
 curl http://localhost:8000/health
 
 # Nginx 项目本地测试
-docker build -t nginx-demo:test .
-docker run -p 80:80 nginx-demo:test
+nerdctl build -t nginx-demo:test .
+nerdctl run -p 80:80 nginx-demo:test
 curl http://localhost/health
+
+# 清理测试镜像
+nerdctl rmi go-demo:test java-demo:test python-demo:test nginx-demo:test
 ```

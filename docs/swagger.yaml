@@ -8,6 +8,32 @@ definitions:
       value:
         type: string
     type: object
+  requests.ApprovalActionRequest:
+    properties:
+      action:
+        description: approve/reject
+        type: string
+      id:
+        type: integer
+      reason:
+        description: 审批意见
+        type: string
+    type: object
+  requests.ApprovalCreateRequest:
+    properties:
+      env_name:
+        type: string
+      image:
+        type: string
+      image_digest:
+        type: string
+      pipeline_id:
+        type: integer
+      pipeline_run_id:
+        type: integer
+      request_reason:
+        type: string
+    type: object
   requests.AuthForgotPasswordRequest:
     properties:
       confirm:
@@ -136,6 +162,68 @@ definitions:
       value:
         type: string
     type: object
+  requests.EnvironmentCreateRequest:
+    properties:
+      approval_user_ids:
+        description: 审批人员ID列表
+        items:
+          type: integer
+        type: array
+      cluster_id:
+        description: 关联集群ID
+        type: integer
+      color:
+        description: 环境颜色标识
+        type: string
+      description:
+        description: 描述
+        type: string
+      display_name:
+        description: 显示名称
+        type: string
+      name:
+        description: 环境名称(dev/staging/prod)
+        type: string
+      namespace:
+        description: 默认命名空间
+        type: string
+      require_approval:
+        description: 是否需要审批
+        type: boolean
+      sort_order:
+        description: 排序
+        type: integer
+    type: object
+  requests.EnvironmentIDRequest:
+    properties:
+      id:
+        type: integer
+    type: object
+  requests.EnvironmentUpdateRequest:
+    properties:
+      approval_user_ids:
+        items:
+          type: integer
+        type: array
+      cluster_id:
+        type: integer
+      color:
+        type: string
+      description:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      namespace:
+        type: string
+      require_approval:
+        type: boolean
+      sort_order:
+        type: integer
+    type: object
   requests.EnvironmentVariable:
     properties:
       name:
@@ -156,6 +244,22 @@ definitions:
       message:
         type: string
       name:
+        type: string
+    type: object
+  requests.GitBranchesRequest:
+    properties:
+      credential_id:
+        description: 可选：Jenkins凭证ID
+        type: string
+      repo_url:
+        type: string
+    type: object
+  requests.GitValidateRequest:
+    properties:
+      credential_id:
+        description: 可选：Jenkins凭证ID
+        type: string
+      repo_url:
         type: string
     type: object
   requests.HealthCheckDetail:
@@ -225,20 +329,6 @@ definitions:
           type: string
         type: array
       secret_name:
-        type: string
-    type: object
-  requests.JenkinsBuildStatusCallback:
-    properties:
-      build_number:
-        type: integer
-      duration:
-        type: integer
-      job_name:
-        type: string
-      message:
-        type: string
-      status:
-        description: SUCCESS / FAILURE / ABORTED
         type: string
     type: object
   requests.K8sClusterCreateRequest:
@@ -1064,11 +1154,50 @@ definitions:
       new_image:
         type: string
     type: object
+  requests.PipelineCallbackRequest:
+    properties:
+      build_number:
+        description: 构建号
+        type: integer
+      duration:
+        description: 额外信息
+        type: integer
+      image:
+        description: 构建产物 - 支持 image 或 image_url
+        type: string
+      image_digest:
+        description: 镜像 digest (e.g., sha256:xxx)
+        type: string
+      image_url:
+        description: 构建产出的镜像地址（兼容旧字段）
+        type: string
+      job_name:
+        description: 必须字段
+        type: string
+      message:
+        description: 错误或补充信息
+        type: string
+      pipeline_id:
+        description: 平台关联字段
+        type: integer
+      request_id:
+        description: 请求ID（用于日志追踪）
+        type: string
+      status:
+        description: SUCCESS / FAILURE / ABORTED
+        type: string
+    type: object
   requests.PipelineCreateRequest:
     properties:
+      auto_deploy:
+        description: 部署配置
+        type: boolean
       deploy_config:
         additionalProperties: {}
         type: object
+      deploy_env:
+        description: 部署环境
+        type: string
       description:
         type: string
       env_vars:
@@ -1085,6 +1214,24 @@ definitions:
         type: string
       name:
         type: string
+      require_approval:
+        description: 是否需要审批
+        type: boolean
+      target_cluster_id:
+        description: 目标集群ID
+        type: integer
+      target_container:
+        description: 容器名称
+        type: string
+      target_namespace:
+        description: 目标命名空间
+        type: string
+      target_workload_kind:
+        description: 工作负载类型
+        type: string
+      target_workload_name:
+        description: 工作负载名称
+        type: string
     type: object
   requests.PipelineIDRequest:
     properties:
@@ -1093,6 +1240,9 @@ definitions:
     type: object
   requests.PipelineRunRequest:
     properties:
+      auto_deploy:
+        description: 运行时部署配置（可覆盖流水线默认配置）
+        type: boolean
       branch:
         description: 可选：覆盖默认分支
         type: string
@@ -1101,8 +1251,26 @@ definitions:
           type: string
         description: 可选：覆盖环境变量
         type: object
+      force:
+        description: 强制运行：自动清理旧的失败/运行中构建
+        type: boolean
       id:
         type: integer
+      target_cluster_id:
+        description: 目标集群ID
+        type: integer
+      target_container:
+        description: 容器名称
+        type: string
+      target_namespace:
+        description: 目标命名空间
+        type: string
+      target_workload_kind:
+        description: 工作负载类型
+        type: string
+      target_workload_name:
+        description: 工作负载名称
+        type: string
     type: object
   requests.PipelineStopRequest:
     properties:
@@ -1114,9 +1282,15 @@ definitions:
     type: object
   requests.PipelineUpdateRequest:
     properties:
+      auto_deploy:
+        description: 部署配置
+        type: boolean
       deploy_config:
         additionalProperties: {}
         type: object
+      deploy_env:
+        description: 部署环境
+        type: string
       description:
         type: string
       env_vars:
@@ -1135,7 +1309,25 @@ definitions:
         type: string
       name:
         type: string
+      require_approval:
+        description: 是否需要审批
+        type: boolean
       status:
+        type: string
+      target_cluster_id:
+        description: 目标集群ID
+        type: integer
+      target_container:
+        description: 容器名称
+        type: string
+      target_namespace:
+        description: 目标命名空间
+        type: string
+      target_workload_kind:
+        description: 工作负载类型
+        type: string
+      target_workload_name:
+        description: 工作负载名称
         type: string
     type: object
   requests.PortMapping:
@@ -1198,6 +1390,58 @@ definitions:
         type: string
       target_port:
         description: 指向 Pod 的容器端口；为兼容命名端口，这里用字符串（Swagger 友好）
+        type: string
+    type: object
+  requests.StageApproveRequest:
+    properties:
+      action:
+        description: approve/reject
+        type: string
+      comment:
+        description: 审批意见
+        type: string
+      stage_id:
+        type: integer
+    type: object
+  requests.StageCallbackRequest:
+    properties:
+      build_number:
+        description: 构建号
+        type: integer
+      job_name:
+        description: Jenkins Job 名称
+        type: string
+      pipeline_id:
+        description: 流水线ID
+        type: integer
+      stage_type:
+        description: '阶段类型: checkout/build/test/push'
+        type: string
+      status:
+        description: '阶段状态: running/success/failed'
+        type: string
+    type: object
+  requests.StageDeployRequest:
+    properties:
+      cluster_id:
+        description: 可覆盖默认集群
+        type: integer
+      container:
+        description: 可覆盖默认容器
+        type: string
+      image:
+        description: 可覆盖默认镜像
+        type: string
+      namespace:
+        description: 可覆盖默认命名空间
+        type: string
+      stage_id:
+        type: integer
+      workload_kind:
+        description: 可覆盖默认工作负载类型
+        type: string
+      workload_name:
+        description: 可覆盖默认工作负载名称
         type: string
     type: object
   requests.TLSFields:
@@ -1597,6 +1841,126 @@ paths:
       summary: 更新 AppConfig
       tags:
       - Operator AppConfig
+  /api/v1/k8s/cicd/approval/action:
+    post:
+      consumes:
+      - application/json
+      description: 通过或拒绝审批申请
+      parameters:
+      - description: 操作参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.ApprovalActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 审批操作
+      tags:
+      - CICD Approval
+  /api/v1/k8s/cicd/approval/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建部署审批申请
+      parameters:
+      - description: 创建参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.ApprovalCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回审批ID
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建审批申请
+      tags:
+      - CICD Approval
+  /api/v1/k8s/cicd/approval/detail:
+    get:
+      description: 获取单个审批记录的详细信息
+      parameters:
+      - description: 审批ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回审批详情
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取审批详情
+      tags:
+      - CICD Approval
+  /api/v1/k8s/cicd/approval/list:
+    get:
+      description: 分页查询审批记录
+      parameters:
+      - description: 页码，默认1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认10
+        in: query
+        name: page_size
+        type: integer
+      - description: 流水线ID筛选
+        in: query
+        name: pipeline_id
+        type: integer
+      - description: 状态筛选（pending/approved/rejected/expired）
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回审批列表
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取审批列表
+      tags:
+      - CICD Approval
+  /api/v1/k8s/cicd/approval/pending:
+    get:
+      description: 获取当前用户待审批的申请列表
+      parameters:
+      - description: 页码，默认1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认10
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回待审批列表
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取待审批列表
+      tags:
+      - CICD Approval
   /api/v1/k8s/cicd/callback/build:
     post:
       consumes:
@@ -1619,18 +1983,200 @@ paths:
       summary: Jenkins 构建回调
       tags:
       - CICD Callback
+  /api/v1/k8s/cicd/environment/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建新的部署环境配置
+      parameters:
+      - description: 创建参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.EnvironmentCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回环境ID
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建环境
+      tags:
+      - CICD Environment
+  /api/v1/k8s/cicd/environment/delete:
+    post:
+      consumes:
+      - application/json
+      description: 删除部署环境配置
+      parameters:
+      - description: 删除参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.EnvironmentIDRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除环境
+      tags:
+      - CICD Environment
+  /api/v1/k8s/cicd/environment/detail:
+    get:
+      description: 获取单个部署环境的详细信息
+      parameters:
+      - description: 环境ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回环境详情
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取环境详情
+      tags:
+      - CICD Environment
+  /api/v1/k8s/cicd/environment/list:
+    get:
+      description: 分页查询部署环境列表
+      parameters:
+      - description: 页码，默认1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认20
+        in: query
+        name: page_size
+        type: integer
+      - description: 关键字搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回环境列表
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取环境列表
+      tags:
+      - CICD Environment
+  /api/v1/k8s/cicd/environment/update:
+    post:
+      consumes:
+      - application/json
+      description: 更新部署环境配置
+      parameters:
+      - description: 更新参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.EnvironmentUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新环境
+      tags:
+      - CICD Environment
+  /api/v1/k8s/cicd/git/branches:
+    post:
+      consumes:
+      - application/json
+      description: 获取指定 Git 仓库的所有远程分支
+      parameters:
+      - description: 仓库信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.GitBranchesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回分支列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+      summary: 获取 Git 仓库分支列表
+      tags:
+      - CICD Git
+  /api/v1/k8s/cicd/git/validate:
+    post:
+      consumes:
+      - application/json
+      description: 测试 Git 仓库是否可访问
+      parameters:
+      - description: 仓库信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.GitValidateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 验证结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+      summary: 验证 Git 仓库连接
+      tags:
+      - CICD Git
   /api/v1/k8s/cicd/pipeline/callback:
     post:
       consumes:
       - application/json
       description: Jenkins 构建完成后调用此接口通知平台更新状态
       parameters:
+      - description: HMAC-SHA256 签名（用于验证请求真实性）
+        in: header
+        name: X-Signature
+        type: string
       - description: 回调参数
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/requests.JenkinsBuildStatusCallback'
+          $ref: '#/definitions/requests.PipelineCallbackRequest'
       produces:
       - application/json
       responses:
@@ -1643,11 +2189,15 @@ paths:
           description: 参数错误
           schema:
             $ref: '#/definitions/errorcode.Error'
+        "401":
+          description: 签名验证失败
+          schema:
+            $ref: '#/definitions/errorcode.Error'
         "500":
           description: 内部错误
           schema:
             $ref: '#/definitions/errorcode.Error'
-      summary: Jenkins 构建状态回调
+      summary: Jenkins 构建状态回调（生产级）
       tags:
       - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/create:
@@ -1872,6 +2422,38 @@ paths:
           schema:
             $ref: '#/definitions/errorcode.Error'
       summary: 运行流水线
+      tags:
+      - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/stages:
+    get:
+      description: 获取 Jenkins Pipeline 的阶段执行数据（来自 Jenkins Workflow API）
+      parameters:
+      - description: 流水线ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      - description: 构建号（不传则获取最新的）
+        in: query
+        name: build_number
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回阶段数据
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/errorcode.Error'
+      summary: 获取流水线阶段数据
       tags:
       - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/status:
@@ -2100,6 +2682,113 @@ paths:
       summary: 获取发布单下的任务列表
       tags:
       - CICD Release
+  /api/v1/k8s/cicd/stage/approve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 审批请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.StageApproveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 审批通过/拒绝阶段
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/callback:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: HMAC-SHA256 签名
+        in: header
+        name: X-Signature
+        type: string
+      - description: 阶段回调请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.StageCallbackRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Jenkins 阶段回调
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/deploy:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 部署请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.StageDeployRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 执行部署阶段
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/list:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 运行记录ID
+        in: query
+        name: run_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取流水线运行阶段列表
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/logs:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 阶段ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取阶段执行日志
+      tags:
+      - CICD-Stage
   /api/v1/k8s/cluster/create:
     post:
       description: 创建K8s集群

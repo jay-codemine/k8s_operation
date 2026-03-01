@@ -4827,11 +4827,13 @@ const createDeployment = async () => {
       autoRefresh.value = true
       setTimeout(() => { autoRefresh.value = false }, 15000)
     } else {
-      Message.error({ content: res.msg || '创建失败' })
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '创建失败')
+      Message.error({ content: errorMsg, duration: 5000 })
     }
   } catch (e) {
     console.error('创建失败:', e)
-    Message.error({ content: e?.msg || e?.message || '创建失败' })
+    const errorMsg = e?.details ? `${e?.msg || '创建失败'}: ${e.details}` : (e?.msg || e?.message || '创建失败')
+    Message.error({ content: errorMsg, duration: 5000 })
   }
 }
 
@@ -5070,12 +5072,15 @@ const createDeploymentFromYaml = async () => {
       autoRefresh.value = true
       setTimeout(() => { autoRefresh.value = false }, 15000)
     } else {
-      Message.error({ content: res.msg || '创建失败' })
-      yamlError.value = res.msg || '创建失败'
+      // 组合 msg 和 details 展示完整错误信息
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '创建失败')
+      Message.error({ content: errorMsg, duration: 5000 })
+      yamlError.value = errorMsg
     }
   } catch (e) {
-    const errorMsg = e?.msg || e?.message || '创建失败'
-    Message.error({ content: errorMsg })
+    // 处理异常情况，同样组合 msg 和 details
+    const errorMsg = e?.details ? `${e?.msg || '创建失败'}: ${e.details}` : (e?.msg || e?.message || '创建失败')
+    Message.error({ content: errorMsg, duration: 5000 })
     yamlError.value = errorMsg
   }
 }
@@ -5203,10 +5208,12 @@ const applyYamlChanges = async () => {
       autoRefresh.value = true
       setTimeout(() => { autoRefresh.value = false }, 15000)
     } else {
-      Message.error({ content: res.msg || '应用 YAML 失败' })
+      const errorMsg = res.details ? `${res.msg}: ${res.details}` : (res.msg || '应用 YAML 失败')
+      Message.error({ content: errorMsg, duration: 5000 })
     }
   } catch (e) {
-    Message.error({ content: e?.msg || e?.message || '应用 YAML 失败' })
+    const errorMsg = e?.details ? `${e?.msg || '应用 YAML 失败'}: ${e.details}` : (e?.msg || e?.message || '应用 YAML 失败')
+    Message.error({ content: errorMsg, duration: 5000 })
   } finally {
     savingYaml.value = false
   }

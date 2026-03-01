@@ -1,0 +1,85 @@
+# Dockerfile - Nginx 静态资源 / 前端项目
+# ============================================
+# 特点：
+#   - 支持多阶段构建（前端 npm build）
+#   - 自定义 nginx 配置
+#   - 支持健康检查
+#   - 非 root 用户运行
+# ============================================
+
+# ============ 方式1：纯静态文件 ============
+# 如果已有编译好的 dist 目录，直接使用此方式
+
+FROM nginx:1.25-alpine
+
+# 安装时区
+RUN apk --no-cache add tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 复制 nginx 配置
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# 复制静态文件到 nginx 目录
+COPY dist/ /usr/share/nginx/html/
+
+# 设置权限
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+# 切换到非 root 用户
+USER nginx
+
+# 暴露端口
+EXPOSE 80
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
+
+
+# ============ 方式2：多阶段构建（前端项目）============
+# 如果需要 npm build，取消下方注释使用
+
+# # 构建阶段
+# FROM node:20-alpine AS builder
+# 
+# WORKDIR /app
+# 
+# # 设置国内镜像
+# RUN npm config set registry https://registry.npmmirror.com
+# 
+# # 先复制 package.json 利用缓存
+# COPY package*.json ./
+# RUN npm ci
+# 
+# # 复制源码并构建
+# COPY . .
+# RUN npm run build
+# 
+# # 运行阶段
+# FROM nginx:1.25-alpine
+# 
+# RUN apk --no-cache add tzdata && \
+#     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+# 
+# COPY nginx.conf /etc/nginx/nginx.conf
+# COPY --from=builder /app/dist /usr/share/nginx/html/
+# 
+# RUN chown -R nginx:nginx /usr/share/nginx/html && \
+#     chown -R nginx:nginx /var/cache/nginx && \
+#     touch /var/run/nginx.pid && \
+#     chown -R nginx:nginx /var/run/nginx.pid
+# 
+# USER nginx
+# EXPOSE 80
+# 
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#     CMD wget -qO- http://localhost/health || exit 1
+# 
+# CMD ["nginx", "-g", "daemon off;"]

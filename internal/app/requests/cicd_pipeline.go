@@ -18,6 +18,16 @@ type PipelineCreateRequest struct {
 	JenkinsJob  string           `json:"jenkins_job" valid:"jenkins_job"`
 	EnvVars     []models.EnvVar  `json:"env_vars"`
 	DeployConfig map[string]any  `json:"deploy_config"`
+	
+	// 部署配置
+	AutoDeploy         bool   `json:"auto_deploy"`          // 是否自动部署
+	TargetClusterID    int64  `json:"target_cluster_id"`    // 目标集群ID
+	TargetNamespace    string `json:"target_namespace"`     // 目标命名空间
+	TargetWorkloadKind string `json:"target_workload_kind"` // 工作负载类型
+	TargetWorkloadName string `json:"target_workload_name"` // 工作负载名称
+	TargetContainer    string `json:"target_container"`     // 容器名称
+	DeployEnv          string `json:"deploy_env"`           // 部署环境
+	RequireApproval    bool   `json:"require_approval"`     // 是否需要审批
 }
 
 func NewPipelineCreateRequest() *PipelineCreateRequest {
@@ -53,6 +63,16 @@ type PipelineUpdateRequest struct {
 	Status      string           `json:"status" valid:"status"`
 	EnvVars     []models.EnvVar  `json:"env_vars"`
 	DeployConfig map[string]any  `json:"deploy_config"`
+	
+	// 部署配置
+	AutoDeploy         *bool   `json:"auto_deploy"`          // 是否自动部署
+	TargetClusterID    *int64  `json:"target_cluster_id"`    // 目标集群ID
+	TargetNamespace    *string `json:"target_namespace"`     // 目标命名空间
+	TargetWorkloadKind *string `json:"target_workload_kind"` // 工作负载类型
+	TargetWorkloadName *string `json:"target_workload_name"` // 工作负载名称
+	TargetContainer    *string `json:"target_container"`     // 容器名称
+	DeployEnv          *string `json:"deploy_env"`           // 部署环境
+	RequireApproval    *bool   `json:"require_approval"`     // 是否需要审批
 }
 
 func NewPipelineUpdateRequest() *PipelineUpdateRequest {
@@ -119,6 +139,15 @@ type PipelineRunRequest struct {
 	ID        int64             `json:"id" valid:"id"`
 	Branch    string            `json:"branch"`     // 可选：覆盖默认分支
 	EnvVars   map[string]string `json:"env_vars"`   // 可选：覆盖环境变量
+	Force     bool              `json:"force"`      // 强制运行：自动清理旧的失败/运行中构建
+	
+	// 运行时部署配置（可覆盖流水线默认配置）
+	AutoDeploy         *bool   `json:"auto_deploy"`          // 是否自动部署
+	TargetClusterID    *int64  `json:"target_cluster_id"`    // 目标集群ID
+	TargetNamespace    *string `json:"target_namespace"`     // 目标命名空间
+	TargetWorkloadKind *string `json:"target_workload_kind"` // 工作负载类型
+	TargetWorkloadName *string `json:"target_workload_name"` // 工作负载名称
+	TargetContainer    *string `json:"target_container"`     // 容器名称
 }
 
 func ValidPipelineRunRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -191,17 +220,34 @@ func ValidPipelineHistoryRequest(data interface{}, ctx *gin.Context) map[string]
 	return valid.ValidateOptions(data, rules, messages)
 }
 
-// ==================== Jenkins构建状态回调 ====================
+// ==================== Jenkins构建状态回调（生产级） ====================
 
-type JenkinsBuildStatusCallback struct {
-	JobName     string `json:"job_name"`
-	BuildNumber int    `json:"build_number"`
-	Status      string `json:"status"` // SUCCESS / FAILURE / ABORTED
-	Duration    int    `json:"duration"`
-	Message     string `json:"message"`
+// PipelineCallbackRequest Jenkins 构建回调请求
+// 幂等键: job_name + build_number 或 pipeline_id + build_number
+type PipelineCallbackRequest struct {
+	// 必须字段
+	JobName     string `json:"job_name" valid:"job_name"`         // Jenkins Job 名称
+	BuildNumber int    `json:"build_number" valid:"build_number"` // 构建号
+	Status      string `json:"status" valid:"status"`             // SUCCESS / FAILURE / ABORTED
+
+	// 平台关联字段
+	PipelineID int64  `json:"pipeline_id" valid:"pipeline_id"` // 流水线ID（用于快速匹配）
+	RequestID  string `json:"request_id" valid:"request_id"`   // 请求ID（用于日志追踪）
+
+	// 构建产物 - 支持 image 或 image_url
+	Image       string `json:"image" valid:"image"`               // 构建产出的镜像地址
+	ImageURL    string `json:"image_url" valid:"image_url"`       // 构建产出的镜像地址（兼容旧字段）
+	ImageDigest string `json:"image_digest" valid:"image_digest"` // 镜像 digest (e.g., sha256:xxx)
+
+	// 额外信息
+	Duration int    `json:"duration" valid:"duration"` // 构建耗时(秒)
+	Message  string `json:"message" valid:"message"`   // 错误或补充信息
+
+	// HMAC 签名（防伪造，放在 Header: X-Signature）
+	// 签名算法: HMAC-SHA256(secret, job_name+build_number+status)
 }
 
-func ValidJenkinsBuildStatusCallback(data interface{}, ctx *gin.Context) map[string][]string {
+func ValidPipelineCallbackRequest(data interface{}, ctx *gin.Context) map[string][]string {
 	rules := govalidator.MapData{
 		"job_name":     []string{"required"},
 		"build_number": []string{"required"},
@@ -210,6 +256,73 @@ func ValidJenkinsBuildStatusCallback(data interface{}, ctx *gin.Context) map[str
 	messages := govalidator.MapData{
 		"job_name":     []string{"required:Job名称不能为空"},
 		"build_number": []string{"required:构建号不能为空"},
+		"status":       []string{"required:状态不能为空", "in:状态值无效，可选值: SUCCESS, FAILURE, ABORTED"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ==================== Git 仓库操作 ====================
+
+// GitBranchesRequest 获取分支列表请求
+type GitBranchesRequest struct {
+	RepoURL      string `json:"repo_url" valid:"repo_url"`
+	CredentialID string `json:"credential_id"` // 可选：Jenkins凭证ID
+}
+
+func ValidGitBranchesRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"repo_url": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"repo_url": []string{"required:Git仓库地址不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// GitValidateRequest 验证仓库连接请求
+type GitValidateRequest struct {
+	RepoURL      string `json:"repo_url" valid:"repo_url"`
+	CredentialID string `json:"credential_id"` // 可选：Jenkins凭证ID
+}
+
+func ValidGitValidateRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"repo_url": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"repo_url": []string{"required:Git仓库地址不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// GitBranch 分支信息
+type GitBranch struct {
+	Name      string `json:"name"`
+	IsDefault bool   `json:"isDefault"`
+}
+
+// ==================== Jenkins 阶段回调（实时更新UI） ====================
+
+// StageCallbackRequest Jenkins 阶段回调请求
+type StageCallbackRequest struct {
+	JobName     string `json:"job_name" valid:"job_name"`         // Jenkins Job 名称
+	BuildNumber int    `json:"build_number" valid:"build_number"` // 构建号
+	PipelineID  int64  `json:"pipeline_id" valid:"pipeline_id"`   // 流水线ID
+	StageType   string `json:"stage_type" valid:"stage_type"`     // 阶段类型: checkout/build/test/push
+	Status      string `json:"status" valid:"status"`             // 阶段状态: running/success/failed
+}
+
+func ValidStageCallbackRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"job_name":     []string{"required"},
+		"build_number": []string{"required"},
+		"stage_type":   []string{"required", "in:checkout,build,test,push"},
+		"status":       []string{"required", "in:running,success,failed"},
+	}
+	messages := govalidator.MapData{
+		"job_name":     []string{"required:Job名称不能为空"},
+		"build_number": []string{"required:构建号不能为空"},
+		"stage_type":   []string{"required:阶段类型不能为空", "in:阶段类型无效"},
 		"status":       []string{"required:状态不能为空", "in:状态值无效"},
 	}
 	return valid.ValidateOptions(data, rules, messages)

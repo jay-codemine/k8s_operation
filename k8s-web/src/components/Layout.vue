@@ -172,8 +172,8 @@ const menuGroups = ref([
     match: ['/cicd'],
     items: [
       { path: '/cicd/pipelines', label: '流水线管理' },
-      { path: '/cicd/templates', label: '流水线模板管理' },
-      // 你如果还有 /cicd/pipelines/create /:id 这些一般不放菜单
+      { path: '/cicd/releases', label: '发布管理' },
+      { path: '/cicd/templates', label: '流水线模板' },
     ],
   },
   {
