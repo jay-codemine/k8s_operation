@@ -79,6 +79,28 @@ func (s *Services) NotifyApprovalRequired(ctx context.Context, pipeline *models.
 	go s.sendDingTalkNotify(webhook, msg)
 }
 
+// NotifyRollbackResult 发送回滚结果通知
+func (s *Services) NotifyRollbackResult(ctx context.Context, pipeline *models.CicdPipeline, stage *models.CicdPipelineStage, success bool, targetRS string, oldImage string, newImage string, userID int64, errMsg string) {
+	webhook := s.getDingTalkWebhook(pipeline)
+	if webhook == "" {
+		return
+	}
+
+	msg := s.buildRollbackNotifyMessage(pipeline, stage, success, targetRS, oldImage, newImage, userID, errMsg)
+	go s.sendDingTalkNotify(webhook, msg)
+}
+
+// NotifyCancelDeployResult 发送取消部署结果通知
+func (s *Services) NotifyCancelDeployResult(ctx context.Context, pipeline *models.CicdPipeline, stage *models.CicdPipelineStage, action string, targetRS string, userID int64) {
+	webhook := s.getDingTalkWebhook(pipeline)
+	if webhook == "" {
+		return
+	}
+
+	msg := s.buildCancelDeployNotifyMessage(pipeline, stage, action, targetRS, userID)
+	go s.sendDingTalkNotify(webhook, msg)
+}
+
 // ==================== 消息构建 ====================
 
 func (s *Services) buildDeployNotifyMessage(pipeline *models.CicdPipeline, stage *models.CicdPipelineStage, success bool, errMsg string) *DingTalkMessage {
@@ -243,6 +265,128 @@ func (s *Services) buildApprovalNotifyMessage(pipeline *models.CicdPipeline, run
 		},
 		At: &DingTalkAt{
 			IsAtAll: false, // 可以配置 @ 指定人员
+		},
+	}
+}
+
+// buildRollbackNotifyMessage 构建回滚通知消息
+func (s *Services) buildRollbackNotifyMessage(pipeline *models.CicdPipeline, stage *models.CicdPipelineStage, success bool, targetRS string, oldImage string, newImage string, userID int64, errMsg string) *DingTalkMessage {
+	statusIcon := "↩️"
+	statusText := "回滚成功"
+	if !success {
+		statusIcon = "❌"
+		statusText = "回滚失败"
+	}
+
+	envText := s.getEnvDisplayName(pipeline.DeployEnv)
+	platformURL := s.getPlatformURL()
+
+	text := fmt.Sprintf(`### %s %s
+
+**流水线**: %s
+
+**环境**: %s
+
+**命名空间**: %s
+
+**工作负载**: %s/%s
+
+**目标版本**: %s
+
+**回滚前镜像**: %s
+
+**回滚后镜像**: %s
+
+**操作人 ID**: %d
+
+**时间**: %s`,
+		statusIcon,
+		statusText,
+		pipeline.Name,
+		envText,
+		stage.DeployNamespace,
+		stage.DeployWorkloadKind,
+		stage.DeployWorkloadName,
+		targetRS,
+		oldImage,
+		newImage,
+		userID,
+		time.Now().Format("2006-01-02 15:04:05"),
+	)
+
+	if !success && errMsg != "" {
+		text += fmt.Sprintf("\n\n**错误**: %s", errMsg)
+	}
+
+	// 添加快捷链接
+	text += "\n\n---\n"
+	if platformURL != "" {
+		text += fmt.Sprintf("🔗 [查看流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+	}
+
+	return &DingTalkMessage{
+		MsgType: "markdown",
+		Markdown: DingTalkMarkdown{
+			Title: fmt.Sprintf("[通知] %s - %s", statusText, pipeline.Name),
+			Text:  text,
+		},
+	}
+}
+
+// buildCancelDeployNotifyMessage 构建取消部署通知消息
+func (s *Services) buildCancelDeployNotifyMessage(pipeline *models.CicdPipeline, stage *models.CicdPipelineStage, action string, targetRS string, userID int64) *DingTalkMessage {
+	var statusIcon, statusText, actionDesc string
+	if action == "cancelled" {
+		statusIcon = "⏹️"
+		statusText = "部署已取消"
+		actionDesc = "取消操作（未执行）"
+	} else {
+		statusIcon = "↩️"
+		statusText = "部署已回滚"
+		actionDesc = fmt.Sprintf("取消并回滚到 %s", targetRS)
+	}
+
+	envText := s.getEnvDisplayName(pipeline.DeployEnv)
+	platformURL := s.getPlatformURL()
+
+	text := fmt.Sprintf(`### %s %s
+
+**流水线**: %s
+
+**环境**: %s
+
+**命名空间**: %s
+
+**工作负载**: %s/%s
+
+**操作**: %s
+
+**操作人 ID**: %d
+
+**时间**: %s`,
+		statusIcon,
+		statusText,
+		pipeline.Name,
+		envText,
+		stage.DeployNamespace,
+		stage.DeployWorkloadKind,
+		stage.DeployWorkloadName,
+		actionDesc,
+		userID,
+		time.Now().Format("2006-01-02 15:04:05"),
+	)
+
+	// 添加快捷链接
+	text += "\n\n---\n"
+	if platformURL != "" {
+		text += fmt.Sprintf("🔗 [查看流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+	}
+
+	return &DingTalkMessage{
+		MsgType: "markdown",
+		Markdown: DingTalkMarkdown{
+			Title: fmt.Sprintf("[通知] %s - %s", statusText, pipeline.Name),
+			Text:  text,
 		},
 	}
 }

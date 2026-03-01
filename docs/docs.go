@@ -1865,6 +1865,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/stage/cancel": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "取消部署阶段",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "阶段ID",
+                        "name": "stage_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/stage/deploy": {
             "post": {
                 "consumes": [
@@ -1886,6 +1917,37 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/requests.StageDeployRequest"
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/history": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "获取部署历史版本列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "阶段ID",
+                        "name": "stage_id",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -1946,6 +2008,44 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "阶段ID",
                         "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/stage/rollback": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "回滚部署到指定版本",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "阶段ID",
+                        "name": "stage_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "目标 ReplicaSet 名称",
+                        "name": "target_rs",
                         "in": "query",
                         "required": true
                     }

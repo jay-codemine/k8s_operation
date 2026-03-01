@@ -2728,6 +2728,26 @@ paths:
       summary: Jenkins 阶段回调
       tags:
       - CICD-Stage
+  /api/v1/k8s/cicd/stage/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 阶段ID
+        in: query
+        name: stage_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 取消部署阶段
+      tags:
+      - CICD-Stage
   /api/v1/k8s/cicd/stage/deploy:
     post:
       consumes:
@@ -2747,6 +2767,26 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: 执行部署阶段
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/history:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 阶段ID
+        in: query
+        name: stage_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取部署历史版本列表
       tags:
       - CICD-Stage
   /api/v1/k8s/cicd/stage/list:
@@ -2787,6 +2827,31 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       summary: 获取阶段执行日志
+      tags:
+      - CICD-Stage
+  /api/v1/k8s/cicd/stage/rollback:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 阶段ID
+        in: query
+        name: stage_id
+        required: true
+        type: integer
+      - description: 目标 ReplicaSet 名称
+        in: query
+        name: target_rs
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 回滚部署到指定版本
       tags:
       - CICD-Stage
   /api/v1/k8s/cluster/create:

@@ -235,7 +235,8 @@ type CicdPipelineStage struct {
 	DeployWorkloadKind string `gorm:"column:deploy_workload_kind" json:"deploy_workload_kind,omitempty"` // 工作负载类型
 	DeployWorkloadName string `gorm:"column:deploy_workload_name" json:"deploy_workload_name,omitempty"` // 工作负载名称
 	DeployContainer    string `gorm:"column:deploy_container" json:"deploy_container,omitempty"`       // 容器名称
-	DeployImage        string `gorm:"column:deploy_image" json:"deploy_image,omitempty"`               // 部署镜像
+	DeployImage        string `gorm:"column:deploy_image" json:"deploy_image,omitempty"`               // 部署的新镜像
+	DeployOldImage     string `gorm:"column:deploy_old_image" json:"deploy_old_image,omitempty"`       // 部署前的旧镜像
 	DeployReplicas     int    `gorm:"column:deploy_replicas" json:"deploy_replicas,omitempty"`         // 副本数
 
 	// 错误信息
@@ -263,6 +264,7 @@ type StageDisplayInfo struct {
 	Logs         string `json:"logs,omitempty"`         // 部署日志（仅部署阶段返回）
 	ErrorMsg     string `json:"error_msg,omitempty"`
 	ErrorMessage string `json:"error_message,omitempty"` // 错误信息（部署失败时）
+	ConfigWarning string `json:"config_warning,omitempty"` // 配置警告（如部署参数不完整）
 	
 	// 审批信息
 	ApprovalInfo *StageApprovalInfo `json:"approval_info,omitempty"`
@@ -287,8 +289,10 @@ type StageDeployInfo struct {
 	WorkloadKind string `json:"workload_kind"`
 	WorkloadName string `json:"workload_name"`
 	Container    string `json:"container"`
-	Image        string `json:"image"`
+	Image        string `json:"image"`                       // 部署的新镜像
+	OldImage     string `json:"old_image,omitempty"`          // 部署前的旧镜像
 	Replicas     int    `json:"replicas,omitempty"`
+	DeployedAt   uint64 `json:"deployed_at,omitempty"`        // 部署完成时间
 }
 
 // PipelineListItem 列表查询返回结构（去除敏感字段）

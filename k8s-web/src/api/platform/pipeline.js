@@ -193,3 +193,28 @@ export const executeDeployStage = (stageId, options = {}) => {
     ...options
   })
 }
+
+/**
+ * 取消部署阶段（智能判断：未执行的取消，已执行的回滚）
+ * @param {number} stageId - 阶段ID
+ */
+export const cancelDeployStage = (stageId) => {
+  return http.post(`${STAGE_URL}/cancel`, null, { params: { stage_id: Number(stageId) } })
+}
+
+/**
+ * 回滚到指定版本
+ * @param {number} stageId - 阶段ID
+ * @param {string} targetRS - 目标 ReplicaSet 名称
+ */
+export const rollbackDeployStage = (stageId, targetRS) => {
+  return http.post(`${STAGE_URL}/rollback`, null, { params: { stage_id: Number(stageId), target_rs: targetRS } })
+}
+
+/**
+ * 获取部署历史版本列表
+ * @param {number} stageId - 阶段ID
+ */
+export const getDeployHistory = (stageId) => {
+  return http.get(`${STAGE_URL}/history`, { params: { stage_id: Number(stageId) } })
+}

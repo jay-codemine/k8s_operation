@@ -233,15 +233,44 @@
 
         <!-- 运行状态 -->
         <div class="run-status">
-          <div class="status-row">
-            <span class="label">上次运行</span>
-            <span :class="['run-status-tag', `status-${pipeline.lastRunStatus}`]">
-              {{ runStatusText(pipeline.lastRunStatus) }}
-            </span>
+          <div class="status-info">
+            <div class="status-row">
+              <span class="label">上次运行</span>
+              <span :class="['run-status-tag', `status-${pipeline.lastRunStatus}`]">
+                {{ runStatusText(pipeline.lastRunStatus) }}
+              </span>
+            </div>
+            <div class="status-row">
+              <span class="label">运行时间</span>
+              <span class="value">{{ formatDate(pipeline.lastRunTime) }}</span>
+            </div>
           </div>
-          <div class="status-row">
-            <span class="label">运行时间</span>
-            <span class="value">{{ formatDate(pipeline.lastRunTime) }}</span>
+          <div class="status-actions">
+            <!-- 停止按钮：运行中或pending状态显示 -->
+            <button
+              v-if="pipeline.status === 'running' || pipeline.lastRunStatus === 'pending' || pipeline.lastRunStatus === 'running'"
+              class="action-mini-btn btn-stop"
+              @click.stop="handleStopPipeline(pipeline)"
+              title="停止构建"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+              停止
+            </button>
+            <!-- 重新发布按钮：非运行状态显示 -->
+            <button
+              v-if="pipeline.status !== 'running' && pipeline.lastRunStatus !== 'running' && pipeline.lastRunStatus !== 'pending'"
+              class="action-mini-btn btn-rerun"
+              @click.stop="handleRunPipeline(pipeline)"
+              title="重新发布"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              重新发布
+            </button>
           </div>
         </div>
 
@@ -412,6 +441,10 @@ export default {
 
     // 运行流水线
     const handleRunPipeline = async (pipeline) => {
+      if (!pipeline || !pipeline.id) {
+        Message.error({ content: '流水线 ID 无效' })
+        return
+      }
       try {
         Message.info({ content: `正在启动流水线 "${pipeline.name}"...` })
         const response = await triggerPipeline(pipeline.id)
@@ -429,6 +462,10 @@ export default {
 
     // 取消/停止构建
     const handleStopPipeline = async (pipeline) => {
+      if (!pipeline || !pipeline.id) {
+        Message.error({ content: '流水线 ID 无效' })
+        return
+      }
       const isPending = pipeline.lastRunStatus === 'pending'
       const actionText = isPending ? '取消' : '停止'
       try {
@@ -1024,10 +1061,58 @@ export default {
 
 /* 运行状态 */
 .run-status {
-  padding: 16px 20px;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: #f8fafc;
+}
+
+.status-info {
   display: flex;
   gap: 24px;
-  background: #f8fafc;
+}
+
+.status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-mini-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-mini-btn.btn-stop {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.action-mini-btn.btn-stop:hover {
+  background: #fecaca;
+}
+
+.action-mini-btn.btn-rerun {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.action-mini-btn.btn-rerun:hover {
+  background: #bfdbfe;
 }
 
 .status-row {

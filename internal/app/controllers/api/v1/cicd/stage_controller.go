@@ -189,3 +189,116 @@ func (c *StageController) StageCallback(ctx *gin.Context) {
 
 	rsp.Success(gin.H{"message": "ok"})
 }
+
+// CancelDeploy 取消部署阶段（智能判断：未执行的取消，已执行的回滚）
+// @Summary 取消部署阶段
+// @Tags CICD-Stage
+// @Accept json
+// @Produce json
+// @Param stage_id query int true "阶段ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/k8s/cicd/stage/cancel [post]
+func (c *StageController) CancelDeploy(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("stage_id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的阶段ID"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+
+	svc := services.NewServices()
+	result, err := svc.CancelDeployStage(ctx.Request.Context(), id, userID)
+	if err != nil {
+		rsp.ToErrorResponse(errorcode.ErrorPipelineRunFail.WithDetails(err.Error()))
+		return
+	}
+
+	msg := "取消成功"
+	if result.Action == "rollback" {
+		msg = "已回滚到 " + result.TargetRS
+	}
+	rsp.Success(gin.H{
+		"message":   msg,
+		"action":    result.Action,
+		"target_rs": result.TargetRS,
+	})
+}
+
+// RollbackDeploy 回滚到指定版本
+// @Summary 回滚部署到指定版本
+// @Tags CICD-Stage
+// @Accept json
+// @Produce json
+// @Param stage_id query int true "阶段ID"
+// @Param target_rs query string true "目标 ReplicaSet 名称"
+// @Success 200 {object} response.Response
+// @Router /api/v1/k8s/cicd/stage/rollback [post]
+func (c *StageController) RollbackDeploy(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("stage_id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的阶段ID"))
+		return
+	}
+
+	targetRS := ctx.Query("target_rs")
+	if targetRS == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("请指定目标版本"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+
+	svc := services.NewServices()
+	result, err := svc.RollbackDeployStage(ctx.Request.Context(), id, targetRS, userID)
+
+	// 统一返回 result，包含成功/失败的详细日志
+	if err != nil {
+		// 失败时也返回详细信息
+		ctx.JSON(200, gin.H{
+			"code": errorcode.ErrorPipelineRunFail.Code(),
+			"msg":  err.Error(),
+			"data": result,
+		})
+		return
+	}
+
+	// 返回详细的成功结果
+	rsp.Success(result)
+}
+
+// GetDeployHistory 获取部署历史版本列表
+// @Summary 获取部署历史版本列表
+// @Tags CICD-Stage
+// @Accept json
+// @Produce json
+// @Param stage_id query int true "阶段ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/k8s/cicd/stage/history [get]
+func (c *StageController) GetDeployHistory(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("stage_id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的阶段ID"))
+		return
+	}
+
+	svc := services.NewServices()
+	revisions, err := svc.GetDeploymentHistory(ctx.Request.Context(), id)
+	if err != nil {
+		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{
+		"revisions": revisions,
+	})
+}

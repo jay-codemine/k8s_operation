@@ -94,10 +94,13 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	// /api/v1/k8s/cicd/stage/...
 	stage := rg.Group("/stage")
 	{
-		stage.GET("/list", r.stageCtrl.GetStages)       // 获取运行阶段列表
-		stage.GET("/logs", r.stageCtrl.GetStageLogs)    // 获取阶段日志
+		stage.GET("/list", r.stageCtrl.GetStages)        // 获取运行阶段列表
+		stage.GET("/logs", r.stageCtrl.GetStageLogs)     // 获取阶段日志
 		stage.POST("/approve", r.stageCtrl.ApproveStage) // 审批阶段
 		stage.POST("/deploy", r.stageCtrl.DeployStage)   // 执行部署阶段
+		stage.POST("/cancel", r.stageCtrl.CancelDeploy)  // 取消部署（智能判断）
+		stage.POST("/rollback", r.stageCtrl.RollbackDeploy) // 回滚到指定版本
+		stage.GET("/history", r.stageCtrl.GetDeployHistory) // 获取历史版本列表
 		// callback 已移至 cicd_callback_router.go（公开接口，跳过JWT）
 	}
 }

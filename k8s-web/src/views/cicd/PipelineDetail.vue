@@ -47,13 +47,42 @@
               </svg>
               <span>{{ pipeline.git_branch }}</span>
             </div>
-            <div class="meta-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="3" width="20" height="14" rx="2"/>
-                <line x1="8" y1="21" x2="16" y2="21"/>
-                <line x1="12" y1="17" x2="12" y2="21"/>
-              </svg>
-              <span>{{ pipeline.jenkins_job || '未配置' }}</span>
+          </div>
+          <!-- 上次运行信息和快捷操作 -->
+          <div class="last-run-row">
+            <div class="last-run-info">
+              <span class="run-label">上次运行</span>
+              <span :class="['run-status-badge', `status-${pipeline.last_run_status}`]">
+                {{ runStatusText(pipeline.last_run_status) }}
+              </span>
+              <span class="run-time">{{ formatDate(pipeline.last_run_time) }}</span>
+            </div>
+            <div class="last-run-actions">
+              <!-- 停止按钮：运行中或pending状态显示 -->
+              <button
+                v-if="pipeline.status === 'running' || pipeline.last_run_status === 'pending' || pipeline.last_run_status === 'running'"
+                class="mini-btn btn-stop"
+                @click="handleStop"
+                title="停止构建"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12" rx="2"/>
+                </svg>
+                停止
+              </button>
+              <!-- 重新发布按钮：非运行状态显示 -->
+              <button
+                v-if="pipeline.status !== 'running' && pipeline.last_run_status !== 'running'"
+                class="mini-btn btn-rerun"
+                @click="handleRun"
+                title="重新发布"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                重新发布
+              </button>
             </div>
           </div>
         </div>
@@ -386,7 +415,8 @@
             <div
               v-for="(stage, index) in filteredStages"
               :key="stage.name"
-              :class="['stage-node', `status-${stage.status}`]"
+              :class="['stage-node', `status-${stage.status}`, { selected: selectedStage && selectedStage.name === stage.name }]"
+              @click="selectStage(stage)"
             >
               <div class="stage-connector" v-if="index > 0"></div>
               <div class="stage-content">
@@ -425,299 +455,290 @@
             <p>{{ stageFilter ? '没有匹配的阶段' : '暂无阶段数据，请运行流水线' }}</p>
           </div>
 
-          <!-- 阶段详情 -->
-          <div v-if="filteredStages.length > 0" class="stage-details">
-            <div v-for="stage in filteredStages" :key="stage.name" class="stage-detail-card">
-              <div class="detail-header" @click="toggleStageExpand(stage.name)">
-                <span :class="['status-dot', `status-${stage.status}`]"></span>
-                <span class="stage-title">{{ stage.name }}</span>
-                <!-- 阶段类型标签 -->
-                <span v-if="stage.type === 'approval'" :class="['stage-type-badge', 'approval', `approval-${stage.status}`]">{{ approvalBadgeText(stage.status) }}</span>
-                <span v-if="stage.type === 'deploy'" class="stage-type-badge deploy">部署</span>
-                <span class="stage-status">{{ stageStatusText(stage.status) }}</span>
-                <svg :class="['expand-icon', { expanded: expandedStages.includes(stage.name) }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9"/>
+          <!-- 选中阶段详情（点击阶段卡片后展示） -->
+          <div v-if="selectedStage" class="selected-stage-detail">
+            <div class="detail-header">
+              <span :class="['status-dot', `status-${selectedStage.status}`]"></span>
+              <span class="stage-title">{{ selectedStage.name }}</span>
+              <!-- 阶段类型标签 -->
+              <span v-if="selectedStage.type === 'approval'" :class="['stage-type-badge', 'approval', `approval-${selectedStage.status}`]">{{ approvalBadgeText(selectedStage.status) }}</span>
+              <span v-if="selectedStage.type === 'deploy'" class="stage-type-badge deploy">部署</span>
+              <span class="stage-status">{{ stageStatusText(selectedStage.status) }}</span>
+              <span class="stage-duration-tag">{{ selectedStage.duration || '-' }}</span>
+              
+              <!-- 部署成功时在头部直接显示回滚按钮 -->
+              <button 
+                v-if="selectedStage.type === 'deploy' && selectedStage.status === 'success'" 
+                class="btn btn-rollback-mini" 
+                @click.stop="handleRollback(selectedStage)" 
+                :disabled="rollingBack"
+                title="回滚到上一版本"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="1 4 1 10 7 10"/>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 </svg>
+                {{ rollingBack ? '回滚中...' : '回滚' }}
+              </button>
+              
+              <!-- 部署进行中时显示取消按钮 -->
+              <button 
+                v-if="selectedStage.type === 'deploy' && selectedStage.status === 'running'" 
+                class="btn btn-cancel-mini" 
+                @click.stop="handleCancelDeploy(selectedStage)" 
+                :disabled="cancelling"
+                title="取消部署"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                {{ cancelling ? '取消中...' : '取消' }}
+              </button>
+            </div>
+            <div class="detail-body">
+              <!-- 审批阶段操作 -->
+              <div v-if="selectedStage.type === 'approval' && (selectedStage.status === 'waiting' || selectedStage.status === 'pending')" class="stage-action-panel approval-panel-enhanced">
+                <div class="approval-header">
+                  <div class="approval-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </div>
+                  <div class="approval-title">
+                    <h4>人工审批</h4>
+                    <p>该阶段需要人工审批确认才能继续部署</p>
+                  </div>
+                </div>
+                <div class="approval-options">
+                  <label :class="['approval-option', { selected: approvalDecision === 'approve' }]" @click="approvalDecision = 'approve'">
+                    <div class="option-radio"><span class="radio-inner"></span></div>
+                    <div class="option-content">
+                      <span class="option-icon approve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                      <span class="option-label">通过</span>
+                      <span class="option-desc">确认并继续执行部署</span>
+                    </div>
+                  </label>
+                  <label :class="['approval-option', { selected: approvalDecision === 'reject' }]" @click="approvalDecision = 'reject'">
+                    <div class="option-radio"><span class="radio-inner"></span></div>
+                    <div class="option-content">
+                      <span class="option-icon reject"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+                      <span class="option-label">拒绝</span>
+                      <span class="option-desc">取消本次部署</span>
+                    </div>
+                  </label>
+                </div>
+                <div class="approval-comment">
+                  <label class="comment-label">审批备注 <span class="optional">(可选)</span></label>
+                  <textarea v-model="approvalComment" class="comment-input" placeholder="请输入审批备注..." rows="3"></textarea>
+                </div>
+                <div class="approval-actions">
+                  <button :class="['btn', 'btn-approval', approvalDecision === 'approve' ? 'approve' : 'reject']" @click.stop="submitApproval(selectedStage.id)" :disabled="approving">
+                    <svg v-if="approving" class="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                    <svg v-else-if="approvalDecision === 'approve'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    {{ approving ? '处理中...' : (approvalDecision === 'approve' ? '确认通过' : '确认拒绝') }}
+                  </button>
+                </div>
               </div>
-              <div v-show="expandedStages.includes(stage.name)" class="detail-body">
-                <!-- 审批阶段操作 - 参考 KubeSphere/Rancher 设计 -->
-                <div v-if="stage.type === 'approval' && (stage.status === 'waiting' || stage.status === 'pending')" class="stage-action-panel approval-panel-enhanced">
-                  <div class="approval-header">
-                    <div class="approval-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                      </svg>
-                    </div>
-                    <div class="approval-title">
-                      <h4>人工审批</h4>
-                      <p>该阶段需要人工审批确认才能继续部署</p>
-                    </div>
-                  </div>
 
-                  <!-- 审批选项 -->
-                  <div class="approval-options">
-                    <label :class="['approval-option', { selected: approvalDecision === 'approve' }]" @click="approvalDecision = 'approve'">
-                      <div class="option-radio">
-                        <span class="radio-inner"></span>
-                      </div>
-                      <div class="option-content">
-                        <span class="option-icon approve">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                            <polyline points="20 6 9 17 4 12"/>
-                          </svg>
-                        </span>
-                        <span class="option-label">通过</span>
-                        <span class="option-desc">确认并继续执行部署</span>
-                      </div>
-                    </label>
-                    <label :class="['approval-option', { selected: approvalDecision === 'reject' }]" @click="approvalDecision = 'reject'">
-                      <div class="option-radio">
-                        <span class="radio-inner"></span>
-                      </div>
-                      <div class="option-content">
-                        <span class="option-icon reject">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
-                          </svg>
-                        </span>
-                        <span class="option-label">拒绝</span>
-                        <span class="option-desc">取消本次部署</span>
-                      </div>
-                    </label>
-                  </div>
+              <!-- 审批已通过 -->
+              <div v-if="selectedStage.type === 'approval' && (selectedStage.status === 'success' || selectedStage.status === 'approved')" class="stage-action-panel approval-result-panel approved">
+                <div class="approval-result-header">
+                  <div class="result-icon approved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                  <div class="result-content"><h4>审批已通过</h4><p>该阶段已经审批通过，可以继续执行部署</p></div>
+                </div>
+                <div v-if="selectedStage.approval_info" class="approval-meta">
+                  <span v-if="selectedStage.approval_info.approver_name">审批人: {{ selectedStage.approval_info.approver_name }}</span>
+                  <span v-if="selectedStage.approval_info.approved_at">审批时间: {{ formatFullDate(selectedStage.approval_info.approved_at) }}</span>
+                </div>
+                <div v-if="selectedStage.approval_info && selectedStage.approval_info.comment" class="approval-comment-display">
+                  <span class="comment-label">审批备注:</span>
+                  <span class="comment-text">{{ selectedStage.approval_info.comment }}</span>
+                </div>
+              </div>
 
-                  <!-- 审批备注 -->
-                  <div class="approval-comment">
-                    <label class="comment-label">审批备注 <span class="optional">(可选)</span></label>
-                    <textarea
-                      v-model="approvalComment"
-                      class="comment-input"
-                      placeholder="请输入审批备注..."
-                      rows="3"
-                    ></textarea>
-                  </div>
+              <!-- 审批已拒绝 -->
+              <div v-if="selectedStage.type === 'approval' && (selectedStage.status === 'failed' || selectedStage.status === 'rejected')" class="stage-action-panel approval-result-panel rejected">
+                <div class="approval-result-header">
+                  <div class="result-icon rejected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
+                  <div class="result-content"><h4>审批已拒绝</h4><p>该阶段审批被拒绝，部署已取消</p></div>
+                </div>
+                <div v-if="selectedStage.approval_info" class="approval-meta">
+                  <span v-if="selectedStage.approval_info.approver_name">拒绝人: {{ selectedStage.approval_info.approver_name }}</span>
+                  <span v-if="selectedStage.approval_info.approved_at">拒绝时间: {{ formatFullDate(selectedStage.approval_info.approved_at) }}</span>
+                </div>
+                <div v-if="selectedStage.approval_info && selectedStage.approval_info.comment" class="approval-comment-display">
+                  <span class="comment-label">拒绝原因:</span>
+                  <span class="comment-text">{{ selectedStage.approval_info.comment }}</span>
+                </div>
+              </div>
 
-                  <!-- 提交按钮 -->
-                  <div class="approval-actions">
-                    <button
-                      :class="['btn', 'btn-approval', approvalDecision === 'approve' ? 'approve' : 'reject']"
-                      @click.stop="submitApproval(stage.id)"
-                      :disabled="approving"
-                    >
-                      <svg v-if="approving" class="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                      </svg>
-                      <svg v-else-if="approvalDecision === 'approve'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                      {{ approving ? '处理中...' : (approvalDecision === 'approve' ? '确认通过' : '确认拒绝') }}
-                    </button>
+              <!-- 部署阶段操作 -->
+              <div v-if="selectedStage.type === 'deploy' && selectedStage.can_operate" class="stage-action-panel deploy-panel">
+                <div v-if="selectedStage.config_warning" class="config-warning">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="warning-content">
+                    <span class="warning-text">{{ selectedStage.config_warning }}</span>
+                    <router-link :to="`/cicd/pipelines/${pipeline.id}/edit`" class="config-link">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      去配置
+                    </router-link>
                   </div>
                 </div>
-
-                <!-- 审批已通过状态展示 -->
-                <div v-if="stage.type === 'approval' && (stage.status === 'success' || stage.status === 'approved')" class="stage-action-panel approval-result-panel approved">
-                  <div class="approval-result-header">
-                    <div class="result-icon approved">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
-                      </svg>
-                    </div>
-                    <div class="result-content">
-                      <h4>审批已通过</h4>
-                      <p>该阶段已经审批通过，可以继续执行部署</p>
-                    </div>
-                  </div>
-                  <div v-if="stage.approval_info" class="approval-meta">
-                    <span v-if="stage.approval_info.approver_name">审批人: {{ stage.approval_info.approver_name }}</span>
-                    <span v-if="stage.approval_info.approved_at">审批时间: {{ formatFullDate(stage.approval_info.approved_at) }}</span>
-                  </div>
-                  <div v-if="stage.approval_info && stage.approval_info.comment" class="approval-comment-display">
-                    <span class="comment-label">审批备注:</span>
-                    <span class="comment-text">{{ stage.approval_info.comment }}</span>
-                  </div>
+                <div v-else class="action-info">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  <span>点击执行部署到 K8s 集群</span>
                 </div>
-
-                <!-- 审批已拒绝状态展示 -->
-                <div v-if="stage.type === 'approval' && (stage.status === 'failed' || stage.status === 'rejected')" class="stage-action-panel approval-result-panel rejected">
-                  <div class="approval-result-header">
-                    <div class="result-icon rejected">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="15" y1="9" x2="9" y2="15"/>
-                        <line x1="9" y1="9" x2="15" y2="15"/>
-                      </svg>
-                    </div>
-                    <div class="result-content">
-                      <h4>审批已拒绝</h4>
-                      <p>该阶段审批被拒绝，部署已取消</p>
-                    </div>
-                  </div>
-                  <div v-if="stage.approval_info" class="approval-meta">
-                    <span v-if="stage.approval_info.approver_name">拒绝人: {{ stage.approval_info.approver_name }}</span>
-                    <span v-if="stage.approval_info.approved_at">拒绝时间: {{ formatFullDate(stage.approval_info.approved_at) }}</span>
-                  </div>
-                  <div v-if="stage.approval_info && stage.approval_info.comment" class="approval-comment-display">
-                    <span class="comment-label">拒绝原因:</span>
-                    <span class="comment-text">{{ stage.approval_info.comment }}</span>
-                  </div>
+                <div v-if="selectedStage.deploy_info && !selectedStage.config_warning" class="deploy-info">
+                  <span>集群: {{ selectedStage.deploy_info.cluster_name || selectedStage.deploy_info.cluster_id || '-' }}</span>
+                  <span>命名空间: {{ selectedStage.deploy_info.namespace || '-' }}</span>
+                  <span>工作负载: {{ selectedStage.deploy_info.workload_name || '-' }}</span>
+                  <span>镜像: {{ selectedStage.deploy_info.image || '-' }}</span>
                 </div>
-
-                <!-- 部署阶段操作 -->
-                <div v-if="stage.type === 'deploy' && stage.can_operate" class="stage-action-panel deploy-panel">
-                  <div class="action-info">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                      <line x1="8" y1="21" x2="16" y2="21"/>
-                      <line x1="12" y1="17" x2="12" y2="21"/>
-                    </svg>
-                    <span>点击执行部署到 K8s 集群</span>
-                  </div>
-                  <div v-if="stage.deploy_info" class="deploy-info">
-                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
-                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
-                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
-                    <span>镜像: {{ stage.deploy_info.image }}</span>
-                  </div>
-                  <div class="action-buttons">
-                    <button class="btn btn-primary" @click.stop="handleDeployStage(stage.id)" :disabled="deploying">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="5 3 19 12 5 21 5 3"/>
-                      </svg>
-                      {{ deploying ? '部署中...' : '执行部署' }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 部署成功信息 -->
-                <div v-if="stage.type === 'deploy' && stage.status === 'success' && stage.deploy_info" class="deploy-success-info">
-                  <div class="success-badge">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                      <polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                    部署成功
-                  </div>
-                  <div class="deploy-details">
-                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
-                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
-                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
-                    <span>镜像: {{ stage.deploy_info.image }}</span>
-                  </div>
-                </div>
-
-                <!-- 部署进行中状态 -->
-                <div v-if="stage.type === 'deploy' && stage.status === 'running'" class="deploy-progress-panel">
-                  <div class="progress-header">
-                    <div class="progress-spinner"></div>
-                    <span>部署进行中...</span>
-                  </div>
-                  <div v-if="stage.deploy_info" class="deploy-info-mini">
-                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
-                    <span>镜像: {{ stage.deploy_info.image }}</span>
-                  </div>
-                </div>
-
-                <!-- 部署失败信息 -->
-                <div v-if="stage.type === 'deploy' && stage.status === 'failed'" class="deploy-failed-info">
-                  <div class="failed-badge">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="15" y1="9" x2="9" y2="15"/>
-                      <line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                    部署失败
-                  </div>
-                  <div v-if="stage.error_message" class="failed-reason">
-                    <span class="reason-label">失败原因:</span>
-                    <span class="reason-text">{{ stage.error_message }}</span>
-                  </div>
-                  <div v-if="stage.deploy_info" class="deploy-details">
-                    <span>集群: {{ stage.deploy_info.cluster_name || stage.deploy_info.cluster_id }}</span>
-                    <span>命名空间: {{ stage.deploy_info.namespace }}</span>
-                    <span>工作负载: {{ stage.deploy_info.workload_name }}</span>
-                    <span>镜像: {{ stage.deploy_info.image }}</span>
-                  </div>
-                  <!-- 重新部署按钮 -->
-                  <div class="retry-deploy-actions">
-                    <button class="btn btn-retry" @click.stop="handleRetryDeploy(stage.id)" :disabled="deploying">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10"/>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                      </svg>
-                      {{ deploying ? '部署中...' : '重新部署' }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 部署日志展示（Rollout 步骤） -->
-                <div v-if="stage.type === 'deploy' && stage.logs && (stage.status === 'success' || stage.status === 'failed' || stage.status === 'running')" class="deploy-logs-panel">
-                  <div class="logs-toggle" @click="stage.showLogs = !stage.showLogs">
-                    <svg :class="['toggle-icon', { expanded: stage.showLogs }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                    <span>查看部署日志</span>
-                  </div>
-                  <pre v-show="stage.showLogs" class="deploy-logs-content">{{ stage.logs }}</pre>
-                </div>
-
-                <!-- Jenkins 构建阶段步骤 -->
-                <div v-if="stage.steps && stage.steps.length > 0" class="stage-steps">
-                  <div v-for="step in stage.steps" :key="step.name" class="step-item">
-                    <svg v-if="step.status === 'success'" class="step-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                    <svg v-else-if="step.status === 'failed'" class="step-icon failed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                    <svg v-else class="step-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"/>
-                    </svg>
-                    <span class="step-name">{{ step.name }}</span>
-                    <span class="step-duration">{{ step.duration || '-' }}</span>
-                  </div>
-                </div>
-
-                <!-- 错误信息 -->
-                <div v-if="stage.error_msg" class="stage-error">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span>{{ stage.error_msg }}</span>
-                </div>
-
-                <!-- 查看日志按钮 -->
-                <div class="stage-actions">
-                  <button v-if="stage.has_logs" class="view-log-btn" @click.stop="viewStageLog(stage)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    查看阶段日志
+                <div class="action-buttons">
+                  <button class="btn btn-primary" @click.stop="handleDeployStage(selectedStage.id)" :disabled="deploying || !!selectedStage.config_warning">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    {{ deploying ? '部署中...' : '执行部署' }}
                   </button>
-                  <button class="view-log-btn" @click.stop="activeTab = 'logs'; loadLogs()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    查看构建日志
+                </div>
+              </div>
+
+              <!-- 部署成功 -->
+              <div v-if="selectedStage.type === 'deploy' && selectedStage.status === 'success' && selectedStage.deploy_info" class="deploy-success-info">
+                <div class="success-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>部署成功</div>
+                
+                <!-- 版本变更信息（参考 Rancher/Kuboard 风格） -->
+                <div v-if="selectedStage.deploy_info.old_image && selectedStage.deploy_info.old_image !== selectedStage.deploy_info.image" class="version-change-card">
+                  <div class="version-change-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <span>版本变更</span>
+                  </div>
+                  <div class="version-change-content">
+                    <div class="version-item old">
+                      <span class="version-label">旧版本</span>
+                      <span class="version-value">{{ selectedStage.deploy_info.old_image }}</span>
+                    </div>
+                    <div class="version-arrow">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </div>
+                    <div class="version-item new">
+                      <span class="version-label">新版本</span>
+                      <span class="version-value">{{ selectedStage.deploy_info.image }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="deploy-details">
+                  <span>集群: {{ selectedStage.deploy_info.cluster_name || selectedStage.deploy_info.cluster_id }}</span>
+                  <span>命名空间: {{ selectedStage.deploy_info.namespace }}</span>
+                  <span>工作负载: {{ selectedStage.deploy_info.workload_name }}</span>
+                  <span>镜像: {{ selectedStage.deploy_info.image }}</span>
+                </div>
+                <div class="deploy-actions rollback-actions">
+                  <button class="btn btn-rollback" @click.stop="quickRollbackToPrevious(selectedStage)" :disabled="rollingBack">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    {{ rollingBack ? '回滚中...' : '回滚到上一版本' }}
                   </button>
+                  <button class="btn btn-rollback-select" @click.stop="handleRollback(selectedStage)" :disabled="rollingBack">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+                    指定版本回滚
+                  </button>
+                </div>
+              </div>
+
+              <!-- 部署进行中 -->
+              <div v-if="selectedStage.type === 'deploy' && selectedStage.status === 'running'" class="deploy-progress-panel">
+                <div class="progress-header"><div class="progress-spinner"></div><span>部署进行中...</span></div>
+                
+                <!-- 版本变更信息 -->
+                <div v-if="selectedStage.deploy_info && selectedStage.deploy_info.old_image" class="version-change-mini">
+                  <span class="old-version">{{ selectedStage.deploy_info.old_image }}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <span class="new-version">{{ selectedStage.deploy_info.image }}</span>
+                </div>
+                
+                <div v-if="selectedStage.deploy_info" class="deploy-info-mini">
+                  <span>工作负载: {{ selectedStage.deploy_info.workload_name }}</span>
+                  <span>镜像: {{ selectedStage.deploy_info.image }}</span>
+                </div>
+                
+                <!-- 实时部署日志预览 -->
+                <div v-if="selectedStage.logs" class="deploy-logs-preview">
+                  <div class="logs-preview-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>部署日志</span>
+                  </div>
+                  <pre class="logs-preview-content">{{ selectedStage.logs }}</pre>
+                </div>
+                
+                <div class="deploy-actions">
+                  <button class="btn btn-cancel" @click.stop="handleCancelDeploy(selectedStage)" :disabled="cancelling">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    {{ cancelling ? '取消中...' : '取消部署' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 部署失败 -->
+              <div v-if="selectedStage.type === 'deploy' && selectedStage.status === 'failed'" class="deploy-failed-info">
+                <div class="failed-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>部署失败</div>
+                <div v-if="selectedStage.error_message" class="failed-reason">
+                  <span class="reason-label">失败原因:</span>
+                  <span class="reason-text">{{ selectedStage.error_message }}</span>
+                </div>
+                <div v-if="selectedStage.deploy_info" class="deploy-details">
+                  <span>集群: {{ selectedStage.deploy_info.cluster_name || selectedStage.deploy_info.cluster_id }}</span>
+                  <span>命名空间: {{ selectedStage.deploy_info.namespace }}</span>
+                  <span>工作负载: {{ selectedStage.deploy_info.workload_name }}</span>
+                  <span>镜像: {{ selectedStage.deploy_info.image }}</span>
+                </div>
+                <div class="retry-deploy-actions">
+                  <button class="btn btn-retry" @click.stop="handleRetryDeploy(selectedStage.id)" :disabled="deploying">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    {{ deploying ? '部署中...' : '重新部署' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 部署日志 -->
+              <div v-if="selectedStage.type === 'deploy' && selectedStage.logs && (selectedStage.status === 'success' || selectedStage.status === 'failed' || selectedStage.status === 'running')" class="deploy-logs-panel">
+                <div class="logs-toggle" @click="selectedStage.showLogs = !selectedStage.showLogs">
+                  <svg :class="['toggle-icon', { expanded: selectedStage.showLogs }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  <span>查看部署日志</span>
+                </div>
+                <pre v-show="selectedStage.showLogs" class="deploy-logs-content">{{ selectedStage.logs }}</pre>
+              </div>
+
+              <!-- 非审批/部署阶段的基本信息 -->
+              <div v-if="selectedStage.type !== 'approval' && selectedStage.type !== 'deploy'" class="stage-basic-info">
+                <div class="info-row">
+                  <span class="info-label">阶段类型:</span>
+                  <span class="info-value">{{ getStageTypeName(selectedStage.type) }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">状态:</span>
+                  <span :class="['info-value', 'status-text', `status-${selectedStage.status}`]">{{ stageStatusText(selectedStage.status) }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">耗时:</span>
+                  <span class="info-value">{{ selectedStage.duration || '-' }}</span>
+                </div>
+                <div v-if="selectedStage.error_message" class="info-row error">
+                  <span class="info-label">错误信息:</span>
+                  <span class="info-value error-text">{{ selectedStage.error_message }}</span>
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- 未选中阶段提示 -->
+          <div v-else-if="filteredStages.length > 0" class="no-stage-selected">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+            </svg>
+            <p>点击上方阶段卡片查看详情</p>
           </div>
         </div>
 
@@ -1122,6 +1143,146 @@
       </div>
     </div>
   </div>
+
+  <!-- 版本选择弹窗（参考 Rancher/KubeSphere 设计） -->
+  <div v-if="showVersionDialog" class="modal-overlay" @click.self="showVersionDialog = false">
+    <div class="modal-container version-dialog">
+      <div class="modal-header">
+        <h3>选择回滚版本</h3>
+        <button class="close-btn" @click="showVersionDialog = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div v-if="versionLoading" class="version-loading">
+          <div class="loading-spinner"></div>
+          <span>正在加载历史版本...</span>
+        </div>
+        <div v-else-if="versionHistory.length === 0" class="version-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span>没有可回滚的历史版本</span>
+        </div>
+        <div v-else class="version-list">
+          <div
+            v-for="version in versionHistory"
+            :key="version.rs_name"
+            class="version-item"
+            :class="{ selected: selectedVersion?.rs_name === version.rs_name, current: version.is_current }"
+            @click="selectedVersion = version"
+          >
+            <div class="version-info">
+              <span class="version-revision">Revision {{ version.revision }}</span>
+              <span v-if="version.is_current" class="current-badge">当前版本</span>
+            </div>
+            <div class="version-details">
+              <span class="version-rs">{{ version.rs_name }}</span>
+              <span class="version-image" :title="version.image">{{ version.image }}</span>
+            </div>
+            <div class="version-time">
+              {{ formatFullDate(version.created_at) }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="showVersionDialog = false">取消</button>
+        <button
+          class="btn btn-warning"
+          @click="confirmRollbackToVersion"
+          :disabled="!selectedVersion || selectedVersion.is_current || rollingBack"
+        >
+          <svg v-if="!rollingBack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+          <span v-else class="loading-spinner small"></span>
+          {{ rollingBack ? '回滚中...' : '确认回滚' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 回滚结果详情弹窗 -->
+  <div v-if="showRollbackResultDialog" class="modal-overlay" @click.self="!rollbackInProgress && (showRollbackResultDialog = false)">
+    <div class="modal-container rollback-result-dialog">
+      <div class="modal-header" :class="rollbackInProgress ? 'in-progress' : (rollbackResultData?.success ? 'success' : 'error')">
+        <h3>
+          <div v-if="rollbackInProgress" class="progress-spinner small"></div>
+          <svg v-else-if="rollbackResultData?.success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          {{ rollbackInProgress ? '回滚进行中...' : (rollbackResultData?.success ? '回滚成功' : '回滚失败') }}
+        </h3>
+        <button v-if="!rollbackInProgress" class="close-btn" @click="showRollbackResultDialog = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="rollback-details">
+          <div class="detail-item">
+            <span class="label">目标版本:</span>
+            <span class="value">{{ rollbackResultData?.target_rs || '-' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">命名空间:</span>
+            <span class="value">{{ rollbackResultData?.namespace || '-' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">工作负载:</span>
+            <span class="value">{{ rollbackResultData?.workload_name || '-' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">回滚前镜像:</span>
+            <span class="value image">{{ rollbackResultData?.old_image || '-' }}</span>
+          </div>
+          <div v-if="rollbackResultData?.new_image" class="detail-item">
+            <span class="label">回滚后镜像:</span>
+            <span class="value image">{{ rollbackResultData?.new_image || '-' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">回滚时间:</span>
+            <span class="value">{{ rollbackResultData?.rollback_at || '-' }}</span>
+          </div>
+        </div>
+        <!-- 回滚日志（类似部署日志面板风格） -->
+        <div class="rollback-log-panel">
+          <div class="log-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <span>回滚日志</span>
+            <div v-if="rollbackInProgress" class="log-loading">
+              <div class="mini-spinner"></div>
+              <span>执行中...</span>
+            </div>
+          </div>
+          <pre class="log-content">{{ rollbackResultData?.message || '等待执行...' }}</pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button v-if="!rollbackInProgress" class="btn btn-primary" @click="showRollbackResultDialog = false">确定</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -1139,8 +1300,12 @@ import {
   getRunStages,
   getStageLogs,
   approveStage,
-  executeDeployStage
+  executeDeployStage,
+  cancelDeployStage,
+  rollbackDeployStage,
+  getDeployHistory
 } from '@/api/platform/pipeline'
+import deploymentsApi from '@/api/cluster/workloads/deployments'
 
 export default {
   name: 'PipelineDetail',
@@ -1192,6 +1357,7 @@ export default {
     ])
     const stagesLoading = ref(false)
     const expandedStages = ref([]) // 展开的阶段列表
+    const selectedStage = ref(null) // 当前选中的阶段
     const stageFilter = ref('')
 
     // 运行弹窗相关
@@ -1201,8 +1367,31 @@ export default {
     // 审批和部署操作相关
     const approving = ref(false)
     const deploying = ref(false)
+    const rollingBack = ref(false)  // 回滚中
+    const cancelling = ref(false)   // 取消中
     const approvalDecision = ref('approve')  // 默认通过
     const approvalComment = ref('')  // 审批备注
+
+    // 版本选择弹窗相关
+    const showVersionDialog = ref(false)
+    const versionHistory = ref([])  // 历史版本列表
+    const versionLoading = ref(false)
+    const selectedVersion = ref(null)  // 选中的版本
+    const currentStageForRollback = ref(null)  // 当前要回滚的阶段
+
+    // 回滚结果弹窗相关
+    const showRollbackResultDialog = ref(false)
+    const rollbackResultData = ref(null)  // 回滚结果详情
+    const rollbackInProgress = ref(false)  // 回滚进行中标志
+
+    // 追加回滚日志
+    const appendRollbackLog = (msg) => {
+      const timestamp = new Date().toLocaleString('zh-CN')
+      const logLine = `[${timestamp}] ${msg}\n`
+      if (rollbackResultData.value) {
+        rollbackResultData.value.message = (rollbackResultData.value.message || '') + logLine
+      }
+    }
 
     // 筛选后的阶段
     const filteredStages = computed(() => {
@@ -1371,7 +1560,7 @@ export default {
       // 清理旧的定时器
       stopPolling()
 
-      // 每 5 秒轮询状态和阶段（参考 Jenkins 默认设计）
+      // 每 3 秒轮询状态和阶段（优化响应速度）
       statusPollingTimer = setInterval(async () => {
         try {
           const response = await getPipelineStatus(pipelineId.value)
@@ -1400,21 +1589,30 @@ export default {
               if (response.data.latest_run && response.data.latest_run.error_message) {
                 Message.error({ content: response.data.latest_run.error_message, duration: 5000 })
               } else {
-                Message.info({ content: `流水线执行完成，状态: ${runStatusText(newPipeline.last_run_status)}` })
+                // 根据状态选择正确的消息类型
+                const status = newPipeline.last_run_status
+                const statusText = runStatusText(status)
+                if (status === 'success' || status === 'SUCCESS') {
+                  Message.success({ content: `构建成功！${statusText}` })
+                } else if (status === 'failed' || status === 'FAILURE') {
+                  Message.error({ content: `构建失败！${statusText}` })
+                } else {
+                  Message.info({ content: `流水线执行完成，状态: ${statusText}` })
+                }
               }
             }
           }
         } catch (error) {
           console.error('轮询状态失败:', error)
         }
-      }, 5000)
+      }, 3000)  // 3秒间隔，更快响应
 
-      // 每 5 秒轮询日志（如果在日志 Tab，参考 Jenkins 默认设计）
+      // 每 3 秒轮询日志（如果在日志 Tab）
       logsPollingTimer = setInterval(async () => {
         if (activeTab.value === 'logs' && pipeline.value.status === 'running') {
           await loadLogs()
         }
-      }, 5000)
+      }, 3000)  // 3秒间隔
     }
 
     // 停止轮询
@@ -1516,6 +1714,10 @@ export default {
     // 操作
     const handleRun = async () => {
       try {
+        Message.info({ content: '正在获取最新配置...' })
+        // 先刷新获取最新流水线配置
+        await loadPipeline()
+        
         Message.info({ content: '正在启动流水线...' })
         // 传入 force: true 自动清理旧的失败/运行中构建
         const response = await runPipeline(pipelineId.value, { force: true })
@@ -1586,6 +1788,20 @@ export default {
         expandedStages.value.push(stageName)
       } else {
         expandedStages.value.splice(index, 1)
+      }
+    }
+
+    // 选中阶段（点击阶段卡片时触发）
+    const selectStage = (stage) => {
+      // 如果点击的是已选中的阶段，切换展开/收起
+      if (selectedStage.value && selectedStage.value.name === stage.name) {
+        // 不取消选中，保持选中状态
+      } else {
+        selectedStage.value = stage
+      }
+      // 确保选中阶段展开
+      if (!expandedStages.value.includes(stage.name)) {
+        expandedStages.value.push(stage.name)
       }
     }
 
@@ -1666,10 +1882,23 @@ export default {
     }
 
     // 部署阶段操作
-    // 优化：启动部署后立即轮询状态，直到完成
+    // 优化：启动部署前先刷新获取最新配置
     const handleDeployStage = async (stageId) => {
       deploying.value = true
       try {
+        Message.info({ content: '正在获取最新配置...' })
+        // 先刷新流水线和阶段数据，获取最新配置
+        await loadPipeline()
+        await loadStages()
+        
+        // 检查选中阶段是否有配置警告
+        const currentStage = pipelineStages.value.find(s => s.id === stageId)
+        if (currentStage && currentStage.config_warning) {
+          Message.warning({ content: currentStage.config_warning, duration: 5000 })
+          deploying.value = false
+          return
+        }
+        
         Message.info({ content: '正在启动部署...' })
         const response = await executeDeployStage(stageId)
         if (response.code === 0) {
@@ -1689,10 +1918,23 @@ export default {
     }
 
     // 重新部署（失败后重试）
-    // 优化：重试后立即轮询状态
+    // 优化：重试前先刷新获取最新配置
     const handleRetryDeploy = async (stageId) => {
       deploying.value = true
       try {
+        Message.info({ content: '正在获取最新配置...' })
+        // 先刷新流水线和阶段数据，获取最新配置
+        await loadPipeline()
+        await loadStages()
+        
+        // 检查选中阶段是否有配置警告
+        const currentStage = pipelineStages.value.find(s => s.id === stageId)
+        if (currentStage && currentStage.config_warning) {
+          Message.warning({ content: currentStage.config_warning, duration: 5000 })
+          deploying.value = false
+          return
+        }
+        
         Message.info({ content: '正在重新部署...' })
         const response = await executeDeployStage(stageId, { retry: true })
         if (response.code === 0) {
@@ -1747,6 +1989,240 @@ export default {
       if (deployPollingTimer) {
         clearInterval(deployPollingTimer)
         deployPollingTimer = null
+      }
+    }
+
+    // 回滚部署（参考 Rancher/KubeSphere 设计）
+    // 点击后打开版本选择弹窗
+    // 优化：操作前先刷新获取最新配置
+    const handleRollback = async (stage) => {
+      if (!stage.id) {
+        Message.warning({ content: '缺少阶段信息' })
+        return
+      }
+
+      // 先刷新获取最新配置
+      Message.info({ content: '正在获取最新配置...' })
+      await loadPipeline()
+      await loadStages()
+
+      currentStageForRollback.value = stage
+      versionLoading.value = true
+      showVersionDialog.value = true
+
+      try {
+        // 使用新的阶段历史 API
+        const res = await getDeployHistory(stage.id)
+        if (res.code === 0 && res.data && res.data.revisions) {
+          versionHistory.value = res.data.revisions
+        } else {
+          throw new Error('获取历史版本失败')
+        }
+      } catch (error) {
+        console.error('[handleRollback] 错误:', error)
+        Message.error({ content: error.message || '获取历史版本失败' })
+        showVersionDialog.value = false
+      } finally {
+        versionLoading.value = false
+      }
+    }
+
+    // 确认回滚到指定版本
+    const confirmRollbackToVersion = async () => {
+      if (!selectedVersion.value || !currentStageForRollback.value) {
+        Message.warning({ content: '请选择要回滚的版本' })
+        return
+      }
+
+      const stage = currentStageForRollback.value
+      const targetVersion = selectedVersion.value
+
+      // 关闭版本选择弹窗
+      showVersionDialog.value = false
+      selectedVersion.value = null
+
+      // 立即显示回滚日志弹窗（进行中状态）
+      rollbackInProgress.value = true
+      rollbackResultData.value = {
+        success: null,  // null 表示进行中
+        target_rs: targetVersion.rs_name,
+        old_image: stage.deploy_info?.image || '',
+        new_image: targetVersion.image || '',
+        namespace: stage.deploy_info?.namespace || '',
+        workload_name: stage.deploy_info?.workload_name || '',
+        rollback_at: new Date().toLocaleString('zh-CN'),
+        user_id: '',
+        message: ''
+      }
+      showRollbackResultDialog.value = true
+
+      // 实时追加日志
+      appendRollbackLog('开始回滚操作...')
+      appendRollbackLog(`目标命名空间: ${stage.deploy_info?.namespace || '-'}`)
+      appendRollbackLog(`目标工作负载: ${stage.deploy_info?.workload_name || '-'}`)
+      appendRollbackLog(`目标版本: ${targetVersion.rs_name}`)
+      appendRollbackLog(`目标镜像: ${targetVersion.image || '-'}`)
+      appendRollbackLog('[INFO] 正在校验目标版本...')
+
+      rollingBack.value = true
+      try {
+        appendRollbackLog('[INFO] 正在更新 Deployment 配置...')
+        
+        const res = await rollbackDeployStage(
+          stage.id,
+          targetVersion.rs_name
+        )
+
+        // 更新回滚结果
+        if (res.data) {
+          rollbackResultData.value = {
+            ...res.data,
+            message: rollbackResultData.value.message + '\n' + (res.data.message || '')
+          }
+        }
+        rollbackInProgress.value = false
+
+        if (res.code === 0) {
+          appendRollbackLog('[INFO] Deployment 更新已提交')
+          appendRollbackLog(`[INFO] 回滚成功！`)
+          appendRollbackLog(`回滚前镜像: ${res.data?.old_image || '-'}`)
+          appendRollbackLog(`回滚后镜像: ${res.data?.new_image || '-'}`)
+          Message.success({ content: '回滚成功！' })
+          await loadStages()
+        } else {
+          appendRollbackLog(`[ERROR] 回滚失败: ${res.msg || '未知错误'}`)
+          Message.error({ content: res.msg || '回滚失败' })
+        }
+      } catch (error) {
+        console.error('[confirmRollbackToVersion] 错误:', error)
+        appendRollbackLog(`[ERROR] 回滚异常: ${error.message || '未知错误'}`)
+        rollbackInProgress.value = false
+        rollbackResultData.value.success = false
+        Message.error({ content: error.message || '回滚失败' })
+      } finally {
+        rollingBack.value = false
+      }
+    }
+
+    // 快速回滚到上一版本（后端自动找到上一个版本）
+    // 优化：操作前先刷新获取最新配置
+    const quickRollbackToPrevious = async (stage) => {
+      if (!stage.id) {
+        Message.warning({ content: '缺少阶段信息' })
+        return
+      }
+
+      // 确认回滚
+      const confirmed = window.confirm(
+        `确定要回滚到上一个版本吗？`
+      )
+      if (!confirmed) return
+
+      // 先刷新获取最新配置
+      Message.info({ content: '正在获取最新配置...' })
+      await loadPipeline()
+      await loadStages()
+
+      // 立即显示回滚日志弹窗（进行中状态）
+      rollbackInProgress.value = true
+      rollbackResultData.value = {
+        success: null,  // null 表示进行中
+        target_rs: '',
+        old_image: '',
+        new_image: '',
+        namespace: stage.deploy_info?.namespace || '',
+        workload_name: stage.deploy_info?.workload_name || '',
+        rollback_at: new Date().toLocaleString('zh-CN'),
+        user_id: '',
+        message: ''
+      }
+      showRollbackResultDialog.value = true
+
+      // 实时追加日志
+      appendRollbackLog('开始回滚操作...')
+      appendRollbackLog(`目标命名空间: ${stage.deploy_info?.namespace || '-'}`)
+      appendRollbackLog(`目标工作负载: ${stage.deploy_info?.workload_name || '-'}`)
+      appendRollbackLog('正在查找上一个版本...')
+
+      rollingBack.value = true
+      try {
+        // 传空字符串或 __previous__，后端自动找到上一个版本
+        const res = await rollbackDeployStage(stage.id, '__previous__')
+
+        // 更新回滚结果
+        if (res.data) {
+          rollbackResultData.value = {
+            ...res.data,
+            message: rollbackResultData.value.message + '\n' + (res.data.message || '')
+          }
+        }
+        rollbackInProgress.value = false
+
+        if (res.code === 0) {
+          appendRollbackLog(`回滚成功！目标版本: ${res.data?.target_rs || '-'}`)
+          appendRollbackLog(`回滚前镜像: ${res.data?.old_image || '-'}`)
+          appendRollbackLog(`回滚后镜像: ${res.data?.new_image || '-'}`)
+          Message.success({ content: '回滚成功！' })
+          await loadStages()
+        } else {
+          appendRollbackLog(`回滚失败: ${res.msg || '未知错误'}`)
+          Message.error({ content: res.msg || '回滚失败' })
+        }
+      } catch (error) {
+        console.error('[quickRollbackToPrevious] 错误:', error)
+        appendRollbackLog(`回滚异常: ${error.message || '未知错误'}`)
+        rollbackInProgress.value = false
+        rollbackResultData.value.success = false
+        Message.error({ content: error.message || '回滚失败' })
+      } finally {
+        rollingBack.value = false
+      }
+    }
+
+    // 取消部署（智能判断：未执行的取消，已执行的回滚）
+    // 优化：操作前先刷新获取最新配置
+    const handleCancelDeploy = async (stage) => {
+      if (!stage.id) {
+        Message.warning({ content: '缺少阶段信息' })
+        return
+      }
+
+      // 确认取消
+      const confirmed = window.confirm(
+        `确定要取消部署吗？\n\n- 如果部署未执行，将直接取消\n- 如果部署已执行，将回滚到上一个版本`
+      )
+      if (!confirmed) return
+
+      // 先刷新获取最新配置
+      Message.info({ content: '正在获取最新配置...' })
+      await loadPipeline()
+      await loadStages()
+
+      cancelling.value = true
+      try {
+        Message.info({ content: '正在取消部署...' })
+
+        // 使用新的取消 API
+        const res = await cancelDeployStage(stage.id)
+
+        if (res.code === 0) {
+          if (res.data?.action === 'rollback') {
+            Message.success({ content: `已回滚到 ${res.data.target_rs}` })
+          } else {
+            Message.success({ content: '部署已取消' })
+          }
+          // 停止轮询
+          stopDeployPolling()
+          // 刷新阶段数据
+          await loadStages()
+        } else {
+          throw new Error(res.msg || '取消失败')
+        }
+      } catch (error) {
+        console.error('[handleCancelDeploy] 错误:', error)
+        Message.error({ content: error.message || '取消部署失败' })
+      } finally {
+        cancelling.value = false
       }
     }
 
@@ -1825,6 +2301,19 @@ export default {
       return map[status] || '审批'
     }
 
+    // 阶段类型名称
+    const getStageTypeName = (type) => {
+      const map = {
+        checkout: '代码检出',
+        build: '构建',
+        test: '测试',
+        push: '推送镜像',
+        approval: '人工审批',
+        deploy: '部署'
+      }
+      return map[type] || type
+    }
+
     const formatDate = (timestamp) => {
       if (!timestamp) return '-'
       const date = new Date(typeof timestamp === 'number' && timestamp < 10000000000 ? timestamp * 1000 : timestamp)
@@ -1883,6 +2372,7 @@ export default {
       pipelineStages,
       stagesLoading,
       expandedStages,
+      selectedStage,
       stageFilter,
       filteredStages,
       getStageStatusCount,
@@ -1899,14 +2389,28 @@ export default {
       handleEdit,
       viewRunLogs,
       toggleStageExpand,
+      selectStage,
       viewStageLog,
       retryRun,
       handleApproveStage,
       handleDeployStage,
       handleRetryDeploy,
+      handleRollback,
+      handleCancelDeploy,
+      confirmRollbackToVersion,
+      quickRollbackToPrevious,
+      showVersionDialog,
+      versionHistory,
+      versionLoading,
+      selectedVersion,
+      showRollbackResultDialog,
+      rollbackResultData,
+      rollbackInProgress,
       submitApproval,
       approving,
       deploying,
+      rollingBack,
+      cancelling,
       approvalDecision,
       approvalComment,
       copyLogs,
@@ -1917,6 +2421,7 @@ export default {
       envLabel,
       stageStatusText,
       approvalBadgeText,
+      getStageTypeName,
       formatDate,
       formatFullDate,
       formatDuration
@@ -2075,6 +2580,112 @@ export default {
   width: 16px;
   height: 16px;
   color: #94a3b8;
+}
+
+/* 上次运行信息行 */
+.last-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.last-run-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.run-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.run-status-badge.status-success {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.run-status-badge.status-failed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.run-status-badge.status-running {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.run-status-badge.status-pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.run-status-badge.status-cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.run-status-badge.status-aborted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.run-time {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.last-run-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mini-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mini-btn.btn-stop {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.mini-btn.btn-stop:hover {
+  background: #fecaca;
+}
+
+.mini-btn.btn-rerun {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.mini-btn.btn-rerun:hover {
+  background: #bfdbfe;
 }
 
 .header-actions {
@@ -2343,7 +2954,7 @@ export default {
   background: white;
   border-radius: 8px;
   border: 2px solid #e2e8f0;
-  transition: all 0.3s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
 
@@ -2403,7 +3014,7 @@ export default {
   justify-content: center;
   background: white;
   border: 2px solid #e2e8f0;
-  transition: all 0.3s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .stage-icon svg {
@@ -2498,6 +3109,149 @@ export default {
 .stage-node.status-failed .stage-duration { color: #b91c1c; }
 .stage-node.status-running .stage-name { color: #1e40af; }
 .stage-node.status-running .stage-duration { color: #2563eb; }
+
+/* 阶段卡片选中状态 */
+.stage-node {
+  cursor: pointer;
+}
+
+.stage-node.selected .stage-content {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.stage-node:hover .stage-content {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stage-node.selected:hover .stage-content {
+  transform: translateY(-2px);
+}
+
+/* 选中阶段详情区域 */
+.selected-stage-detail {
+  margin-top: 24px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.selected-stage-detail .detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.selected-stage-detail .stage-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.selected-stage-detail .stage-status {
+  margin-left: auto;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.selected-stage-detail .stage-duration-tag {
+  padding: 4px 10px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.selected-stage-detail .detail-body {
+  padding: 20px;
+}
+
+/* 未选中阶段提示 */
+.no-stage-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  margin-top: 24px;
+  background: #f8fafc;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  color: #94a3b8;
+}
+
+.no-stage-selected svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.no-stage-selected p {
+  font-size: 14px;
+}
+
+/* 阶段基本信息展示 */
+.stage-basic-info {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.stage-basic-info .info-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.stage-basic-info .info-row:last-child {
+  border-bottom: none;
+}
+
+.stage-basic-info .info-label {
+  width: 100px;
+  font-size: 13px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.stage-basic-info .info-value {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.stage-basic-info .info-value.status-text.status-success {
+  color: #16a34a;
+}
+
+.stage-basic-info .info-value.status-text.status-failed {
+  color: #dc2626;
+}
+
+.stage-basic-info .info-value.status-text.status-running {
+  color: #2563eb;
+}
+
+.stage-basic-info .info-row.error {
+  background: #fef2f2;
+  margin: 8px -16px -16px;
+  padding: 12px 16px;
+  border-radius: 0 0 8px 8px;
+}
+
+.stage-basic-info .error-text {
+  color: #dc2626;
+  word-break: break-all;
+}
 
 .stage-details {
   display: grid;
@@ -4059,6 +4813,59 @@ export default {
   color: #2563eb;
 }
 
+/* 配置警告样式 */
+.config-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+}
+
+.config-warning > svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: #d97706;
+}
+
+.config-warning .warning-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-warning .warning-text {
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.config-warning .config-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2563eb;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.config-warning .config-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.config-warning .config-link svg {
+  width: 14px;
+  height: 14px;
+}
+
 .stage-action-panel .action-buttons {
   display: flex;
   gap: 10px;
@@ -4288,6 +5095,190 @@ export default {
   height: 16px;
 }
 
+/* 部署操作按钮区域（回滚/取消） */
+.deploy-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  gap: 10px;
+}
+
+.deploy-success-info .deploy-actions {
+  border-top-color: #bbf7d0;
+}
+
+.deploy-progress-panel .deploy-actions {
+  border-top-color: #fde68a;
+}
+
+/* 回滚按钮（参考 Rancher/KubeSphere 设计） */
+.btn-rollback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rollback:hover:not(:disabled) {
+  background: #ffedd5;
+  border-color: #fb923c;
+}
+
+.btn-rollback:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-rollback svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 回滚按钮组布局 */
+.rollback-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 指定版本回滚按钮 */
+.btn-rollback-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rollback-select:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #334155;
+}
+
+.btn-rollback-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-rollback-select svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 回滚按钮 Mini 版本（头部显示） */
+.btn-rollback-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-left: auto;
+  margin-right: 8px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rollback-mini:hover:not(:disabled) {
+  background: #ffedd5;
+  border-color: #fb923c;
+}
+
+.btn-rollback-mini:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-rollback-mini svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 取消按钮 Mini 版本（头部显示） */
+.btn-cancel-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-left: auto;
+  margin-right: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-cancel-mini:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+.btn-cancel-mini:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel-mini svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 取消部署按钮 */
+.btn-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* 部署日志展示 */
 .deploy-logs-panel {
   margin-bottom: 12px;
@@ -4337,6 +5328,163 @@ export default {
   overflow-y: auto;
 }
 
+/* 版本变更卡片（参考 Rancher/Kuboard 风格） */
+.version-change-card {
+  margin: 12px 0;
+  padding: 14px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+}
+
+.version-change-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0369a1;
+}
+
+.version-change-header svg {
+  width: 18px;
+  height: 18px;
+}
+
+.version-change-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.version-change-content .version-item {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.version-change-content .version-item.old {
+  border-left: 3px solid #f59e0b;
+}
+
+.version-change-content .version-item.new {
+  border-left: 3px solid #10b981;
+}
+
+.version-change-content .version-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.version-change-content .version-value {
+  display: block;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.version-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #0ea5e9;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.version-arrow svg {
+  width: 16px;
+  height: 16px;
+  color: white;
+}
+
+/* 部署进行中的版本变更迷你版 */
+.version-change-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.version-change-mini .old-version {
+  color: #f59e0b;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-change-mini .new-version {
+  color: #10b981;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-change-mini .arrow-icon {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+/* 部署日志预览（部署进行中时显示） */
+.deploy-logs-preview {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.logs-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f1f5f9;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.logs-preview-header svg {
+  width: 14px;
+  height: 14px;
+}
+
+.logs-preview-content {
+  margin: 0;
+  padding: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* 阶段错误信息 */
 .stage-error {
   display: flex;
@@ -4372,5 +5520,317 @@ export default {
 /* 已跳过状态 */
 .status-dot.status-skipped {
   background: #94a3b8;
+}
+
+/* 版本选择弹窗 */
+.version-dialog {
+  width: 600px;
+  max-width: 90vw;
+}
+
+.version-loading,
+.version-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #718096;
+}
+
+.version-loading svg,
+.version-empty svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+}
+
+.version-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.version-item {
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.version-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e0;
+}
+
+.version-item.selected {
+  background: #ebf8ff;
+  border-color: #4299e1;
+}
+
+.version-item.current {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.version-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.version-revision {
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.current-badge {
+  padding: 2px 8px;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+.version-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.version-rs {
+  font-size: 13px;
+  color: #4a5568;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.version-image {
+  font-size: 12px;
+  color: #718096;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-time {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.btn-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.btn-warning:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-warning svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 回滚结果弹窗 */
+.rollback-result-dialog {
+  width: 600px;
+  max-width: 90vw;
+}
+
+.rollback-result-dialog .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: 12px 12px 0 0;
+}
+
+.rollback-result-dialog .modal-header.success {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+}
+
+.rollback-result-dialog .modal-header.error {
+  background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+}
+
+.rollback-result-dialog .modal-header.in-progress {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+}
+
+.rollback-result-dialog .modal-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.rollback-result-dialog .modal-header.success h3 {
+  color: #166534;
+}
+
+.rollback-result-dialog .modal-header.error h3 {
+  color: #dc2626;
+}
+
+.rollback-result-dialog .modal-header.in-progress h3 {
+  color: #1d4ed8;
+}
+
+.rollback-result-dialog .modal-header h3 svg {
+  width: 24px;
+  height: 24px;
+}
+
+.rollback-result-dialog .modal-header h3 .progress-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #93c5fd;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.rollback-details {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.rollback-details .detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rollback-details .label {
+  flex-shrink: 0;
+  width: 100px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.rollback-details .value {
+  color: #1a202c;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.rollback-details .value.image {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  color: #4a5568;
+}
+
+/* 回滚日志面板（类似部署日志风格） */
+.rollback-log-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rollback-log-panel .log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e293b;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  border-bottom: 1px solid #334155;
+}
+
+.rollback-log-panel .log-header svg {
+  width: 16px;
+  height: 16px;
+  stroke: #94a3b8;
+}
+
+.rollback-log-panel .log-header .log-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: #60a5fa;
+  font-size: 12px;
+}
+
+.rollback-log-panel .log-header .mini-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #334155;
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.rollback-log-panel .log-content {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px;
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  max-height: 280px;
+  min-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 旧版本回滚日志样式（兼容） */
+.rollback-log {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rollback-log .log-header {
+  background: #f1f5f9;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rollback-log .log-content {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 14px;
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>
