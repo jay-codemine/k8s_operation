@@ -100,7 +100,7 @@ K8s Operation 是一个面向多集群的 Kubernetes 运维管理平台，
 ---
 
 <details>
-<summary>📂 点击展开查看全部界面截图（共 13 张）</summary>
+<summary>📂 点击展开查看全部界面截图 </summary>
 
 <br/>
 
