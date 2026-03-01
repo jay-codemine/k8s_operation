@@ -144,6 +144,26 @@ K8s Operation 是一个面向多集群的 Kubernetes 运维管理平台，
   <img src="docs/images/13.png" width="900"/>
 </p>
 
+<p align="center">
+  <img src="docs/images/14.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/15.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/16.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/17.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/18.png" width="900"/>
+</p>
+
 </details>
 
 ## ✨ 核心特性
