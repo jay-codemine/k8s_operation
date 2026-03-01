@@ -180,6 +180,28 @@ K8s Operation 是一个面向多集群的 Kubernetes 运维管理平台，
 
 ## ✨ 核心特性
 
+## 🚦 CI/CD 发布控制（人工审批 / 回滚 / 审计）
+
+平台内置“发布控制平面”，将 CI/CD 从脚本编排升级为 **可控、可追踪、可回滚** 的发布体系。
+
+### 发布流程（建议生产启用）
+1. 创建发布单（Release）
+2. 触发构建（CI）：Jenkins/GitHub Actions 等（平台与 CI 解耦）
+3. 进入待审批（PENDING_APPROVAL）
+4. 人工审批通过（APPROVED）后进入部署（DEPLOYING）
+5. 滚动更新（RollingUpdate）并持续采集状态
+6. 发布成功（SUCCEEDED）或失败（FAILED）
+7. 支持一键回滚（ROLLBACKING -> ROLLED_BACK）
+
+### 能力说明
+- ✅ 人工审批：审批人/审批时间/审批意见记录，可做权限控制与审计
+- ✅ 发布状态机：状态迁移可控，避免“脚本式发布不可追踪”
+- ✅ 发布日志：记录构建/部署/回滚全过程关键事件
+- ✅ 回滚能力：
+    - Deployment：基于 ReplicaSet 历史版本回滚（或指定历史版本）
+    - StatefulSet/DaemonSet：基于 ControllerRevision 回滚（按实现情况说明）
+- ✅ 发布过程可观测：滚动更新进度、Pod 状态、事件聚合（Backoff、PullError 等）
+
 ### 🧩 系统通用能力
 
 - 配置化加载（YAML / ENV）
