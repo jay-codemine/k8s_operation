@@ -1,0 +1,214 @@
+// Jenkinsfile - Vue + Nginx 前端项目 CI/CD（支持阶段级回调）
+// =============================================================
+// 使用说明：
+// 1. 将此文件放到 Git 仓库根目录，命名为 Jenkinsfile
+// 2. 在 Jenkins 创建 Pipeline 任务，选择 "Pipeline script from SCM"
+// 3. 配置 Jenkins 凭证：registry-creds（镜像仓库）、hmac-secret（回调签名）
+// =============================================================
+
+pipeline {
+    agent any
+
+    environment {
+        // ==================== 必须配置 ====================
+        IMAGE_REGISTRY = 'registry.cn-hangzhou.aliyuncs.com'  // 镜像仓库地址
+        IMAGE_NAMESPACE = 'k8s-gos'                           // 镜像命名空间
+        IMAGE_NAME = 'nginx'                                   // 镜像名称
+        
+        // 平台回调地址（替换为你的平台地址）
+        PLATFORM_CALLBACK_URL = 'http://your-platform:8080'
+        
+        // Jenkins 凭证 ID
+        REGISTRY_CREDS = credentials('registry-creds')        // 镜像仓库凭证
+        HMAC_SECRET = credentials('hmac-secret')              // HMAC 签名密钥
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    stages {
+        stage('代码检出') {
+            steps {
+                script {
+                    // 阶段开始回调
+                    sendStageCallback('checkout', 'running')
+                }
+                echo '=== 拉取代码 ==='
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_FULL = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B | head -1', returnStdout: true).trim()
+                    env.BUILD_TIMESTAMP = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.GIT_BRANCH ?: 'master'}-${env.GIT_COMMIT_SHORT}-${env.BUILD_TIMESTAMP}"
+                    env.FULL_IMAGE = "${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}:${env.IMAGE_TAG}"
+                    echo "Commit: ${env.GIT_COMMIT_SHORT}"
+                    echo "Image: ${env.FULL_IMAGE}"
+                }
+            }
+            post {
+                success { script { sendStageCallback('checkout', 'success') } }
+                failure { script { sendStageCallback('checkout', 'failed') } }
+            }
+        }
+
+        stage('构建') {
+            steps {
+                script { sendStageCallback('build', 'running') }
+                echo '=== 编译前端 ==='
+                script {
+                    if (fileExists('package.json')) {
+                        sh '''
+                            set -e
+                            npm config set registry https://registry.npmmirror.com
+                            npm ci --prefer-offline
+                            npm run build
+                            test -d dist
+                        '''
+                    } else {
+                        echo '跳过：无 package.json'
+                    }
+                }
+            }
+            post {
+                success { script { sendStageCallback('build', 'success') } }
+                failure { script { sendStageCallback('build', 'failed') } }
+            }
+        }
+
+        stage('构建镜像') {
+            steps {
+                script { sendStageCallback('test', 'running') }
+                echo '=== 构建镜像 ==='
+                sh """
+                    set -e
+                    nerdctl build -t ${env.FULL_IMAGE} -f Dockerfile \\
+                        --label git.commit=${env.GIT_COMMIT_FULL} \\
+                        --label git.branch=${env.GIT_BRANCH ?: 'master'} \\
+                        --label build.number=${env.BUILD_NUMBER} \\
+                        --label build.timestamp=${env.BUILD_TIMESTAMP} \\
+                        .
+                """
+            }
+            post {
+                success { script { sendStageCallback('test', 'success') } }
+                failure { script { sendStageCallback('test', 'failed') } }
+            }
+        }
+
+        stage('推送镜像') {
+            steps {
+                script { sendStageCallback('push', 'running') }
+                echo '=== 推送镜像 ==='
+                sh """
+                    set -e
+                    echo '${REGISTRY_CREDS_PSW}' | nerdctl login ${IMAGE_REGISTRY} -u '${REGISTRY_CREDS_USR}' --password-stdin
+                    nerdctl push ${env.FULL_IMAGE}
+                """
+                script {
+                    // 获取镜像 digest
+                    env.IMAGE_DIGEST = sh(
+                        script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{.RepoDigests}}' | grep -oP 'sha256:[a-f0-9]+' | head -1 || echo ''",
+                        returnStdout: true
+                    ).trim()
+                    echo "Image Digest: ${env.IMAGE_DIGEST}"
+                }
+            }
+            post {
+                success { script { sendStageCallback('push', 'success') } }
+                failure { script { sendStageCallback('push', 'failed') } }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+        success {
+            script {
+                sendPipelineCallback('SUCCESS', '构建成功')
+            }
+        }
+        failure {
+            script {
+                sendPipelineCallback('FAILURE', '构建失败')
+            }
+        }
+        aborted {
+            script {
+                sendPipelineCallback('ABORTED', '构建中止')
+            }
+        }
+    }
+}
+
+// ==================== 回调函数 ====================
+
+// 阶段回调（实时更新 UI）
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:stage_type")
+def sendStageCallback(String stageType, String status) {
+    try {
+        def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}"
+        def signature = sh(
+            script: "echo -n '${signContent}' | openssl dgst -sha256 -hmac '${HMAC_SECRET}' | awk '{print \$2}'",
+            returnStdout: true
+        ).trim()
+        
+        def payload = """{"job_name":"${env.JOB_NAME}","build_number":${env.BUILD_NUMBER},"stage_type":"${stageType}","status":"${status}"}"""
+        
+        httpRequest(
+            url: "${PLATFORM_CALLBACK_URL}/api/v1/k8s/cicd/stage/callback",
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            customHeaders: [[name: 'X-Signature', value: signature]],
+            requestBody: payload,
+            validResponseCodes: '200:299',
+            quiet: true
+        )
+    } catch (Exception e) {
+        echo "[阶段回调] 失败（不影响构建）: ${e.message}"
+    }
+}
+
+// 流水线回调（构建完成后）
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
+def sendPipelineCallback(String status, String message) {
+    try {
+        def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}"
+        def signature = sh(
+            script: "echo -n '${signContent}' | openssl dgst -sha256 -hmac '${HMAC_SECRET}' | awk '{print \$2}'",
+            returnStdout: true
+        ).trim()
+        
+        def payload = """{
+            "job_name": "${env.JOB_NAME}",
+            "build_number": ${env.BUILD_NUMBER},
+            "status": "${status}",
+            "pipeline_id": ${env.PIPELINE_ID ?: 0},
+            "image_url": "${env.FULL_IMAGE ?: ''}",
+            "image_digest": "${env.IMAGE_DIGEST ?: ''}",
+            "git_commit": "${env.GIT_COMMIT_SHORT ?: ''}",
+            "git_branch": "${env.GIT_BRANCH ?: 'master'}",
+            "duration_sec": ${currentBuild.duration / 1000 as int},
+            "message": "${message}",
+            "build_url": "${env.BUILD_URL}"
+        }"""
+        
+        def response = httpRequest(
+            url: "${PLATFORM_CALLBACK_URL}/api/v1/k8s/cicd/pipeline/callback",
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            customHeaders: [[name: 'X-Signature', value: signature]],
+            requestBody: payload,
+            validResponseCodes: '200:299'
+        )
+        echo "[流水线回调] 成功: ${response.content}"
+    } catch (Exception e) {
+        echo "[流水线回调] 失败: ${e.message}"
+    }
+}

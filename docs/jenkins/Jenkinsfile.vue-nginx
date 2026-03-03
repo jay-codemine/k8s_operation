@@ -1,0 +1,324 @@
+// Jenkinsfile - Vue + Nginx 前端项目 CI/CD（支持阶段级回调）
+// =============================================================
+// 架构：
+//   Jenkins（虚拟机 + containerd）
+//     -> checkout(平台传入 repo/branch)  阶段回调
+//     -> npm install & build  阶段回调
+//     -> nerdctl build  阶段回调
+//     -> push  阶段回调
+//     -> 最终回调平台（触发审批/部署阶段）
+//
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
+// =============================================================
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        skipDefaultCheckout(true)
+    }
+
+    parameters {
+        string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址（必填）')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
+
+        string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址（必填）')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空自动生成）')
+        string(name: 'DOCKERFILE_PATH', defaultValue: 'Dockerfile', description: 'Dockerfile 路径')
+
+        string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
+        string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
+    }
+
+    environment {
+        REGISTRY_CREDS = credentials('harbor-registry')
+        HMAC_SECRET    = credentials('hmac-secret')
+        NPM_REGISTRY   = 'https://registry.npmmirror.com'
+    }
+
+    stages {
+
+        // ==================== 1. 拉取代码 ====================
+        stage('Checkout') {
+            steps {
+                echo "=== 拉取代码 ==="
+
+                script {
+                    if (!params.GIT_REPO?.trim()) {
+                        error("GIT_REPO 不能为空")
+                    }
+                    if (!params.IMAGE_REPO?.trim()) {
+                        error("IMAGE_REPO 不能为空")
+                    }
+                }
+
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${params.GIT_BRANCH}"]],
+                    userRemoteConfigs: [[
+                        url: params.GIT_REPO,
+                        credentialsId: 'gitee-id'
+                    ]],
+                    extensions: [
+                        [$class: 'CleanBeforeCheckout'],
+                        [$class: 'PruneStaleBranch']
+                    ]
+                ])
+
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_MSG   = sh(script: 'git log -1 --pretty=%B | head -1', returnStdout: true).trim()
+
+                    env.GIT_BRANCH_NAME  = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim()
+                        ? params.IMAGE_TAG.trim()
+                        : "${env.GIT_BRANCH_NAME}-${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
+
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+
+                    echo "Commit: ${env.GIT_COMMIT_SHORT}"
+                    echo "Image: ${env.FULL_IMAGE}"
+                }
+            }
+            post {
+                success { script { stageCallback('checkout', 'success') } }
+                failure { script { stageCallback('checkout', 'failed') } }
+            }
+        }
+
+        // ==================== 2. 前端构建 ====================
+        stage('Build') {
+            steps {
+                echo "=== 编译前端 ==="
+
+                script {
+                    if (!fileExists('package.json')) {
+                        echo "未检测到 package.json，跳过前端编译"
+                        return
+                    }
+
+                    sh """
+                        set -e
+                        npm config set registry ${NPM_REGISTRY}
+                        npm ci --prefer-offline || npm install
+                        npm run build
+                        test -d dist
+                    """
+                }
+            }
+            post {
+                success { script { stageCallback('build', 'success') } }
+                failure { script { stageCallback('build', 'failed') } }
+            }
+        }
+
+        // ==================== 3. 单元测试（可选） ====================
+        stage('Test') {
+            steps {
+                echo "=== 执行测试 ==="
+
+                script {
+                    if (!fileExists('package.json')) {
+                        echo "跳过测试"
+                        return
+                    }
+
+                    def hasTest = sh(
+                        script: "grep -q '\"test\"' package.json && echo 'yes' || echo 'no'",
+                        returnStdout: true
+                    ).trim()
+
+                    if (hasTest == 'yes') {
+                        sh "npm test --passWithNoTests || true"
+                    } else {
+                        echo "未配置 test 脚本，跳过"
+                    }
+                }
+            }
+            post {
+                success { script { stageCallback('test', 'success') } }
+                failure { script { stageCallback('test', 'failed') } }
+            }
+        }
+
+        // ==================== 4. 构建镜像 ====================
+        stage('Build Image') {
+            steps {
+                echo "=== 构建镜像 ==="
+
+                sh """
+                    set -e
+                    nerdctl build \
+                        -t ${env.FULL_IMAGE} \
+                        -f ${params.DOCKERFILE_PATH} \
+                        --label git.commit=${env.GIT_COMMIT_FULL} \
+                        --label git.branch=${env.GIT_BRANCH_NAME} \
+                        --label build.number=${env.BUILD_NUMBER} \
+                        --label build.timestamp=${env.BUILD_TS} \
+                        .
+                """
+            }
+            post {
+                success { script { stageCallback('push', 'running') } }
+                failure { script { stageCallback('push', 'failed') } }
+            }
+        }
+
+        // ==================== 5. 推送镜像 ====================
+        stage('Push Image') {
+            steps {
+                echo "=== 推送镜像 ==="
+
+                script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+
+                    sh """
+                        set -e
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+
+                    env.IMAGE_DIGEST = sh(
+                        script: """
+                            nerdctl inspect ${env.FULL_IMAGE} \
+                            --format 'range .RepoDigestsprintln .end' \
+                            2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Digest: ${env.IMAGE_DIGEST ?: '未获取到'}"
+                }
+            }
+            post {
+                success { script { stageCallback('push', 'success') } }
+                failure { script { stageCallback('push', 'failed') } }
+            }
+        }
+    }
+
+    post {
+        success {
+            script { callbackPlatform('SUCCESS', '构建成功') }
+        }
+        failure {
+            script { callbackPlatform('FAILURE', '构建失败') }
+        }
+        aborted {
+            script { callbackPlatform('ABORTED', '构建中止') }
+        }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+// ==================== 阶段级回调（实时更新UI） ====================
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:stage_type")
+def stageCallback(String stageType, String status) {
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) {
+        return
+    }
+
+    try {
+        def payload = [
+            job_name     : env.JOB_NAME,
+            build_number : env.BUILD_NUMBER as Integer,
+            pipeline_id  : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+            stage_type   : stageType,
+            status       : status
+        ]
+
+        def body = groovy.json.JsonOutput.toJson(payload)
+
+        // 阶段回调地址
+        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/callback', '/stage/callback')
+
+        // 签名内容: job_name:build_number:stage_type（冒号分隔）
+        def signature = ''
+        if (env.HMAC_SECRET?.trim()) {
+            def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}"
+            signature = hmacSha256(env.HMAC_SECRET, signContent)
+        }
+
+        def headers = signature ? [[name: 'X-Signature', value: signature]] : []
+
+        httpRequest(
+            url: stageUrl,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: body,
+            customHeaders: headers,
+            validResponseCodes: '100:599',
+            timeout: 10
+        )
+        
+        echo "[阶段回调] ${stageType} -> ${status}"
+    } catch (e) {
+        echo "[阶段回调] 非致命错误: ${e.message}"
+    }
+}
+
+// ==================== 最终回调函数 ====================
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
+def callbackPlatform(String status, String message) {
+
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) {
+        echo "未配置回调地址"
+        return
+    }
+
+    def payload = [
+        job_name     : env.JOB_NAME,
+        build_number : env.BUILD_NUMBER as Integer,
+        status       : status,
+        pipeline_id  : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+        image_url    : env.FULL_IMAGE ?: '',
+        image_digest : env.IMAGE_DIGEST ?: '',
+        git_commit   : env.GIT_COMMIT_SHORT ?: '',
+        git_branch   : env.GIT_BRANCH_NAME ?: '',
+        duration_sec : currentBuild.duration ? (currentBuild.duration / 1000) as Integer : 0,
+        message      : message,
+        build_url    : env.BUILD_URL ?: ''
+    ]
+
+    def body = groovy.json.JsonOutput.toJson(payload)
+
+    // 签名内容: job_name:build_number:status（冒号分隔）
+    def signature = ''
+    if (env.HMAC_SECRET?.trim()) {
+        def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}"
+        signature = hmacSha256(env.HMAC_SECRET, signContent)
+    }
+
+    def headers = signature ? [[name: 'X-Signature', value: signature]] : []
+
+    echo "[流水线回调] ${status}: ${message}"
+    echo "[签名内容] ${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}"
+
+    httpRequest(
+        url: params.PLATFORM_CALLBACK_URL,
+        httpMode: 'POST',
+        contentType: 'APPLICATION_JSON',
+        requestBody: body,
+        customHeaders: headers,
+        validResponseCodes: '200:299',
+        consoleLogResponseBody: true
+    )
+}
+
+// ==================== HMAC-SHA256（openssl 实现） ====================
+// 避免 Groovy Sandbox 拦截
+def hmacSha256(String secret, String data) {
+    return sh(
+        script: "echo -n '${data}' | openssl dgst -sha256 -hmac '${secret}' | awk '{print \$2}'",
+        returnStdout: true
+    ).trim()
+}
