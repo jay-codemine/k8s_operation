@@ -510,30 +510,37 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 	// 如果需要审批，将审批阶段设为等待状态
 	approvalStage, err := s.dao.StageGetByRunIDAndType(ctx, runID, models.StageTypeApproval)
 	if err == nil && approvalStage != nil && status == models.PipelineRunStatusSuccess {
-		_ = s.dao.StageUpdateStatus(ctx, approvalStage.ID, models.StageStatusWaiting)
+		// 幂等：只有 pending 状态才更新为 waiting，避免重复设置
+		if approvalStage.Status == models.StageStatusPending {
+			_ = s.dao.StageUpdateStatus(ctx, approvalStage.ID, models.StageStatusWaiting)
+		}
 
 		// 同步创建审批记录到 cicd_approval 表，对接审批管理页面
-		run, _ := s.dao.PipelineRunGetByID(ctx, runID)
-		if run != nil {
-			now := time.Now().Unix()
-			approval := &models.CicdApproval{
-				PipelineID:    approvalStage.PipelineID,
-				PipelineRunID: runID,
-				StageID:       approvalStage.ID,
-				Status:        models.ApprovalStatusPending,
-				Image:         imageURL,
-				RequestUserID: run.TriggerUserID,
-				RequestReason: "流水线构建完成，等待人工审批",
-				ExpireTime:    uint64(now + 86400*7), // 7天过期
-				CreatedAt:     uint64(now),
-				ModifiedAt:    uint64(now),
+		// 幂等：检查是否已存在审批记录，避免重复创建
+		exists, _ := s.dao.ApprovalExistsByStageID(ctx, approvalStage.ID)
+		if !exists {
+			run, _ := s.dao.PipelineRunGetByID(ctx, runID)
+			if run != nil {
+				now := time.Now().Unix()
+				approval := &models.CicdApproval{
+					PipelineID:    approvalStage.PipelineID,
+					PipelineRunID: runID,
+					StageID:       approvalStage.ID,
+					Status:        models.ApprovalStatusPending,
+					Image:         imageURL,
+					RequestUserID: run.TriggerUserID,
+					RequestReason: "流水线构建完成，等待人工审批",
+					ExpireTime:    uint64(now + 86400*7), // 7天过期
+					CreatedAt:     uint64(now),
+					ModifiedAt:    uint64(now),
+				}
+				_, _ = s.dao.ApprovalCreate(ctx, approval)
+				global.Logger.Info("[流水线] 自动创建审批记录",
+					zap.Int64("stage_id", approvalStage.ID),
+					zap.Int64("pipeline_id", approvalStage.PipelineID),
+					zap.Int64("approval_id", approval.ID),
+				)
 			}
-			_, _ = s.dao.ApprovalCreate(ctx, approval)
-			global.Logger.Info("[流水线] 自动创建审批记录",
-				zap.Int64("stage_id", approvalStage.ID),
-				zap.Int64("pipeline_id", approvalStage.PipelineID),
-				zap.Int64("approval_id", approval.ID),
-			)
 		}
 	}
 
@@ -567,7 +574,17 @@ func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64
 	}
 
 	if stage.Status != models.StageStatusWaiting {
-		return errors.New("该阶段当前不处于等待审批状态")
+		// 提供更友好的错误提示，帮助定位问题
+		switch stage.Status {
+		case models.StageStatusPending:
+			return errors.New("构建尚未完成或构建失败，无法审批")
+		case models.StageStatusSuccess:
+			return errors.New("该阶段已审批通过，无需重复操作")
+		case models.StageStatusFailed:
+			return errors.New("该阶段已被拒绝，无法再次审批")
+		default:
+			return fmt.Errorf("该阶段当前状态为 [%s]，不处于等待审批状态", stage.Status)
+		}
 	}
 
 	// 更新审批信息

@@ -158,10 +158,25 @@ func (d *Dao) PipelineRunGetLatest(ctx context.Context, pipelineID int64) (*mode
 }
 
 // PipelineRunGetRunning 获取流水线正在运行的记录
+// 过滤 build_number=0 的幽灵记录（创建了但从未实际触发 Jenkins 构建）
 func (d *Dao) PipelineRunGetRunning(ctx context.Context, pipelineID int64) (*models.CicdPipelineRun, error) {
 	var run models.CicdPipelineRun
 	err := d.db.WithContext(ctx).
-		Where("pipeline_id = ? AND status IN (?, ?)", pipelineID, models.PipelineRunStatusPending, models.PipelineRunStatusRunning).
+		Where("pipeline_id = ? AND status IN (?, ?) AND build_number > 0", pipelineID, models.PipelineRunStatusPending, models.PipelineRunStatusRunning).
+		Order("id DESC").
+		First(&run).Error
+	if err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+
+// PipelineRunGetLatestBuilt 获取流水线最近一次已构建的运行记录（build_number > 0）
+// 跳过创建了但从未实际触发 Jenkins 构建的幽灵记录
+func (d *Dao) PipelineRunGetLatestBuilt(ctx context.Context, pipelineID int64) (*models.CicdPipelineRun, error) {
+	var run models.CicdPipelineRun
+	err := d.db.WithContext(ctx).
+		Where("pipeline_id = ? AND build_number > 0", pipelineID).
 		Order("id DESC").
 		First(&run).Error
 	if err != nil {

@@ -647,9 +647,14 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 		return nil, nil, nil, fmt.Errorf("查询流水线失败: %w", err)
 	}
 
-	// 获取运行记录：优先正在运行的，否则获取最新的
+	// 获取运行记录：优先正在运行的（DAO 已过滤 build_number=0 的幽灵记录）
 	latestRun, _ := s.dao.PipelineRunGetRunning(ctx, id)
 	if latestRun == nil {
+		// 没有正在运行的，获取最新的已构建记录
+		latestRun, _ = s.dao.PipelineRunGetLatestBuilt(ctx, id)
+	}
+	if latestRun == nil {
+		// 如果没有已构建的运行记录，回退到任意最新运行记录
 		latestRun, _ = s.dao.PipelineRunGetLatest(ctx, id)
 	}
 
@@ -672,6 +677,10 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 					if latestRun != nil && latestRun.BuildNumber == pipeline.LastBuildNumber && latestRun.Status == models.PipelineRunStatusRunning {
 						_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, runStatus)
 						latestRun.Status = runStatus
+
+						// 重要：同步更新各阶段状态（包括将审批阶段设为 waiting）
+						// 避免回调未触发时，审批阶段状态与流水线状态不一致
+						_ = s.UpdateBuildStagesComplete(ctx, latestRun.ID, runStatus, latestRun.ImageURL, latestRun.ImageDigest, "")
 					}
 				}
 			}
@@ -893,6 +902,8 @@ type PipelineStageInfo struct {
 	Status   string `json:"status"` // success, failed, running, pending, waiting
 	Duration string `json:"duration"`
 	Steps    []PipelineStepInfo `json:"steps"`
+	CanOperate   bool                       `json:"can_operate,omitempty"`
+	ApprovalInfo *models.StageApprovalInfo   `json:"approval_info,omitempty"`
 }
 
 // PipelineStepInfo 步骤信息
@@ -976,8 +987,8 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 		stages = append(stages, stageInfo)
 	}
 
-	// 追加平台特有阶段（审批/部署）
-	stages = s.appendPlatformStages(stages, pipeline, pipelineRun.Status)
+	// 追加平台特有阶段（审批/部署）—— 使用 DB 真实数据
+	stages = s.appendPlatformStages(ctx, stages, pipeline, pipelineRun.Status, buildNumber)
 
 	return stages, nil
 }
@@ -1026,33 +1037,75 @@ func (s *Services) inferStageTypeFromName(name string) string {
 }
 
 // appendPlatformStages 追加平台特有阶段（审批/部署）
-func (s *Services) appendPlatformStages(stages []PipelineStageInfo, pipeline *models.CicdPipeline, jenkinsStatus string) []PipelineStageInfo {
+// 优先从 DB 获取真实阶段数据（包含真实 ID、状态、can_operate、审批信息）
+// 避免前端使用假 ID “approval” 导致提交审批时 stage_id=NaN
+func (s *Services) appendPlatformStages(ctx context.Context, stages []PipelineStageInfo, pipeline *models.CicdPipeline, jenkinsStatus string, buildNumber int) []PipelineStageInfo {
 	buildSuccess := jenkinsStatus == "SUCCESS"
-	
+
+	// 尝试从 DB 获取真实的审批/部署阶段数据
+	var dbApprovalStage, dbDeployStage *models.CicdPipelineStage
+	if buildNumber > 0 {
+		run, _ := s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, buildNumber)
+		if run != nil {
+			dbApprovalStage, _ = s.dao.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeApproval)
+			dbDeployStage, _ = s.dao.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeDeploy)
+		}
+	}
+
 	// 添加审批阶段（如果配置了）
 	if pipeline.RequireApproval {
-		approvalStatus := "pending"
-		if buildSuccess {
-			approvalStatus = "waiting" // 构建成功后等待审批
+		if dbApprovalStage != nil {
+			// 使用 DB 真实数据（包含真实 ID、状态、审批信息）
+			approvalInfo := PipelineStageInfo{
+				ID:     fmt.Sprintf("%d", dbApprovalStage.ID),
+				Name:   "人工审批",
+				Type:   "approval",
+				Status: dbApprovalStage.Status,
+				Steps:  []PipelineStepInfo{},
+			}
+			// 设置 can_operate
+			if dbApprovalStage.Status == models.StageStatusWaiting {
+				approvalInfo.CanOperate = true
+			}
+			// 填充审批信息
+			if dbApprovalStage.ApprovalDecision != "" {
+				approvalInfo.ApprovalInfo = &models.StageApprovalInfo{
+					ApproverID: dbApprovalStage.ApprovalUserID,
+					Decision:   dbApprovalStage.ApprovalDecision,
+					Comment:    dbApprovalStage.ApprovalComment,
+					ApprovedAt: dbApprovalStage.FinishedAt,
+				}
+			}
+			stages = append(stages, approvalInfo)
+		} else {
+			// 无 DB 数据，使用推断状态（兼容旧数据）
+			approvalStatus := "pending"
+			if buildSuccess {
+				approvalStatus = "waiting"
+			}
+			stages = append(stages, PipelineStageInfo{
+				ID: "approval", Name: "人工审批", Type: "approval",
+				Status: approvalStatus, Steps: []PipelineStepInfo{},
+			})
 		}
-		stages = append(stages, PipelineStageInfo{
-			ID:     "approval",
-			Name:   "人工审批",
-			Type:   "approval",
-			Status: approvalStatus,
-			Steps:  []PipelineStepInfo{},
-		})
 	}
 
 	// 添加部署阶段（如果配置了）
 	if pipeline.AutoDeploy {
-		stages = append(stages, PipelineStageInfo{
-			ID:     "deploy",
-			Name:   "部署",
-			Type:   "deploy",
-			Status: "pending",
-			Steps:  []PipelineStepInfo{},
-		})
+		if dbDeployStage != nil {
+			stages = append(stages, PipelineStageInfo{
+				ID:     fmt.Sprintf("%d", dbDeployStage.ID),
+				Name:   "部署",
+				Type:   "deploy",
+				Status: dbDeployStage.Status,
+				Steps:  []PipelineStepInfo{},
+			})
+		} else {
+			stages = append(stages, PipelineStageInfo{
+				ID: "deploy", Name: "部署", Type: "deploy",
+				Status: "pending", Steps: []PipelineStepInfo{},
+			})
+		}
 	}
 
 	return stages

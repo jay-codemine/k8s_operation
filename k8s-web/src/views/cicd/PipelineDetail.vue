@@ -627,7 +627,7 @@
             <transition name="slide-fade">
               <div v-show="stageDetailExpanded" class="detail-body">
               <!-- 审批阶段操作 -->
-              <div v-if="selectedStage.type === 'approval' && (selectedStage.status === 'waiting' || selectedStage.status === 'pending')" :class="['stage-action-panel', 'approval-panel-enhanced', { 'highlight-pulse': highlightApproval }]">
+              <div v-if="selectedStage.type === 'approval' && (selectedStage.status === 'waiting' || (selectedStage.status === 'pending' && selectedStage.can_operate))" :class="['stage-action-panel', 'approval-panel-enhanced', { 'highlight-pulse': highlightApproval }]">
                 <div class="approval-header">
                   <div class="approval-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1869,7 +1869,7 @@ export default {
       // 获取流水线状态（优先级：latest_run > pipeline）
       const runStatus = latestRun.value?.status || pipeline.value.last_run_status || pipeline.value.status
       // 构建阶段类型（动态识别，包含 custom 类型）
-      const buildStageTypes = ['clean', 'scm', 'checkout', 'dependencies', 'compile', 'test', 'lint', 'build', 'push', 'custom']
+      const buildStageTypes = ['clean', 'scm', 'checkout', 'dependencies', 'compile', 'test', 'lint', 'sonar', 'quality_gate', 'build_binary', 'upload_artifact', 'build', 'push', 'custom']
 
       console.log('[inferStageStatus] runStatus:', runStatus, 'stages:', stages.length)
 
@@ -1878,12 +1878,21 @@ export default {
         const isBuildStage = buildStageTypes.includes(stageType)
         const currentStatus = stage.status || 'pending'
 
-        // 审批阶段：保持后端返回的实际状态，不覆盖
+        // 审批阶段：优先使用后端返回的 can_operate 标志，避免前端推断与 DB 不一致
         if (stageType === 'approval') {
           if (['success', 'approved', 'failed', 'rejected'].includes(currentStatus)) {
             return stage  // 保持后端返回的实际状态
           }
-          // 只有当状态是 pending 且构建成功时，才推断为 waiting
+          // 如果后端已返回 can_operate（来自 DB），以后端为准
+          if (stage.can_operate !== undefined) {
+            // 后端标记为可操作 → 使用 waiting 状态（后端已验证 DB 为 waiting）
+            if (stage.can_operate) {
+              return { ...stage, status: 'waiting' }
+            }
+            // 后端标记为不可操作 → 保持原状态（可能是 pending/构建失败等）
+            return stage
+          }
+          // 仅当没有后端标志时（如 Jenkins wfapi 数据），才按 runStatus 推断
           if (currentStatus === 'pending' && (runStatus === 'success' || runStatus === 'SUCCESS')) {
             return { ...stage, status: 'waiting' }
           }
