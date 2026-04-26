@@ -52,7 +52,6 @@ pipeline {
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
         string(name: 'RUN_ID', defaultValue: '', description: '平台运行记录ID')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
-        string(name: 'ARTIFACT_UPLOAD_URL', defaultValue: '', description: '制品上传地址（平台制品库API）')
 
         // 构建参数
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
@@ -290,65 +289,15 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        stage('Package') {
-            steps {
-                echo "=== 打包（跳过 clean，复用已编译 class） ==="
-                sh "mvn package -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
-                archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
-            }
-            post {
-                success { script { stageCallback('package', 'success') } }
-                failure { script { stageCallback('package', 'failed') } }
-            }
-        }
-
-        // ==================== 上传制品到平台制品库 ====================
-        stage('Upload Artifact') {
-            when { expression { return params.ARTIFACT_UPLOAD_URL?.trim() } }
-            steps {
-                echo "=== 上传构建产物到制品库 ==="
-                script {
-                    // 查找构建产物 JAR
-                    def jarFile = sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
-                    if (!jarFile) {
-                        echo "[制品库] 未找到 JAR 文件，跳过上传"
-                        return
-                    }
-                    env.ARTIFACT_FILE = jarFile
-                    def artifactName = jarFile.split('/')[-1]
-                    echo "[制品库] 上传: ${artifactName}"
-
-                    // 通过 curl 上传到平台制品库 API
-                    def uploadResp = sh(
-                        script: """
-                            curl -s -X POST '${params.ARTIFACT_UPLOAD_URL}' \\
-                                -F 'file=@${jarFile}' \\
-                                -F 'pipeline_id=${params.PIPELINE_ID}' \\
-                                -F 'run_id=${params.RUN_ID ?: ""}' \\
-                                -F 'build_number=${env.BUILD_NUMBER}' \\
-                                -F 'version=${env.FINAL_TAG}' \\
-                                -F 'language_type=java' \\
-                                -F 'artifact_type=jar' \\
-                                -F 'git_repo=${params.GIT_REPO}' \\
-                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                                -F 'git_commit=${env.GIT_COMMIT_FULL}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    echo "[制品库] 上传响应: ${uploadResp}"
-                }
-            }
-            post {
-                success { script { stageCallback('upload_artifact', 'success') } }
-                failure { script { stageCallback('upload_artifact', 'failed') } }
-            }
-        }
-
-        // ==================== Docker 镜像构建（纯运行时，只打包 JAR） ====================
+        // ==================== Docker 镜像构建（打包 + 构建一体化，减少阶段数） ====================
         stage('Build Image') {
             steps {
-                echo "=== 构建 Docker 镜像（纯运行时，仅打包 JAR 制品） ==="
+                echo "=== 打包 + 构建 Docker 镜像 ==="
                 script {
+                    // Maven 打包（合并到镜像构建阶段，减少流水线耗时）
+                    sh "mvn package -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
+                    archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
+
                     def dockerfile = params.DOCKERFILE_PATH?.trim()
                     def javaVersion = params.JAVA_VERSION ?: '17'
 

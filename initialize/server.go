@@ -38,6 +38,9 @@ func (s *Engine) injectMiddlewares() {
 	// 初始化并赋值 gin.Engine
 	s.Engine = gin.New()
 
+	// 设置 multipart 内存阈值（64MB），避免小文件先落盘再读取，加速制品上传
+	s.Engine.MaxMultipartMemory = 64 << 20 // 64MB
+
 	// ====== CORS 跨域配置，必须在路由前统一 Use ======
 	s.Engine.Use(cors.New(cors.Config{
 		AllowOrigins: []string{

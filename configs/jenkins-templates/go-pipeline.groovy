@@ -36,7 +36,6 @@ pipeline {
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
         string(name: 'RUN_ID', defaultValue: '', description: '平台运行记录ID')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
-        string(name: 'ARTIFACT_UPLOAD_URL', defaultValue: '', description: '制品上传地址（平台制品库API）')
 
         // 可选参数
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
@@ -278,73 +277,27 @@ pipeline {
             }
         }
 
-        // ==================== 构建二进制制品 ====================
-        stage('Build Binary') {
-            steps {
-                echo "=== 构建 Go 二进制制品 ==="
-                script {
-                    if (!fileExists('go.mod')) { echo "跳过构建"; return }
-                    def appName = params.GIT_REPO.split('/')[-1].replace('.git', '')
-                    env.APP_NAME = appName
-                    env.BINARY_PATH = "bin/${appName}"
-                    sh """
-                        set -e
-                        mkdir -p bin
-                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
-                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
-                    """
-                    echo "[构建] 产物: ${env.BINARY_PATH}"
-                }
-            }
-            post {
-                success { script { stageCallback('build_binary', 'success') } }
-                failure { script { stageCallback('build_binary', 'failed') } }
-            }
-        }
-
-        // ==================== 上传制品到平台制品库 ====================
-        stage('Upload Artifact') {
-            when { expression { return params.ARTIFACT_UPLOAD_URL?.trim() && env.BINARY_PATH } }
-            steps {
-                echo "=== 上传构建产物到制品库 ==="
-                script {
-                    if (!fileExists(env.BINARY_PATH)) {
-                        echo "[制品库] 二进制文件不存在，跳过上传"
-                        return
-                    }
-                    def uploadResp = sh(
-                        script: """
-                            curl -s -X POST '${params.ARTIFACT_UPLOAD_URL}' \\
-                                -F 'file=@${env.BINARY_PATH}' \\
-                                -F 'pipeline_id=${params.PIPELINE_ID}' \\
-                                -F 'run_id=${params.RUN_ID ?: ""}' \\
-                                -F 'build_number=${env.BUILD_NUMBER}' \\
-                                -F 'version=${env.FINAL_TAG}' \\
-                                -F 'language_type=go' \\
-                                -F 'artifact_type=binary' \\
-                                -F 'git_repo=${params.GIT_REPO}' \\
-                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                                -F 'git_commit=${env.GIT_COMMIT_FULL}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    echo "[制品库] 上传响应: ${uploadResp}"
-                }
-            }
-            post {
-                success { script { stageCallback('upload_artifact', 'success') } }
-                failure { script { stageCallback('upload_artifact', 'failed') } }
-            }
-        }
-
-        // ==================== Docker 镜像构建（纯运行时，只打包二进制） ====================
+        // ==================== Docker 镜像构建（编译 + 打包一体化，减少阶段数） ====================
 
         stage('Build Image') {
             steps {
-                echo "=== 构建 Docker 镜像（纯运行时，仅打包编译产物） ==="
+                echo "=== 编译 + 构建 Docker 镜像 ==="
                 script {
+                    // 编译 Go 二进制（合并到镜像构建阶段，减少流水线耗时）
+                    def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
+                    env.APP_NAME = appName
+                    env.BINARY_PATH = "bin/${appName}"
+                    if (fileExists('go.mod')) {
+                        sh """
+                            set -e
+                            mkdir -p bin
+                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
+                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
+                        """
+                        echo "[构建] 二进制产物: ${env.BINARY_PATH}"
+                    }
+
                     def dockerfile = params.DOCKERFILE_PATH?.trim()
-                    def appName = env.APP_NAME ?: 'server'
 
                     // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
                     // __PLATFORM_GENERATE__ 为平台哨兵值，表示强制使用平台生成

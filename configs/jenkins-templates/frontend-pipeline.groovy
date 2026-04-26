@@ -33,7 +33,6 @@ pipeline {
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
         string(name: 'RUN_ID', defaultValue: '', description: '平台运行记录ID')
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
-        string(name: 'ARTIFACT_UPLOAD_URL', defaultValue: '', description: '制品上传地址（平台制品库API）')
 
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
         string(name: 'NODE_VERSION', defaultValue: '18', description: 'Node.js 版本')
@@ -225,44 +224,6 @@ pipeline {
             post {
                 success { script { stageCallback('quality_gate', 'success') } }
                 failure { script { stageCallback('quality_gate', 'failed') } }
-            }
-        }
-
-        // ==================== 上传制品到平台制品库 ====================
-        stage('Upload Artifact') {
-            when { expression { return params.ARTIFACT_UPLOAD_URL?.trim() } }
-            steps {
-                echo "=== 上传构建产物到制品库 ==="
-                script {
-                    def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
-                    if (!fileExists(outputDir)) {
-                        echo "[制品库] 构建产物目录不存在，跳过上传"
-                        return
-                    }
-                    // 压缩 dist 目录为 tar.gz
-                    sh "tar -czf ${outputDir}.tar.gz ${outputDir}/"
-                    def uploadResp = sh(
-                        script: """
-                            curl -s -X POST '${params.ARTIFACT_UPLOAD_URL}' \\
-                                -F 'file=@${outputDir}.tar.gz' \\
-                                -F 'pipeline_id=${params.PIPELINE_ID}' \\
-                                -F 'run_id=${params.RUN_ID ?: ""}' \\
-                                -F 'build_number=${env.BUILD_NUMBER}' \\
-                                -F 'version=${env.FINAL_TAG}' \\
-                                -F 'language_type=frontend' \\
-                                -F 'artifact_type=archive' \\
-                                -F 'git_repo=${params.GIT_REPO}' \\
-                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                                -F 'git_commit=${env.GIT_COMMIT_FULL}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    echo "[制品库] 上传响应: ${uploadResp}"
-                }
-            }
-            post {
-                success { script { stageCallback('upload_artifact', 'success') } }
-                failure { script { stageCallback('upload_artifact', 'failed') } }
             }
         }
 

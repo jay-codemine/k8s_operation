@@ -34,6 +34,24 @@
       </div>
     </div>
 
+    <!-- ====== 上传进度条（全局浮层） ====== -->
+    <Transition name="fade">
+      <div v-if="uploading || creating" class="upload-progress-overlay">
+        <div class="upload-progress-card">
+          <div class="upload-progress-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="upload-progress-body">
+            <div class="upload-progress-title">正在上传制品文件...</div>
+            <div class="upload-progress-bar">
+              <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <div class="upload-progress-text">{{ uploadProgress }}%</div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- ====== 数据概览卡片 ====== -->
     <div class="overview-section">
       <div class="overview-cards">
@@ -646,6 +664,7 @@ const createForm = reactive({
   image_repo: '', image_tag: '', image_digest: ''
 })
 const uploading = ref(false)
+const uploadProgress = ref(0) // 上传进度 0-100
 
 const pagination = reactive({ page: 1, page_size: 20 })
 const filters = reactive({ artifact_type: '', language_type: '', status: '' })
@@ -762,17 +781,17 @@ const handleAttachFile = (a) => {
     const file = e.target.files[0]
     if (!file) return
     uploading.value = true
+    uploadProgress.value = 0
     try {
-      await attachArtifactFile(a.id, file)
+      await attachArtifactFile(a.id, file, (pct) => { uploadProgress.value = pct })
       showToast(`文件 ${file.name} 上传成功`, 'success')
       loadArtifacts(); loadStats()
-      // 如果详情抽屉打开，刷新详情
       if (showDetailDrawer.value && currentArtifact.value?.id === a.id) {
         showDetail(a)
       }
     } catch (e) {
       showToast('文件上传失败: ' + (e.message || ''), 'error')
-    } finally { uploading.value = false }
+    } finally { uploading.value = false; uploadProgress.value = 0 }
   }
   input.click()
 }
@@ -838,12 +857,13 @@ const onCreateFileChange = (e) => {
 const handleCreate = async () => {
   if (!createForm.name.trim() && !createFile.value) { showToast('请输入制品名称或上传文件', 'warning'); return }
   creating.value = true
+  uploadProgress.value = 0
   try {
     if (createFile.value) {
       // 带文件上传 → 走 upload 接口（multipart）
       const meta = { ...createForm }
       if (!meta.name) meta.name = createFile.value.name
-      await uploadArtifact(createFile.value, meta)
+      await uploadArtifact(createFile.value, meta, (pct) => { uploadProgress.value = pct })
       showToast('制品上传成功', 'success')
     } else {
       // 仅创建记录（镜像类型等）
@@ -853,7 +873,7 @@ const handleCreate = async () => {
     showCreateModal.value = false
     loadArtifacts(); loadStats()
   } catch (e) { showToast('创建失败: ' + (e.message || ''), 'error') }
-  finally { creating.value = false }
+  finally { creating.value = false; uploadProgress.value = 0 }
 }
 const openEditModal = (a) => {
   editingArtifact.value = a
@@ -1225,4 +1245,19 @@ onMounted(() => { loadArtifacts(); loadStats() })
   .card-grid { grid-template-columns: 1fr; }
   .drawer-panel { width: 100%; }
 }
+
+/* ===== 上传进度浮层 ===== */
+.upload-progress-overlay { position: fixed; top: 0; left: 0; right: 0; z-index: 99998; display: flex; justify-content: center; padding-top: 20px; pointer-events: none; }
+.upload-progress-card { display: flex; align-items: center; gap: 14px; background: #fff; border-radius: 14px; padding: 16px 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); pointer-events: auto; min-width: 340px; border: 1.5px solid rgba(102,126,234,0.2); animation: slideDown 0.3s ease-out; }
+@keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.upload-progress-icon { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; animation: pulse-icon 1.5s ease-in-out infinite; }
+.upload-progress-icon svg { width: 22px; height: 22px; color: #fff; }
+@keyframes pulse-icon { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+.upload-progress-body { flex: 1; min-width: 0; }
+.upload-progress-title { font-size: 13.5px; font-weight: 600; color: #2d3748; margin-bottom: 8px; }
+.upload-progress-bar { height: 8px; background: #edf2f7; border-radius: 4px; overflow: hidden; }
+.upload-progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; transition: width 0.3s ease; min-width: 2%; }
+.upload-progress-text { font-size: 12px; color: #718096; margin-top: 4px; text-align: right; font-variant-numeric: tabular-nums; }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

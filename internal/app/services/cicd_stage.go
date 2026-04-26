@@ -39,8 +39,8 @@ var DefaultStageDefinitions = []StageDefinition{
 	{Order: 6, Type: models.StageTypeLint, Name: "代码检查", Enabled: true},
 	{Order: 7, Type: models.StageTypeSonar, Name: "SonarQube 代码扫描", Enabled: false},       // 默认关闭，由 EnableSonar 控制
 	{Order: 8, Type: models.StageTypeQualityGate, Name: "质量门禁检查", Enabled: false}, // 默认关闭，由 EnableSonar 控制
-	{Order: 9, Type: models.StageTypeBuildBinary, Name: "构建制品", Enabled: true},
-	{Order: 10, Type: models.StageTypeUploadArtifact, Name: "上传制品库", Enabled: true},
+	{Order: 9, Type: models.StageTypeBuildBinary, Name: "构建制品", Enabled: false},      // 默认关闭，按需启用
+	{Order: 10, Type: models.StageTypeUploadArtifact, Name: "上传制品库", Enabled: false}, // 默认关闭，按需启用
 	{Order: 11, Type: models.StageTypeBuild, Name: "打包镜像", Enabled: true},
 	{Order: 12, Type: models.StageTypePush, Name: "推送镜像", Enabled: true},
 	{Order: 13, Type: models.StageTypeApproval, Name: "人工审批", Enabled: false},  // 默认关闭
@@ -1010,16 +1010,38 @@ func (s *Services) waitDeploymentRolloutWithUpdate(ctx context.Context, client k
 		// Rollout 完成的条件（参考 kubectl rollout status 逻辑）：
 		// 1. ObservedGeneration >= Generation（控制器已处理最新配置）
 		// 2. UpdatedReplicas == 期望副本数（所有 Pod 已更新）
-		// 3. AvailableReplicas == 期望副本数（所有 Pod 可用）
+		// 3. ReadyReplicas == 期望副本数（所有 Pod 容器就绪探针通过）
+		// 4. AvailableReplicas == 期望副本数（所有 Pod 可用）
 		// 注意：不检查 Replicas == 期望副本数，因为滚动更新期间旧 Pod 可能还在终止中
 		if dp.Status.ObservedGeneration >= dp.Generation &&
 			dp.Status.UpdatedReplicas == replicas &&
+			dp.Status.ReadyReplicas == replicas &&
 			dp.Status.AvailableReplicas == replicas {
-			// 最终确认：所有 Pod 已就绪并可对外提供服务
-			logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪，服务可用\n", replicas))
-			// 最后一次更新日志到数据库
-			s.updateStageLogsIfNeeded(ctx, stageID, logs.String())
-			return nil
+			// 最终确认：逐个检查 Pod 容器就绪状态，确保可对外提供服务
+			allReady := true
+			if dp.Spec.Selector != nil {
+				labelSelector := metav1.FormatLabelSelector(dp.Spec.Selector)
+				pods, podErr := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+				if podErr == nil {
+					for _, pod := range pods.Items {
+						for _, cs := range pod.Status.ContainerStatuses {
+							if !cs.Ready {
+								allReady = false
+								logs.WriteString(fmt.Sprintf("[WAIT] Pod %s 容器 %s 未就绪\n", pod.Name, cs.Name))
+								break
+							}
+						}
+						if !allReady {
+							break
+						}
+					}
+				}
+			}
+			if allReady {
+				logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪，容器健康检查通过，服务可用\n", replicas))
+				s.updateStageLogsIfNeeded(ctx, stageID, logs.String())
+				return nil
+			}
 		}
 
 		time.Sleep(interval)

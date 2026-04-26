@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -15,6 +16,9 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// copyBufferSize 文件拷贝缓冲区大小（1MB，默认 io.Copy 仅 32KB）
+const copyBufferSize = 1 << 20
 
 // ArtifactUploadDir 制品存储根目录
 const ArtifactUploadDir = "storage/artifacts"
@@ -34,7 +38,7 @@ func (s *Services) ArtifactUpload(ctx context.Context, file multipart.File, head
 		return nil, fmt.Errorf("创建存储目录失败: %w", err)
 	}
 
-	// 2. 写入文件并计算 SHA256
+	// 2. 写入文件并计算 SHA256（使用大缓冲区加速 I/O）
 	storePath := filepath.Join(storeDir, header.Filename)
 	dst, err := os.Create(storePath)
 	if err != nil {
@@ -42,12 +46,18 @@ func (s *Services) ArtifactUpload(ctx context.Context, file multipart.File, head
 	}
 	defer dst.Close()
 
+	bufDst := bufio.NewWriterSize(dst, copyBufferSize)
 	hasher := sha256.New()
-	writer := io.MultiWriter(dst, hasher)
-	written, err := io.Copy(writer, file)
+	writer := io.MultiWriter(bufDst, hasher)
+	buf := make([]byte, copyBufferSize)
+	written, err := io.CopyBuffer(writer, file, buf)
 	if err != nil {
 		os.Remove(storePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
+	}
+	if err := bufDst.Flush(); err != nil {
+		os.Remove(storePath)
+		return nil, fmt.Errorf("刷新缓冲区失败: %w", err)
 	}
 
 	// 3. 填充制品信息
@@ -233,12 +243,18 @@ func (s *Services) ArtifactAttachFile(ctx context.Context, id int64, file multip
 	}
 	defer dst.Close()
 
+	bufDst := bufio.NewWriterSize(dst, copyBufferSize)
 	hasher := sha256.New()
-	writer := io.MultiWriter(dst, hasher)
-	written, err := io.Copy(writer, file)
+	writer := io.MultiWriter(bufDst, hasher)
+	buf := make([]byte, copyBufferSize)
+	written, err := io.CopyBuffer(writer, file, buf)
 	if err != nil {
 		os.Remove(storePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
+	}
+	if err := bufDst.Flush(); err != nil {
+		os.Remove(storePath)
+		return nil, fmt.Errorf("刷新缓冲区失败: %w", err)
 	}
 
 	// 更新数据库

@@ -642,12 +642,22 @@ export const downloadArtifact = (id) => {
  * @param {number} id - 制品ID
  * @param {File} file - 文件对象
  */
-export const attachArtifactFile = (id, file) => {
+/**
+ * 为已有制品补传/替换文件
+ * @param {number} id - 制品ID
+ * @param {File} file - 文件对象
+ * @param {Function} onProgress - 上传进度回调 (percent: 0-100)
+ */
+export const attachArtifactFile = (id, file, onProgress) => {
   const formData = new FormData()
   formData.append('id', id)
   formData.append('file', file)
   return http.post(`${ARTIFACT_BASE}/attach`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 10 * 60 * 1000, // 10分钟，大文件上传需要更长超时
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
   })
 }
 
@@ -655,15 +665,20 @@ export const attachArtifactFile = (id, file) => {
  * 上传制品（带文件 + 元数据，新建记录）
  * @param {File} file - 文件对象
  * @param {Object} meta - 元数据
+ * @param {Function} onProgress - 上传进度回调 (percent: 0-100)
  */
-export const uploadArtifact = (file, meta = {}) => {
+export const uploadArtifact = (file, meta = {}, onProgress) => {
   const formData = new FormData()
   formData.append('file', file)
   Object.entries(meta).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') formData.append(k, v)
   })
   return http.post(`${ARTIFACT_BASE}/upload`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 10 * 60 * 1000, // 10分钟，大文件上传需要更长超时
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
   })
 }
 

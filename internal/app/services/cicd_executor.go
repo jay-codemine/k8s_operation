@@ -146,6 +146,7 @@ func (e *CicdTaskExecutor) waitDeploymentRollout(ctx context.Context, kube kuber
 }
 
 // isDeploymentRolloutComplete 检查 Deployment Rollout 是否完成
+// 严格检查：所有 Pod 必须 Ready（容器就绪探针通过）才算完成
 // 注意：不检查 Replicas == replicas，因为滚动更新期间旧 Pod 可能还在终止中
 func isDeploymentRolloutComplete(dp *appv1.Deployment) bool {
 	replicas := int32(1)
@@ -155,6 +156,7 @@ func isDeploymentRolloutComplete(dp *appv1.Deployment) bool {
 
 	return dp.Status.ObservedGeneration >= dp.Generation &&
 		dp.Status.UpdatedReplicas == replicas &&
+		dp.Status.ReadyReplicas == replicas &&
 		dp.Status.AvailableReplicas == replicas
 }
 
