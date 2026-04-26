@@ -67,6 +67,9 @@ pipeline {
         string(name: 'SONAR_JAVA_BINARIES', defaultValue: 'target/classes', description: 'Java 编译输出目录')
         string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/test/**,**/generated/**', description: '排除扫描的文件模式')
         booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
+
+        // 制品上传参数
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
     }
 
     environment {
@@ -289,7 +292,56 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== Docker 镜像构建（打包 + 构建一体化，减少阶段数） ====================
+        // ==================== 制品上传（可选，JAR 直接上传，无需压缩） ====================
+        stage('Upload Artifact') {
+            when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
+            steps {
+                echo "=== 上传制品到平台制品库 ==="
+                script {
+                    // 查找 JAR 文件（Compile 阶段已产出）
+                    def jarFile = sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                    if (!jarFile) { echo "[制品上传] 未找到 JAR 文件，跳过"; return }
+
+                    def fileSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
+                    echo "[制品上传] 上传文件: ${jarFile} (${fileSize} bytes)"
+
+                    def uploadUrl = params.PLATFORM_CALLBACK_URL
+                        .replace('/pipeline/callback', '/artifact/upload')
+                        .replace('/stage/callback', '/artifact/upload')
+
+                    def curlStatus = sh(script: """
+                        set -e
+                        curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
+                            -X POST '${uploadUrl}' \\
+                            -F 'file=@${jarFile}' \\
+                            -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
+                            -F 'run_id=${params.RUN_ID ?: 0}' \\
+                            -F 'build_number=${env.BUILD_NUMBER}' \\
+                            -F 'version=${env.FINAL_TAG}' \\
+                            -F 'language_type=java' \\
+                            -F 'artifact_type=jar' \\
+                            -F 'git_repo=${params.GIT_REPO}' \\
+                            -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
+                            -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
+                            --connect-timeout 10 \\
+                            --max-time 300
+                    """, returnStdout: true).trim()
+
+                    if (curlStatus.endsWith('200')) {
+                        echo "[制品上传] 上传成功"
+                    } else {
+                        echo "[制品上传] 上传返回: HTTP ${curlStatus}（非致命，不影响构建）"
+                    }
+                    sh "rm -f /tmp/artifact_resp.json 2>/dev/null || true"
+                }
+            }
+            post {
+                success { script { stageCallback('upload_artifact', 'success') } }
+                failure { script { stageCallback('upload_artifact', 'failed') } }
+            }
+        }
+
+        // ==================== Docker 镜像构建（复用 Compile 阶段已打包的 JAR） ====================
         stage('Build Image') {
             steps {
                 echo "=== 打包 + 构建 Docker 镜像 ==="

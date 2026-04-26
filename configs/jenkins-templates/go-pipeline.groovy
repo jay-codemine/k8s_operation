@@ -49,6 +49,9 @@ pipeline {
         string(name: 'SONAR_SOURCES', defaultValue: '.', description: '源代码目录')
         string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/vendor/**,**/*_test.go,**/test/**', description: '排除扫描的文件模式')
         booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
+
+        // 制品上传参数
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
     }
 
     environment {
@@ -64,6 +67,8 @@ pipeline {
         CGO_ENABLED    = '0'
         GOOS           = 'linux'
         GOARCH         = 'amd64'
+        // BuildKit 层缓存目录（跨构建持久复用，二次构建仅重建变化层）
+        BUILDKIT_CACHE = '/var/lib/jenkins/.buildkit-cache'
     }
 
     stages {
@@ -170,10 +175,19 @@ pipeline {
 
         stage('Compile Check') {
             steps {
-                echo "=== 编译检查 ==="
+                echo "=== 编译检查（直接产出最终二进制，Build Image 复用，避免重复编译） ==="
                 script {
                     if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
-                    sh 'set -e && go build ./...'
+                    def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
+                    env.APP_NAME = appName
+                    env.BINARY_PATH = "bin/${appName}"
+                    sh """
+                        set -e
+                        mkdir -p bin
+                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \\
+                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
+                    """
+                    echo "[编译] 二进制产物: ${env.BINARY_PATH}"
                 }
             }
             post {
@@ -277,26 +291,70 @@ pipeline {
             }
         }
 
-        // ==================== Docker 镜像构建（编译 + 打包一体化，减少阶段数） ====================
-
+        // ==================== 制品上传（可选，gzip 压缩加速传输） ====================
+        stage('Upload Artifact') {
+            when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
+            steps {
+                echo "=== 上传制品到平台制品库（gzip 压缩加速） ==="
+                script {
+                    def binaryPath = env.BINARY_PATH ?: "bin/${env.APP_NAME ?: 'server'}"
+                    if (!fileExists(binaryPath)) { echo "[制品上传] 二进制文件不存在: ${binaryPath}，跳过"; return }
+        
+                    // gzip 压缩二进制（Go 二进制压缩率 60-70%，大幅减少传输时间）
+                    def gzPath = "${binaryPath}.gz"
+                    sh "gzip -1 -c ${binaryPath} > ${gzPath}"
+                    def origSize = sh(script: "stat -c%s ${binaryPath} 2>/dev/null || stat -f%z ${binaryPath}", returnStdout: true).trim()
+                    def gzSize = sh(script: "stat -c%s ${gzPath} 2>/dev/null || stat -f%z ${gzPath}", returnStdout: true).trim()
+                    echo "[制品上传] 原始: ${origSize} bytes → 压缩: ${gzSize} bytes"
+        
+                    // 构造上传 URL：从回调地址推导制品上传接口
+                    def uploadUrl = params.PLATFORM_CALLBACK_URL
+                        .replace('/pipeline/callback', '/artifact/upload')
+                        .replace('/stage/callback', '/artifact/upload')
+        
+                    // curl 上传（multipart/form-data，携带构建元数据）
+                    def curlStatus = sh(script: """
+                        set -e
+                        curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
+                            -X POST '${uploadUrl}' \\
+                            -F 'file=@${gzPath}' \\
+                            -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
+                            -F 'run_id=${params.RUN_ID ?: 0}' \\
+                            -F 'build_number=${env.BUILD_NUMBER}' \\
+                            -F 'version=${env.FINAL_TAG}' \\
+                            -F 'language_type=go' \\
+                            -F 'artifact_type=binary' \\
+                            -F 'git_repo=${params.GIT_REPO}' \\
+                            -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
+                            -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
+                            --connect-timeout 10 \\
+                            --max-time 300
+                    """, returnStdout: true).trim()
+        
+                    if (curlStatus.endsWith('200')) {
+                        echo "[制品上传] 上传成功"
+                    } else {
+                        echo "[制品上传] 上传返回: HTTP ${curlStatus}（非致命，不影响构建）"
+                    }
+                    sh "rm -f ${gzPath} /tmp/artifact_resp.json 2>/dev/null || true"
+                }
+            }
+            post {
+                success { script { stageCallback('upload_artifact', 'success') } }
+                failure { script { stageCallback('upload_artifact', 'failed') } }
+            }
+        }
+        
+        // ==================== Docker 镜像构建（复用 Compile Check 产出的二进制） ====================
+        
         stage('Build Image') {
             steps {
-                echo "=== 编译 + 构建 Docker 镜像 ==="
+                echo "=== 构建 Docker 镜像（复用 Compile Check 产出的二进制） ==="
                 script {
-                    // 编译 Go 二进制（合并到镜像构建阶段，减少流水线耗时）
-                    def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
+                    def appName = env.APP_NAME ?: (params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server')
                     env.APP_NAME = appName
-                    env.BINARY_PATH = "bin/${appName}"
-                    if (fileExists('go.mod')) {
-                        sh """
-                            set -e
-                            mkdir -p bin
-                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
-                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
-                        """
-                        echo "[构建] 二进制产物: ${env.BINARY_PATH}"
-                    }
-
+                    if (!env.BINARY_PATH) { env.BINARY_PATH = "bin/${appName}" }
+        
                     def dockerfile = params.DOCKERFILE_PATH?.trim()
 
                     // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
@@ -328,11 +386,16 @@ ENTRYPOINT ["/app/${appName}"]
                         }
                     }
 
+                    // 使用 BuildKit 本地层缓存：首次全量构建，后续仅重建变化层
+                    def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
                     sh """
                         set -e
+                        mkdir -p ${cacheDir}
                         nerdctl build \\
                             -t ${env.FULL_IMAGE} \\
                             -f ${dockerfile} \\
+                            --cache-from type=local,src=${cacheDir} \\
+                            --cache-to type=local,dest=${cacheDir},mode=max \\
                             --label git.commit=${env.GIT_COMMIT_FULL} \\
                             --label git.branch=${env.GIT_BRANCH_NAME} \\
                             --label build.number=${env.BUILD_NUMBER} \\
@@ -356,7 +419,7 @@ ENTRYPOINT ["/app/${appName}"]
                     sh """
                         set -e
                         echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
-                        nerdctl push ${env.FULL_IMAGE}
+                        nerdctl push --concurrency 8 ${env.FULL_IMAGE}
                     """
                     env.IMAGE_DIGEST = sh(
                         script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''",
