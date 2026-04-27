@@ -191,8 +191,8 @@ pipeline {
                 }
             }
             post {
-                success { script { stageCallback('compile', 'success') } }
-                failure { script { stageCallback('compile', 'failed') } }
+                success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
+                failure { script { stageCallback('compile', 'failed'); stageCallback('build_binary', 'failed') } }
             }
         }
 

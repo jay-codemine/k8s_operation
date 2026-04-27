@@ -1538,38 +1538,52 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 		params["LANGUAGE_TYPE"] = pipeline.LanguageType
 	}
 
+	// ==================== 语言特有参数 ====================
 	switch pipeline.LanguageType {
 	case models.LanguageTypeGo:
-		// Go 特有参数
 		setDefault(params, "GO_VERSION", "1.24")
 		setDefault(params, "SKIP_TESTS", "false")
 	case models.LanguageTypeJava:
-		// Java 特有参数
 		setDefault(params, "JAVA_VERSION", "17")
 		setDefault(params, "MAVEN_GOALS", "clean package -DskipTests -B")
 		setDefault(params, "SKIP_TESTS", "false")
-		// SonarQube 代码质量扫描（默认启用）
-		setDefault(params, "ENABLE_SONAR", "true")
-		setDefault(params, "SONAR_QUALITY_GATE", "true")
+		// Java 特有 SonarQube 参数
 		setDefault(params, "SONAR_SOURCES", "src/main/java")
 		setDefault(params, "SONAR_JAVA_BINARIES", "target/classes")
 		setDefault(params, "SONAR_EXCLUSIONS", "**/test/**,**/generated/**")
 	case models.LanguageTypeFrontend:
-		// 前端特有参数
 		setDefault(params, "NODE_VERSION", "18")
 		setDefault(params, "BUILD_COMMAND", "npm run build")
 		setDefault(params, "BUILD_OUTPUT_DIR", "dist")
 		setDefault(params, "SKIP_TESTS", "false")
+		setDefault(params, "SONAR_SOURCES", "src")
+		setDefault(params, "SONAR_EXCLUSIONS", "**/node_modules/**,**/dist/**,**/*.spec.*,**/*.test.*")
 	case models.LanguageTypePython:
-		// Python 特有参数
 		setDefault(params, "PYTHON_VERSION", "3.11")
 		setDefault(params, "SKIP_TESTS", "false")
+		setDefault(params, "SONAR_SOURCES", ".")
+		setDefault(params, "SONAR_EXCLUSIONS", "**/venv/**,**/__pycache__/**,**/test_*,**/*_test.py,**/migrations/**")
 	}
-	// 通用参数
-	// 注意：DOCKERFILE_PATH 默认留空，让 Jenkins 模板自动生成纯运行时 Dockerfile
-	// 只有用户显式指定了自定义 Dockerfile 路径时才会使用
+
+	// ==================== 通用参数（全语言） ====================
 	setDefault(params, "DOCKERFILE_PATH", "")
 	setDefault(params, "GIT_CREDENTIAL_ID", "gitee-id")
+
+	// SonarQube 代码质量扫描（根据流水线配置注入，所有语言统一）
+	if pipeline.EnableSonar {
+		setDefault(params, "ENABLE_SONAR", "true")
+		setDefault(params, "SONAR_QUALITY_GATE", "true")
+	} else {
+		setDefault(params, "ENABLE_SONAR", "false")
+		setDefault(params, "SONAR_QUALITY_GATE", "false")
+	}
+
+	// 制品上传（根据流水线配置注入，所有语言统一）
+	// 判断逻辑：如果流水线已配置回调地址且未显式关闭，则默认启用
+	if _, exists := params["ENABLE_ARTIFACT_UPLOAD"]; !exists {
+		// 默认关闭，用户可通过 env_vars 或平台界面按需开启
+		params["ENABLE_ARTIFACT_UPLOAD"] = "false"
+	}
 }
 
 // setDefault 设置默认参数（不覆盖已有值）
@@ -1598,47 +1612,45 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			LanguageType: models.LanguageTypeGo,
 			JenkinsJob:   models.DefaultJenkinsJobMap[models.LanguageTypeGo],
 			TemplateFile: "configs/jenkins-templates/go-pipeline.groovy",
-			Stages:       []string{"checkout", "dependencies", "compile", "test", "lint", "build", "push"},
+			Stages:       []string{"checkout", "dependencies", "compile", "test", "lint", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
 				"GO_VERSION":  "1.24",
 				"SKIP_TESTS":  "false",
 			},
-			Description: "Go 项目通用构建模板，支持 go test / golangci-lint / nerdctl build",
+			Description: "Go 项目通用构建模板，支持 go test / golangci-lint / SonarQube / 制品上传 / nerdctl build",
 		},
 		{
 			LanguageType: models.LanguageTypeJava,
 			JenkinsJob:   models.DefaultJenkinsJobMap[models.LanguageTypeJava],
 			TemplateFile: "configs/jenkins-templates/java-spring-pipeline.groovy",
-			Stages:       []string{"checkout", "compile", "test", "sonar", "quality_gate", "dependencies", "build", "push"},
+			Stages:       []string{"checkout", "dependencies", "compile", "test", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
 				"JAVA_VERSION":    "17",
 				"MAVEN_GOALS":     "clean package -DskipTests -B",
-				"ENABLE_SONAR":    "true",
-				"SONAR_QUALITY_GATE": "true",
 			},
-			Description: "Java/Spring Boot 通用构建模板，支持 Maven + SonarQube 代码质量扫描 + 质量门禁",
+			Description: "Java/Spring Boot 通用构建模板，支持 Maven + SonarQube + 质量门禁 + 制品上传",
 		},
 		{
 			LanguageType: models.LanguageTypeFrontend,
 			JenkinsJob:   models.DefaultJenkinsJobMap[models.LanguageTypeFrontend],
 			TemplateFile: "configs/jenkins-templates/frontend-pipeline.groovy",
-			Stages:       []string{"checkout", "dependencies", "test", "compile", "build", "push"},
+			Stages:       []string{"checkout", "dependencies", "test", "compile", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
 				"NODE_VERSION":    "18",
 				"BUILD_COMMAND":   "npm run build",
 				"BUILD_OUTPUT_DIR": "dist",
 			},
-			Description: "前端通用构建模板（Vue/React/Angular），支持 npm ci / Nginx 镜像",
+			Description: "前端通用构建模板（Vue/React/Angular），支持 npm ci / SonarQube / 制品上传 / Nginx 镜像",
 		},
 		{
 			LanguageType: models.LanguageTypePython,
 			JenkinsJob:   models.DefaultJenkinsJobMap[models.LanguageTypePython],
 			TemplateFile: "configs/jenkins-templates/python-pipeline.groovy",
-			Stages:       []string{"checkout", "dependencies", "lint", "test", "build", "push"},
+			Stages:       []string{"checkout", "dependencies", "lint", "test", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
 				"PYTHON_VERSION": "3.11",
 			},
-			Description: "Python 通用构建模板，支持 pip / flake8 / pytest",
+			Description: "Python 通用构建模板，支持 pip / flake8 / pytest / SonarQube / 制品上传",
 		},
 	}
 

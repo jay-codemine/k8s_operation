@@ -58,6 +58,8 @@ pipeline {
         NPM_REGISTRY   = 'https://registry.npmmirror.com'
         // npm 缓存放 workspace 外，跨构建持久复用
         NPM_CACHE_DIR  = '/var/lib/jenkins/.npm-cache'
+        // BuildKit 层缓存目录（跨构建持久复用，二次构建仅重建变化层）
+        BUILDKIT_CACHE = '/var/lib/jenkins/.buildkit-cache'
     }
 
     stages {
@@ -170,8 +172,8 @@ pipeline {
                 """
             }
             post {
-                success { script { stageCallback('compile', 'success') } }
-                failure { script { stageCallback('compile', 'failed') } }
+                success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
+                failure { script { stageCallback('compile', 'failed'); stageCallback('build_binary', 'failed') } }
             }
         }
 
@@ -316,11 +318,16 @@ CMD ["nginx", "-g", "daemon off;"]
                         }
                     }
 
+                    // 使用 BuildKit 本地层缓存：首次全量构建，后续仅重建变化层
+                    def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
                     sh """
                         set -e
+                        mkdir -p ${cacheDir}
                         nerdctl build \\
                             -t ${env.FULL_IMAGE} \\
                             -f ${dockerfile} \\
+                            --cache-from type=local,src=${cacheDir} \\
+                            --cache-to type=local,dest=${cacheDir},mode=max \\
                             --label git.commit=${env.GIT_COMMIT_FULL} \\
                             --label git.branch=${env.GIT_BRANCH_NAME} \\
                             --label build.number=${env.BUILD_NUMBER} \\
@@ -342,7 +349,7 @@ CMD ["nginx", "-g", "daemon off;"]
                     sh """
                         set -e
                         echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
-                        nerdctl push ${env.FULL_IMAGE}
+                        nerdctl push --concurrency 8 ${env.FULL_IMAGE}
                     """
                     env.IMAGE_DIGEST = sh(
                         script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''",

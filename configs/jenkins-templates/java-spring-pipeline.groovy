@@ -78,6 +78,8 @@ pipeline {
         MAVEN_OPTS       = '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
         // Maven 本地仓库放在 workspace 外部，跨构建持久缓存（首次下载后后续秒级复用）
         MAVEN_LOCAL_REPO = '/var/lib/jenkins/.m2/repository'
+        // BuildKit 层缓存目录（跨构建持久复用，二次构建仅重建变化层）
+        BUILDKIT_CACHE   = '/var/lib/jenkins/.buildkit-cache'
     }
 
     stages {
@@ -203,8 +205,8 @@ MAVEN_HOME=${MAVEN_HOME}
                 sh "mvn compile -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
             }
             post {
-                success { script { stageCallback('compile', 'success') } }
-                failure { script { stageCallback('compile', 'failed') } }
+                success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
+                failure { script { stageCallback('compile', 'failed'); stageCallback('build_binary', 'failed') } }
             }
         }
 
@@ -385,11 +387,16 @@ ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
                         }
                     }
 
+                    // 使用 BuildKit 本地层缓存：首次全量构建，后续仅重建变化层
+                    def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
                     sh """
                         set -e
+                        mkdir -p ${cacheDir}
                         nerdctl build \\
                             -t ${env.FULL_IMAGE} \\
                             -f ${dockerfile} \\
+                            --cache-from type=local,src=${cacheDir} \\
+                            --cache-to type=local,dest=${cacheDir},mode=max \\
                             --build-arg JAVA_VERSION=${javaVersion} \\
                             --label git.commit=${env.GIT_COMMIT_FULL} \\
                             --label git.branch=${env.GIT_BRANCH_NAME} \\
@@ -413,7 +420,7 @@ ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
                     sh """
                         set -e
                         echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
-                        nerdctl push ${env.FULL_IMAGE}
+                        nerdctl push --concurrency 8 ${env.FULL_IMAGE}
                     """
                     env.IMAGE_DIGEST = sh(
                         script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''",
