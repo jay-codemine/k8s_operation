@@ -173,8 +173,9 @@ type CicdPipeline struct {
 	TargetWorkloadName string `gorm:"column:target_workload_name" json:"target_workload_name"` // 工作负载名称
 	TargetContainer    string `gorm:"column:target_container" json:"target_container"`         // 容器名称
 	DeployEnv          string `gorm:"column:deploy_env" json:"deploy_env"`                      // 部署环境(dev/staging/prod)
-	RequireApproval    bool   `gorm:"column:require_approval" json:"require_approval"`          // 是否需要审批
-	EnableSonar        bool   `gorm:"column:enable_sonar" json:"enable_sonar"`                    // 是否启用 SonarQube 代码扫描
+	RequireApproval      bool   `gorm:"column:require_approval" json:"require_approval"`              // 是否需要审批
+	EnableSonar          bool   `gorm:"column:enable_sonar" json:"enable_sonar"`                        // 是否启用 SonarQube 代码扫描
+	EnableArtifactUpload bool   `gorm:"column:enable_artifact_upload" json:"enable_artifact_upload"`    // 是否启用制品上传
 
 	// 最新部署信息
 	LastDeployImage   string `gorm:"column:last_deploy_image" json:"last_deploy_image"`     // 最新部署镜像

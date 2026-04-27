@@ -75,6 +75,8 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		TargetContainer:    req.TargetContainer,
 		DeployEnv:          req.DeployEnv,
 		RequireApproval:    req.RequireApproval,
+		EnableSonar:        req.EnableSonar,
+		EnableArtifactUpload: req.EnableArtifactUpload,
 		CreatedUserID:      userID,
 	}
 
@@ -188,6 +190,12 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	}
 	if req.RequireApproval != nil {
 		updates["require_approval"] = *req.RequireApproval
+	}
+	if req.EnableSonar != nil {
+		updates["enable_sonar"] = *req.EnableSonar
+	}
+	if req.EnableArtifactUpload != nil {
+		updates["enable_artifact_upload"] = *req.EnableArtifactUpload
 	}
 	if req.LanguageType != nil {
 		updates["language_type"] = *req.LanguageType
@@ -336,6 +344,8 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 			TargetContainer:    item.TargetContainer,
 			DeployEnv:          item.DeployEnv,
 			RequireApproval:    item.RequireApproval,
+			EnableSonar:        item.EnableSonar,
+			EnableArtifactUpload: item.EnableArtifactUpload,
 			CreatedUserID:      userID,
 		}
 
@@ -1131,13 +1141,20 @@ func (s *Services) getDefaultStagesForPipeline(pipeline *models.CicdPipeline) []
 		)
 	}
 
-	// 构建制品 + 上传制品库 + 打包镜像 + 推送镜像
+	// 构建制品 + 上传制品库（如果启用）
+	if pipeline.EnableArtifactUpload {
+		nextID := len(stages) + 1
+		stages = append(stages,
+			PipelineStageInfo{ID: fmt.Sprintf("%d", nextID), Name: "Build Binary", Type: "build_binary", Status: "pending", Steps: []PipelineStepInfo{}},
+			PipelineStageInfo{ID: fmt.Sprintf("%d", nextID+1), Name: "Upload Artifact", Type: "upload_artifact", Status: "pending", Steps: []PipelineStepInfo{}},
+		)
+	}
+
+	// 打包镜像 + 推送镜像
 	nextID := len(stages) + 1
 	stages = append(stages,
-		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID), Name: "Build Binary", Type: "build_binary", Status: "pending", Steps: []PipelineStepInfo{}},
-		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID+1), Name: "Upload Artifact", Type: "upload_artifact", Status: "pending", Steps: []PipelineStepInfo{}},
-		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID+2), Name: "Build Image", Type: "build", Status: "pending", Steps: []PipelineStepInfo{}},
-		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID+3), Name: "Push Image", Type: "push", Status: "pending", Steps: []PipelineStepInfo{}},
+		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID), Name: "Build Image", Type: "build", Status: "pending", Steps: []PipelineStepInfo{}},
+		PipelineStageInfo{ID: fmt.Sprintf("%d", nextID+1), Name: "Push Image", Type: "push", Status: "pending", Steps: []PipelineStepInfo{}},
 	)
 
 	// 根据流水线配置追加平台阶段
@@ -1579,10 +1596,10 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	}
 
 	// 制品上传（根据流水线配置注入，所有语言统一）
-	// 判断逻辑：如果流水线已配置回调地址且未显式关闭，则默认启用
-	if _, exists := params["ENABLE_ARTIFACT_UPLOAD"]; !exists {
-		// 默认关闭，用户可通过 env_vars 或平台界面按需开启
-		params["ENABLE_ARTIFACT_UPLOAD"] = "false"
+	if pipeline.EnableArtifactUpload {
+		setDefault(params, "ENABLE_ARTIFACT_UPLOAD", "true")
+	} else {
+		setDefault(params, "ENABLE_ARTIFACT_UPLOAD", "false")
 	}
 }
 

@@ -94,6 +94,10 @@ func (s *Services) getStageDefinitionsForPipeline(pipeline *models.CicdPipeline)
 			stages[i].Enabled = pipeline.EnableSonar
 		case models.StageTypeQualityGate:
 			stages[i].Enabled = pipeline.EnableSonar
+		case models.StageTypeBuildBinary:
+			stages[i].Enabled = pipeline.EnableArtifactUpload
+		case models.StageTypeUploadArtifact:
+			stages[i].Enabled = pipeline.EnableArtifactUpload
 		case models.StageTypeApproval:
 			stages[i].Enabled = pipeline.RequireApproval
 		case models.StageTypeDeploy:

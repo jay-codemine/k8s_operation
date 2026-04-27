@@ -29,6 +29,8 @@ type PipelineCreateRequest struct {
 	TargetContainer    string `json:"target_container"`     // 容器名称
 	DeployEnv          string `json:"deploy_env"`           // 部署环境
 	RequireApproval    bool   `json:"require_approval"`     // 是否需要审批
+	EnableSonar        bool   `json:"enable_sonar"`         // 是否启用 SonarQube
+	EnableArtifactUpload bool `json:"enable_artifact_upload"` // 是否启用制品上传
 }
 
 func NewPipelineCreateRequest() *PipelineCreateRequest {
@@ -80,6 +82,8 @@ type PipelineBatchItem struct {
 	TargetContainer    string `json:"target_container"`
 	DeployEnv          string `json:"deploy_env"`
 	RequireApproval    bool   `json:"require_approval"`
+	EnableSonar        bool   `json:"enable_sonar"`
+	EnableArtifactUpload bool `json:"enable_artifact_upload"`
 }
 
 func ValidPipelineBatchCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -116,6 +120,8 @@ type PipelineUpdateRequest struct {
 	TargetContainer    *string `json:"target_container"`     // 容器名称
 	DeployEnv          *string `json:"deploy_env"`           // 部署环境
 	RequireApproval    *bool   `json:"require_approval"`     // 是否需要审批
+	EnableSonar        *bool   `json:"enable_sonar"`         // 是否启用 SonarQube
+	EnableArtifactUpload *bool `json:"enable_artifact_upload"` // 是否启用制品上传
 }
 
 func NewPipelineUpdateRequest() *PipelineUpdateRequest {

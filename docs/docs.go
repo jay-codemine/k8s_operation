@@ -18432,6 +18432,12 @@ const docTemplate = `{
                     "description": "可选：描述",
                     "type": "string"
                 },
+                "enable_artifact_upload": {
+                    "type": "boolean"
+                },
+                "enable_sonar": {
+                    "type": "boolean"
+                },
                 "env_vars": {
                     "description": "可选：环境变量",
                     "type": "array",
@@ -18561,6 +18567,14 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
+                },
+                "enable_artifact_upload": {
+                    "description": "是否启用制品上传",
+                    "type": "boolean"
+                },
+                "enable_sonar": {
+                    "description": "是否启用 SonarQube",
+                    "type": "boolean"
                 },
                 "env_vars": {
                     "type": "array",
@@ -18697,6 +18711,14 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
+                },
+                "enable_artifact_upload": {
+                    "description": "是否启用制品上传",
+                    "type": "boolean"
+                },
+                "enable_sonar": {
+                    "description": "是否启用 SonarQube",
+                    "type": "boolean"
                 },
                 "env_vars": {
                     "type": "array",

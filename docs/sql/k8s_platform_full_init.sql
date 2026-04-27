@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS `cicd_pipeline` (
   `deploy_env` varchar(20) DEFAULT 'dev' COMMENT '部署环境',
   `require_approval` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要审批',
   `enable_sonar` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用SonarQube代码扫描',
+  `enable_artifact_upload` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用制品上传',
   -- 最新部署信息
   `last_deploy_image` varchar(500) DEFAULT '' COMMENT '最新部署镜像',
   `last_deploy_digest` varchar(100) DEFAULT '' COMMENT '镜像摘要',
