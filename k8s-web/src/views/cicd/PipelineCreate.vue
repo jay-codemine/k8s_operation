@@ -16,6 +16,19 @@
         </div>
       </div>
       <div class="header-actions">
+        <button
+          v-if="isEdit"
+          type="button"
+          class="btn-header-save"
+          @click="submit"
+          :disabled="submitting"
+        >
+          <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span v-if="submitting" class="loading-spinner-sm"></span>
+          {{ submitting ? '保存中...' : '保存修改' }}
+        </button>
         <button class="btn-icon" @click="cancel" title="返回列表">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 18L18 6M6 6l12 12"/>
@@ -342,6 +355,23 @@
                   </div>
                   <label class="toggle-switch">
                     <input type="checkbox" v-model="pipelineData.enable_sonar" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 制品上传到平台制品库开关 -->
+              <div class="form-group">
+                <div class="toggle-row">
+                  <div class="toggle-info">
+                    <label class="form-label">
+                      制品上传到平台制品库
+                      <span class="env-tag" style="background:#1890ff;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">推荐</span>
+                    </label>
+                    <p class="toggle-desc">启用后构建完成自动将制品（JAR/二进制/dist）上传到平台制品库，支持版本溯源与下载</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="pipelineData.enable_artifact_upload" />
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
@@ -1315,6 +1345,7 @@ export default {
       git_credential_id: 'gitee-id',  // Git 凭证 ID
       env_vars: [],
       enable_sonar: false,  // SonarQube 代码质量扫描开关（Java 项目默认启用）
+      enable_artifact_upload: false,  // 制品上传到平台制品库开关
       deploy_config: {
         replicas: 3,
         strategy: 'rollingUpdate',
@@ -1665,6 +1696,7 @@ export default {
               git_credential_id: getEnv('GIT_CREDENTIAL_ID', 'gitee-id'),
               env_vars: filteredEnvVars,
               enable_sonar: hasSonar,
+              enable_artifact_upload: data.enable_artifact_upload || false,
               deploy_config: data.deploy_config || pipelineData.value.deploy_config,
               // 自动部署配置
               auto_deploy: data.auto_deploy || false,
@@ -1750,7 +1782,8 @@ export default {
           }
         }
         submitData.env_vars = envVars
-        delete submitData.enable_sonar  // 后端不需要此字段
+        delete submitData.enable_sonar  // 后端不需要此字段（通过 env_vars 传递 ENABLE_SONAR）
+        // 注意：enable_artifact_upload 是后端独立字段，保留传递
         // 清理前端独立字段，后端不需要
         delete submitData.image_repo
         delete submitData.skip_tests
@@ -2089,6 +2122,12 @@ export default {
   font-size: 14px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .btn-icon {
   width: 40px;
   height: 40px;
@@ -2110,6 +2149,37 @@ export default {
 .btn-icon svg {
   width: 20px;
   height: 20px;
+}
+
+.btn-header-save {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-header-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+}
+
+.btn-header-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-header-save svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ==================== 主体布局 ==================== */
