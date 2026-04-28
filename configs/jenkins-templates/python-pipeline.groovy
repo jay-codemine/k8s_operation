@@ -365,7 +365,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                     sh """
                         set -e
                         echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
-                        nerdctl push --concurrency 8 ${env.FULL_IMAGE}
+                        nerdctl push ${env.FULL_IMAGE}
                     """
                     env.IMAGE_DIGEST = sh(
                         script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''",
