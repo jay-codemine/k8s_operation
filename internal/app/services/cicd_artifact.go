@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// copyBufferSize 文件拷贝缓冲区大小（1MB，默认 io.Copy 仅 32KB）
-const copyBufferSize = 1 << 20
+// copyBufferSize 文件拷贝缓冲区大小（4MB，默认 io.Copy 仅 32KB，大缓冲区减少 syscall 次数，加速大文件写入）
+const copyBufferSize = 4 << 20
 
 // ArtifactUploadDir 制品存储根目录
 const ArtifactUploadDir = "storage/artifacts"

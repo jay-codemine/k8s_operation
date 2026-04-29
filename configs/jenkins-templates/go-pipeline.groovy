@@ -309,60 +309,56 @@ pipeline {
             }
         }
 
-        // ==================== 制品上传（可选，gzip 压缩加速传输） ====================
+        // ==================== 制品归档（Quality Gate 之后、Build Image 之前，失败即终止流水线） ====================
         stage('Upload Artifact') {
             when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
             steps {
                 echo "=== 上传制品到平台制品库（gzip 压缩加速） ==="
                 script {
-                    def binaryPath = env.BINARY_PATH ?: "bin/${env.APP_NAME ?: 'server'}"
-                    if (!fileExists(binaryPath)) { echo "[制品上传] 二进制文件不存在: ${binaryPath}，跳过"; return }
-        
-                    // gzip 压缩二进制（Go 二进制压缩率 60-70%，大幅减少传输时间）
-                    def gzPath = "${binaryPath}.gz"
-                    sh "gzip -1 -c ${binaryPath} > ${gzPath}"
-                    def origSize = sh(script: "stat -c%s ${binaryPath} 2>/dev/null || stat -f%z ${binaryPath}", returnStdout: true).trim()
-                    def gzSize = sh(script: "stat -c%s ${gzPath} 2>/dev/null || stat -f%z ${gzPath}", returnStdout: true).trim()
-                    echo "[制品上传] 原始: ${origSize} bytes → 压缩: ${gzSize} bytes"
-        
-                    // 构造上传 URL：从回调地址推导制品上传接口
-                    def uploadUrl = params.PLATFORM_CALLBACK_URL
-                        .replace('/pipeline/callback', '/artifact/upload')
-                        .replace('/stage/callback', '/artifact/upload')
-        
-                    // curl 上传（multipart/form-data，携带构建元数据）
-                    def curlStatus = sh(script: """
-                        set -e
-                        curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
-                            -X POST '${uploadUrl}' \\
-                            -F 'file=@${gzPath}' \\
-                            -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
-                            -F 'run_id=${params.RUN_ID ?: 0}' \\
-                            -F 'build_number=${env.BUILD_NUMBER}' \\
-                            -F 'version=${env.FINAL_TAG}' \\
-                            -F 'language_type=go' \\
-                            -F 'artifact_type=binary' \\
-                            -F 'git_repo=${params.GIT_REPO}' \\
-                            -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                            -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
-                            --connect-timeout 10 \\
-                            --max-time 120 \\
-                            --tcp-nodelay \\
-                            -H "Expect:" \\
-                            --retry 1
-                    """, returnStdout: true).trim()
-        
-                    if (curlStatus.endsWith('200')) {
-                        echo "[制品上传] ✅ 上传成功"
-                    } else {
-                        echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
-                        def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
-                        echo "[制品上传] 响应内容: ${respBody}"
-                        echo "[制品上传] 上传地址: ${uploadUrl}"
+                        def binaryPath = env.BINARY_PATH ?: "bin/${env.APP_NAME ?: 'server'}"
+                        if (!fileExists(binaryPath)) { error("[制品上传] 二进制文件不存在: ${binaryPath}") }
+
+                        def gzPath = "${binaryPath}.gz"
+                        sh "gzip -1 -c ${binaryPath} > ${gzPath}"
+                        def origSize = sh(script: "stat -c%s ${binaryPath} 2>/dev/null || stat -f%z ${binaryPath}", returnStdout: true).trim()
+                        def gzSize = sh(script: "stat -c%s ${gzPath} 2>/dev/null || stat -f%z ${gzPath}", returnStdout: true).trim()
+                        echo "[制品上传] 原始: ${origSize} bytes → 压缩: ${gzSize} bytes"
+
+                        def uploadUrl = params.PLATFORM_CALLBACK_URL
+                            .replace('/pipeline/callback', '/artifact/upload')
+                            .replace('/stage/callback', '/artifact/upload')
+
+                        def curlStatus = sh(script: """
+                            set -e
+                            curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
+                                -X POST '${uploadUrl}' \\
+                                -F 'file=@${gzPath}' \\
+                                -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
+                                -F 'run_id=${params.RUN_ID ?: 0}' \\
+                                -F 'build_number=${env.BUILD_NUMBER}' \\
+                                -F 'version=${env.FINAL_TAG}' \\
+                                -F 'language_type=go' \\
+                                -F 'artifact_type=binary' \\
+                                -F 'git_repo=${params.GIT_REPO}' \\
+                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
+                                -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
+                                --connect-timeout 10 \\
+                                --max-time 300 \\
+                                --tcp-nodelay \\
+                                -H "Expect:" \\
+                                --retry 2 --retry-delay 5
+                        """, returnStdout: true).trim()
+
+                        if (curlStatus.endsWith('200')) {
+                            echo "[制品上传] ✅ 上传成功"
+                        } else {
+                            echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
+                            def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                            echo "[制品上传] 响应内容: ${respBody}"
+                            echo "[制品上传] 上传地址: ${uploadUrl}"
+                            error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
+                        }
                         sh "rm -f ${gzPath} /tmp/artifact_resp.json 2>/dev/null || true"
-                        error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
-                    }
-                    sh "rm -f ${gzPath} /tmp/artifact_resp.json 2>/dev/null || true"
                 }
             }
             post {
@@ -370,7 +366,7 @@ pipeline {
                 failure { script { stageCallback('upload_artifact', 'failed') } }
             }
         }
-        
+
         // ==================== Docker 镜像构建（复用 Compile Check 产出的二进制） ====================
         
         stage('Build Image') {
@@ -462,6 +458,7 @@ ENTRYPOINT ["/app/${appName}"]
                 failure { script { stageCallback('push', 'failed') } }
             }
         }
+
     }
 
     post {

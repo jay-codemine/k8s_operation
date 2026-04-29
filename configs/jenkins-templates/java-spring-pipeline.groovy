@@ -321,56 +321,60 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== 制品上传（可选，JAR 直接上传，无需压缩） ====================
+        // ==================== 制品归档（Quality Gate 之后、Build Image 之前，失败即终止流水线） ====================
         stage('Upload Artifact') {
             when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
             steps {
-                echo "=== 上传制品到平台制品库 ==="
+                echo "=== 上传制品到平台制品库（gzip 压缩加速） ==="
                 script {
-                    // 查找 JAR 文件（Compile & Package 阶段已产出）
-                    def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
-                    if (!jarFile) { error("[制品上传] 未找到 JAR 文件，Compile & Package 阶段可能异常") }
+                        // 查找 JAR 文件（Compile & Package 阶段已产出）
+                        def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                        if (!jarFile) { error("[制品上传] 未找到 JAR 文件，Compile & Package 阶段可能异常") }
 
-                    def fileSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
-                    echo "[制品上传] 上传文件: ${jarFile} (${fileSize} bytes)"
+                        // gzip 压缩（-1 快速压缩，JAR 通常可压缩 30-50%）
+                        def gzPath = "${jarFile}.gz"
+                        sh "gzip -1 -c ${jarFile} > ${gzPath}"
+                        def origSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
+                        def gzSize = sh(script: "stat -c%s ${gzPath} 2>/dev/null || stat -f%z ${gzPath}", returnStdout: true).trim()
+                        echo "[制品上传] 原始: ${origSize} bytes → 压缩: ${gzSize} bytes (节省 ${((origSize as Long) - (gzSize as Long)) * 100 / (origSize as Long)}%)"
 
-                    def uploadUrl = params.PLATFORM_CALLBACK_URL
-                        .replace('/pipeline/callback', '/artifact/upload')
-                        .replace('/stage/callback', '/artifact/upload')
+                        def uploadUrl = params.PLATFORM_CALLBACK_URL
+                            .replace('/pipeline/callback', '/artifact/upload')
+                            .replace('/stage/callback', '/artifact/upload')
 
-                    def curlStatus = sh(script: """
-                        set -e
-                        curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
-                            -X POST '${uploadUrl}' \\
-                            -F 'file=@${jarFile}' \\
-                            -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
-                            -F 'run_id=${params.RUN_ID ?: 0}' \\
-                            -F 'build_number=${env.BUILD_NUMBER}' \\
-                            -F 'version=${env.FINAL_TAG}' \\
-                            -F 'language_type=java' \\
-                            -F 'artifact_type=jar' \\
-                            -F 'git_repo=${params.GIT_REPO}' \\
-                            -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                            -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
-                            --connect-timeout 10 \\
-                            --max-time 120 \\
-                            --tcp-nodelay \\
-                            -H "Expect:" \\
-                            --retry 1
-                    """, returnStdout: true).trim()
+                        def curlStatus = sh(script: """
+                            set -e
+                            curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
+                                -X POST '${uploadUrl}' \\
+                                -F 'file=@${gzPath}' \\
+                                -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
+                                -F 'run_id=${params.RUN_ID ?: 0}' \\
+                                -F 'build_number=${env.BUILD_NUMBER}' \\
+                                -F 'version=${env.FINAL_TAG}' \\
+                                -F 'language_type=java' \\
+                                -F 'artifact_type=jar' \\
+                                -F 'git_repo=${params.GIT_REPO}' \\
+                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
+                                -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
+                                --connect-timeout 10 \\
+                                --max-time 300 \\
+                                --tcp-nodelay \\
+                                -H "Expect:" \\
+                                --retry 2 --retry-delay 5
+                        """, returnStdout: true).trim()
 
-                    def httpCode = curlStatus[-3..-1]
-                    def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
-                    sh "rm -f /tmp/artifact_resp.json 2>/dev/null || true"
-                    if (httpCode == '200') {
-                        echo "[制品上传] ✅ 上传成功，平台制品库已入库"
-                        echo "[制品上传] 响应: ${respBody}"
-                    } else {
-                        echo "[制品上传] ❌ 上传失败 HTTP ${httpCode}"
-                        echo "[制品上传] 响应内容: ${respBody}"
-                        echo "[制品上传] 上传地址: ${uploadUrl}"
-                        error("制品上传失败: HTTP ${httpCode}")
-                    }
+                        def httpCode = curlStatus[-3..-1]
+                        def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                        sh "rm -f ${gzPath} /tmp/artifact_resp.json 2>/dev/null || true"
+                        if (httpCode == '200') {
+                            echo "[制品上传] ✅ 上传成功，平台制品库已入库"
+                            echo "[制品上传] 响应: ${respBody}"
+                        } else {
+                            echo "[制品上传] ❌ 上传失败 HTTP ${httpCode}"
+                            echo "[制品上传] 响应内容: ${respBody}"
+                            echo "[制品上传] 上传地址: ${uploadUrl}"
+                            error("制品上传失败: HTTP ${httpCode}")
+                        }
                 }
             }
             post {
@@ -379,7 +383,7 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== Docker 镜像构建（复用 Compile & Package 阶段已打包的 JAR） ====================
+        // ==================== Docker 镜像构建（复用 Compile & Package 阶段已打包的 JAR） ==
         stage('Build Image') {
             steps {
                 echo "=== 构建 Docker 镜像（复用 Compile & Package 产出的 JAR） ==="
@@ -471,6 +475,7 @@ ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
                 failure { script { stageCallback('push', 'failed') } }
             }
         }
+
     }
 
     post {

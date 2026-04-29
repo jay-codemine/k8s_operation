@@ -253,55 +253,53 @@ pipeline {
             }
         }
 
-        // ==================== 制品上传（可选，tar.gz 打包上传） ====================
+        // ==================== 制品归档（Quality Gate 之后、Build Image 之前，失败即终止流水线） ====================
         stage('Upload Artifact') {
             when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
             steps {
                 echo "=== 上传制品到平台制品库（tar.gz 打包加速） ==="
                 script {
-                    // 打包项目源码为 tar.gz（排除 venv/__pycache__/.git）
-                    def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'python-app'
-                    def archiveName = "${appName}-${env.FINAL_TAG}.tar.gz"
-                    sh "tar czf ${archiveName} --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.Dockerfile.runtime' ."
-                    def fileSize = sh(script: "stat -c%s ${archiveName} 2>/dev/null || stat -f%z ${archiveName}", returnStdout: true).trim()
-                    echo "[制品上传] 上传文件: ${archiveName} (${fileSize} bytes)"
+                        def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'python-app'
+                        def archiveName = "${appName}-${env.FINAL_TAG}.tar.gz"
+                        sh "tar czf ${archiveName} --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.Dockerfile.runtime' ."
+                        def fileSize = sh(script: "stat -c%s ${archiveName} 2>/dev/null || stat -f%z ${archiveName}", returnStdout: true).trim()
+                        echo "[制品上传] 上传文件: ${archiveName} (${fileSize} bytes)"
 
-                    def uploadUrl = params.PLATFORM_CALLBACK_URL
-                        .replace('/pipeline/callback', '/artifact/upload')
-                        .replace('/stage/callback', '/artifact/upload')
+                        def uploadUrl = params.PLATFORM_CALLBACK_URL
+                            .replace('/pipeline/callback', '/artifact/upload')
+                            .replace('/stage/callback', '/artifact/upload')
 
-                    def curlStatus = sh(script: """
-                        set -e
-                        curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
-                            -X POST '${uploadUrl}' \\
-                            -F 'file=@${archiveName}' \\
-                            -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
-                            -F 'run_id=${params.RUN_ID ?: 0}' \\
-                            -F 'build_number=${env.BUILD_NUMBER}' \\
-                            -F 'version=${env.FINAL_TAG}' \\
-                            -F 'language_type=python' \\
-                            -F 'artifact_type=archive' \\
-                            -F 'git_repo=${params.GIT_REPO}' \\
-                            -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                            -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
-                            --connect-timeout 10 \\
-                            --max-time 120 \\
-                            --tcp-nodelay \\
-                            -H "Expect:" \\
-                            --retry 1
-                    """, returnStdout: true).trim()
+                        def curlStatus = sh(script: """
+                            set -e
+                            curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
+                                -X POST '${uploadUrl}' \\
+                                -F 'file=@${archiveName}' \\
+                                -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
+                                -F 'run_id=${params.RUN_ID ?: 0}' \\
+                                -F 'build_number=${env.BUILD_NUMBER}' \\
+                                -F 'version=${env.FINAL_TAG}' \\
+                                -F 'language_type=python' \\
+                                -F 'artifact_type=archive' \\
+                                -F 'git_repo=${params.GIT_REPO}' \\
+                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
+                                -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
+                                --connect-timeout 10 \\
+                                --max-time 300 \\
+                                --tcp-nodelay \\
+                                -H "Expect:" \\
+                                --retry 2 --retry-delay 5
+                        """, returnStdout: true).trim()
 
-                    if (curlStatus.endsWith('200')) {
-                        echo "[制品上传] ✅ 上传成功"
-                    } else {
-                        echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
-                        def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
-                        echo "[制品上传] 响应内容: ${respBody}"
-                        echo "[制品上传] 上传地址: ${uploadUrl}"
+                        if (curlStatus.endsWith('200')) {
+                            echo "[制品上传] ✅ 上传成功"
+                        } else {
+                            echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
+                            def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                            echo "[制品上传] 响应内容: ${respBody}"
+                            echo "[制品上传] 上传地址: ${uploadUrl}"
+                            error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
+                        }
                         sh "rm -f ${archiveName} /tmp/artifact_resp.json 2>/dev/null || true"
-                        error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
-                    }
-                    sh "rm -f ${archiveName} /tmp/artifact_resp.json 2>/dev/null || true"
                 }
             }
             post {
@@ -394,6 +392,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                 failure { script { stageCallback('push', 'failed') } }
             }
         }
+
     }
 
     post {
