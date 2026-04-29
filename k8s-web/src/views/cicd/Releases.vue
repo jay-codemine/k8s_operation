@@ -13,6 +13,10 @@
           </div>
         </div>
         <div class="banner-actions">
+          <button class="btn-banner-sync" @click="syncFromPipeline" :disabled="syncing">
+            <svg :class="{ spinning: syncing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+            <span>{{ syncing ? '同步中...' : '同步流水线' }}</span>
+          </button>
           <button class="btn-banner-refresh" @click="loadAll" :disabled="loading">
             <svg :class="{ spinning: loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             <span>刷新</span>
@@ -94,6 +98,32 @@
         </div>
       </div>
 
+      <!-- 批量操作工具栏（全宽醒目） -->
+      <transition name="batch-slide">
+        <div v-if="selectedIds.length > 0" class="batch-toolbar">
+          <div class="batch-left">
+            <div class="batch-indicator">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <span class="batch-label">已选择 <strong>{{ selectedIds.length }}</strong> 个发布单</span>
+          </div>
+          <div class="batch-right">
+            <button class="batch-action-btn publish" @click="handleBatchRetry" :disabled="batchLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span>批量发布</span>
+            </button>
+            <button class="batch-action-btn rollback" @click="handleBatchRollback" :disabled="batchLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span>批量回滚</span>
+            </button>
+            <button class="batch-action-btn cancel" @click="selectedIds = []">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <span>取消选择</span>
+            </button>
+          </div>
+        </div>
+      </transition>
+
       <!-- 加载 -->
       <div v-if="loading" class="loading-state">
         <div class="loader"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
@@ -121,6 +151,9 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th style="width: 40px;">
+                <input type="checkbox" class="row-checkbox" :checked="isAllSelected" :indeterminate.prop="isIndeterminate" @change="toggleAll" />
+              </th>
               <th>应用</th>
               <th>状态</th>
               <th>工作负载</th>
@@ -132,7 +165,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="rel in releases" :key="rel.id" :class="[`row-${normalizeStatus(rel.status)}`]">
+            <tr v-for="rel in releases" :key="rel.id" :class="[`row-${normalizeStatus(rel.status)}`, { 'row-selected': selectedIds.includes(rel.id) }]">
+              <td>
+                <input type="checkbox" class="row-checkbox" :checked="selectedIds.includes(rel.id)" @change="toggleSelect(rel.id)" />
+              </td>
               <td>
                 <div class="app-cell">
                   <div class="app-avatar" :class="normalizeStatus(rel.status)">
@@ -400,7 +436,10 @@ import {
   deleteRelease as deleteReleaseApi,
   cancelRelease as cancelReleaseApi,
   rollbackRelease as rollbackReleaseApi,
-  retryRelease as retryReleaseApi
+  retryRelease as retryReleaseApi,
+  batchRetryRelease as batchRetryReleaseApi,
+  batchRollbackRelease as batchRollbackReleaseApi,
+  syncReleasesFromPipeline as syncReleasesApi
 } from '@/api/cicd'
 
 export default {
@@ -416,6 +455,34 @@ export default {
     const pageSizeRef = ref(10)
     const total = ref(0)
     const jumpPage = ref(1)
+
+    // 批量选择
+    const selectedIds = ref([])
+    const batchLoading = ref(false)
+    const syncing = ref(false)
+    const isAllSelected = computed(() => {
+      if (releases.value.length === 0) return false
+      return releases.value.every(r => selectedIds.value.includes(r.id))
+    })
+    const isIndeterminate = computed(() => {
+      if (releases.value.length === 0) return false
+      const selected = releases.value.filter(r => selectedIds.value.includes(r.id))
+      return selected.length > 0 && selected.length < releases.value.length
+    })
+    const toggleAll = (e) => {
+      if (e.target.checked) {
+        const ids = releases.value.map(r => r.id)
+        selectedIds.value = [...new Set([...selectedIds.value, ...ids])]
+      } else {
+        const ids = releases.value.map(r => r.id)
+        selectedIds.value = selectedIds.value.filter(id => !ids.includes(id))
+      }
+    }
+    const toggleSelect = (id) => {
+      const idx = selectedIds.value.indexOf(id)
+      if (idx === -1) selectedIds.value.push(id)
+      else selectedIds.value.splice(idx, 1)
+    }
 
     // 后端动态统计数据
     const statsData = ref({ total: 0, deploying: 0, success: 0, failed: 0, rollback: 0 })
@@ -637,6 +704,72 @@ export default {
     }
     const clearSearch = () => { searchKeyword.value = ''; currentPage.value = 1; loadReleases() }
 
+    // 批量发布
+    const handleBatchRetry = () => {
+      const ids = selectedIds.value.filter(id => {
+        const rel = releases.value.find(r => r.id === id)
+        return rel && ['Failed', 'Canceled', 'Succeeded'].includes(rel.status)
+      })
+      if (ids.length === 0) {
+        Message.warning({ content: '请选择可发布的记录（失败/已取消/已成功状态）' }); return
+      }
+      openConfirm('批量发布', `确定要重新发布已选的 ${ids.length} 个发布单吗？\n将根据每个发布单的最近配置重新执行发布。`, '确认发布', 'create', async () => {
+        batchLoading.value = true
+        try {
+          const r = await batchRetryReleaseApi(ids)
+          if (r.code === 0) {
+            const data = r.data || {}
+            Message.success({ content: data.message || `批量发布完成`, duration: 3000 })
+            selectedIds.value = []
+            loadAll()
+          } else { throw new Error(r.msg || '批量发布失败') }
+        } catch (e) { Message.error({ content: e.message || '批量发布失败' }) }
+        finally { batchLoading.value = false }
+      })
+    }
+
+    // 批量回滚
+    const handleBatchRollback = () => {
+      const ids = selectedIds.value.filter(id => {
+        const rel = releases.value.find(r => r.id === id)
+        return rel && ['Succeeded', 'Running'].includes(rel.status)
+      })
+      if (ids.length === 0) {
+        Message.warning({ content: '请选择可回滚的记录（发布成功/运行中状态）' }); return
+      }
+      openConfirm('批量回滚', `确定要回滚已选的 ${ids.length} 个发布单吗？\n将根据每个发布单的上一次部署记录回滚到上一个稳定版本。`, '确认回滚', 'warning', async () => {
+        batchLoading.value = true
+        try {
+          const r = await batchRollbackReleaseApi(ids)
+          if (r.code === 0) {
+            const data = r.data || {}
+            Message.success({ content: data.message || `批量回滚完成`, duration: 3000 })
+            selectedIds.value = []
+            loadAll()
+          } else { throw new Error(r.msg || '批量回滚失败') }
+        } catch (e) { Message.error({ content: e.message || '批量回滚失败' }) }
+        finally { batchLoading.value = false }
+      })
+    }
+
+    // 同步流水线记录
+    const syncFromPipeline = async () => {
+      syncing.value = true
+      try {
+        const r = await syncReleasesApi()
+        if (r.code === 0) {
+          const data = r.data || {}
+          if (data.synced > 0) {
+            Message.success({ content: data.message || `同步完成：新增 ${data.synced} 条记录`, duration: 3000 })
+            loadAll()
+          } else {
+            Message.info({ content: '所有流水线记录已同步，无新数据' })
+          }
+        } else { throw new Error(r.msg || '同步失败') }
+      } catch (e) { Message.error({ content: e.message || '同步流水线记录失败' }) }
+      finally { syncing.value = false }
+    }
+
     watch(statusFilter, () => { currentPage.value = 1; loadReleases() })
     watch(currentPage, () => { loadReleases() })
 
@@ -681,7 +814,10 @@ export default {
       showConfirmDialog, confirmTitle, confirmMessage, confirmBtnText, confirmType, confirming, confirmAction,
       viewRelease, cancelRelease, rollbackRelease, retryRelease, handleSearch, clearSearch,
       statusText, normalizeStatus, strategyText, formatImage, getFullImage, formatDate, loadAll,
-      visiblePages, goToPage, jumpPage, jumpToPage, pageSizeRef, onPageSizeChange
+      visiblePages, goToPage, jumpPage, jumpToPage, pageSizeRef, onPageSizeChange,
+      selectedIds, batchLoading, isAllSelected, isIndeterminate, toggleAll, toggleSelect,
+      handleBatchRetry, handleBatchRollback,
+      syncing, syncFromPipeline
     }
   }
 }
@@ -710,16 +846,19 @@ export default {
 .banner-title { margin: 0; font-size: 22px; font-weight: 600; color: #fff; letter-spacing: 0.5px; }
 .banner-desc { margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,0.55); }
 .banner-actions { display: flex; gap: 10px; }
-.btn-banner-refresh, .btn-banner-create {
+.btn-banner-refresh, .btn-banner-create, .btn-banner-sync {
   display: flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px;
   font-size: 13px; cursor: pointer; transition: all 0.25s; border: 1px solid rgba(255,255,255,0.15);
 }
 .btn-banner-refresh { background: rgba(255,255,255,0.1); color: #fff; }
 .btn-banner-refresh:hover { background: rgba(255,255,255,0.18); }
 .btn-banner-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-banner-refresh svg, .btn-banner-create svg { width: 16px; height: 16px; }
+.btn-banner-refresh svg, .btn-banner-create svg, .btn-banner-sync svg { width: 16px; height: 16px; }
 .btn-banner-create { background: linear-gradient(135deg, #4e7cf6, #3b5fe0); color: #fff; border-color: transparent; font-weight: 600; }
 .btn-banner-create:hover { box-shadow: 0 4px 14px rgba(78,124,246,0.4); transform: translateY(-1px); }
+.btn-banner-sync { background: linear-gradient(135deg, #10b981, #059669); color: #fff; border-color: transparent; font-weight: 600; }
+.btn-banner-sync:hover { box-shadow: 0 4px 14px rgba(16,185,129,0.4); transform: translateY(-1px); }
+.btn-banner-sync:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* ---- Metrics ---- */
 .metrics-row {
@@ -768,6 +907,85 @@ export default {
 .clear-btn { background: none; border: none; cursor: pointer; padding: 2px; color: #94a3b8; display: flex; }
 .clear-btn:hover { color: #ef4444; }
 .clear-btn svg { width: 14px; height: 14px; }
+
+/* ---- Batch Toolbar (Full-width prominent) ---- */
+.batch-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
+  border-radius: 10px;
+  margin: 12px 0;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+  animation: batchSlideIn 0.25s ease;
+}
+@keyframes batchSlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.batch-slide-enter-active, .batch-slide-leave-active { transition: all 0.25s ease; }
+.batch-slide-enter-from, .batch-slide-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.batch-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.batch-indicator {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+}
+.batch-indicator svg { width: 18px; height: 18px; color: #fff; }
+.batch-label { font-size: 14px; color: #fff; font-weight: 500; }
+.batch-label strong { color: #fbbf24; font-weight: 700; font-size: 16px; }
+
+.batch-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.batch-action-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 20px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.batch-action-btn svg { width: 16px; height: 16px; }
+.batch-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+.batch-action-btn.publish {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+.batch-action-btn.publish:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.batch-action-btn.rollback {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+}
+.batch-action-btn.rollback:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.batch-action-btn.cancel {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+.batch-action-btn.cancel:hover {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.5);
+}
+
+/* ---- Checkbox ---- */
+.row-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #4e7cf6; }
+.data-table tbody tr.row-selected { background: #f0f7ff !important; }
+.data-table tbody tr.row-selected:hover { background: #e0efff !important; }
 
 /* ---- Table ---- */
 .table-wrapper {

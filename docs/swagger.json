@@ -3637,6 +3637,76 @@
                 }
             }
         },
+        "/api/v1/k8s/cicd/release/batch-retry": {
+            "post": {
+                "description": "批量重新发布（根据最近一次发布记录重新发布）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "批量重新发布",
+                "parameters": [
+                    {
+                        "description": "批量发布参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.CicdReleaseBatchRetryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/release/batch-rollback": {
+            "post": {
+                "description": "批量回滚（根据最近一次发布记录回滚到上一个版本）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "批量回滚发布单",
+                "parameters": [
+                    {
+                        "description": "批量回滚参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.CicdReleaseBatchRollbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/release/cancel": {
             "post": {
                 "description": "智能取消：已部署成功/运行中的会触发回滚，未部署的直接取消",
@@ -3859,6 +3929,27 @@
                     "CICD Release"
                 ],
                 "summary": "获取发布单统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/release/sync-from-pipeline": {
+            "post": {
+                "description": "将最近的流水线运行记录同步到发布管理页面",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "同步流水线运行记录到发布管理",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4856,6 +4947,56 @@
                     },
                     "400": {
                         "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cluster/batch-delete": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "批量软删除K8s集群",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s集群管理"
+                ],
+                "summary": "批量删除K8s集群",
+                "parameters": [
+                    {
+                        "description": "body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.K8sClusterBatchDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -16669,6 +16810,28 @@
                 }
             }
         },
+        "requests.CicdReleaseBatchRetryRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "requests.CicdReleaseBatchRollbackRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
         "requests.CicdReleaseCreateRequest": {
             "type": "object",
             "properties": {
@@ -17147,6 +17310,17 @@
                 },
                 "secret_name": {
                     "type": "string"
+                }
+            }
+        },
+        "requests.K8sClusterBatchDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

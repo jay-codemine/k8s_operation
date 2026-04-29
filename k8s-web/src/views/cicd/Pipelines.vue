@@ -1285,9 +1285,11 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #ebf8ff 0%, #e0f2fe 100%);
-  border-bottom: 1px solid #bae6fd;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
 }
 
 .batch-info {
@@ -1298,27 +1300,29 @@ export default {
 
 .batch-count {
   font-size: 14px;
-  color: #0369a1;
+  color: #ffffff;
 }
 
 .batch-count strong {
-  font-weight: 600;
-  color: #0284c7;
+  font-weight: 700;
+  color: #fbbf24;
+  font-size: 16px;
 }
 
 .batch-clear {
-  background: none;
-  border: none;
-  color: #0284c7;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
   font-size: 13px;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 4px 12px;
   border-radius: 4px;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
 .batch-clear:hover {
-  background: rgba(2, 132, 199, 0.1);
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .batch-actions {
@@ -1330,13 +1334,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 9px 18px;
   border: none;
   border-radius: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .batch-btn svg {
@@ -1345,44 +1350,53 @@ export default {
 }
 
 .batch-btn.primary {
-  background: #4299e1;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.35);
 }
 
 .batch-btn.primary:hover:not(:disabled) {
-  background: #3182ce;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
 }
 
 .batch-btn.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .batch-btn.warning {
-  background: white;
-  color: #d97706;
-  border: 1px solid #fcd34d;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  box-shadow: 0 3px 8px rgba(245, 158, 11, 0.35);
 }
 
 .batch-btn.warning:hover:not(:disabled) {
-  background: #fffbeb;
-  border-color: #fbbf24;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
 }
 
 .batch-btn.warning:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .batch-btn.danger {
-  background: white;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
 }
 
 .batch-btn.danger:hover {
-  background: #fef2f2;
-  border-color: #f87171;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.45);
 }
 
 .slide-down-enter-active,

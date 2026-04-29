@@ -343,6 +343,21 @@ func (d *Dao) PipelineUpdateDeployInfo(ctx context.Context, id int64, image, dig
 	})
 }
 
+// PipelineRunListCompletedUnsynced 获取已完成但未同步到发布记录的运行记录
+func (d *Dao) PipelineRunListCompletedUnsynced(ctx context.Context, limit int) ([]*models.CicdPipelineRun, error) {
+	var list []*models.CicdPipelineRun
+	err := d.db.WithContext(ctx).
+		Where("status IN (?, ?) AND build_number > 0 AND id NOT IN (SELECT build_id FROM cicd_release WHERE is_del = 0 AND build_id > 0)",
+			models.PipelineRunStatusSuccess, models.PipelineRunStatusFailed).
+		Order("id DESC").
+		Limit(limit).
+		Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // ==================== Environment CRUD ====================
 
 // EnvironmentList 获取环境列表（支持分页和关键字搜索）

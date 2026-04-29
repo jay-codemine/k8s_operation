@@ -38,6 +38,14 @@
         </div>
       </div>
       <div class="toolbar-right">
+        <button 
+          v-if="canOperate && selectedIds.length > 0" 
+          class="btn btn-danger" 
+          :disabled="loading"
+          @click="onBatchDelete"
+        >
+          批量删除 ({{ selectedIds.length }})
+        </button>
         <div class="view-switch">
           <button 
             class="view-btn" 
@@ -72,6 +80,15 @@
         <table class="resource-table">
           <thead>
           <tr>
+            <th v-if="canOperate" style="width: 40px;">
+              <input 
+                type="checkbox" 
+                :checked="isAllSelected" 
+                :indeterminate="isIndeterminate"
+                @change="toggleAll"
+                class="row-checkbox"
+              />
+            </th>
             <th style="width: 80px;">ID</th>
             <th>集群名称</th>
             <th style="width: 140px;">版本</th>
@@ -82,7 +99,15 @@
           </thead>
 
           <tbody>
-          <tr v-for="c in paginatedClusters" :key="c.id">
+          <tr v-for="c in paginatedClusters" :key="c.id" :class="{ 'row-selected': selectedIds.includes(c.id) }">
+            <td v-if="canOperate">
+              <input 
+                type="checkbox" 
+                :checked="selectedIds.includes(c.id)" 
+                @change="toggleSelect(c.id)"
+                class="row-checkbox"
+              />
+            </td>
             <td>{{ c.id }}</td>
 
             <td>
@@ -355,6 +380,7 @@ import http from '@/api/http'
 import {
   createCluster,
   deleteCluster,
+  batchDeleteCluster,
   getClusterList,
   initCluster,
   updateCluster,
@@ -379,6 +405,37 @@ const clusters = ref([])
 
 // 视图模式：table（表格） 或 card（卡片）
 const viewMode = ref('table')
+
+// ===== 批量选择 =====
+const selectedIds = ref([])
+const isAllSelected = computed(() => {
+  if (paginatedClusters.value.length === 0) return false
+  return paginatedClusters.value.every(c => selectedIds.value.includes(c.id))
+})
+const isIndeterminate = computed(() => {
+  if (paginatedClusters.value.length === 0) return false
+  const selected = paginatedClusters.value.filter(c => selectedIds.value.includes(c.id))
+  return selected.length > 0 && selected.length < paginatedClusters.value.length
+})
+
+const toggleAll = (e) => {
+  if (e.target.checked) {
+    const currentPageIds = paginatedClusters.value.map(c => c.id)
+    selectedIds.value = [...new Set([...selectedIds.value, ...currentPageIds])]
+  } else {
+    const currentPageIds = paginatedClusters.value.map(c => c.id)
+    selectedIds.value = selectedIds.value.filter(id => !currentPageIds.includes(id))
+  }
+}
+
+const toggleSelect = (id) => {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx === -1) {
+    selectedIds.value.push(id)
+  } else {
+    selectedIds.value.splice(idx, 1)
+  }
+}
 
 // ===== UI =====
 const searchQuery = ref('')
@@ -646,12 +703,44 @@ const onDelete = async (c) => {
   try {
     const body = await deleteCluster({id: c.id})
     Message.success({content: body?.msg || '删除成功', duration: 1800})
+    selectedIds.value = selectedIds.value.filter(id => id !== c.id)
     await fetchList()
   } catch (e) {
     console.error(e)
     const body = unwrapErrorBody(e)
     Message.error({
       content: `删除失败：${pickMsg(body, e?.message || '请查看后端日志')}`,
+      duration: 2600,
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+// 批量删除
+const onBatchDelete = async () => {
+  if (selectedIds.value.length === 0) {
+    Message.warning({content: '请先选择要删除的集群', duration: 1800})
+    return
+  }
+  if (!confirm(`⚠️ 确认批量删除 ${selectedIds.value.length} 个集群？
+
+已选集群 ID: ${selectedIds.value.join(', ')}
+
+警告：删除集群将移除所有关联配置和 kubeconfig！
+此操作不可逆，请确认！`)) return;
+
+  loading.value = true
+  try {
+    const body = await batchDeleteCluster({ids: selectedIds.value})
+    Message.success({content: body?.data?.msg || body?.msg || `批量删除成功`, duration: 1800})
+    selectedIds.value = []
+    await fetchList()
+  } catch (e) {
+    console.error(e)
+    const body = unwrapErrorBody(e)
+    Message.error({
+      content: `批量删除失败：${pickMsg(body, e?.message || '请查看后端日志')}`,
       duration: 2600,
     })
   } finally {
@@ -1010,6 +1099,21 @@ const formatCheckAt = (ts) => {
 
 .resource-table tbody tr:hover {
   background: #f8fafc;
+}
+
+.resource-table tbody tr.row-selected {
+  background: #eff6ff;
+}
+
+.resource-table tbody tr.row-selected:hover {
+  background: #dbeafe;
+}
+
+.row-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #326ce5;
 }
 
 .op {

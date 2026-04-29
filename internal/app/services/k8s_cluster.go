@@ -40,6 +40,14 @@ func (s *Services) K8sClusterDelete(ctx context.Context, param *requests.K8sClus
 	return s.dao.KubeClusterDelete(ctx, param.ID)
 }
 
+// K8sClusterBatchDelete 批量删除集群
+func (s *Services) K8sClusterBatchDelete(ctx context.Context, ids []uint32) (int64, error) {
+	if len(ids) == 0 {
+		return 0, fmt.Errorf("集群ID列表不能为空")
+	}
+	return s.dao.KubeClusterBatchDelete(ctx, ids)
+}
+
 func (s *Services) K8sClusterList(ctx context.Context, param *requests.K8sClusterListRequest,
 ) (list []*models.K8sCluster, total int64, err error) {
 	return s.dao.KubeClusterList(ctx, param)

@@ -197,6 +197,29 @@ export const rollbackRelease = (id, targetVersion = null) => {
 }
 
 /**
+ * 批量重新发布
+ * @param {number[]} ids - 发布单ID列表
+ */
+export const batchRetryRelease = (ids) => {
+  return http.post(`${RELEASE_BASE}/batch-retry`, { ids })
+}
+
+/**
+ * 批量回滚发布单
+ * @param {number[]} ids - 发布单ID列表
+ */
+export const batchRollbackRelease = (ids) => {
+  return http.post(`${RELEASE_BASE}/batch-rollback`, { ids })
+}
+
+/**
+ * 同步流水线运行记录到发布管理
+ */
+export const syncReleasesFromPipeline = () => {
+  return http.post(`${RELEASE_BASE}/sync-from-pipeline`)
+}
+
+/**
  * 获取发布单下的任务列表
  * @param {number} id - 发布单ID
  */

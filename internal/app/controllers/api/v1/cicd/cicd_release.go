@@ -1,6 +1,7 @@
 package cicd
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -331,4 +332,122 @@ func (c *CicdReleaseController) BuildCallback(ctx *gin.Context) {
 	}
 
 	rsp.Success(gin.H{"message": "回调处理成功"})
+}
+
+// BatchRetry godoc
+// @Summary 批量重新发布
+// @Description 批量重新发布（根据最近一次发布记录重新发布）
+// @Tags CICD Release
+// @Accept json
+// @Produce json
+// @Param body body requests.CicdReleaseBatchRetryRequest true "批量发布参数"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/batch-retry [post]
+func (c *CicdReleaseController) BatchRetry(ctx *gin.Context) {
+	param := requests.NewCicdReleaseBatchRetryRequest()
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCicdReleaseBatchRetryRequest); !ok {
+		return
+	}
+
+	if len(param.IDs) == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("发布单ID列表不能为空"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+	svc := services.NewServices()
+	results, err := svc.CicdReleaseBatchRetry(ctx.Request.Context(), param.IDs, userID)
+	if err != nil {
+		global.Logger.Error("CicdReleaseBatchRetry error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	// 统计成功/失败
+	successCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		}
+	}
+
+	rsp.Success(gin.H{
+		"message": fmt.Sprintf("批量发布完成：成功 %d / 共 %d", successCount, len(results)),
+		"results": results,
+		"success": successCount,
+		"total":   len(results),
+	})
+}
+
+// BatchRollback godoc
+// @Summary 批量回滚发布单
+// @Description 批量回滚（根据最近一次发布记录回滚到上一个版本）
+// @Tags CICD Release
+// @Accept json
+// @Produce json
+// @Param body body requests.CicdReleaseBatchRollbackRequest true "批量回滚参数"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/batch-rollback [post]
+func (c *CicdReleaseController) BatchRollback(ctx *gin.Context) {
+	param := requests.NewCicdReleaseBatchRollbackRequest()
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCicdReleaseBatchRollbackRequest); !ok {
+		return
+	}
+
+	if len(param.IDs) == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("发布单ID列表不能为空"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+	svc := services.NewServices()
+	results, err := svc.CicdReleaseBatchRollback(ctx.Request.Context(), param.IDs, userID)
+	if err != nil {
+		global.Logger.Error("CicdReleaseBatchRollback error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	// 统计成功/失败
+	successCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		}
+	}
+
+	rsp.Success(gin.H{
+		"message": fmt.Sprintf("批量回滚完成：成功 %d / 共 %d", successCount, len(results)),
+		"results": results,
+		"success": successCount,
+		"total":   len(results),
+	})
+}
+
+// SyncFromPipeline godoc
+// @Summary 同步流水线运行记录到发布管理
+// @Description 将最近的流水线运行记录同步到发布管理页面
+// @Tags CICD Release
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/sync-from-pipeline [post]
+func (c *CicdReleaseController) SyncFromPipeline(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	svc := services.NewServices()
+	synced, err := svc.CicdReleaseSyncFromPipeline(ctx.Request.Context())
+	if err != nil {
+		global.Logger.Error("CicdReleaseSyncFromPipeline error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{
+		"message": fmt.Sprintf("同步完成：新增 %d 条发布记录", synced),
+		"synced":  synced,
+	})
 }

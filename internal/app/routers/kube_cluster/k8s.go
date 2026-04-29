@@ -16,6 +16,7 @@ func (r *KubeRouter) Inject(router *gin.RouterGroup) {
 	router.POST("/create", kc.Create)
 	router.POST("/update", kc.Update)
 	router.POST("/delete", kc.Delete)
+	router.POST("/batch-delete", kc.BatchDelete)
 	router.GET("/list", kc.List)
 	router.POST("/init", kc.Init)
 }

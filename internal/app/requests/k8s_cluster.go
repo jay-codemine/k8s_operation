@@ -139,6 +139,30 @@ func ValidK8sClusterDeleteRequest(data interface{}, ctx *gin.Context) map[string
 }
 
 // =======================
+// BatchDelete
+// =======================
+
+type K8sClusterBatchDeleteRequest struct {
+	IDs []uint32 `json:"ids" form:"ids" valid:"ids"`
+}
+
+func NewK8sClusterBatchDeleteRequest() *K8sClusterBatchDeleteRequest {
+	return &K8sClusterBatchDeleteRequest{}
+}
+
+func ValidK8sClusterBatchDeleteRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{
+			"required: 集群ID列表不能为空(ids)",
+		},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// =======================
 // Init
 // =======================
 

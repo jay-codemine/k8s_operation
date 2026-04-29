@@ -71,6 +71,9 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		release.POST("/rollback", r.releaseCtrl.Rollback) // 回滚发布
 		release.POST("/retry", r.releaseCtrl.Retry)       // 重试发布
 		release.GET("/tasks", r.releaseCtrl.Tasks)        // 获取发布单下的任务列表
+		release.POST("/batch-retry", r.releaseCtrl.BatchRetry)       // 批量重新发布
+		release.POST("/batch-rollback", r.releaseCtrl.BatchRollback) // 批量回滚
+		release.POST("/sync-from-pipeline", r.releaseCtrl.SyncFromPipeline) // 同步流水线记录
 	}
 
 	// ==================== 回调接口 ====================

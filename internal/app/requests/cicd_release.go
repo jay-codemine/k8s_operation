@@ -133,3 +133,43 @@ type CicdBuildCallbackRequest struct {
 	ImageDigest string `json:"image_digest"` // 镜像摘要（可选）
 	Message     string `json:"message"`      // 构建消息
 }
+
+// ========== 批量发布 ==========
+
+type CicdReleaseBatchRetryRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchRetryRequest() *CicdReleaseBatchRetryRequest {
+	return &CicdReleaseBatchRetryRequest{}
+}
+
+func ValidCicdReleaseBatchRetryRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 批量回滚 ==========
+
+type CicdReleaseBatchRollbackRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchRollbackRequest() *CicdReleaseBatchRollbackRequest {
+	return &CicdReleaseBatchRollbackRequest{}
+}
+
+func ValidCicdReleaseBatchRollbackRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}

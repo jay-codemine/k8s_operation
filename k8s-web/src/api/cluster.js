@@ -24,6 +24,11 @@ export function deleteCluster(data) {
   return http.post(`${API_BASE}/k8s/cluster/delete`, data)
 }
 
+// 批量删除 K8s 集群
+export function batchDeleteCluster(data) {
+  return http.post(`${API_BASE}/k8s/cluster/batch-delete`, data)
+}
+
 // 初始化 K8s 集群
 export function initCluster(data) {
   return http.post(`${API_BASE}/k8s/cluster/init`, data)

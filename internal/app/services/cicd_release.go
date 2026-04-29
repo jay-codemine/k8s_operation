@@ -459,3 +459,156 @@ func (s *Services) CicdBuildCallback(ctx context.Context, req *requests.CicdBuil
 func (s *Services) TryFinalizeRelease(ctx context.Context, releaseID int64) {
 	s.tryFinalizeRelease(ctx, releaseID)
 }
+
+// ========== 批量操作 ==========
+
+// BatchRetryResult 批量发布结果
+type BatchRetryResult struct {
+	ID       int64  `json:"id"`
+	NewID    int64  `json:"new_id,omitempty"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
+}
+
+// CicdReleaseBatchRetry 批量重新发布（根据最近一次发布记录发布）
+func (s *Services) CicdReleaseBatchRetry(ctx context.Context, ids []int64, userID int64) ([]BatchRetryResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("发布单ID列表不能为空")
+	}
+
+	results := make([]BatchRetryResult, 0, len(ids))
+	for _, id := range ids {
+		newID, err := s.CicdReleaseRetry(ctx, id, userID)
+		if err != nil {
+			results = append(results, BatchRetryResult{
+				ID:      id,
+				Success: false,
+				Message: err.Error(),
+			})
+		} else {
+			results = append(results, BatchRetryResult{
+				ID:      id,
+				NewID:   newID,
+				Success: true,
+				Message: "发布成功",
+			})
+		}
+	}
+	return results, nil
+}
+
+// BatchRollbackResult 批量回滚结果
+type BatchRollbackResult struct {
+	ID       int64  `json:"id"`
+	NewID    int64  `json:"new_id,omitempty"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
+}
+
+// CicdReleaseBatchRollback 批量回滚（根据最近一次发布记录回滚到上一个版本）
+func (s *Services) CicdReleaseBatchRollback(ctx context.Context, ids []int64, userID int64) ([]BatchRollbackResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("发布单ID列表不能为空")
+	}
+
+	results := make([]BatchRollbackResult, 0, len(ids))
+	for _, id := range ids {
+		newID, err := s.CicdReleaseRollback(ctx, id, userID)
+		if err != nil {
+			results = append(results, BatchRollbackResult{
+				ID:      id,
+				Success: false,
+				Message: err.Error(),
+			})
+		} else {
+			results = append(results, BatchRollbackResult{
+				ID:      id,
+				NewID:   newID,
+				Success: true,
+				Message: "回滚成功",
+			})
+		}
+	}
+	return results, nil
+}
+
+// CicdReleaseSyncFromPipeline 将未同步的流水线运行记录同步到发布管理
+func (s *Services) CicdReleaseSyncFromPipeline(ctx context.Context) (int, error) {
+	// 获取未同步的已完成运行记录（最多50条）
+	runs, err := s.dao.PipelineRunListCompletedUnsynced(ctx, 50)
+	if err != nil {
+		return 0, fmt.Errorf("查询未同步运行记录失败: %w", err)
+	}
+
+	if len(runs) == 0 {
+		return 0, nil
+	}
+
+	synced := 0
+	for _, run := range runs {
+		// 获取对应的流水线信息
+		pipeline, err := s.dao.PipelineGetByID(ctx, run.PipelineID)
+		if err != nil {
+			continue
+		}
+
+		// 转换状态
+		releaseStatus := models.CicdReleaseStatusSucceeded
+		if run.Status == models.PipelineRunStatusFailed {
+			releaseStatus = models.CicdReleaseStatusFailed
+		}
+
+		// 解析镜像
+		imageRepo := run.ImageURL
+		imageTag := ""
+		if run.ImageURL != "" {
+			if idx := strings.LastIndex(run.ImageURL, ":"); idx > 0 && !strings.Contains(run.ImageURL[idx:], "/") {
+				imageRepo = run.ImageURL[:idx]
+				imageTag = run.ImageURL[idx+1:]
+			}
+		}
+
+		workloadKind := pipeline.TargetWorkloadKind
+		if workloadKind == "" {
+			workloadKind = "Deployment"
+		}
+		namespace := pipeline.TargetNamespace
+		if namespace == "" {
+			namespace = "default"
+		}
+
+		// 使用运行记录的创建时间作为发布时间
+		createdAt := run.CreatedAt
+		if createdAt == 0 {
+			createdAt = uint64(time.Now().Unix())
+		}
+
+		release := &models.CicdRelease{
+			AppName:       pipeline.Name,
+			Namespace:     namespace,
+			WorkloadKind:  workloadKind,
+			WorkloadName:  pipeline.TargetWorkloadName,
+			ContainerName: pipeline.TargetContainer,
+			Strategy:      "rolling",
+			TimeoutSec:    300,
+			Status:        releaseStatus,
+			Message:       fmt.Sprintf("流水线同步: %s #%d", pipeline.Name, run.BuildNumber),
+			CreatedUserID: run.TriggerUserID,
+			BuildID:       run.ID,
+			ImageRepo:     imageRepo,
+			ImageTag:      imageTag,
+			CreatedAt:     createdAt,
+			ModifiedAt:    uint64(time.Now().Unix()),
+		}
+		if run.ImageDigest != "" {
+			digest := run.ImageDigest
+			release.ImageDigest = &digest
+		}
+
+		if err := s.dao.CicdReleaseCreate(ctx, release); err == nil {
+			synced++
+		}
+	}
+
+	return synced, nil
+}

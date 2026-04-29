@@ -98,6 +98,19 @@ func (d *Dao) KubeClusterDelete(ctx context.Context, clusterId uint32) error {
 	return kc.Delete(d.db.WithContext(ctx))
 }
 
+// KubeClusterBatchDelete 批量软删除集群
+func (d *Dao) KubeClusterBatchDelete(ctx context.Context, ids []uint32) (int64, error) {
+	now := utils.NowUnix()
+	tx := d.db.WithContext(ctx).Model(&models.K8sCluster{}).
+		Where("id IN ? AND is_del = 0", ids).
+		Updates(map[string]interface{}{
+			"is_del":      1,
+			"deleted_at":  now,
+			"modified_at": now,
+		})
+	return tx.RowsAffected, tx.Error
+}
+
 func (d *Dao) UpdateClusterHealth(ctx context.Context, clusterID uint32, status uint8, lastErr string) error {
 	kc := &models.K8sCluster{ID: clusterID}
 	return kc.UpdateHealth(d.db.WithContext(ctx), status, lastErr)

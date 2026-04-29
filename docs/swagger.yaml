@@ -464,6 +464,20 @@ definitions:
         description: SUCCESS / FAILURE / ABORTED
         type: string
     type: object
+  requests.CicdReleaseBatchRetryRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  requests.CicdReleaseBatchRollbackRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
   requests.CicdReleaseCreateRequest:
     properties:
       app_name:
@@ -784,6 +798,13 @@ definitions:
         type: array
       secret_name:
         type: string
+    type: object
+  requests.K8sClusterBatchDeleteRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
     type: object
   requests.K8sClusterCreateRequest:
     properties:
@@ -5044,6 +5065,52 @@ paths:
       summary: 更新流水线
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/release/batch-retry:
+    post:
+      consumes:
+      - application/json
+      description: 批量重新发布（根据最近一次发布记录重新发布）
+      parameters:
+      - description: 批量发布参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.CicdReleaseBatchRetryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量重新发布
+      tags:
+      - CICD Release
+  /api/v1/k8s/cicd/release/batch-rollback:
+    post:
+      consumes:
+      - application/json
+      description: 批量回滚（根据最近一次发布记录回滚到上一个版本）
+      parameters:
+      - description: 批量回滚参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.CicdReleaseBatchRollbackRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量回滚发布单
+      tags:
+      - CICD Release
   /api/v1/k8s/cicd/release/cancel:
     post:
       consumes:
@@ -5194,6 +5261,20 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取发布单统计
+      tags:
+      - CICD Release
+  /api/v1/k8s/cicd/release/sync-from-pipeline:
+    post:
+      description: 将最近的流水线运行记录同步到发布管理页面
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 同步流水线运行记录到发布管理
       tags:
       - CICD Release
   /api/v1/k8s/cicd/release/tasks:
@@ -5853,6 +5934,38 @@ paths:
       summary: 更新流水线模板
       tags:
       - CICD Template
+  /api/v1/k8s/cluster/batch-delete:
+    post:
+      description: 批量软删除K8s集群
+      parameters:
+      - description: body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.K8sClusterBatchDeleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            type: string
+        "400":
+          description: 请求错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 批量删除K8s集群
+      tags:
+      - K8s集群管理
   /api/v1/k8s/cluster/create:
     post:
       description: 创建K8s集群

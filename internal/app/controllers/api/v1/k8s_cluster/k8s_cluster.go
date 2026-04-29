@@ -1,7 +1,8 @@
-﻿package k8s_cluster
+package k8s_cluster
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"io"
@@ -179,5 +180,41 @@ func (c *K8sClusterController) Init(ctx *gin.Context) {
 	rsp.Success(gin.H{
 		"message":  "初始化K8s集群成功",
 		"eventsV1": global.SupportsEventsV1,
+	})
+}
+
+// @Summary 批量删除K8s集群
+// @Description 批量软删除K8s集群
+// @Tags K8s集群管理
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body requests.K8sClusterBatchDeleteRequest true "body"
+// @Success 200 {object} string "成功"
+// @Failure 400 {object} map[string]interface{} "请求错误"
+// @Failure 500 {object} map[string]interface{} "内部错误"
+// @Router /api/v1/k8s/cluster/batch-delete [post]
+func (c *K8sClusterController) BatchDelete(ctx *gin.Context) {
+	param := requests.NewK8sClusterBatchDeleteRequest()
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidK8sClusterBatchDeleteRequest); !ok {
+		return
+	}
+
+	if len(param.IDs) == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("集群ID列表不能为空"))
+		return
+	}
+
+	svc := services.NewServices()
+	affected, err := svc.K8sClusterBatchDelete(ctx.Request.Context(), param.IDs)
+	if err != nil {
+		global.Logger.Error("批量删除K8s集群失败", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorClusterDeleteFail)
+		return
+	}
+	rsp.Success(gin.H{
+		"msg":      fmt.Sprintf("成功删除 %d 个集群", affected),
+		"affected": affected,
 	})
 }

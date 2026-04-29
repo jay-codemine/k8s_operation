@@ -874,6 +874,12 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 		result.Image = deployResult.Image
 	}
 
+	// ==================== 自动同步发布记录 ====================
+	// 构建完成后自动创建发布单，让发布管理页面可以看到最新的构建记录
+	if runStatus == models.PipelineRunStatusSuccess || runStatus == models.PipelineRunStatusFailed {
+		go s.syncPipelineRunToRelease(context.Background(), pipeline, run, runStatus, image, req.ImageDigest)
+	}
+
 	return result, nil
 }
 
@@ -1246,6 +1252,87 @@ func computeHMAC(secret, jobName string, buildNumber int, status string) string 
 // hmacEqual 安全比较两个 HMAC 签名（防止时序攻击）
 func hmacEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// ==================== 流水线运行同步到发布记录 ====================
+
+// syncPipelineRunToRelease 构建完成后自动创建发布单，让发布管理页面能看到最新的构建记录
+func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, runStatus, image, imageDigest string) {
+	// 防重：检查是否已经存在对应的发布单（以 build_id 关联）
+	existing, _ := s.dao.CicdReleaseGetByBuildID(ctx, run.ID)
+	if existing != nil {
+		global.Logger.Debug("[同步发布] 已存在对应的发布单，跳过",
+			zap.Int64("run_id", run.ID),
+			zap.Int64("release_id", existing.ID),
+		)
+		return
+	}
+
+	// 转换状态
+	releaseStatus := models.CicdReleaseStatusSucceeded
+	if runStatus == models.PipelineRunStatusFailed {
+		releaseStatus = models.CicdReleaseStatusFailed
+	}
+
+	// 解析镜像地址
+	imageRepo := image
+	imageTag := ""
+	if image != "" {
+		// 分离 repo 和 tag，如 registry.cn/proj/app:v1.0 -> repo=registry.cn/proj/app, tag=v1.0
+		if idx := strings.LastIndex(image, ":"); idx > 0 && !strings.Contains(image[idx:], "/") {
+			imageRepo = image[:idx]
+			imageTag = image[idx+1:]
+		}
+	}
+
+	// 确定工作负载信息
+	workloadKind := pipeline.TargetWorkloadKind
+	if workloadKind == "" {
+		workloadKind = "Deployment"
+	}
+	namespace := pipeline.TargetNamespace
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	now := uint64(time.Now().Unix())
+	release := &models.CicdRelease{
+		AppName:       pipeline.Name,
+		Namespace:     namespace,
+		WorkloadKind:  workloadKind,
+		WorkloadName:  pipeline.TargetWorkloadName,
+		ContainerName: pipeline.TargetContainer,
+		Strategy:      "rolling",
+		TimeoutSec:    300,
+		Status:        releaseStatus,
+		Message:       fmt.Sprintf("流水线自动同步: %s #%d", pipeline.Name, run.BuildNumber),
+		CreatedUserID: run.TriggerUserID,
+		BuildID:       run.ID,
+		ImageRepo:     imageRepo,
+		ImageTag:      imageTag,
+		CreatedAt:     now,
+		ModifiedAt:    now,
+	}
+	if imageDigest != "" {
+		release.ImageDigest = &imageDigest
+	}
+
+	if err := s.dao.CicdReleaseCreate(ctx, release); err != nil {
+		global.Logger.Warn("[同步发布] 创建发布单失败",
+			zap.Int64("pipeline_id", pipeline.ID),
+			zap.Int64("run_id", run.ID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	global.Logger.Info("[同步发布] 发布单创建成功",
+		zap.Int64("pipeline_id", pipeline.ID),
+		zap.Int64("run_id", run.ID),
+		zap.Int64("release_id", release.ID),
+		zap.String("app_name", pipeline.Name),
+		zap.String("status", releaseStatus),
+	)
 }
 
 // ==================== 自动部署 K8s ====================
