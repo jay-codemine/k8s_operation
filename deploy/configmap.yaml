@@ -1,0 +1,113 @@
+# ============================================================
+# K8sOperation 平台主配置 ConfigMap
+# 说明：存放非敏感配置项，敏感信息（密码、Token）放 Secret
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8soperation-config
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation
+data:
+  config.yaml: |
+    Server:
+      RunMode: release
+      Port: 8080
+      ReadTimeout: 3600
+      WriteTimeout: 3600
+      IdleTimeout: 300
+      ShutdownTimeout: 300
+
+    Database:
+      DBType: mysql
+      Username: root
+      # Password 通过 Secret 环境变量注入，此处占位
+      Password: "${DB_PASSWORD}"
+      Host: mysql.k8soperation.svc        # K8s 内部 MySQL Service 地址
+      Port: "3306"
+      DBName: k8s-platform
+      Charset: utf8
+      ParseTime: true
+      MaxIdleConns: 10
+      MaxOpenConns: 100
+      MaxLifeSeconds: 300
+
+    Cache:
+      Type: redis
+      Name: sk_sid
+      Address: redis.k8soperation.svc:6379  # K8s 内部 Redis Service 地址
+      Username: ""
+      Password: "${REDIS_PASSWORD}"
+      MaxConnect: 10
+      Network: tcp
+      Secret: "k8smana"
+
+    App:
+      LogLevel: info                        # 生产环境建议 info
+      TIMEZONE: "Asia/Shanghai"
+      LogType: single
+      LogFileName: storage/logs/app.log
+      BusinessLogFileName: storage/logs/biz.log
+      LogMaxSize: 50                        # 生产环境单文件 50MB
+      LogMaxBackup: 5
+      LogMaxAge: 30
+      LogCompress: true
+      MirrorBusinessToSystem: false
+      JWTMaxRefreshTime: 86400
+      JWTSigningKey: "${JWT_SIGNING_KEY}"
+      JWTExpireTime: 120000
+      AppName: "k8soperation"
+      GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
+      DefaultClusterID: 0
+      AutoInitK8s: true
+      AllowEmptyStart: true
+
+    PodLog:
+      EnableStreaming: false
+      TailDefault: 500
+      TailMax: 5000
+      LimitBytes: 2097152
+      Timestamps: false
+      Previous: false
+
+    ErrorCode:
+      AllowOverride: false                  # 生产环境禁止覆盖
+
+    ClusterClient:
+      TTL: 30m
+      TTLJitter: 3m
+
+    Pod:
+      eviction:
+        default_grace_seconds: 30
+
+    Node:
+      drain:
+        max_grace_seconds: 300
+        ignore_daemon_sets: true
+        delete_empty_dir: false
+
+    Jenkins:
+      URL: "${JENKINS_URL}"
+      Username: "${JENKINS_USERNAME}"
+      APIToken: "${JENKINS_API_TOKEN}"
+      TriggerTimeout: 60
+      CallbackURL: "http://k8soperation.k8soperation.svc:8080"   # K8s 内部 Service 地址
+      PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（钉钉通知用）
+      HMACSecret: "${HMAC_SECRET}"
+      PollInterval: 15
+      MaxBuildTime: 30
+      DingTalkWebhook: "${DINGTALK_WEBHOOK}"
+
+    Security:
+      KubeConfigEncryptKey: "${KUBECONFIG_ENCRYPT_KEY}"
+      PasswordBcryptCost: 10
+      AutoEncryptLegacyData: true
+
+    AIAssistant:
+      Enabled: false                        # 按需开启
+      DefaultProvider: "qwen"
+      SystemPrompt: "你是 K8s 管理平台的 AI 助手，擅长 Kubernetes 集群管理、资源运维、故障诊断。请用中文回复，简洁专业。"
+      ApprovalExpire: 30
+      MaxHistoryRound: 20

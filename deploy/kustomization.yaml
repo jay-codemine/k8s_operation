@@ -1,0 +1,21 @@
+# ============================================================
+# Kustomization - 一键部署所有资源
+# 使用方式：kubectl apply -k deploy/
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: k8soperation
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - service.yaml       # 包含 Service + ServiceAccount + RBAC
+  - deployment.yaml
+  # - ingress.yaml      # 按需取消注释
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: k8soperation-platform

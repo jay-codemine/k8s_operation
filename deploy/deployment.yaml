@@ -1,0 +1,176 @@
+# ============================================================
+# K8sOperation 平台 Deployment
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8soperation
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1                             # 制品存储为本地 PVC，建议单副本；多副本需 RWX 存储
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0                   # 先启新再下旧，保证零停机
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8soperation
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8soperation
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: k8soperation    # 需要操作 K8s API 的 ServiceAccount
+      terminationGracePeriodSeconds: 60   # 优雅退出等待时间（匹配代码中 30s shutdown + 5s cleanup）
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000                     # PVC 文件归属组
+
+      containers:
+        - name: k8soperation
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/k8soperation:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ==================== 环境变量（从 Secret 注入敏感配置） ====================
+          env:
+            - name: GIN_MODE
+              value: "release"
+            - name: APP_CONFIG
+              value: "/app/configs/config.yaml"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_PASSWORD
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: REDIS_PASSWORD
+            - name: JWT_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: JWT_SIGNING_KEY
+            - name: JENKINS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: JENKINS_URL
+            - name: JENKINS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: JENKINS_USERNAME
+            - name: JENKINS_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: JENKINS_API_TOKEN
+            - name: HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: HMAC_SECRET
+            - name: KUBECONFIG_ENCRYPT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: KUBECONFIG_ENCRYPT_KEY
+            - name: DINGTALK_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DINGTALK_WEBHOOK
+                  optional: true
+            - name: PLATFORM_FRONTEND_URL
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: PLATFORM_FRONTEND_URL
+                  optional: true
+
+          # ==================== 健康检查探针 ====================
+          # 存活探针：只要进程能响应即可（不检查外部依赖）
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # 就绪探针：检查 DB 等核心依赖是否就绪
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # 启动探针：给应用足够的启动时间（DB 迁移、数据补全等）
+          startupProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30          # 最多等 5*30=150s 启动
+
+          # ==================== 资源限制 ====================
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+
+          # ==================== 挂载卷 ====================
+          volumeMounts:
+            # 配置文件（ConfigMap）
+            - name: config
+              mountPath: /app/configs/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            # Jenkins 流水线模板（随镜像打包，或用 ConfigMap 覆盖）
+            - name: jenkins-templates
+              mountPath: /app/configs/jenkins-templates
+              readOnly: true
+            # 制品存储（PVC 持久化）
+            - name: artifact-storage
+              mountPath: /app/storage/artifacts
+            # 日志存储（PVC 持久化，可选）
+            - name: log-storage
+              mountPath: /app/storage/logs
+
+      # ==================== 卷定义 ====================
+      volumes:
+        - name: config
+          configMap:
+            name: k8soperation-config
+        - name: jenkins-templates
+          configMap:
+            name: k8soperation-jenkins-templates
+            optional: true                # 如果不存在，使用镜像内置模板
+        - name: artifact-storage
+          persistentVolumeClaim:
+            claimName: k8soperation-artifacts
+        - name: log-storage
+          persistentVolumeClaim:
+            claimName: k8soperation-logs
