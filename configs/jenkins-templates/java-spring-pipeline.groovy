@@ -198,11 +198,23 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== 编译 + 测试（合并生命周期，避免重复 clean） ====================
-        stage('Compile') {
+        // ==================== 编译 + 打包（一步到位产出 JAR，供制品上传和 Docker 构建复用） ====================
+        stage('Compile & Package') {
             steps {
-                echo "=== Maven 编译（增量模式） ==="
-                sh "mvn compile -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
+                echo "=== Maven 编译 & 打包（产出 target/*.jar） ==="
+                sh "mvn package -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
+                archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
+                script {
+                    // 验证 JAR 产出
+                    def jarFile = sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                    if (jarFile) {
+                        def jarSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
+                        echo "[Compile & Package] ✅ 产出: ${jarFile} (${jarSize} bytes)"
+                        env.JAR_FILE = jarFile
+                    } else {
+                        error("Maven package 未产出 JAR 文件，请检查 pom.xml 配置")
+                    }
+                }
             }
             post {
                 success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
@@ -315,9 +327,9 @@ MAVEN_HOME=${MAVEN_HOME}
             steps {
                 echo "=== 上传制品到平台制品库 ==="
                 script {
-                    // 查找 JAR 文件（Compile 阶段已产出）
-                    def jarFile = sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
-                    if (!jarFile) { echo "[制品上传] 未找到 JAR 文件，跳过"; return }
+                    // 查找 JAR 文件（Compile & Package 阶段已产出）
+                    def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                    if (!jarFile) { error("[制品上传] 未找到 JAR 文件，Compile & Package 阶段可能异常") }
 
                     def fileSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
                     echo "[制品上传] 上传文件: ${jarFile} (${fileSize} bytes)"
@@ -367,14 +379,15 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== Docker 镜像构建（复用 Compile 阶段已打包的 JAR） ====================
+        // ==================== Docker 镜像构建（复用 Compile & Package 阶段已打包的 JAR） ====================
         stage('Build Image') {
             steps {
-                echo "=== 打包 + 构建 Docker 镜像 ==="
+                echo "=== 构建 Docker 镜像（复用 Compile & Package 产出的 JAR） ==="
                 script {
-                    // Maven 打包（合并到镜像构建阶段，减少流水线耗时）
-                    sh "mvn package -DskipTests -B -T 1C -s ${MVN_SETTINGS} -Dmaven.repo.local=${MAVEN_LOCAL_REPO}"
-                    archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
+                    // JAR 已在 Compile & Package 阶段产出，此处直接构建镜像
+                    def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                    if (!jarFile) { error("target/ 下未找到 JAR 文件，请检查 Compile & Package 阶段") }
+                    echo "[Build Image] 使用 JAR: ${jarFile}"
 
                     def dockerfile = params.DOCKERFILE_PATH?.trim()
                     def javaVersion = params.JAVA_VERSION ?: '17'
