@@ -211,11 +211,11 @@ pipeline {
                         echo "[SonarQube] 扫描已提交，等待质量门禁..."
                         stageCallback('sonar', 'success')
                     } catch (e) {
-                        echo "[SonarQube] ⚠️ 扫描失败: ${e.message}"
+                        echo "[SonarQube] ❌ 扫描失败: ${e.message}"
                         echo "[SonarQube] 常见原因: 1) SonarQube 服务未启动  2) Jenkins 与 SonarQube 网络不通  3) SonarQube Token 过期"
                         stageCallback('sonar', 'failed')
                         env.SONAR_ANALYSIS_FAILED = 'true'
-                        // 不中断构建，继续后续阶段
+                        error("SonarQube 扫描失败: ${e.message}")
                     }
                 }
             }
@@ -291,9 +291,14 @@ pipeline {
                     """, returnStdout: true).trim()
 
                     if (curlStatus.endsWith('200')) {
-                        echo "[制品上传] 上传成功"
+                        echo "[制品上传] ✅ 上传成功"
                     } else {
-                        echo "[制品上传] 上传返回: HTTP ${curlStatus}（非致命，不影响构建）"
+                        echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
+                        def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                        echo "[制品上传] 响应内容: ${respBody}"
+                        echo "[制品上传] 上传地址: ${uploadUrl}"
+                        sh "rm -f ${archiveName} /tmp/artifact_resp.json 2>/dev/null || true"
+                        error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
                     }
                     sh "rm -f ${archiveName} /tmp/artifact_resp.json 2>/dev/null || true"
                 }

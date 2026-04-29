@@ -267,11 +267,11 @@ MAVEN_HOME=${MAVEN_HOME}
                         echo "[SonarQube] 扫描已提交，等待质量门禁..."
                         stageCallback('sonar', 'success')
                     } catch (e) {
-                        echo "[SonarQube] ⚠️ 扫描失败: ${e.message}"
+                        echo "[SonarQube] ❌ 扫描失败: ${e.message}"
                         echo "[SonarQube] 常见原因: 1) SonarQube 服务未启动  2) Jenkins 与 SonarQube 网络不通  3) SonarQube Token 过期"
                         stageCallback('sonar', 'failed')
                         env.SONAR_ANALYSIS_FAILED = 'true'
-                        // 不中断构建，继续后续阶段（镜像构建和推送不受 SonarQube 影响）
+                        error("SonarQube 扫描失败: ${e.message}")
                     }
                 }
             }
@@ -349,15 +349,16 @@ MAVEN_HOME=${MAVEN_HOME}
 
                     def httpCode = curlStatus[-3..-1]
                     def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                    sh "rm -f /tmp/artifact_resp.json 2>/dev/null || true"
                     if (httpCode == '200') {
                         echo "[制品上传] ✅ 上传成功，平台制品库已入库"
                         echo "[制品上传] 响应: ${respBody}"
                     } else {
-                        echo "[制品上传] ⚠️ 上传返回 HTTP ${httpCode}（非致命，不影响构建）"
+                        echo "[制品上传] ❌ 上传失败 HTTP ${httpCode}"
                         echo "[制品上传] 响应内容: ${respBody}"
                         echo "[制品上传] 上传地址: ${uploadUrl}"
+                        error("制品上传失败: HTTP ${httpCode}")
                     }
-                    sh "rm -f /tmp/artifact_resp.json 2>/dev/null || true"
                 }
             }
             post {
