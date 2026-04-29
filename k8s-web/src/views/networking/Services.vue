@@ -117,7 +117,18 @@
             </td>
             <td><span class="namespace-badge">{{ service.namespace }}</span></td>
             <td>
-              <span class="type-badge" :class="service.type.toLowerCase()">{{ service.type }}</span>
+              <div v-if="editingTypeService?.name === service.name && editingTypeService?.namespace === service.namespace" class="type-edit-inline">
+                <select v-model="editingTypeValue" class="type-edit-select" @change="confirmTypeChange(service)" @blur="cancelTypeEdit">
+                  <option value="ClusterIP">ClusterIP</option>
+                  <option value="NodePort">NodePort</option>
+                  <option value="LoadBalancer">LoadBalancer</option>
+                  <option value="ExternalName">ExternalName</option>
+                </select>
+              </div>
+              <span v-else class="type-badge editable" :class="service.type.toLowerCase()" @click="canOperate && startTypeEdit(service)" :title="canOperate ? '点击修改类型' : ''">
+                {{ service.type }}
+                <span v-if="canOperate" class="edit-hint">✎</span>
+              </span>
             </td>
             <td>{{ service.cluster_ip || '-' }}</td>
             <td>{{ service.ports || '-' }}</td>
@@ -211,19 +222,25 @@
 
           <!-- YAML 模式 -->
           <div v-if="createMode === 'yaml'" class="yaml-mode">
-            <div class="yaml-toolbar">
+            <div class="yaml-editor-toolbar">
               <button class="btn btn-sm" @click="loadServiceYamlTemplate">📋 加载模板</button>
               <button class="btn btn-sm" @click="clearYamlContent">🗑️ 清空</button>
               <button class="btn btn-sm" @click="formatYaml">✨ 格式化</button>
             </div>
             <div class="yaml-editor-container">
               <div class="yaml-editor">
-                <label>YAML 内容</label>
+                <label class="editor-label">YAML 内容</label>
                 <textarea v-model="createYamlContent" class="yaml-textarea" placeholder="粘贴或输入 Service YAML..."></textarea>
               </div>
-              <div class="yaml-preview">
-                <label>预览</label>
-                <pre class="yaml-preview-content">{{ yamlPreviewContent || '输入 YAML 后显示预览...' }}</pre>
+              <div class="yaml-preview-panel">
+                <label class="editor-label">实时预览</label>
+                <YamlHighlight
+                  :content="yamlPreviewContent"
+                  title="Preview"
+                  :show-toolbar="false"
+                  :show-line-numbers="true"
+                  max-height="360px"
+                />
               </div>
             </div>
             <div v-if="createYamlError" class="yaml-error">{{ createYamlError }}</div>
@@ -281,11 +298,23 @@
           </div>
           <button class="close-btn" @click="closeYamlModal">×</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body yaml-modal-body">
           <div v-if="loadingYaml" class="loading-state">加载中...</div>
-          <div v-else>
-            <pre v-if="yamlViewMode === 'view'" class="yaml-content">{{ yamlContent }}</pre>
-            <textarea v-else v-model="yamlEditContent" class="yaml-textarea full-height"></textarea>
+          <div v-else class="yaml-display-wrapper">
+            <YamlHighlight
+              v-if="yamlViewMode === 'view'"
+              :content="yamlContent"
+              :title="selectedService?.name + '.yaml'"
+              :show-toolbar="true"
+              :allow-download="true"
+              :filename="(selectedService?.name || 'service') + '.yaml'"
+              :show-line-numbers="true"
+              max-height="500px"
+            />
+            <div v-else class="yaml-edit-wrapper">
+              <label class="editor-label">编辑 YAML</label>
+              <textarea v-model="yamlEditContent" class="yaml-textarea full-height"></textarea>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -441,6 +470,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
+import YamlHighlight from '@/components/YamlHighlight.vue'
 import serviceApi from '@/api/cluster/networking/service'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import namespaceApi from '@/api/cluster/config/namespace'
@@ -521,6 +551,11 @@ const loadingEndpoints = ref(false)
 
 // 删除
 const deleting = ref(false)
+
+// 类型直接编辑
+const editingTypeService = ref(null)
+const editingTypeValue = ref('')
+const changingType = ref(false)
 
 // Deployment 关联
 const deploymentsList = ref([])          // 关联 Deployment 列表
@@ -1093,6 +1128,50 @@ const viewRelatedDeployments = async (service) => {
   }
 }
 
+// ==================== 类型直接编辑 ====================
+const startTypeEdit = (service) => {
+  editingTypeService.value = { name: service.name, namespace: service.namespace }
+  editingTypeValue.value = service.type
+}
+
+const cancelTypeEdit = () => {
+  editingTypeService.value = null
+  editingTypeValue.value = ''
+}
+
+const confirmTypeChange = async (service) => {
+  if (editingTypeValue.value === service.type) {
+    cancelTypeEdit()
+    return
+  }
+  if (!confirm(`确定将 Service 「${service.name}」的类型从 ${service.type} 改为 ${editingTypeValue.value} 吗？`)) {
+    cancelTypeEdit()
+    return
+  }
+  changingType.value = true
+  try {
+    const patchContent = JSON.stringify({ spec: { type: editingTypeValue.value } })
+    const res = await serviceApi.patchJson({
+      namespace: service.namespace,
+      name: service.name,
+      content: patchContent
+    })
+    if (res.code === 0) {
+      Message.success({ content: '类型修改成功', duration: 3000 })
+      service.type = editingTypeValue.value
+      fetchServices()
+    } else {
+      Message.error({ content: res.msg || '类型修改失败', duration: 5000 })
+    }
+  } catch (e) {
+    console.error('修改类型失败:', e)
+    Message.error({ content: e?.kube_message_error || e?.msg || e?.message || '类型修改失败', duration: 5000 })
+  } finally {
+    changingType.value = false
+    cancelTypeEdit()
+  }
+}
+
 // ==================== 删除 ====================
 const confirmDelete = (service) => {
   selectedService.value = service
@@ -1123,9 +1202,9 @@ onMounted(() => {
 
 <style scoped>
 .resource-view { width: 100%; display: flex; flex-direction: column; min-height: 0; }
-.view-header { margin-bottom: 24px; }
-.view-header h1 { font-size: 28px; font-weight: 700; color: #2d3748; margin-bottom: 8px; }
-.view-header p { font-size: 14px; color: #718096; }
+.view-header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid #eef2f7; }
+.view-header h1 { font-size: 32px; font-weight: 800; color: #1a202c; margin-bottom: 10px; letter-spacing: -0.5px; }
+.view-header p { font-size: 14px; color: #8b9ab0; font-weight: 400; }
 
 .action-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
 .filter-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1134,19 +1213,21 @@ onMounted(() => {
 .btn-filter.active { background: #326ce5; color: white; border-color: #326ce5; }
 .filter-count { font-size: 12px; opacity: 0.8; margin-left: 4px; }
 
-.search-box input { padding: 10px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; width: 250px; }
-.filter-dropdown select { padding: 10px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white; }
+.search-box input { padding: 10px 16px 10px 38px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; width: 260px; background: #fafbfc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E") no-repeat 12px center; transition: all 0.2s; }
+.search-box input:focus { outline: none; border-color: #326ce5; box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1); background-color: white; }
+.filter-dropdown select { padding: 10px 16px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; background: #fafbfc; transition: all 0.2s; cursor: pointer; }
+.filter-dropdown select:focus { outline: none; border-color: #326ce5; box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1); background: white; }
 .action-buttons { display: flex; gap: 8px; margin-left: auto; }
 
-.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-.btn-primary { background: #326ce5; color: white; }
-.btn-primary:hover { background: #2554c7; }
-.btn-secondary { background: #e2e8f0; color: #4a5568; }
-.btn-secondary:hover { background: #cbd5e0; }
-.btn-batch { background: #805ad5; color: white; }
-.btn-batch:hover { background: #6b46c1; }
-.btn-danger { background: #e53e3e; color: white; }
-.btn-danger:hover { background: #c53030; }
+.btn { padding: 10px 20px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px; }
+.btn-primary { background: linear-gradient(135deg, #326ce5 0%, #2554c7 100%); color: white; box-shadow: 0 2px 8px rgba(50, 108, 229, 0.25); }
+.btn-primary:hover { background: linear-gradient(135deg, #2554c7 0%, #1d45a7 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(50, 108, 229, 0.35); }
+.btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.btn-secondary:hover { background: #e2e8f0; color: #334155; transform: translateY(-1px); }
+.btn-batch { background: linear-gradient(135deg, #805ad5 0%, #6b46c1 100%); color: white; box-shadow: 0 2px 8px rgba(128, 90, 213, 0.25); }
+.btn-batch:hover { background: linear-gradient(135deg, #6b46c1 0%, #5a36b0 100%); transform: translateY(-1px); }
+.btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25); }
+.btn-danger:hover { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); transform: translateY(-1px); }
 .btn-link { background: none; border: none; color: #326ce5; cursor: pointer; padding: 4px 8px; }
 
 .pagination-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -1163,12 +1244,13 @@ onMounted(() => {
 .batch-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .batch-btn.danger { background: #e53e3e; }
 
-.table-container { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
-.resource-table { width: 100%; border-collapse: collapse; table-layout: auto; min-width: 0; }
-.resource-table th { background: #f7fafc; text-align: left; padding: 14px 16px; font-size: 13px; font-weight: 600; color: #4a5568; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-.resource-table td { padding: 14px 16px; font-size: 13px; color: #2d3748; border-bottom: 1px solid #f7fafc; }
-.resource-table tbody tr:hover { background: #f7fafc; }
-.row-selected { background: #ebf4ff !important; }
+.table-container { background: white; border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02); overflow: hidden; border: 1px solid #f1f5f9; }
+.resource-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: auto; min-width: 0; }
+.resource-table th { background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); text-align: left; padding: 14px 18px; font-size: 12px; font-weight: 700; color: #475569; border-bottom: 2px solid #e2e8f0; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.5px; }
+.resource-table td { padding: 14px 18px; font-size: 13px; color: #334155; border-bottom: 1px solid #f8fafc; transition: background 0.15s; }
+.resource-table tbody tr:hover { background: #f8fafc; }
+.resource-table tbody tr { transition: background 0.15s; }
+.row-selected { background: #eff6ff !important; }
 
 .loading-row, .empty-row { text-align: center; color: #718096; padding: 40px !important; }
 
@@ -1176,12 +1258,17 @@ onMounted(() => {
 .service-name .icon { font-size: 16px; }
 .namespace-badge { display: inline-block; padding: 4px 8px; background: rgba(50,108,229,0.1); color: #326ce5; border-radius: 4px; font-size: 12px; }
 
-.type-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-.type-badge.clusterip { background: rgba(50,108,229,0.1); color: #326ce5; }
-.type-badge.nodeport { background: rgba(16,185,129,0.1); color: #10b981; }
-.type-badge.loadbalancer { background: rgba(245,158,11,0.1); color: #f59e0b; }
-.type-badge.externalname { background: rgba(139,92,246,0.1); color: #8b5cf6; }
-.type-badge.headless { background: rgba(107,114,128,0.1); color: #6b7280; }
+.type-badge { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid transparent; transition: all 0.2s; }
+.type-badge.clusterip { background: rgba(50,108,229,0.08); color: #326ce5; border-color: rgba(50,108,229,0.15); }
+.type-badge.nodeport { background: rgba(16,185,129,0.08); color: #10b981; border-color: rgba(16,185,129,0.15); }
+.type-badge.loadbalancer { background: rgba(245,158,11,0.08); color: #f59e0b; border-color: rgba(245,158,11,0.15); }
+.type-badge.externalname { background: rgba(139,92,246,0.08); color: #8b5cf6; border-color: rgba(139,92,246,0.15); }
+.type-badge.headless { background: rgba(107,114,128,0.08); color: #6b7280; border-color: rgba(107,114,128,0.15); }
+.type-badge.editable { cursor: pointer; }
+.type-badge.editable:hover { filter: brightness(0.95); transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.type-badge .edit-hint { font-size: 10px; opacity: 0.5; }
+.type-edit-inline { display: inline-block; }
+.type-edit-select { padding: 4px 10px; border-radius: 8px; border: 2px solid #326ce5; font-size: 12px; font-weight: 600; color: #1e293b; background: white; outline: none; cursor: pointer; box-shadow: 0 2px 8px rgba(50, 108, 229, 0.15); }
 
 .selector-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .selector-tag { display: inline-block; padding: 2px 6px; background: #edf2f7; color: #4a5568; border-radius: 3px; font-size: 11px; }
@@ -1193,50 +1280,60 @@ onMounted(() => {
 .icon-btn.danger:hover { background: #fed7d7; }
 
 /* 模态框 */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background: white; border-radius: 12px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; }
-.modal-large { max-width: 900px; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #e2e8f0; }
-.modal-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.close-btn { background: none; border: none; font-size: 24px; color: #718096; cursor: pointer; }
-.modal-body { padding: 20px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 20px; border-top: 1px solid #e2e8f0; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal-content { background: white; border-radius: 16px; width: 90%; max-width: 520px; max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04); border: 1px solid rgba(226, 232, 240, 0.6); animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.modal-large { max-width: 960px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 22px 24px; border-bottom: 1px solid #f1f5f9; background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%); border-radius: 16px 16px 0 0; }
+.modal-header h3 { margin: 0; font-size: 18px; font-weight: 700; color: #1e293b; }
+.close-btn { background: #f1f5f9; border: none; font-size: 20px; color: #64748b; cursor: pointer; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.close-btn:hover { background: #e2e8f0; color: #334155; }
+.modal-body { padding: 24px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 24px; border-top: 1px solid #f1f5f9; background: #fafbfc; border-radius: 0 0 16px 16px; }
 
-.view-toggle-buttons { display: flex; gap: 4px; }
-.view-toggle-btn { padding: 6px 12px; border: 1px solid #e2e8f0; background: white; cursor: pointer; font-size: 12px; border-radius: 4px; }
-.view-toggle-btn.active { background: #326ce5; color: white; border-color: #326ce5; }
+.view-toggle-buttons { display: flex; gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 10px; }
+.view-toggle-btn { padding: 7px 14px; border: none; background: transparent; cursor: pointer; font-size: 12px; font-weight: 600; border-radius: 8px; color: #64748b; transition: all 0.2s; }
+.view-toggle-btn.active { background: white; color: #326ce5; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.view-toggle-btn:hover:not(.active) { color: #334155; }
 
 /* 表单 */
 .form-row { display: flex; gap: 16px; }
 .form-row .form-group { flex: 1; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #4a5568; }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
-.required { color: #e53e3e; }
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #475569; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 11px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; background: #fafbfc; transition: all 0.2s; color: #1e293b; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #326ce5; box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1); background: white; }
+.required { color: #ef4444; }
 
-.port-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-.port-input { width: 100px !important; }
-.protocol-select { width: 80px !important; }
+.port-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px 12px; background: #f8fafc; border-radius: 10px; border: 1px solid #f1f5f9; }
+.port-input { width: 110px !important; }
+.protocol-select { width: 90px !important; }
 .btn-icon { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; }
-.btn-icon.remove { color: #e53e3e; }
+.btn-icon.remove { color: #ef4444; }
 
 /* YAML 模式 */
-.yaml-mode { height: 400px; display: flex; flex-direction: column; }
-.yaml-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-.btn-sm { padding: 6px 12px; font-size: 12px; }
+.yaml-mode { height: 420px; display: flex; flex-direction: column; }
+.yaml-editor-toolbar { display: flex; gap: 8px; margin-bottom: 14px; padding: 10px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid #f1f5f9; }
+.btn-sm { padding: 7px 14px; font-size: 12px; font-weight: 600; border-radius: 8px; }
 .yaml-editor-container { display: flex; gap: 16px; flex: 1; min-height: 0; }
-.yaml-editor, .yaml-preview { flex: 1; display: flex; flex-direction: column; }
-.yaml-textarea { flex: 1; font-family: monospace; font-size: 13px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; resize: none; }
-.yaml-preview-content { flex: 1; background: #f7fafc; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow: auto; white-space: pre-wrap; margin: 0; }
-.yaml-error { color: #e53e3e; font-size: 13px; margin-top: 8px; padding: 8px; background: #fed7d7; border-radius: 4px; }
+.yaml-editor, .yaml-preview-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.editor-label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
+.yaml-textarea { flex: 1; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 13px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; resize: none; background: #fafbfc; line-height: 1.6; transition: border-color 0.2s, box-shadow 0.2s; }
+.yaml-textarea:focus { outline: none; border-color: #326ce5; box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1); background: white; }
+.yaml-error { color: #dc2626; font-size: 13px; margin-top: 10px; padding: 10px 14px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca; font-weight: 500; }
 .yaml-content { background: #f7fafc; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow: auto; white-space: pre-wrap; max-height: 400px; margin: 0; }
-.full-height { height: 400px; }
+.yaml-modal-body { padding: 0 24px 24px 24px; }
+.yaml-display-wrapper { margin-top: 8px; }
+.yaml-edit-wrapper { display: flex; flex-direction: column; height: 480px; }
+.yaml-edit-wrapper .editor-label { margin-bottom: 10px; }
+.full-height { flex: 1; height: auto; }
 
 /* 详情 */
-.detail-item { display: flex; align-items: flex-start; margin-bottom: 12px; font-size: 14px; }
-.detail-label { width: 100px; font-weight: 600; color: #4a5568; flex-shrink: 0; }
-.detail-value { color: #2d3748; }
-.highlight { color: #326ce5; font-weight: 600; }
+.detail-item { display: flex; align-items: flex-start; margin-bottom: 14px; font-size: 14px; padding: 10px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid #f1f5f9; }
+.detail-label { width: 100px; font-weight: 700; color: #475569; flex-shrink: 0; }
+.detail-value { color: #1e293b; font-weight: 500; }
+.highlight { color: #326ce5; font-weight: 700; }
 
 /* Endpoints */
 .endpoint-item { padding: 8px 12px; background: #f7fafc; border-radius: 4px; margin-bottom: 8px; font-family: monospace; font-size: 13px; }

@@ -2044,38 +2044,47 @@ export default {
     }
 
     // 自动选中当前执行的阶段（大厂风格实时跟踪）
+    // 优化：尊重用户手动选择，不强制覆盖用户操作
     const autoSelectRunningStage = (previousRunningStage) => {
       // 找到当前运行中的阶段（包括 running 和 deploying）
       const currentRunning = pipelineStages.value.find(s => s.status === 'running' || s.status === 'deploying')
       
-      // 如果有新的运行中阶段，自动选中并展开
+      // 如果有新的运行中阶段
       if (currentRunning) {
         // 检查是否切换到了新阶段
         const isNewStage = !previousRunningStage || previousRunningStage.name !== currentRunning.name
         
         if (isNewStage || !selectedStage.value) {
-          // 自动选中当前运行的阶段
-          selectedStage.value = currentRunning
-          stageDetailExpanded.value = true
+          // 新阶段开始执行时，只有在用户未手动选择时才自动切换
+          // 或者用户选中的恰好是上一个 running 阶段（自然流转）
+          const isFollowingFlow = selectedStage.value && 
+            (selectedStage.value.name === previousRunningStage?.name || selectedStage.value.status === 'running' || selectedStage.value.status === 'deploying')
+          
+          if (!userManuallySelected.value || isFollowingFlow || !selectedStage.value) {
+            selectedStage.value = currentRunning
+            stageDetailExpanded.value = true
+          }
         } else if (selectedStage.value && selectedStage.value.name === currentRunning.name) {
-          // 更新当前选中阶段的数据
+          // 更新当前选中阶段的数据（不改变展开状态）
           selectedStage.value = currentRunning
         }
       } else {
         // 没有运行中的阶段，检查是否有失败的阶段
         const failedStage = pipelineStages.value.find(s => s.status === 'failed')
         const wasRunning = selectedStage.value && (selectedStage.value.status === 'running' || selectedStage.value.status === 'deploying')
-        if (failedStage && (!selectedStage.value || wasRunning)) {
-          // 自动选中失败的阶段
+        
+        // 仅在用户未手动选择、或者当前选中的阶段刚从 running 变为其他状态时，才自动切换到失败阶段
+        if (failedStage && !userManuallySelected.value && (!selectedStage.value || wasRunning)) {
           selectedStage.value = failedStage
           stageDetailExpanded.value = true
         }
       }
       
-      // 同步更新选中阶段的数据
+      // 同步更新选中阶段的数据（仅更新数据，不改变展开/收起状态）
       if (selectedStage.value) {
         const updatedStage = pipelineStages.value.find(s => s.id === selectedStage.value.id || s.name === selectedStage.value.name)
         if (updatedStage) {
+          // 保持当前的展开状态，只更新阶段数据
           selectedStage.value = updatedStage
         }
       }
@@ -2218,6 +2227,9 @@ export default {
       // 清理选中的阶段详情（因为旧数据将无效）
       selectedStage.value = null
       stageDetailExpanded.value = false
+      // 重置手动选择标志，新的运行应该自动跟踪
+      userManuallySelected.value = false
+      if (userManuallySelectedTimer) clearTimeout(userManuallySelectedTimer)
       
       // 清理最新运行记录的错误信息
       if (latestRun.value) {
@@ -2293,9 +2305,21 @@ export default {
 
     // 阶段详情展开状态
     const stageDetailExpanded = ref(false)
+    // 用户手动选择标志：防止轮询自动覆盖用户的手动操作
+    const userManuallySelected = ref(false)
+    let userManuallySelectedTimer = null
 
     // 选中阶段（点击阶段卡片时触发）
     const selectStage = (stage) => {
+      // 标记为用户手动选择，防止轮询自动切换
+      userManuallySelected.value = true
+      // 清除旧的定时器
+      if (userManuallySelectedTimer) clearTimeout(userManuallySelectedTimer)
+      // 30秒后自动恢复自动跟踪（用户长时间不操作后恢复）
+      userManuallySelectedTimer = setTimeout(() => {
+        userManuallySelected.value = false
+      }, 30000)
+
       // 如果点击的是已选中的阶段，切换展开/收起
       if (selectedStage.value && selectedStage.value.name === stage.name) {
         stageDetailExpanded.value = !stageDetailExpanded.value
@@ -2312,6 +2336,12 @@ export default {
     // 切换阶段详情展开/收起
     const toggleStageDetail = () => {
       stageDetailExpanded.value = !stageDetailExpanded.value
+      // 用户主动操作展开/收起，标记为手动选择
+      userManuallySelected.value = true
+      if (userManuallySelectedTimer) clearTimeout(userManuallySelectedTimer)
+      userManuallySelectedTimer = setTimeout(() => {
+        userManuallySelected.value = false
+      }, 30000)
     }
 
     // 查看阶段日志

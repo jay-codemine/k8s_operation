@@ -51,7 +51,7 @@ pipeline {
         booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
 
         // 制品上传参数
-        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
     }
 
     environment {
@@ -242,41 +242,51 @@ pipeline {
         stage('SonarQube Analysis') {
             when { expression { return params.ENABLE_SONAR } }
             steps {
-                echo "=== SonarQube 代码质量扫描（轻量模式） ==="
                 script {
-                    def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
-                    def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
-                    def sources     = params.SONAR_SOURCES?.trim()      ?: '.'
-                    def exclusions  = params.SONAR_EXCLUSIONS?.trim()   ?: '**/vendor/**,**/*_test.go'
+                    try {
+                        echo "=== SonarQube 代码质量扫描（轻量模式） ==="
+                        def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
+                        def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
+                        def sources     = params.SONAR_SOURCES?.trim()      ?: '.'
+                        def exclusions  = params.SONAR_EXCLUSIONS?.trim()   ?: '**/vendor/**,**/*_test.go'
 
-                    // 使用 SonarQube Scanner CLI（Go 项目不用 Maven）
-                    withSonarQubeEnv('SonarQube') {
-                        sh """
-                            sonar-scanner \\
-                                -Dsonar.projectKey=${projectKey} \\
-                                -Dsonar.projectName=${projectName} \\
-                                -Dsonar.projectVersion=${env.FINAL_TAG} \\
-                                -Dsonar.sources=${sources} \\
-                                -Dsonar.exclusions=${exclusions},**/bin/**,**/build/** \\
-                                -Dsonar.go.coverage.reportPaths=coverage.out \\
-                                -Dsonar.scm.disabled=true \\
-                                -Dsonar.qualitygate.wait=false \\
-                                -Dsonar.threads=4 \\
-                                -Dsonar.links.ci=${env.BUILD_URL}
-                        """
+                        // 使用 SonarQube Scanner CLI（Go 项目不用 Maven）
+                        withSonarQubeEnv('SonarQube') {
+                            sh """
+                                sonar-scanner \\
+                                    -Dsonar.projectKey=${projectKey} \\
+                                    -Dsonar.projectName=${projectName} \\
+                                    -Dsonar.projectVersion=${env.FINAL_TAG} \\
+                                    -Dsonar.sources=${sources} \\
+                                    -Dsonar.exclusions=${exclusions},**/bin/**,**/build/** \\
+                                    -Dsonar.go.coverage.reportPaths=coverage.out \\
+                                    -Dsonar.scm.disabled=true \\
+                                    -Dsonar.qualitygate.wait=false \\
+                                    -Dsonar.threads=4 \\
+                                    -Dsonar.links.ci=${env.BUILD_URL}
+                            """
+                        }
+                        echo "[SonarQube] 扫描已提交，等待质量门禁..."
+                        stageCallback('sonar', 'success')
+                    } catch (e) {
+                        echo "[SonarQube] ⚠️ 扫描失败: ${e.message}"
+                        echo "[SonarQube] 常见原因: 1) SonarQube 服务未启动  2) Jenkins 与 SonarQube 网络不通  3) SonarQube Token 过期"
+                        stageCallback('sonar', 'failed')
+                        env.SONAR_ANALYSIS_FAILED = 'true'
+                        // 不中断构建，继续后续阶段
                     }
-                    echo "[SonarQube] 扫描已提交，等待质量门禁..."
                 }
-            }
-            post {
-                success { script { stageCallback('sonar', 'success') } }
-                failure { script { stageCallback('sonar', 'failed') } }
             }
         }
 
         // ==================== SonarQube 质量门禁检查 ====================
         stage('Quality Gate') {
-            when { expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE } }
+            when {
+                allOf {
+                    expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE }
+                    expression { return env.SONAR_ANALYSIS_FAILED != 'true' }
+                }
+            }
             steps {
                 echo "=== 质量门禁检查 ==="
                 script {
@@ -452,9 +462,14 @@ ENTRYPOINT ["/app/${appName}"]
     post {
         success {
             script {
-                def msg = params.ENABLE_SONAR
-                    ? "Go 项目构建成功 | SonarQube: ${env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED'}"
-                    : 'Go 项目构建成功'
+                def msg
+                if (!params.ENABLE_SONAR) {
+                    msg = 'Go 项目构建成功'
+                } else if (env.SONAR_ANALYSIS_FAILED == 'true') {
+                    msg = "Go 项目构建成功 | SonarQube: UNAVAILABLE（扫描阶段连接失败，请检查 SonarQube 服务状态）"
+                } else {
+                    msg = "Go 项目构建成功 | SonarQube: ${env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED'}"
+                }
                 callbackPlatform('SUCCESS', msg)
             }
         }

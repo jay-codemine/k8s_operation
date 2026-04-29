@@ -69,7 +69,7 @@ pipeline {
         booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
 
         // 制品上传参数
-        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
     }
 
     environment {
@@ -235,46 +235,56 @@ MAVEN_HOME=${MAVEN_HOME}
         stage('SonarQube Analysis') {
             when { expression { return params.ENABLE_SONAR } }
             steps {
-                echo "=== SonarQube 代码质量扫描（轻量模式） ==="
                 script {
-                    def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
-                    def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
-                    def sources     = params.SONAR_SOURCES?.trim()      ?: 'src/main/java'
-                    def binaries    = params.SONAR_JAVA_BINARIES?.trim() ?: 'target/classes'
-                    def exclusions  = params.SONAR_EXCLUSIONS?.trim()   ?: '**/test/**,**/generated/**'
+                    try {
+                        echo "=== SonarQube 代码质量扫描（轻量模式） ==="
+                        def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
+                        def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
+                        def sources     = params.SONAR_SOURCES?.trim()      ?: 'src/main/java'
+                        def binaries    = params.SONAR_JAVA_BINARIES?.trim() ?: 'target/classes'
+                        def exclusions  = params.SONAR_EXCLUSIONS?.trim()   ?: '**/test/**,**/generated/**'
 
-                    withSonarQubeEnv('SonarQube') {
-                        sh """
-                            mvn sonar:sonar \\
-                                -s ${env.MVN_SETTINGS} \\
-                                -Dmaven.repo.local=${MAVEN_LOCAL_REPO} \\
-                                -Dmaven.main.skip=true \\
-                                -DskipTests \\
-                                -Dsonar.projectKey=${projectKey} \\
-                                -Dsonar.projectName=${projectName} \\
-                                -Dsonar.projectVersion=${env.FINAL_TAG} \\
-                                -Dsonar.sources=${sources} \\
-                                -Dsonar.java.binaries=${binaries} \\
-                                -Dsonar.exclusions=${exclusions},**/target/**,**/build/** \\
-                                -Dsonar.scm.disabled=true \\
-                                -Dsonar.qualitygate.wait=false \\
-                                -Dsonar.threads=4 \\
-                                -Dsonar.links.ci=${env.BUILD_URL} \\
-                                -B
-                        """
+                        withSonarQubeEnv('SonarQube') {
+                            sh """
+                                mvn sonar:sonar \\
+                                    -s ${env.MVN_SETTINGS} \\
+                                    -Dmaven.repo.local=${MAVEN_LOCAL_REPO} \\
+                                    -Dmaven.main.skip=true \\
+                                    -DskipTests \\
+                                    -Dsonar.projectKey=${projectKey} \\
+                                    -Dsonar.projectName=${projectName} \\
+                                    -Dsonar.projectVersion=${env.FINAL_TAG} \\
+                                    -Dsonar.sources=${sources} \\
+                                    -Dsonar.java.binaries=${binaries} \\
+                                    -Dsonar.exclusions=${exclusions},**/target/**,**/build/** \\
+                                    -Dsonar.scm.disabled=true \\
+                                    -Dsonar.qualitygate.wait=false \\
+                                    -Dsonar.threads=4 \\
+                                    -Dsonar.links.ci=${env.BUILD_URL} \\
+                                    -B
+                            """
+                        }
+                        echo "[SonarQube] 扫描已提交，等待质量门禁..."
+                        stageCallback('sonar', 'success')
+                    } catch (e) {
+                        echo "[SonarQube] ⚠️ 扫描失败: ${e.message}"
+                        echo "[SonarQube] 常见原因: 1) SonarQube 服务未启动  2) Jenkins 与 SonarQube 网络不通  3) SonarQube Token 过期"
+                        stageCallback('sonar', 'failed')
+                        env.SONAR_ANALYSIS_FAILED = 'true'
+                        // 不中断构建，继续后续阶段（镜像构建和推送不受 SonarQube 影响）
                     }
-                    echo "[SonarQube] 扫描已提交，等待质量门禁..."
                 }
-            }
-            post {
-                success { script { stageCallback('sonar', 'success') } }
-                failure { script { stageCallback('sonar', 'failed') } }
             }
         }
 
         // ==================== SonarQube 质量门禁检查 ====================
         stage('Quality Gate') {
-            when { expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE } }
+            when {
+                allOf {
+                    expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE }
+                    expression { return env.SONAR_ANALYSIS_FAILED != 'true' }
+                }
+            }
             steps {
                 echo "=== 质量门禁检查 ==="
                 script {
@@ -337,10 +347,15 @@ MAVEN_HOME=${MAVEN_HOME}
                             --retry 1
                     """, returnStdout: true).trim()
 
-                    if (curlStatus.endsWith('200')) {
-                        echo "[制品上传] 上传成功"
+                    def httpCode = curlStatus[-3..-1]
+                    def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
+                    if (httpCode == '200') {
+                        echo "[制品上传] ✅ 上传成功，平台制品库已入库"
+                        echo "[制品上传] 响应: ${respBody}"
                     } else {
-                        echo "[制品上传] 上传返回: HTTP ${curlStatus}（非致命，不影响构建）"
+                        echo "[制品上传] ⚠️ 上传返回 HTTP ${httpCode}（非致命，不影响构建）"
+                        echo "[制品上传] 响应内容: ${respBody}"
+                        echo "[制品上传] 上传地址: ${uploadUrl}"
                     }
                     sh "rm -f /tmp/artifact_resp.json 2>/dev/null || true"
                 }
@@ -447,9 +462,14 @@ ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
     post {
         success {
             script {
-                def msg = params.ENABLE_SONAR
-                    ? "Java 项目构建成功 | SonarQube: ${env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED'}"
-                    : 'Java 项目构建成功'
+                def msg
+                if (!params.ENABLE_SONAR) {
+                    msg = 'Java 项目构建成功'
+                } else if (env.SONAR_ANALYSIS_FAILED == 'true') {
+                    msg = "Java 项目构建成功 | SonarQube: UNAVAILABLE（扫描阶段连接失败，请检查 SonarQube 服务状态）"
+                } else {
+                    msg = "Java 项目构建成功 | SonarQube: ${env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED'}"
+                }
                 callbackPlatform('SUCCESS', msg)
             }
         }
