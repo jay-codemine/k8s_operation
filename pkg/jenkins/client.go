@@ -8,12 +8,40 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+)
+
+// ==================== 高性能连接池 Transport ====================
+
+// sharedTransport 全局共享的 HTTP Transport（连接池）
+// 所有 Jenkins Client 实例共用，避免每次创建新连接
+var sharedTransport = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	MaxIdleConns:          200,            // 全局最大空闲连接数
+	MaxIdleConnsPerHost:   50,             // 单个 Jenkins 主机最大空闲连接
+	MaxConnsPerHost:       100,            // 单个主机最大并发连接
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ResponseHeaderTimeout: 30 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
+// ==================== Client 全局缓存 ====================
+
+var (
+	clientCache   = make(map[string]*Client) // key: baseURL
+	clientCacheMu sync.RWMutex
 )
 
 // Client Jenkins API 客户端
@@ -21,19 +49,61 @@ type Client struct {
 	BaseURL    string       // Jenkins 服务器地址，如 http://jenkins.example.com
 	Username   string       // Jenkins 用户名
 	APIToken   string       // Jenkins API Token（在用户设置中生成）
-	HTTPClient *http.Client // HTTP 客户端
+	HTTPClient *http.Client // HTTP 客户端（共享连接池）
+
+	jobInfoCache   map[string]*cachedJobInfo // Job 信息缓存
+	jobInfoCacheMu sync.RWMutex
 }
 
-// NewClient 创建 Jenkins 客户端
+// cachedJobInfo JobInfo 缓存项
+type cachedJobInfo struct {
+	info      *JobInfo
+	cachedAt  time.Time
+}
+
+// jobInfoCacheTTL JobInfo 缓存过期时间（5分钟）
+const jobInfoCacheTTL = 5 * time.Minute
+
+// NewClient 创建 Jenkins 客户端（使用全局共享连接池）
 func NewClient(baseURL, username, apiToken string) *Client {
+	normalized := strings.TrimSuffix(baseURL, "/")
 	return &Client{
-		BaseURL:  strings.TrimSuffix(baseURL, "/"),
+		BaseURL:  normalized,
 		Username: username,
 		APIToken: apiToken,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: sharedTransport, // 共享连接池
 		},
+		jobInfoCache: make(map[string]*cachedJobInfo),
 	}
+}
+
+// GetOrCreateClient 获取或创建全局缓存的 Jenkins 客户端（单例）
+// 同一个 baseURL 只会创建一个 Client 实例，所有调用方共享
+func GetOrCreateClient(baseURL, username, apiToken string) *Client {
+	normalized := strings.TrimSuffix(baseURL, "/")
+
+	// 快路径：读锁检查缓存
+	clientCacheMu.RLock()
+	if c, ok := clientCache[normalized]; ok {
+		clientCacheMu.RUnlock()
+		return c
+	}
+	clientCacheMu.RUnlock()
+
+	// 慢路径：写锁创建
+	clientCacheMu.Lock()
+	defer clientCacheMu.Unlock()
+
+	// 二次检查
+	if c, ok := clientCache[normalized]; ok {
+		return c
+	}
+
+	c := NewClient(normalized, username, apiToken)
+	clientCache[normalized] = c
+	return c
 }
 
 // BuildInfo Jenkins 构建信息
@@ -108,13 +178,37 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	return c.HTTPClient.Do(req)
 }
 
+// GetJobInfoCached 获取 Job 信息（带缓存，避免频繁查询 Jenkins API）
+func (c *Client) GetJobInfoCached(ctx context.Context, jobName string) (*JobInfo, error) {
+	// 读缓存
+	c.jobInfoCacheMu.RLock()
+	if cached, ok := c.jobInfoCache[jobName]; ok && time.Since(cached.cachedAt) < jobInfoCacheTTL {
+		c.jobInfoCacheMu.RUnlock()
+		return cached.info, nil
+	}
+	c.jobInfoCacheMu.RUnlock()
+
+	// 缓存未命中，调用 API
+	info, err := c.GetJobInfo(ctx, jobName)
+	if err != nil {
+		return nil, err
+	}
+
+	// 写缓存
+	c.jobInfoCacheMu.Lock()
+	c.jobInfoCache[jobName] = &cachedJobInfo{info: info, cachedAt: time.Now()}
+	c.jobInfoCacheMu.Unlock()
+
+	return info, nil
+}
+
 // TriggerBuild 触发构建
 // jobName: Job 名称
 // params: 构建参数（可选）
 // 返回队列 ID，后续可通过 WaitForBuild 获取构建号
 func (c *Client) TriggerBuild(ctx context.Context, jobName string, params map[string]string) (*TriggerBuildResult, error) {
-	// 先检查 Job 是否支持参数化构建
-	jobInfo, err := c.GetJobInfo(ctx, jobName)
+	// 使用缓存检查 Job 是否支持参数化构建
+	jobInfo, err := c.GetJobInfoCached(ctx, jobName)
 	if err != nil {
 		return nil, fmt.Errorf("获取Job信息失败: %w", err)
 	}

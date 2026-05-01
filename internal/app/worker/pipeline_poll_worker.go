@@ -22,6 +22,7 @@ type PipelinePollWorker struct {
 	pollInterval time.Duration // 轮询间隔
 	maxBuildTime int           // 最大构建时间(分钟)
 	batchSize    int           // 每批处理数量
+	workerCount  int           // 并行 worker 数量
 	limiter      *rate.Limiter // 限流器（防止打爆 Jenkins）
 
 	stopCh chan struct{}
@@ -31,7 +32,7 @@ type PipelinePollWorker struct {
 // NewPipelinePollWorker 创建轮询 Worker
 func NewPipelinePollWorker() *PipelinePollWorker {
 	// 从配置读取参数，设置默认值
-	pollInterval := 15 * time.Second
+	pollInterval := 10 * time.Second
 	maxBuildTime := 30 // 分钟
 	if global.JenkinsSetting != nil {
 		if global.JenkinsSetting.PollInterval > 0 {
@@ -46,8 +47,9 @@ func NewPipelinePollWorker() *PipelinePollWorker {
 		dao:          dao.NewDao(global.DB),
 		pollInterval: pollInterval,
 		maxBuildTime: maxBuildTime,
-		batchSize:    20,
-		limiter:      rate.NewLimiter(rate.Every(500*time.Millisecond), 5), // 每秒最多2次请求，突发5次
+		batchSize:    100,                                              // 扩大批次: 20 -> 100
+		workerCount:  5,                                                // 5 个并行 worker
+		limiter:      rate.NewLimiter(rate.Every(100*time.Millisecond), 10), // 10 QPS，突发 10
 		stopCh:       make(chan struct{}),
 	}
 }
@@ -89,7 +91,7 @@ func (w *PipelinePollWorker) pollLoop(ctx context.Context) {
 	}
 }
 
-// pollOnce 执行一次轮询
+// pollOnce 执行一次轮询（并行处理）
 func (w *PipelinePollWorker) pollOnce(ctx context.Context) {
 	// 1. 先标记超时的记录
 	w.markTimeoutRecords(ctx)
@@ -109,16 +111,28 @@ func (w *PipelinePollWorker) pollOnce(ctx context.Context) {
 		zap.Int("count", len(runs)),
 	)
 
-	// 3. 逐个轮询状态
+	// 3. 并行轮询：通过 channel 分发给多个 worker
+	runCh := make(chan *models.CicdPipelineRun, len(runs))
 	for _, run := range runs {
-		// 限流
-		if err := w.limiter.Wait(ctx); err != nil {
-			global.Logger.Warn("[轮询Worker] 限流等待被中断", zap.Error(err))
-			return
-		}
-
-		w.pollSingleRun(ctx, run)
+		runCh <- run
 	}
+	close(runCh)
+
+	var pollWg sync.WaitGroup
+	for i := 0; i < w.workerCount; i++ {
+		pollWg.Add(1)
+		go func() {
+			defer pollWg.Done()
+			for run := range runCh {
+				// 限流
+				if err := w.limiter.Wait(ctx); err != nil {
+					return
+				}
+				w.pollSingleRun(ctx, run)
+			}
+		}()
+	}
+	pollWg.Wait()
 }
 
 // pollSingleRun 轮询单个运行记录
@@ -204,7 +218,7 @@ func (w *PipelinePollWorker) markTimeoutRecords(ctx context.Context) {
 	}
 }
 
-// getJenkinsClient 获取 Jenkins 客户端
+// getJenkinsClient 获取 Jenkins 客户端（全局缓存单例，复用连接池）
 func (w *PipelinePollWorker) getJenkinsClient(pipelineJenkinsURL string) *jenkins.Client {
 	if global.JenkinsSetting == nil {
 		return nil
@@ -218,7 +232,7 @@ func (w *PipelinePollWorker) getJenkinsClient(pipelineJenkinsURL string) *jenkin
 		return nil
 	}
 
-	return jenkins.NewClient(
+	return jenkins.GetOrCreateClient(
 		jenkinsURL,
 		global.JenkinsSetting.Username,
 		global.JenkinsSetting.APIToken,

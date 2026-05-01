@@ -701,35 +701,12 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 }
 
 // PipelineHistory 获取流水线运行历史
+// 状态同步完全依赖回调 + PollWorker，不再在列表查询时实时调用 Jenkins API
+// 避免高并发下每次列表请求都打 Jenkins，影响性能
 func (s *Services) PipelineHistory(ctx context.Context, req *requests.PipelineHistoryRequest) ([]*models.CicdPipelineRun, int64, error) {
 	list, total, err := s.dao.PipelineRunList(ctx, req.ID, req.Page, req.PageSize)
 	if err != nil {
 		return nil, 0, err
-	}
-
-	// 获取流水线信息用于同步状态
-	pipeline, _ := s.dao.PipelineGetByID(ctx, req.ID)
-	if pipeline == nil {
-		return list, total, nil
-	}
-
-	// 检查并修复处于 "running" 状态但实际已完成的记录
-	client := s.getJenkinsClient(pipeline.JenkinsURL)
-	if client == nil {
-		return list, total, nil
-	}
-
-	for _, run := range list {
-		// 只处理状态为 "running" 且有构建号的记录
-		if run.Status == models.PipelineRunStatusRunning && run.BuildNumber > 0 {
-			buildInfo, err := client.GetBuildInfo(ctx, pipeline.JenkinsJob, run.BuildNumber)
-			if err == nil && buildInfo != nil && !buildInfo.Building {
-				// Jenkins 构建已完成，同步更新记录状态
-				runStatus := jenkins.BuildStatusToRunStatus(false, buildInfo.Result)
-				_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, runStatus)
-				run.Status = runStatus
-			}
-		}
 	}
 
 	return list, total, nil
@@ -1211,7 +1188,7 @@ func (s *Services) formatDuration(millis int64) string {
 	return fmt.Sprintf("%dh%dm", seconds/3600, (seconds%3600)/60)
 }
 
-// getJenkinsClient 获取 Jenkins 客户端
+// getJenkinsClient 获取 Jenkins 客户端（全局缓存单例，复用连接池）
 // 优先使用流水线配置的 URL，否则使用全局配置
 // 凭据统一从全局配置读取
 func (s *Services) getJenkinsClient(pipelineJenkinsURL string) *jenkins.Client {
@@ -1231,7 +1208,8 @@ func (s *Services) getJenkinsClient(pipelineJenkinsURL string) *jenkins.Client {
 		return nil
 	}
 
-	return jenkins.NewClient(
+	// 使用全局缓存单例，复用连接池
+	return jenkins.GetOrCreateClient(
 		jenkinsURL,
 		global.JenkinsSetting.Username,
 		global.JenkinsSetting.APIToken,
