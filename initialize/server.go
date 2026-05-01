@@ -47,7 +47,7 @@ func (s *Engine) injectMiddlewares() {
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
 			// 新内网穿透域名（花生壳）
-			"http://708iuyd54169.vicp.fun:22043",  // 内网穿透前端地址
+			"http://708iuyd54169.vicp.fun:52005",  // 内网穿透前端地址
 			"http://708iuyd54169.vicp.fun:59979",  // 内网穿透后端地址
 			// 旧内网穿透域名（保留兼容）
 			"http://james521.gnway.cc:8000",

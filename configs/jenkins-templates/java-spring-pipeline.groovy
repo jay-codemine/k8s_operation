@@ -86,8 +86,11 @@ pipeline {
 
         stage('Clean Workspace') {
             steps {
-                // 选择性清理：保留外部缓存目录，只清源码区
-                sh 'find . -mindepth 1 -maxdepth 1 ! -name ".m2" | xargs rm -rf 2>/dev/null || true'
+                // 强制清理：保留 Maven 缓存，删除所有源码和 .git（防止浅克隆残留导致拉不到最新代码）
+                sh '''
+                    rm -rf .git 2>/dev/null || true
+                    find . -mindepth 1 -maxdepth 1 ! -name ".m2" -exec rm -rf {} + 2>/dev/null || true
+                '''
                 script {
                     // 语言类型交叉校验：防止自定义 Job 配错脚本
                     def expectedType = 'java'
@@ -115,17 +118,26 @@ pipeline {
                     if (!params.IMAGE_REPO?.trim()) { error("IMAGE_REPO 不能为空") }
 
                     def targetBranch = params.GIT_BRANCH?.trim() ?: 'main'
+
+                    // 确保 .git 不存在，强制全新 clone（而非在旧 .git 上 fetch）
+                    sh 'rm -rf .git 2>/dev/null || true'
+
                     checkout([
                         $class: 'GitSCM',
                         branches: [[name: "*/${targetBranch}"]],
                         extensions: [
-                            [$class: 'CleanBeforeCheckout'],
+                            [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true],
                             [$class: 'LocalBranch', localBranch: targetBranch],
-                            [$class: 'CloneOption', depth: 1, shallow: true, noTags: true, timeout: 10]
+                            [$class: 'CloneOption', depth: 1, shallow: true, noTags: true, timeout: 10, honorRefspec: true]
                         ],
                         userRemoteConfigs: [[url: params.GIT_REPO, credentialsId: params.GIT_CREDENTIAL_ID ?: 'gitee-id']]
                     ])
                     env.TARGET_BRANCH = targetBranch
+
+                    // 验证拉取的是最新代码（在 Jenkins 控制台输出最新提交信息）
+                    def latestCommit = sh(script: 'git log -1 --format="%h %s (%ci)"', returnStdout: true).trim()
+                    echo "[Checkout] ✅ 最新提交: ${latestCommit}"
+                    echo "[Checkout] 分支: ${targetBranch} | 仓库: ${params.GIT_REPO}"
                 }
             }
         }
@@ -428,15 +440,28 @@ ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
                         }
                     }
 
-                    // 使用 BuildKit 本地层缓存：首次全量构建，后续仅重建变化层
+                    // 使用 BuildKit 本地层缓存 + Dockerfile 内容哈希防止缓存过期
                     def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
+                    // 检测 Dockerfile 内容是否变化：与上次构建的缓存哈希比对
+                    def dfHash = sh(script: "md5sum ${dockerfile} | awk '{print \$1}'", returnStdout: true).trim()
+                    def cacheHashFile = "${cacheDir}/.dockerfile_hash"
+                    def oldHash = sh(script: "cat ${cacheHashFile} 2>/dev/null || echo ''", returnStdout: true).trim()
+                    def cacheArgs = ''
+                    if (dfHash != oldHash) {
+                        echo "[Build Image] Dockerfile 内容已变化（${oldHash ?: '无缓存'} → ${dfHash}），清除旧缓存"
+                        sh "rm -rf ${cacheDir} 2>/dev/null || true"
+                    } else {
+                        echo "[Build Image] Dockerfile 未变化，复用 BuildKit 层缓存"
+                        cacheArgs = "--cache-from type=local,src=${cacheDir}"
+                    }
                     sh """
                         set -e
                         mkdir -p ${cacheDir}
+                        echo '${dfHash}' > ${cacheHashFile}
                         nerdctl build \\
                             -t ${env.FULL_IMAGE} \\
                             -f ${dockerfile} \\
-                            --cache-from type=local,src=${cacheDir} \\
+                            ${cacheArgs} \\
                             --cache-to type=local,dest=${cacheDir},mode=max \\
                             --build-arg JAVA_VERSION=${javaVersion} \\
                             --label git.commit=${env.GIT_COMMIT_FULL} \\

@@ -106,13 +106,16 @@ pipeline {
 
                     def targetBranch = params.GIT_BRANCH?.trim() ?: 'main'
 
+                    // 强制清除 .git（防止浅克隆残留导致 fetch 拉不到最新代码）
+                    sh 'rm -rf .git 2>/dev/null || true'
+
                     checkout([
                         $class: 'GitSCM',
                         branches: [[name: "*/${targetBranch}"]],
                         extensions: [
-                            [$class: 'CleanBeforeCheckout'],
+                            [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true],
                             [$class: 'LocalBranch', localBranch: targetBranch],
-                            [$class: 'CloneOption', depth: 1, shallow: true, noTags: true, timeout: 10]
+                            [$class: 'CloneOption', depth: 1, shallow: true, noTags: true, timeout: 10, honorRefspec: true]
                         ],
                         userRemoteConfigs: [[
                             url: params.GIT_REPO,
@@ -121,6 +124,11 @@ pipeline {
                     ])
 
                     env.TARGET_BRANCH = targetBranch
+
+                    // 验证拉取的是最新代码
+                    def latestCommit = sh(script: 'git log -1 --format="%h %s (%ci)"', returnStdout: true).trim()
+                    echo "[Checkout] ✅ 最新提交: ${latestCommit}"
+                    echo "[Checkout] 分支: ${targetBranch} | 仓库: ${params.GIT_REPO}"
                 }
             }
         }
@@ -408,15 +416,27 @@ ENTRYPOINT ["/app/${appName}"]
                         }
                     }
 
-                    // 使用 BuildKit 本地层缓存：首次全量构建，后续仅重建变化层
+                    // 使用 BuildKit 本地层缓存 + Dockerfile 内容哈希防止缓存过期
                     def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
+                    def dfHash = sh(script: "md5sum ${dockerfile} | awk '{print \$1}'", returnStdout: true).trim()
+                    def cacheHashFile = "${cacheDir}/.dockerfile_hash"
+                    def oldHash = sh(script: "cat ${cacheHashFile} 2>/dev/null || echo ''", returnStdout: true).trim()
+                    def cacheArgs = ''
+                    if (dfHash != oldHash) {
+                        echo "[Build Image] Dockerfile 内容已变化（${oldHash ?: '无缓存'} → ${dfHash}），清除旧缓存"
+                        sh "rm -rf ${cacheDir} 2>/dev/null || true"
+                    } else {
+                        echo "[Build Image] Dockerfile 未变化，复用 BuildKit 层缓存"
+                        cacheArgs = "--cache-from type=local,src=${cacheDir}"
+                    }
                     sh """
                         set -e
                         mkdir -p ${cacheDir}
+                        echo '${dfHash}' > ${cacheHashFile}
                         nerdctl build \\
                             -t ${env.FULL_IMAGE} \\
                             -f ${dockerfile} \\
-                            --cache-from type=local,src=${cacheDir} \\
+                            ${cacheArgs} \\
                             --cache-to type=local,dest=${cacheDir},mode=max \\
                             --label git.commit=${env.GIT_COMMIT_FULL} \\
                             --label git.branch=${env.GIT_BRANCH_NAME} \\
