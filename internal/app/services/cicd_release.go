@@ -594,6 +594,7 @@ func (s *Services) CicdReleaseSyncFromPipeline(ctx context.Context) (int, error)
 			Status:        releaseStatus,
 			Message:       fmt.Sprintf("流水线同步: %s #%d", pipeline.Name, run.BuildNumber),
 			CreatedUserID: run.TriggerUserID,
+			RequestID:     fmt.Sprintf("pipeline-sync-%d", run.ID),
 			BuildID:       run.ID,
 			ImageRepo:     imageRepo,
 			ImageTag:      imageTag,

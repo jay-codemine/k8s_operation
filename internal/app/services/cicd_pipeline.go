@@ -1307,6 +1307,7 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 		Status:        releaseStatus,
 		Message:       fmt.Sprintf("流水线自动同步: %s #%d", pipeline.Name, run.BuildNumber),
 		CreatedUserID: run.TriggerUserID,
+		RequestID:     fmt.Sprintf("pipeline-sync-%d", run.ID),
 		BuildID:       run.ID,
 		ImageRepo:     imageRepo,
 		ImageTag:      imageTag,

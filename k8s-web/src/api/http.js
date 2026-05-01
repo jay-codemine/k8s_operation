@@ -9,13 +9,13 @@ const isRemoteAccess = !['localhost', '127.0.0.1'].includes(window.location.host
 
 // 动态计算远程 API 地址：
 // 1. 优先使用环境变量 VITE_REMOTE_API_URL
-// 2. 否则使用当前域名 + 后端穿透端口（从环境变量 VITE_REMOTE_API_PORT 获取，默认 59508）
+// 2. 否则使用当前域名 + 后端穿透端口（从环境变量 VITE_REMOTE_API_PORT 获取，默认 59979）
 const getRemoteBaseURL = () => {
   if (import.meta.env.VITE_REMOTE_API_URL) {
     return import.meta.env.VITE_REMOTE_API_URL
   }
   // 使用当前访问域名 + 后端端口，确保 DDNS 切换后仍可用
-  const backendPort = import.meta.env.VITE_REMOTE_API_PORT || '59508'
+  const backendPort = import.meta.env.VITE_REMOTE_API_PORT || '59979'
   return `${window.location.protocol}//${window.location.hostname}:${backendPort}`
 }
 
