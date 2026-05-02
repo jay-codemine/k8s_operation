@@ -149,7 +149,7 @@ pipeline {
                     env.GIT_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     env.GIT_BRANCH_NAME  = (env.TARGET_BRANCH ?: 'main').replaceAll('/', '-')
                     env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
-                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_BRANCH_NAME}-${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim() ?: "${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
                     env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
                     echo "Commit: ${env.GIT_COMMIT_SHORT} | Image: ${env.FULL_IMAGE}"
                 }
@@ -412,10 +412,10 @@ MAVEN_HOME=${MAVEN_HOME}
                     // __PLATFORM_GENERATE__ 为平台哨兵值，表示强制使用平台生成
                     def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
                     if (!dockerfile || forceGenerate) {
-                        // 智能检测模式：检查项目是否自带 Dockerfile（非强制生成时）
-                        if (!forceGenerate && fileExists('Dockerfile')) {
+                        // 智能检测模式：始终优先使用项目自带 Dockerfile（即使平台配置了强制生成）
+                        if (fileExists('Dockerfile')) {
                             dockerfile = 'Dockerfile'
-                            echo "[Build Image] 检测到项目自带 Dockerfile，直接使用"
+                            echo "[Build Image] 检测到项目自带 Dockerfile，优先使用（确保 OTEL 等自定义配置生效）"
                         } else {
                             // 项目无 Dockerfile，自动生成纯运行时版本（阿里云镜像源）
                             dockerfile = '.Dockerfile.runtime'
@@ -425,16 +425,27 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
+RUN wget -q -O /app/opentelemetry-javaagent.jar \\
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.33.0/opentelemetry-javaagent.jar \\
+    || true
 COPY target/*.jar /app/app.jar
 USER appuser
 EXPOSE 8080
+ENV OTEL_OPTS="\\
+-javaagent:/app/opentelemetry-javaagent.jar \\
+-Dotel.service.name=java-app \\
+-Dotel.traces.exporter=otlp \\
+-Dotel.metrics.exporter=none \\
+-Dotel.logs.exporter=none \\
+-Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318"
 ENV JAVA_OPTS="\\
 -XX:MaxRAMPercentage=75.0 \\
 -XX:+UseG1GC \\
 -XX:+HeapDumpOnOutOfMemoryError \\
 -XX:HeapDumpPath=/app/logs \\
+-Xlog:gc*:file=/app/logs/gc.log:time,uptime,level \\
 -Djava.security.egd=file:/dev/./urandom"
-ENTRYPOINT ["sh", "-c", "exec java \$JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
 """
                             echo "[Build Image] 项目无 Dockerfile，已自动生成纯运行时版本（阿里云 JRE 镜像）"
                         }

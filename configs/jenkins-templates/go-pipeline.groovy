@@ -144,7 +144,7 @@ pipeline {
 
                     env.FINAL_TAG = params.IMAGE_TAG?.trim()
                         ? params.IMAGE_TAG.trim()
-                        : "${env.GIT_BRANCH_NAME}-${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
+                        : "${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
 
                     env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
 
@@ -391,9 +391,9 @@ pipeline {
                     // __PLATFORM_GENERATE__ 为平台哨兵值，表示强制使用平台生成
                     def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
                     if (!dockerfile || forceGenerate) {
-                        if (!forceGenerate && fileExists('Dockerfile')) {
+                        if (fileExists('Dockerfile')) {
                             dockerfile = 'Dockerfile'
-                            echo "[Build Image] 检测到项目自带 Dockerfile，直接使用"
+                            echo "[Build Image] 检测到项目自带 Dockerfile，优先使用（确保自定义配置生效）"
                         } else {
                             dockerfile = '.Dockerfile.runtime'
                             writeFile file: dockerfile, text: """\
