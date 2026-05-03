@@ -401,7 +401,7 @@
 
     <!-- 更新镜像弹窗 -->
     <div v-if="showUpdateImageModal" class="modal-overlay" @click.self="showUpdateImageModal = false">
-      <div class="modal-content">
+      <div class="modal-content" style="max-width: 520px;">
         <div class="modal-header">
           <h3>🔧 更新镜像</h3>
           <button class="close-btn" @click="showUpdateImageModal = false">×</button>
@@ -411,18 +411,35 @@
             <div><strong>DaemonSet:</strong> {{ updateImageForm.name }}</div>
             <div><strong>命名空间:</strong> {{ updateImageForm.namespace }}</div>
           </div>
-          <div class="form-group">
+          <div class="form-group" v-if="containerList.length > 1">
+            <label>选择容器</label>
+            <select v-model="updateImageForm.container" class="form-select" @change="onUpdateImageContainerChange">
+              <option value="" disabled>请选择容器</option>
+              <option v-for="c in containerList" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="form-group" v-else-if="containerList.length === 1">
+            <label>容器</label>
+            <div class="form-static">{{ containerList[0] }}</div>
+          </div>
+          <div class="form-group" v-else>
             <label>容器名称</label>
             <input type="text" v-model="updateImageForm.container" class="form-input" placeholder="容器名称" />
           </div>
           <div class="form-group">
+            <label>当前镜像</label>
+            <div class="current-image-display" :title="updateImageForm.currentImage">
+              <span class="current-image-text">{{ updateImageForm.currentImage || '-' }}</span>
+            </div>
+          </div>
+          <div class="form-group">
             <label>新镜像地址</label>
-            <input type="text" v-model="updateImageForm.image" class="form-input" placeholder="例如: nginx:1.25" />
+            <input type="text" v-model="updateImageForm.image" class="form-input" :placeholder="updateImageForm.currentImage || '例如: nginx:1.25'" />
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showUpdateImageModal = false">取消</button>
-          <button class="btn btn-primary" @click="submitUpdateImage" :disabled="updatingImage">
+          <button class="btn btn-primary" @click="submitUpdateImage" :disabled="updatingImage || !updateImageForm.image">
             {{ updatingImage ? '更新中...' : '确认更新' }}
           </button>
         </div>
@@ -1198,7 +1215,9 @@ const rollbackHistoryList = ref([])
 const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
 
 // 更新镜像表单
-const updateImageForm = ref({ namespace: '', name: '', container: '', image: '' })
+const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
+const containerList = ref([])
+const imagesList = ref([])
 
 // 创建表单
 const daemonsetForm = ref({
@@ -1327,6 +1346,8 @@ const fetchDaemonsets = async () => {
         desiredNumberScheduled: item.desired_number_scheduled || item.desiredNumberScheduled || 0,
         numberReady: item.number_ready || item.numberReady || 0,
         image: item.image || (item.images && item.images[0]) || '',
+        containers: item.containers || [],
+        images: item.images || [],
         selector: item.selector || {},
         updateStrategy: item.update_strategy || item.updateStrategy || 'RollingUpdate',
         createdAt: item.created_at || item.createdAt || ''
@@ -1617,11 +1638,16 @@ const openEvents = async (ds) => {
 // 更新镜像（内联）
 // =========================
 const startInlineImage = (ds) => {
+  containerList.value = ds.containers || []
+  imagesList.value = ds.images || []
+  const firstContainer = containerList.value[0] || ''
+  const firstImage = imagesList.value[0] || ds.image || ''
   updateImageForm.value = {
     namespace: ds.namespace,
     name: ds.name,
-    container: ds.containers?.[0] || '',
-    image: ds.image
+    container: firstContainer,
+    image: '',
+    currentImage: firstImage
   }
   showUpdateImageModal.value = true
 }
@@ -1631,9 +1657,19 @@ const openUpdateImage = (ds) => {
   startInlineImage(ds)
 }
 
+// 容器切换时更新当前镜像显示
+const onUpdateImageContainerChange = () => {
+  const idx = containerList.value.indexOf(updateImageForm.value.container)
+  updateImageForm.value.currentImage = idx >= 0 ? (imagesList.value[idx] || '') : ''
+}
+
 const submitUpdateImage = async () => {
   if (!updateImageForm.value.image) {
     Message.error({ content: '请输入镜像地址' })
+    return
+  }
+  // 二次确认
+  if (!confirm(`⚠️ 确认更新镜像？\n\nDaemonSet: ${updateImageForm.value.namespace}/${updateImageForm.value.name}\n容器: ${updateImageForm.value.container}\n当前镜像: ${updateImageForm.value.currentImage || '未知'}\n新镜像: ${updateImageForm.value.image}\n\n此操作将触发滚动更新，请确认！`)) {
     return
   }
   updatingImage.value = true
@@ -3944,4 +3980,17 @@ const downloadYaml = () => {
 .ev-msg { color: #9aa5ce; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watcher-slide-enter-active, .watcher-slide-leave-active { transition: all 0.3s ease; }
 .watcher-slide-enter-from, .watcher-slide-leave-to { opacity: 0; transform: translateY(20px); }
+
+.current-image-display {
+  padding: 10px 12px;
+  background: #f0f4f8;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  color: #2d3748;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.current-image-text { opacity: 0.85; }
 </style>

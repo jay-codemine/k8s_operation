@@ -77,6 +77,7 @@ func autoMigrateTables() error {
 		&models.AppStoreInstall{},
 		&models.AppStoreComponent{},
 		&models.CicdApproval{},
+		&models.CicdBuildAgent{},
 	); err != nil {
 		return fmt.Errorf("migrate base tables: %w", err)
 	}
@@ -121,6 +122,11 @@ func initDefaultData() error {
 	svc := services.NewServices()
 	if err := svc.AppStoreSeed(ctx); err != nil {
 		return fmt.Errorf("init appstore seed data failed: %w", err)
+	}
+
+	// 初始化构建探针种子数据（OTEL Java Agent）
+	if err := svc.BuildAgentSeedOTEL(ctx); err != nil {
+		log.Printf("[InitData] 构建探针种子数据初始化失败: %v", err)
 	}
 
 	return nil

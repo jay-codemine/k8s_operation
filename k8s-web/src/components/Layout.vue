@@ -349,6 +349,7 @@ const menuGroupsConfig = reactive([
       { path: '/cicd/approvals', label: '审批管理' },
       { path: '/cicd/artifacts', label: '制品管理' },
       { path: '/cicd/templates', label: '流水线模板' },
+      { path: '/cicd/agents', label: '构建探针' },
     ],
   },
   // 镜像管理

@@ -1582,7 +1582,7 @@
           </div>
           <div class="form-group" v-if="containerList.length > 1">
             <label>选择容器</label>
-            <select v-model="updateImageForm.container" class="form-select">
+            <select v-model="updateImageForm.container" class="form-select" @change="onUpdateImageContainerChange">
               <option value="" disabled>请选择容器</option>
               <option v-for="c in containerList" :key="c" :value="c">{{ c }}</option>
             </select>
@@ -1592,8 +1592,14 @@
             <div class="form-static">{{ containerList[0] }}</div>
           </div>
           <div class="form-group">
+            <label>当前镜像</label>
+            <div class="current-image-display" :title="updateImageForm.currentImage">
+              <span class="current-image-text">{{ updateImageForm.currentImage || '-' }}</span>
+            </div>
+          </div>
+          <div class="form-group">
             <label>新镜像地址</label>
-            <input v-model="updateImageForm.image" type="text" class="form-input" placeholder="例如: nginx:1.28" />
+            <input v-model="updateImageForm.image" type="text" class="form-input" :placeholder="updateImageForm.currentImage || '例如: nginx:1.28'" />
           </div>
         </div>
         <div class="modal-footer">
@@ -3353,7 +3359,8 @@ const editForm = ref({
 })
 
 const scaleForm = ref({ namespace: '', name: '', replicas: 1 })
-const updateImageForm = ref({ namespace: '', name: '', container: '', image: '' })
+const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
+const imagesList = ref([])
 const rollbackForm = ref({ namespace: '', name: '', revision: 0 })
 const selectorInput = ref('')
 const editSelectorInput = ref('')
@@ -3648,6 +3655,7 @@ const fetchDeployments = async () => {
         availableReplicas: item.available_replicas || 0,
         updatedReplicas: item.updated_replicas || 0,
         image: item.image || (item.images && item.images[0]) || '',
+        images: item.images || [],
         selector: item.selector || {},
         updateStrategy: item.update_strategy || 'RollingUpdate',
         createdAt: item.created_at || '',
@@ -4927,17 +4935,24 @@ const scaleDeployment = async () => {
 // =========================
 const openUpdateImage = (deployment) => {
   showMoreOptions.value = false
+  containerList.value = deployment.containers || []
+  imagesList.value = deployment.images || []
+  const firstContainer = containerList.value[0] || ''
+  const firstImage = imagesList.value[0] || deployment.image || ''
   updateImageForm.value = {
     namespace: deployment.namespace,
     name: deployment.name,
-    container: deployment.containers?.[0] || '',  // containers 是字符串数组
-    image: ''
-  }
-  containerList.value = deployment.containers || []  // 直接使用字符串数组
-  if (containerList.value.length === 1) {
-    updateImageForm.value.container = containerList.value[0]
+    container: firstContainer,
+    image: '',
+    currentImage: firstImage
   }
   showUpdateImageModal.value = true
+}
+
+// 容器切换时更新当前镜像显示
+const onUpdateImageContainerChange = () => {
+  const idx = containerList.value.indexOf(updateImageForm.value.container)
+  updateImageForm.value.currentImage = idx >= 0 ? (imagesList.value[idx] || '') : ''
 }
 
 const submitUpdateImage = async () => {
@@ -4946,6 +4961,7 @@ const submitUpdateImage = async () => {
 
 Deployment: ${updateImageForm.value.namespace}/${updateImageForm.value.name}
 容器: ${updateImageForm.value.container}
+当前镜像: ${updateImageForm.value.currentImage || '未知'}
 新镜像: ${updateImageForm.value.image}
 
 此操作将触发滚动更新，请确认！`)) {
@@ -6790,6 +6806,22 @@ const downloadYaml = () => {
   border-radius: 6px;
   font-size: 14px;
   color: #4a5568;
+}
+
+.current-image-display {
+  padding: 10px 12px;
+  background: #f0f4f8;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  color: #2d3748;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.current-image-text {
+  opacity: 0.85;
 }
 
 /* Event styles */

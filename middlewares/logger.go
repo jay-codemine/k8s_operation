@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -36,9 +37,14 @@ func Logger() gin.HandlerFunc {
 		w := &responseBodyWriter{body: &bytes.Buffer{}, ResponseWriter: c.Writer}
 		c.Writer = w
 
-		// 备份并复位请求体
+		// 判断是否为文件上传请求（multipart/form-data）
+		// 文件上传时不读取请求体，避免将整个文件（可能几十MB）读入内存做日志
+		contentType := c.GetHeader("Content-Type")
+		isMultipart := strings.Contains(contentType, "multipart/form-data")
+
+		// 备份并复位请求体（跳过文件上传）
 		var requestBody []byte
-		if c.Request.Body != nil {
+		if c.Request.Body != nil && !isMultipart {
 			// c.Request.Body 是一个只读一次的流，这里先读出来
 			requestBody, _ = io.ReadAll(c.Request.Body)
 			// 读完要复位，否则后续 handler 读不到
@@ -67,13 +73,19 @@ func Logger() gin.HandlerFunc {
 			zap.Int64("latency_ms", cost.Milliseconds()),    // 请求处理耗时（毫秒）
 		}
 
-		// 仅在变更类方法时记录请求/响应体（保持你的原有逻辑）
-		if c.Request.Method == http.MethodPost ||
+		// 仅在变更类方法且非文件上传时记录请求/响应体
+		if !isMultipart && (c.Request.Method == http.MethodPost ||
 			c.Request.Method == http.MethodPut ||
-			c.Request.Method == http.MethodDelete {
+			c.Request.Method == http.MethodDelete) {
 
 			logFields = append(logFields,
 				zap.String("requests-body", string(requestBody)),
+				zap.String("response-body", w.body.String()),
+			)
+		} else if isMultipart {
+			// 文件上传只记录基本信息
+			logFields = append(logFields,
+				zap.String("requests-body", "[multipart/form-data upload, body omitted]"),
 				zap.String("response-body", w.body.String()),
 			)
 		}

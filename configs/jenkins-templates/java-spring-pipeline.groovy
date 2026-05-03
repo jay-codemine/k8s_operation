@@ -395,10 +395,128 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== Docker 镜像构建（复用 Compile & Package 阶段已打包的 JAR） ==
+        // ==================== 准备构建探针（全自动模式） ====================
+        // 自动从平台「构建探针管理」拉取 Java scope 下所有已启用的 Agent
+        // 每个 Agent 下载到 .agents/{name}/{filename}，并记录 Dockerfile 注入信息
+        // 如果平台不可用，降级使用项目自带的 opentelemetry-javaagent.jar 或 Maven 下载
+        stage('Prepare Build Agents') {
+            steps {
+                echo "=== 准备构建探针（自动拉取平台已启用 Agent） ==="
+                script {
+                    def agentsDir = '.agents'
+                    sh "mkdir -p ${agentsDir}"
+
+                    // 用于收集所有 Agent 的 Dockerfile 注入指令
+                    env.AGENT_DOCKER_COPY_LINES = ''
+                    env.AGENT_ENV_LINES = ''
+                    env.AGENT_JAVA_OPTS = ''
+                    def agentsPrepared = []
+
+                    def platformUrl = params.PLATFORM_CALLBACK_URL?.trim()
+                    def platformAvailable = false
+
+                    // ===== 优先级 1：从平台 API 自动拉取所有 java scope 探针 =====
+                    if (platformUrl) {
+                        def apiBase = platformUrl.replaceAll('/api/v1/k8s/cicd/pipeline/callback.*', '/api/v1/k8s/cicd')
+                        def listUrl = "${apiBase}/agent/by-scope?scope=java"
+                        echo "[Agents] 查询平台已启用探针: ${listUrl}"
+
+                        try {
+                            def response = sh(script: "wget -q -O - '${listUrl}' 2>/dev/null", returnStdout: true).trim()
+                            if (response) {
+                                def json = new groovy.json.JsonSlurper().parseText(response)
+                                def agentList = json?.data?.list ?: json?.list ?: []
+                                echo "[Agents] 平台返回 ${agentList.size()} 个已启用探针"
+
+                                agentList.each { agent ->
+                                    def agentName = agent.name
+                                    def fileName = agent.file_name ?: "${agentName}.jar"
+                                    def destPath = agent.docker_copy_dest ?: "/app/${fileName}"
+                                    def localDir = "${agentsDir}/${agentName}"
+                                    def localPath = "${localDir}/${fileName}"
+                                    sh "mkdir -p ${localDir}"
+
+                                    // 下载 Agent 文件
+                                    def downloadUrl = "${apiBase}/agent/download?name=${agentName}"
+                                    def dlResult = sh(script: "wget -q -O '${localPath}' '${downloadUrl}'", returnStatus: true)
+                                    if (dlResult == 0) {
+                                        def fileSize = sh(script: "stat -c%s '${localPath}' 2>/dev/null || stat -f%z '${localPath}'", returnStdout: true).trim()
+                                        if (fileSize.toLong() > 1024) {
+                                            echo "[Agents] ✅ ${agent.display_name ?: agentName} v${agent.version ?: '?'} (${fileSize} bytes)"
+                                            // 收集 Dockerfile COPY 指令
+                                            env.AGENT_DOCKER_COPY_LINES += "COPY ${localPath} ${destPath}\n"
+                                            // 收集环境变量
+                                            if (agent.env_key && agent.env_value) {
+                                                env.AGENT_ENV_LINES += "ENV ${agent.env_key}=\"${agent.env_value}\"\n"
+                                                // 如果是 javaagent 类型，收集到 JAVA 启动参数
+                                                if (agent.env_value?.contains('-javaagent:')) {
+                                                    env.AGENT_JAVA_OPTS += "${agent.env_value} "
+                                                }
+                                            }
+                                            agentsPrepared << agentName
+                                            platformAvailable = true
+                                        } else {
+                                            echo "[Agents] ⚠️ ${agentName} 文件过小，跳过"
+                                        }
+                                    } else {
+                                        echo "[Agents] ⚠️ ${agentName} 下载失败，跳过"
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            echo "[Agents] ⚠️ 平台 API 不可用: ${e.message}"
+                        }
+                    }
+
+                    // ===== 优先级 2：降级兼容 - 项目自带 OTEL Agent 或 Maven 下载 =====
+                    if (!platformAvailable) {
+                        echo "[Agents] 平台不可用，启用降级模式..."
+                        def otelDir = "${agentsDir}/opentelemetry-javaagent"
+                        def otelJar = "${otelDir}/opentelemetry-javaagent.jar"
+                        def otelVersion = '1.33.0'
+                        sh "mkdir -p ${otelDir}"
+
+                        if (fileExists('opentelemetry-javaagent.jar')) {
+                            sh "cp opentelemetry-javaagent.jar ${otelJar}"
+                            echo "[Agents] ✅ 使用项目自带 opentelemetry-javaagent.jar"
+                        } else {
+                            def downloaded = sh(script: """
+                                wget -q -O '${otelJar}' \\
+                                    'https://maven.aliyun.com/repository/central/io/opentelemetry/javaagent/opentelemetry-javaagent/${otelVersion}/opentelemetry-javaagent-${otelVersion}.jar' \\
+                                || wget -q -O '${otelJar}' \\
+                                    'https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/${otelVersion}/opentelemetry-javaagent-${otelVersion}.jar' \\
+                                || wget -q -O '${otelJar}' \\
+                                    'https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${otelVersion}/opentelemetry-javaagent.jar'
+                            """, returnStatus: true)
+
+                            if (downloaded != 0 || !fileExists(otelJar)) {
+                                echo "[Agents] ⚠️ OTEL Agent 所有下载源均失败，OTEL 将不生效"
+                                sh "touch ${otelJar}"
+                            } else {
+                                def jarSize = sh(script: "stat -c%s '${otelJar}' 2>/dev/null || stat -f%z '${otelJar}'", returnStdout: true).trim()
+                                echo "[Agents] ✅ Maven 下载成功: opentelemetry-javaagent-${otelVersion}.jar (${jarSize} bytes)"
+                            }
+                        }
+                        // 降级模式下使用默认 OTEL 配置
+                        env.AGENT_DOCKER_COPY_LINES = "COPY ${otelJar} /app/opentelemetry-javaagent.jar\n"
+                        env.AGENT_ENV_LINES = ''
+                        env.AGENT_JAVA_OPTS = '-javaagent:/app/opentelemetry-javaagent.jar'
+                        agentsPrepared << 'opentelemetry-javaagent (降级)'
+                    }
+
+                    echo "[Agents] === 准备完成: ${agentsPrepared.join(', ')} ==="
+                }
+            }
+            post {
+                success { script { stageCallback('prepare_agents', 'success') } }
+                failure { script { stageCallback('prepare_agents', 'failed') } }
+            }
+        }
+
+        // ==================== Docker 镜像构建（复用 JAR + 动态注入探针） ====================
         stage('Build Image') {
             steps {
-                echo "=== 构建 Docker 镜像（复用 Compile & Package 产出的 JAR） ==="
+                echo "=== 构建 Docker 镜像（复用 JAR + 动态注入探针） ==="
                 script {
                     // JAR 已在 Compile & Package 阶段产出，此处直接构建镜像
                     def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
@@ -409,36 +527,37 @@ MAVEN_HOME=${MAVEN_HOME}
                     def javaVersion = params.JAVA_VERSION ?: '17'
 
                     // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
-                    // __PLATFORM_GENERATE__ 为平台哨兵值，表示强制使用平台生成
                     def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
                     if (!dockerfile || forceGenerate) {
-                        // 智能检测模式：始终优先使用项目自带 Dockerfile（即使平台配置了强制生成）
                         if (fileExists('Dockerfile')) {
                             dockerfile = 'Dockerfile'
-                            echo "[Build Image] 检测到项目自带 Dockerfile，优先使用（确保 OTEL 等自定义配置生效）"
+                            echo "[Build Image] 检测到项目自带 Dockerfile，优先使用"
                         } else {
-                            // 项目无 Dockerfile，自动生成纯运行时版本（阿里云镜像源）
+                            // 自动生成 Dockerfile，动态注入所有探针
                             dockerfile = '.Dockerfile.runtime'
+                            def agentCopyLines = env.AGENT_DOCKER_COPY_LINES ?: ''
+                            def agentEnvLines = env.AGENT_ENV_LINES ?: ''
+                            def agentJavaOpts = env.AGENT_JAVA_OPTS?.trim() ?: ''
+
+                            // 构建 OTEL_OPTS：如果有 javaagent 参数则注入，否则留空
+                            def otelOptsValue = agentJavaOpts ? """\\
+${agentJavaOpts} \\
+-Dotel.service.name=java-app \\
+-Dotel.traces.exporter=otlp \\
+-Dotel.metrics.exporter=none \\
+-Dotel.logs.exporter=none \\
+-Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
+
                             writeFile file: dockerfile, text: """\
 FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${javaVersion}-jre-alpine
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
-RUN wget -q -O /app/opentelemetry-javaagent.jar \\
-    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.33.0/opentelemetry-javaagent.jar \\
-    || true
-COPY target/*.jar /app/app.jar
+${agentCopyLines}COPY target/*.jar /app/app.jar
 USER appuser
 EXPOSE 8080
-ENV OTEL_OPTS="\\
--javaagent:/app/opentelemetry-javaagent.jar \\
--Dotel.service.name=java-app \\
--Dotel.traces.exporter=otlp \\
--Dotel.metrics.exporter=none \\
--Dotel.logs.exporter=none \\
--Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318"
-ENV JAVA_OPTS="\\
+${agentEnvLines}${otelOptsValue ? "ENV OTEL_OPTS=\"${otelOptsValue}\"\n" : ''}ENV JAVA_OPTS="\\
 -XX:MaxRAMPercentage=75.0 \\
 -XX:+UseG1GC \\
 -XX:+HeapDumpOnOutOfMemoryError \\
@@ -447,7 +566,7 @@ ENV JAVA_OPTS="\\
 -Djava.security.egd=file:/dev/./urandom"
 ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
 """
-                            echo "[Build Image] 项目无 Dockerfile，已自动生成纯运行时版本（阿里云 JRE 镜像）"
+                            echo "[Build Image] 自动生成 Dockerfile（动态注入 ${agentCopyLines.count('COPY')} 个探针）"
                         }
                     }
 
@@ -532,8 +651,8 @@ ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
         aborted { script { callbackPlatform('ABORTED', '构建中止') } }
         always {
             sh "nerdctl rmi ${env.FULL_IMAGE} || true"
-            // 清理源码和 target，但保留外部 Maven 缓存
-            sh 'rm -rf target src .git 2>/dev/null || true'
+            // 清理源码、target 和 .agents，但保留外部 Maven 缓存
+            sh 'rm -rf target src .git .agents .Dockerfile.runtime 2>/dev/null || true'
         }
     }
 }

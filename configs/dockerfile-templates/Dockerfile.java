@@ -10,7 +10,13 @@
 #
 # 配合流水线使用：
 #   Jenkins Package 阶段产出 target/*.jar
+#   流水线 Prepare OTEL Agent 阶段准备 opentelemetry-javaagent.jar
 #   Build Image 阶段执行 nerdctl build
+#
+# OTEL Agent JAR 管理策略（由流水线统一管理，Dockerfile 仅做 COPY）：
+#   全自动模式：流水线从平台「构建探针管理」自动拉取所有已启用 Agent
+#   降级模式：项目自带 opentelemetry-javaagent.jar 或从 Maven 下载
+#   流水线会将 agent jar 统一放到 .agents/{name}/ 目录
 #
 # 基础镜像说明：
 #   使用阿里云镜像源，国内拉取更快
@@ -29,13 +35,9 @@ RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 # 创建日志目录并授权
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
 
-# 下载 OpenTelemetry Java Agent（用于链路追踪）
-ARG OTEL_AGENT_VERSION=1.33.0
-RUN wget -q -O /app/opentelemetry-javaagent.jar \
-    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar \
-    || wget -q -O /app/opentelemetry-javaagent.jar \
-    https://mirrors.huaweicloud.com/repository/maven/io/opentelemetry/javaagent/opentelemetry-javaagent/${OTEL_AGENT_VERSION}/opentelemetry-javaagent-${OTEL_AGENT_VERSION}.jar \
-    || true
+# 复制 OpenTelemetry Java Agent（由流水线 Prepare Build Agents 阶段准备到 .agents/ 目录）
+# 注意：若使用平台自动生成模式，此 COPY 行会被动态替换为所有已启用探针
+COPY .agents/opentelemetry-javaagent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 
 # 复制 JAR（由流水线 Package 阶段产出）
 COPY target/*.jar /app/app.jar

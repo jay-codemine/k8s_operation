@@ -15,6 +15,7 @@ type CicdRouter struct {
 	templateCtrl    *cicd.TemplateController
 	resourceCtrl    *cicd.ResourceController
 	artifactCtrl    *cicd.ArtifactController
+	agentCtrl       *cicd.BuildAgentController
 }
 
 func NewCicdRouter() *CicdRouter {
@@ -28,6 +29,7 @@ func NewCicdRouter() *CicdRouter {
 		templateCtrl:    cicd.NewTemplateController(),
 		resourceCtrl:    cicd.NewResourceController(),
 		artifactCtrl:    cicd.NewArtifactController(),
+		agentCtrl:       cicd.NewBuildAgentController(),
 	}
 }
 
@@ -178,5 +180,19 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		artifact.POST("/delete", r.artifactCtrl.Delete)            // 删除制品
 		artifact.POST("/batch-delete", r.artifactCtrl.BatchDelete) // 批量删除制品
 		artifact.GET("/stats", r.artifactCtrl.Stats)               // 制品统计（按类型分组）
+	}
+
+	// ==================== 构建探针管理 ====================
+	// /api/v1/k8s/cicd/agent/...
+	agent := rg.Group("/agent")
+	{
+		agent.GET("/list", r.agentCtrl.List)             // 探针列表（分页 + 筛选）
+		agent.GET("/detail", r.agentCtrl.Detail)         // 探针详情
+		agent.POST("/upload", r.agentCtrl.Upload)        // 上传探针文件
+		agent.POST("/update", r.agentCtrl.Update)        // 更新探针信息
+		agent.POST("/toggle", r.agentCtrl.ToggleStatus)  // 切换启用/停用
+		agent.POST("/delete", r.agentCtrl.Delete)        // 删除探针
+		agent.GET("/download", r.agentCtrl.Download)     // 下载探针文件（支持 ID 和名称）
+		agent.GET("/by-scope", r.agentCtrl.ListByScope)  // 按语言获取已启用探针
 	}
 }

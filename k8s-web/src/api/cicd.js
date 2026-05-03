@@ -741,3 +741,93 @@ export const getTemplateSimulate = (languageType, gitRepo, imageRepo, gitBranch 
     params: { language_type: languageType, git_repo: gitRepo, image_repo: imageRepo, git_branch: gitBranch }
   })
 }
+
+// =======================
+// 构建探针管理（Build Agent）
+// 对应后端路由: /api/v1/k8s/cicd/agent/*
+// =======================
+
+const AGENT_BASE = `${API_BASE}/k8s/cicd/agent`
+
+/**
+ * 获取探针列表
+ * @param {Object} params - 查询参数
+ * @param {number} params.page - 页码
+ * @param {number} params.page_size - 每页数量
+ * @param {string} params.category - 分类：observability/diagnostics/security/custom
+ * @param {string} params.scope - 适用语言：java/go/python/all
+ * @param {string} params.status - 状态：active/inactive
+ * @param {string} params.keyword - 搜索关键字
+ */
+export const getBuildAgents = (params = {}) => {
+  return http.get(`${AGENT_BASE}/list`, { params })
+}
+
+/**
+ * 获取探针详情
+ * @param {number} id - 探针ID
+ */
+export const getBuildAgentDetail = (id) => {
+  return http.get(`${AGENT_BASE}/detail`, { params: { id } })
+}
+
+/**
+ * 上传探针文件
+ * @param {FormData} formData - 包含 file, name, display_name, category, scope, version 等
+ * @param {Function} onUploadProgress - 上传进度回调
+ */
+export const uploadBuildAgent = (formData, onUploadProgress) => {
+  return http.post(`${AGENT_BASE}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 300000, // 5 分钟，大文件上传需要更长超时
+    onUploadProgress
+  })
+}
+
+/**
+ * 更新探针信息
+ * @param {Object} data - 更新数据
+ */
+export const updateBuildAgent = (data) => {
+  return http.post(`${AGENT_BASE}/update`, data)
+}
+
+/**
+ * 切换探针启用/停用状态
+ * @param {number} id - 探针ID
+ */
+export const toggleBuildAgent = (id) => {
+  return http.post(`${AGENT_BASE}/toggle`, { id })
+}
+
+/**
+ * 删除探针
+ * @param {number} id - 探针ID
+ */
+export const deleteBuildAgent = (id) => {
+  return http.post(`${AGENT_BASE}/delete`, { id })
+}
+
+/**
+ * 下载探针文件
+ * @param {number} id - 探针ID
+ */
+export const downloadBuildAgent = (id) => {
+  return `${AGENT_BASE}/download?id=${id}`
+}
+
+/**
+ * 按名称下载探针（流水线使用）
+ * @param {string} name - 探针名称
+ */
+export const downloadBuildAgentByName = (name) => {
+  return `${AGENT_BASE}/download?name=${name}`
+}
+
+/**
+ * 获取指定语言的已启用探针列表
+ * @param {string} scope - 语言类型：java/go/python
+ */
+export const getBuildAgentsByScope = (scope) => {
+  return http.get(`${AGENT_BASE}/by-scope`, { params: { scope } })
+}

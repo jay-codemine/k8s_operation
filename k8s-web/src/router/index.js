@@ -50,6 +50,7 @@ const routePermissions = {
   '/cicd/releases': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin'],
   '/cicd/artifacts': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'viewer'],
+  '/cicd/agents': ['super_admin', 'platform_admin', 'cicd_admin'],
   
   // ==================== 镜像管理 ====================
   '/images/repositories': ['super_admin', 'platform_admin'],
@@ -158,6 +159,8 @@ const router = createRouter({
         {path: 'cicd/approvals', component: () => import('@/views/cicd/Approvals.vue')},
         // CICD 制品库管理
         {path: 'cicd/artifacts', component: () => import('@/views/cicd/Artifacts.vue')},
+        // CICD 构建探针管理
+        {path: 'cicd/agents', component: () => import('@/views/cicd/BuildAgents.vue')},
 
         {
           path: 'images/repositories',

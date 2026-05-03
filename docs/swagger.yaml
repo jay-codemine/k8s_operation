@@ -3897,6 +3897,146 @@ paths:
       summary: 更新 AppConfig
       tags:
       - Operator AppConfig
+  /api/v1/k8s/cicd/agent/by-scope:
+    get:
+      parameters:
+      - description: 语言类型：java/go/python
+        in: query
+        name: scope
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: 获取指定语言的已启用探针
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/delete:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: 删除构建探针
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/detail:
+    get:
+      parameters:
+      - description: 探针ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: 获取构建探针详情
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/download:
+    get:
+      parameters:
+      - description: 探针ID（二选一）
+        in: query
+        name: id
+        type: integer
+      - description: 探针名称（二选一，流水线构建使用）
+        in: query
+        name: name
+        type: string
+      produces:
+      - application/octet-stream
+      responses: {}
+      summary: 下载构建探针文件
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/list:
+    get:
+      parameters:
+      - description: 分类：observability/diagnostics/security/custom
+        in: query
+        name: category
+        type: string
+      - description: 适用语言：java/go/python/all
+        in: query
+        name: scope
+        type: string
+      - description: 状态：active/inactive
+        in: query
+        name: status
+        type: string
+      - description: 关键词搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: 获取构建探针列表
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/toggle:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: 切换构建探针启用状态
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/update:
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+      summary: 更新构建探针信息
+      tags:
+      - CICD BuildAgent
+  /api/v1/k8s/cicd/agent/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: 探针文件（如 opentelemetry-javaagent.jar）
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 探针名称（唯一标识）
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: 显示名称
+        in: formData
+        name: display_name
+        required: true
+        type: string
+      - description: 分类
+        in: formData
+        name: category
+        required: true
+        type: string
+      - description: 适用语言
+        in: formData
+        name: scope
+        required: true
+        type: string
+      - description: 版本号
+        in: formData
+        name: version
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: 上传构建探针文件
+      tags:
+      - CICD BuildAgent
   /api/v1/k8s/cicd/approval/action:
     post:
       consumes:

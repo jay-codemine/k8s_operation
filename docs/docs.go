@@ -1898,6 +1898,215 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/agent/by-scope": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "获取指定语言的已启用探针",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "语言类型：java/go/python",
+                        "name": "scope",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/delete": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "删除构建探针",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/detail": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "获取构建探针详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "探针ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/download": {
+            "get": {
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "下载构建探针文件",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "探针ID（二选一）",
+                        "name": "id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "探针名称（二选一，流水线构建使用）",
+                        "name": "name",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/list": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "获取构建探针列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "分类：observability/diagnostics/security/custom",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "适用语言：java/go/python/all",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态：active/inactive",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键词搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/toggle": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "切换构建探针启用状态",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/update": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "更新构建探针信息",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/cicd/agent/upload": {
+            "post": {
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD BuildAgent"
+                ],
+                "summary": "上传构建探针文件",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "探针文件（如 opentelemetry-javaagent.jar）",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "探针名称（唯一标识）",
+                        "name": "name",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "显示名称",
+                        "name": "display_name",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "分类",
+                        "name": "category",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "适用语言",
+                        "name": "scope",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "版本号",
+                        "name": "version",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {}
+            }
+        },
         "/api/v1/k8s/cicd/approval/action": {
             "post": {
                 "description": "通过或拒绝审批申请",

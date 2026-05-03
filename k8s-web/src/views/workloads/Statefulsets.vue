@@ -1013,7 +1013,7 @@
           </div>
           <div class="form-group" v-if="containerList.length > 1">
             <label>选择容器</label>
-            <select v-model="updateImageForm.container" class="form-select">
+            <select v-model="updateImageForm.container" class="form-select" @change="onUpdateImageContainerChange">
               <option value="" disabled>请选择容器</option>
               <option v-for="c in containerList" :key="c" :value="c">{{ c }}</option>
             </select>
@@ -1023,8 +1023,14 @@
             <div class="form-static">{{ containerList[0] }}</div>
           </div>
           <div class="form-group">
+            <label>当前镜像</label>
+            <div class="current-image-display" :title="updateImageForm.currentImage">
+              <span class="current-image-text">{{ updateImageForm.currentImage || '-' }}</span>
+            </div>
+          </div>
+          <div class="form-group">
             <label>新镜像地址</label>
-            <input v-model="updateImageForm.image" type="text" class="form-input" placeholder="例如: nginx:1.28" />
+            <input v-model="updateImageForm.image" type="text" class="form-input" :placeholder="updateImageForm.currentImage || '例如: nginx:1.28'" />
           </div>
         </div>
         <div class="modal-footer">
@@ -1723,7 +1729,8 @@ const statefulsetForm = ref({
   volumeClaimTemplates: []
 })
 
-const updateImageForm = ref({ namespace: '', name: '', container: '', image: '' })
+const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
+const imagesList = ref([])
 const stsToDelete = ref(null)
 
 // 内联编辑状态
@@ -1924,7 +1931,8 @@ const fetchStatefulsets = async () => {
         updateStrategy: item.update_strategy || 'RollingUpdate',
         serviceName: item.service_name || '',
         createdAt: item.created_at || '',
-        containers: item.containers || []
+        containers: item.containers || [],
+        images: item.images || []
       }))
     } else {
       statefulsets.value = []
@@ -2630,18 +2638,32 @@ const downloadYaml = () => {
 const openUpdateImage = (sts) => {
   showMoreOptions.value = false
   containerList.value = sts.containers || []
+  imagesList.value = sts.images || []
+  const firstContainer = containerList.value[0] || ''
+  const firstImage = imagesList.value[0] || sts.image || ''
   updateImageForm.value = {
     namespace: sts.namespace,
     name: sts.name,
-    container: containerList.value[0] || '',
-    image: ''
+    container: firstContainer,
+    image: '',
+    currentImage: firstImage
   }
   showUpdateImageModal.value = true
+}
+
+// 容器切换时更新当前镜像显示
+const onUpdateImageContainerChange = () => {
+  const idx = containerList.value.indexOf(updateImageForm.value.container)
+  updateImageForm.value.currentImage = idx >= 0 ? (imagesList.value[idx] || '') : ''
 }
 
 const submitUpdateImage = async () => {
   if (!updateImageForm.value.image?.trim()) {
     Message.error({ content: '请输入镜像地址' })
+    return
+  }
+  // 二次确认
+  if (!confirm(`⚠️ 确认更新镜像？\n\nStatefulSet: ${updateImageForm.value.namespace}/${updateImageForm.value.name}\n容器: ${updateImageForm.value.container}\n当前镜像: ${updateImageForm.value.currentImage || '未知'}\n新镜像: ${updateImageForm.value.image.trim()}\n\n此操作将触发滚动更新，请确认！`)) {
     return
   }
   updatingImage.value = true
@@ -3550,4 +3572,17 @@ const createStatefulSetFromYaml = async () => {
 .ev-msg { color: #9aa5ce; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watcher-slide-enter-active, .watcher-slide-leave-active { transition: all 0.3s ease; }
 .watcher-slide-enter-from, .watcher-slide-leave-to { opacity: 0; transform: translateY(20px); }
+
+.current-image-display {
+  padding: 10px 12px;
+  background: #f0f4f8;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  color: #2d3748;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.current-image-text { opacity: 0.85; }
 </style>
