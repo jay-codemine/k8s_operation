@@ -156,6 +156,17 @@
               </svg>
               执行部署
             </button>
+            <button 
+              v-if="selectedStage.type === 'deploy' && selectedStage.status === 'failed'"
+              class="action-btn retry"
+              @click="$emit('retry-deploy', selectedStage.id)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              重新部署
+            </button>
             <button class="action-btn logs" @click="$emit('view-logs', selectedStage)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -177,7 +188,7 @@ const props = defineProps({
   stages: { type: Array, default: () => [] }
 })
 
-defineEmits(['approve', 'deploy', 'view-logs'])
+defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs'])
 
 const activeTab = ref('all')
 const selectedStage = ref(null)
@@ -723,6 +734,15 @@ watch(runningStage, (stage) => {
 
 .action-btn.deploy:hover {
   background: #2563eb;
+}
+
+.action-btn.retry {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.action-btn.retry:hover {
+  background: #d97706;
 }
 
 .action-btn.logs {

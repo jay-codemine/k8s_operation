@@ -122,6 +122,14 @@
                   </button>
                 </div>
 
+                <!-- 部署失败重试 -->
+                <div v-if="stage.type === 'deploy' && stage.status === 'failed'" class="deploy-actions">
+                  <button class="btn btn-retry-deploy" @click.stop="$emit('retry-deploy', stage)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    重新部署
+                  </button>
+                </div>
+
                 <!-- 查看日志按钮 -->
                 <button class="btn btn-logs" @click.stop="$emit('view-logs', stage)">
                   <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75zM8 5.5a.75.75 0 01.75.75v3.59l1.72-1.72a.75.75 0 111.06 1.06l-3 3a.75.75 0 01-1.06 0l-3-3a.75.75 0 111.06-1.06l1.72 1.72V6.25A.75.75 0 018 5.5z"/></svg>
@@ -162,7 +170,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['approve', 'deploy', 'view-logs', 'select-stage'])
+const emit = defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs', 'select-stage'])
 
 const expandedStage = ref(null)
 const activeFilter = ref('all')
@@ -701,6 +709,20 @@ watch(() => props.stages, (newStages) => {
 
 .btn-deploy:hover {
   background: #2563eb;
+}
+
+.btn-retry-deploy {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.btn-retry-deploy:hover {
+  background: #d97706;
+}
+
+.btn-retry-deploy svg {
+  width: 14px;
+  height: 14px;
 }
 
 .btn-logs {

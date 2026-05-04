@@ -447,6 +447,7 @@
               :pipeline-id="pipelineId"
               @approve="handleApproveStage"
               @deploy="handleDeployStage"
+              @retry-deploy="handleRetryDeploy"
               @view-logs="activeTab = 'logs'; loadLogs()"
             />
           </template>
@@ -620,6 +621,21 @@
                   <line x1="9" y1="9" x2="15" y2="15"/>
                 </svg>
                 {{ cancelling ? '取消中...' : '取消' }}
+              </button>
+              
+              <!-- 部署失败时在头部显示重新部署按钮 -->
+              <button 
+                v-if="selectedStage.type === 'deploy' && selectedStage.status === 'failed'" 
+                class="btn btn-retry-mini" 
+                @click.stop="handleRetryDeploy(selectedStage.id)" 
+                :disabled="deploying"
+                title="重新部署"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                {{ deploying ? '部署中...' : '重新部署' }}
               </button>
             </div>
             
@@ -6574,6 +6590,38 @@ export default {
 }
 
 .btn-cancel-mini svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 重新部署迷你按钮（头部快捷操作） */
+.btn-retry-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 8px;
+}
+
+.btn-retry-mini:hover:not(:disabled) {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.btn-retry-mini:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-retry-mini svg {
   width: 14px;
   height: 14px;
 }
