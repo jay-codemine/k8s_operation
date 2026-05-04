@@ -17,16 +17,22 @@
 | 代码质量无管控 | SonarQube 集成 + 质量门禁自动拦截 |
 | 构建产物无追踪 | 制品库全生命周期管理（上传/下载/版本/统计） |
 | 镜像管理混乱 | 多仓库接入 + 自动清理策略 |
+| 可观测性集成复杂 | 构建探针管理，上传即生效，全自动注入 Agent |
+| kubectl 操作不便 | 容器 Web 终端，浏览器内直接进入容器 Shell |
+| 基础组件部署繁琐 | 应用商城一键部署开源组件 |
 | 运维门槛高 | AI 智能助手，自然语言操作平台 |
 
 **核心能力**：
 - 🌐 **多集群资源治理** - 统一管理开发/测试/生产环境
 - 🔐 **RBAC 精细化权限** - 细粒度权限隔离，满足审计要求
-- 🔄 **CI/CD 14 阶段闭环** - 集成 Jenkins，14 阶段全链路流水线，支持审批/回滚
+- 🔄 **CI/CD 14 阶段闭环** - 集成 Jenkins，14 阶段全链路流水线，支持审批/回滚/批量发布
 - 🔍 **SonarQube 代码质量** - 代码扫描 + 质量门禁，4 语言统一集成（Go/Java/Python/前端）
 - 📦 **制品库管理** - 构建产物全生命周期管理，支持上传/下载/版本追踪/统计
 - 🏗️ **镜像仓库管理** - 支持 Harbor/ACR/Docker Registry
-- ⚙ **平台运维监控** - 健康检查、审计日志、系统配置
+- 🔭 **构建探针管理** - 可观测性 Agent 全自动注入，上传即生效，无需改流水线
+- 🖥️ **容器 Web 终端** - 浏览器内 kubectl exec，WebSocket + xterm.js 交互式 Shell
+- 🏪 **应用商城** - 内置应用市场，一键部署开源组件与自有应用
+- ⚙ **平台运维监控** - 健康检查、ETCD/核心组件监控、审计日志、系统配置
 - 🤖 **AI 智能助手** - 自然语言操作 K8s，多模型支持，高危自动审批
 
 ------
@@ -65,6 +71,9 @@
 | CI/CD 引擎 | Jenkins + HMAC | 多语言模板 + 阶段回调 + 签名校验 |
 | 代码质量 | SonarQube | Bug/漏洞/异味/覆盖率/重复率 + 质量门禁 |
 | 制品库 | 内置制品管理 | SHA256 校验、多类型支持、全生命周期管理 |
+| 构建探针 | Build Agent 管理 | 全自动注入可观测性探针（OTEL/SkyWalking/Arthas 等） |
+| 容器终端 | xterm.js + WebSocket | 浏览器内交互式 Shell，SPDY 桥接 K8s exec |
+| 应用商城 | 内置 App Store | 一键部署开源组件，组件化安装管理 |
 | 日志系统 | Zap | 高性能、结构化日志、三日志分类（系统/业务/AI） |
 
 ------
@@ -383,6 +392,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
     - Deployment：基于 ReplicaSet 历史版本回滚（或指定历史版本）
     - StatefulSet/DaemonSet：基于 ControllerRevision 回滚
 - ✅ **发布过程可观测**：14 阶段实时状态 + 滚动更新进度 + Pod 状态 + 事件聚合
+- ✅ **批量发布**：支持多个发布单同时触发构建，提升发布效率
+- ✅ **批量回滚**：支持多个发布单一键批量回滚到上一个稳定版本
+- ✅ **部署失败重试**：失败的发布单支持一键重试，自动创建新的发布单
 
 ### 🤖 AI 智能助手（核心亮点）
 
@@ -539,13 +551,69 @@ API 接口一览：
 └── GET  /artifact/stats         # 制品统计（按类型分组）
 ```
 
+### 🔭 构建探针管理（Build Agent Management）
+
+平台内置构建探针管理系统，实现 **上传即生效** 的全自动 Agent 注入，无需修改流水线或 Dockerfile。
+
+#### 支持的探针分类
+
+| 分类 | 说明 | 典型探针 |
+|------|------|----------|
+| 可观测性 | 分布式追踪/指标采集 | OpenTelemetry Java Agent、SkyWalking |
+| 诊断工具 | 在线诊断/性能分析 | Arthas、JProfiler Agent |
+| 安全扫描 | 运行时安全防护 | RASP、Falco Probe |
+| 自定义 | 任意自定义 Agent | 用户上传的任意 JAR/Binary |
+
+#### 核心能力
+
+- ✅ **全自动注入**：Jenkins 流水线 `Prepare Build Agents` 阶段自动从平台拉取所有已启用探针
+- ✅ **动态 Dockerfile**：Build Image 阶段自动生成 COPY + ENV 指令，零人工干预
+- ✅ **三级降级策略**：平台 API → 项目本地 → Maven 中央仓库，确保构建不中断
+- ✅ **SHA256 校验**：上传时自动计算文件哈希，确保探针完整性
+- ✅ **多语言支持**：Java / Go / Python / 通用，按语言范围自动匹配
+- ✅ **版本管理**：支持版本追踪、启用/停用、安装包上传与下载
+
+### 🖥️ 容器 Web 终端（Container Terminal）
+
+类似 `kubectl exec -it` 的浏览器内交互式终端，基于 **WebSocket + SPDY** 双协议桥接。
+
+#### 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| Tokyo Night 主题 | 暗色终端配色，参考 VS Code Tokyo Night 主题 |
+| Shell 自动检测 | 按优先级探测 bash → sh → zsh → ash |
+| 窗口自适应 | ResizeObserver + FitAddon 自动适配终端尺寸 |
+| 心跳保活 | 双端 ping/pong（前端 25s / 后端 30s） |
+| 全屏模式 | 一键切换全屏/窗口模式 |
+| 拖拽支持 | 标题栏可拖拽移动窗口位置 |
+| Distroless 友好 | 无 Shell 容器自动检测并给出调试提示 |
+
+### 📡 工作负载实时状态监听（Resource Watcher）
+
+参考 KubeSphere 的状态追踪机制，当用户执行镜像更新/重启等操作后，自动开启快速轮询：
+
+- 实时展示 `Updating → Progressing → Running` 完整状态变化
+- 自动拉取关联 Events 显示在右下角浮窗
+- 覆盖全部 5 类工作负载（Deployment / StatefulSet / DaemonSet / Job / CronJob）
+
+### 🏪 应用商城（App Store）
+
+内置应用市场，支持一键部署开源组件与自有应用到 K8s 集群。
+
+- ✅ **应用目录管理**：分类浏览、搜索、版本管理
+- ✅ **一键安装**：选择集群 + 命名空间 + 自定义 Values，自动创建 Deployment/Service
+- ✅ **组件化部署**：每个应用支持多组件（如 Prometheus + Grafana + AlertManager）
+- ✅ **安装状态追踪**：实时监控 Pod Ready 状态，部分就绪降级运行
+- ✅ **卸载与管理**：一键卸载，清理所有关联资源
+
 ### 🧩 系统通用能力
 
 - 配置化加载（YAML / ENV）
 - JWT 鉴权 + 刷新机制
 - Zap 三日志系统（系统日志 / 业务日志 / AI 日志）
 - Swagger 在线 API 文档（支持 Standalone）
-- 健康检查与优雅关闭
+- 健康检查与优雅关闭（含 ETCD / Controller Manager / Scheduler / CoreDNS 核心组件监控）
 - 标准化控制器 / 服务 / DAO 分层
 - 全局异常拦截（中间件）
 
@@ -693,6 +761,10 @@ func (s *AIService) AIChat(msg string) {
 | 代码质量管控 | SonarQube 4 语言统一集成 + 质量门禁自动拦截 + 扫描报告回传 |
 | 制品全生命周期 | SHA256 完整性校验 + 1MB 大缓冲区加速 I/O + 流式下载 |
 | 构建性能优化 | BuildKit 本地层缓存 + nerdctl push --concurrency 8 并发推送 |
+| 构建探针全自动注入 | 平台 API 自动拉取 + 动态 Dockerfile 生成 + 三级降级策略 |
+| 容器终端桥接 | WebSocket ↔ SPDY 双协议桥接 + Shell 自动检测 + 心跳保活 |
+| 应用商城组件化部署 | 多组件自动创建 + Pod Ready 等待 + 部分就绪降级 |
+| Jenkins 高并发优化 | Client 连接池化 + Job 信息 5min TTL 缓存 + PollWorker 5 并行 |
 
 ------
 
@@ -710,6 +782,9 @@ func (s *AIService) AIChat(msg string) {
 - **AI 赋能**：自然语言操作 K8s，零门槛运维，高危自动拦截审批
 - **质量保障**：SonarQube 代码扫描 + 质量门禁，从源头把控代码质量
 - **制品管理**：构建产物全链路追踪，版本可查、文件可下载、统计可视
+- **探针管理**：构建探针上传即生效，全自动注入到 Docker 镜像，零运维成本
+- **终端体验**：浏览器内直接进入容器 Shell，免去 kubectl 配置
+- **应用商城**：一键部署开源组件，降低基础设施搭建成本
 
 ------
 
@@ -724,18 +799,18 @@ k8soperation/
 ├── initialize/                # 初始化（日志/数据库/路由/集群）
 ├── internal/
 │   ├── app/
-│   │   ├── controllers/       # API 控制器（含 AI / CI/CD / 制品库）
-│   │   ├── services/          # 业务服务（含 AI / 流水线 / 制品 / SonarQube）
-│   │   ├── models/            # 数据模型（含 CicdArtifact / SonarQube 指标）
+│   │   ├── controllers/       # API 控制器（含 AI / CI/CD / 制品库 / 探针 / 终端 / 应用商城）
+│   │   ├── services/          # 业务服务（含 AI / 流水线 / 制品 / SonarQube / 探针 / 应用商城）
+│   │   ├── models/            # 数据模型（含 CicdArtifact / SonarQube / BuildAgent / AppStore）
 │   │   ├── dao/               # 数据访问层
 │   │   └── routers/           # 路由注册
 │   ├── bootstrap/             # 启动编排
 │   └── errorcode/             # 统一错误码
 ├── pkg/
-│   ├── k8s/                   # K8s 客户端封装
+│   ├── k8s/                   # K8s 客户端封装（含容器终端 WebSocket 桥接）
 │   ├── openai/                # AI 多模型 Provider Registry
 │   ├── jwt/                   # JWT 认证
-│   └── jenkins/               # Jenkins CI 集成
+│   └── jenkins/               # Jenkins CI 集成（连接池化 + 缓存优化）
 ├── configs/
 │   ├── jenkins-templates/     # 多语言 Jenkins 流水线模板
 │   │   ├── go-pipeline.groovy
