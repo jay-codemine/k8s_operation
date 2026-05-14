@@ -3,7 +3,6 @@ package initialize
 import (
 	"context"
 	"fmt"
-	"log"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm/logger"
 	"k8soperation/global"
@@ -11,6 +10,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/pkg/database"
+	"log"
 	"time"
 )
 
@@ -38,7 +38,7 @@ func SetupDB() error {
 
 	// 连接数据库
 	var err error
-	global.DB, global.SQLDB, err = database.Connect(dbConfig, logger.Default.LogMode(logger.Info))
+	global.DB, global.SQLDB, err = database.Connect(dbConfig, logger.Default.LogMode(logger.Silent))
 	if err != nil {
 		return fmt.Errorf("connect db failed: %w", err)
 	}

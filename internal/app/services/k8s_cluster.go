@@ -21,6 +21,11 @@ func (s *Services) K8sClusterCreate(ctx context.Context, param *requests.K8sClus
 	return s.dao.KubeClusterCreate(ctx, param.ClusterName, param.ClusterVersion, param.KubeConfig)
 }
 
+// K8sClusterGetByName 按名称查询集群（用于启动时复用已有记录，避免重复创建）
+func (s *Services) K8sClusterGetByName(ctx context.Context, name string) (*models.K8sCluster, error) {
+	return s.dao.KubeClusterGetByName(ctx, name)
+}
+
 func (s *Services) K8sClusterUpdate(ctx context.Context, param *requests.K8sClusterUpdateRequest) error {
 	// Update：不再接收 status
 	// kubeconfig 为空时：不覆盖 kube_config；同时也不强制改 status

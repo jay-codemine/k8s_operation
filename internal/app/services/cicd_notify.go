@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -69,7 +70,7 @@ func (s *Services) NotifyDeployResult(ctx context.Context, pipeline *models.Cicd
 	go s.sendDingTalkNotify(webhook, msg)
 }
 
-// NotifyBuildResult 发送构建结果通知
+// NotifyBuildResult 发送构建结果通知（异步）
 func (s *Services) NotifyBuildResult(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, success bool) {
 	webhook := s.getDingTalkWebhook(pipeline)
 	if webhook == "" {
@@ -78,6 +79,20 @@ func (s *Services) NotifyBuildResult(ctx context.Context, pipeline *models.CicdP
 
 	msg := s.buildBuildNotifyMessage(pipeline, run, success)
 	go s.sendDingTalkNotify(webhook, msg)
+}
+
+// NotifyBuildResultSync 发送构建结果通知（同步，用于后台 Worker 中确保通知可追踪）
+func (s *Services) NotifyBuildResultSync(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, success bool) {
+	webhook := s.getDingTalkWebhook(pipeline)
+	if webhook == "" {
+		global.Logger.Warn("[通知] 钉钉 Webhook 未配置，跳过通知",
+			zap.String("pipeline_name", pipeline.Name),
+		)
+		return
+	}
+
+	msg := s.buildBuildNotifyMessage(pipeline, run, success)
+	s.sendDingTalkNotify(webhook, msg)
 }
 
 // NotifyApprovalRequired 发送审批提醒通知
@@ -664,6 +679,7 @@ func (s *Services) getEnvDisplayNameWithCluster(env string, clusterID int64) str
 
 func (s *Services) sendDingTalkNotify(webhook string, msg *DingTalkMessage) {
 	if webhook == "" || msg == nil {
+		global.Logger.Warn("[通知] sendDingTalkNotify 跳过: webhook 或 msg 为空")
 		return
 	}
 
@@ -673,22 +689,36 @@ func (s *Services) sendDingTalkNotify(webhook string, msg *DingTalkMessage) {
 		return
 	}
 
+	global.Logger.Info("[通知] 准备发送钉钉消息",
+		zap.String("title", msg.Markdown.Title),
+		zap.Int("body_len", len(body)),
+	)
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(webhook, "application/json", bytes.NewReader(body))
 	if err != nil {
-		global.Logger.Error("[通知] 发送钉钉消息失败", zap.Error(err))
+		global.Logger.Error("[通知] 发送钉钉消息失败",
+			zap.String("title", msg.Markdown.Title),
+			zap.Error(err),
+		)
 		return
 	}
 	defer resp.Body.Close()
 
+	// 读取响应体，记录钉钉返回的完整信息
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+
 	if resp.StatusCode != http.StatusOK {
-		global.Logger.Warn("[通知] 钉钉返回非200状态码",
+		global.Logger.Error("[通知] 钉钉返回非200状态码",
 			zap.Int("status_code", resp.StatusCode),
+			zap.String("response", string(respBody)),
+			zap.String("title", msg.Markdown.Title),
 		)
 		return
 	}
 
 	global.Logger.Info("[通知] 钉钉消息发送成功",
 		zap.String("title", msg.Markdown.Title),
+		zap.String("response", string(respBody)),
 	)
 }

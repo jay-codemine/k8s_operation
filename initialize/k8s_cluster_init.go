@@ -77,43 +77,65 @@ func SetupK8sBootstrap() error {
 		return nil
 	}
 
-	// 3) 本地文件存在，尝试自动入库
-	global.Logger.Info("发现本地 kubeconfig，尝试自动入库...", zap.String("path", localKubeConfig))
+	// 3) 本地文件存在，先检查是否已有 "default-cluster" 记录（避免重复创建）
+	global.Logger.Info("发现本地 kubeconfig，检查是否已入库...", zap.String("path", localKubeConfig))
 
+	existing, _ := svc.K8sClusterGetByName(ctx, "default-cluster")
+	if existing != nil {
+		// 已存在，直接用它初始化
+		global.Logger.Info("已存在 default-cluster 记录，复用", zap.Uint32("id", existing.ID))
+		cli, initErr := svc.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: existing.ID})
+		if initErr == nil {
+			setGlobalClients(cli)
+			printClusterInfo("数据库集群(default-cluster)")
+			return nil
+		}
+		global.Logger.Warn("复用 default-cluster 初始化失败，尝试更新 kubeconfig", zap.Error(initErr))
+		// 更新 kubeconfig 后重试
+		_ = svc.K8sClusterUpdate(ctx, &requests.K8sClusterUpdateRequest{
+			ID: existing.ID, ClusterName: existing.ClusterName,
+			ClusterVersion: existing.ClusterVersion, KubeConfig: kubeConfigStr,
+		})
+		cli, initErr = svc.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: existing.ID})
+		if initErr == nil {
+			setGlobalClients(cli)
+			printClusterInfo("数据库集群(default-cluster, kubeconfig已更新)")
+			return nil
+		}
+	}
+
+	// 4) 不存在，创建新记录
 	createErr := svc.K8sClusterCreate(ctx, &requests.K8sClusterCreateRequest{
 		ClusterName:    "default-cluster",
 		ClusterVersion: "auto-detected",
 		KubeConfig:     kubeConfigStr,
 	})
 	if createErr != nil {
-		// 入库失败（可能是重复名称等），尝试直接用本地配置初始化
-		global.Logger.Warn("自动入库失败，尝试直接使用本地配置初始化",
-			zap.Error(createErr))
-
-		// 直接从本地配置构建 client
+		// 入库失败，尝试直接用本地配置初始化
+		global.Logger.Warn("自动入库失败，尝试直接使用本地配置初始化", zap.Error(createErr))
 		cli, buildErr := services.BuildClientsFromKubeconfig(kubeConfigStr)
 		if buildErr != nil {
 			if !global.AppSetting.AllowEmptyStart {
-				global.Logger.Error("生产环境禁止空启动：本地 kubeconfig 无法初始化",
-					zap.Error(buildErr))
+				global.Logger.Error("生产环境禁止空启动：本地 kubeconfig 无法初始化", zap.Error(buildErr))
 				return ErrNoClusterConfig
 			}
-			global.Logger.Warn("本地 kubeconfig 无法初始化，允许空启动",
-				zap.Error(buildErr))
+			global.Logger.Warn("本地 kubeconfig 无法初始化，允许空启动", zap.Error(buildErr))
 			printEmptyStartWarning()
 			return nil
 		}
-
 		setGlobalClients(cli)
 		printClusterInfo("本地 kubeconfig（未入库）")
 		return nil
 	}
 
-	// 4) 入库成功，重新初始化
+	// 5) 入库成功，查询刚创建的记录获取 ID
 	global.Logger.Info("本地 kubeconfig 已自动入库，正在初始化...")
-	cli, initErr := svc.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{
-		ID: 1, // 新创建的记录 ID 通常为 1
-	})
+	newCluster, _ := svc.K8sClusterGetByName(ctx, "default-cluster")
+	var initID uint32 = 1
+	if newCluster != nil {
+		initID = newCluster.ID
+	}
+	cli, initErr := svc.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: initID})
 	if initErr != nil {
 		if !global.AppSetting.AllowEmptyStart {
 			global.Logger.Error("生产环境禁止空启动：入库后初始化失败", zap.Error(initErr))
