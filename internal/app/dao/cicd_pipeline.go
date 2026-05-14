@@ -316,6 +316,18 @@ func (d *Dao) PipelineRunListPendingForPoll(ctx context.Context, maxAgeMinutes i
 	return list, nil
 }
 
+// PipelineRunListTimedOut 查询即将超时的运行记录（用于同步更新 pipeline 表状态）
+func (d *Dao) PipelineRunListTimedOut(ctx context.Context, maxAgeMinutes int) ([]*models.CicdPipelineRun, error) {
+	var list []*models.CicdPipelineRun
+	cutoffTime := uint64(time.Now().Add(-time.Duration(maxAgeMinutes) * time.Minute).Unix())
+
+	err := d.db.WithContext(ctx).
+		Where("status IN (?, ?) AND callback_received = 0 AND created_at <= ?",
+			models.PipelineRunStatusPending, models.PipelineRunStatusRunning, cutoffTime).
+		Find(&list).Error
+	return list, err
+}
+
 // PipelineRunMarkTimeout 批量标记超时的运行记录为失败
 func (d *Dao) PipelineRunMarkTimeout(ctx context.Context, maxAgeMinutes int) (int64, error) {
 	cutoffTime := uint64(time.Now().Add(-time.Duration(maxAgeMinutes) * time.Minute).Unix())
@@ -341,6 +353,16 @@ func (d *Dao) PipelineUpdateDeployInfo(ctx context.Context, id int64, image, dig
 		"last_deploy_time":   deployTime,
 		"last_deploy_status": status,
 	})
+}
+
+// PipelineListStuckRunning 查询卡在 running 状态的流水线（孤儿 pipeline）
+// 条件：pipeline.status = 'running' 且没有活跃的 run 记录（pending/running）
+func (d *Dao) PipelineListStuckRunning(ctx context.Context) ([]*models.CicdPipeline, error) {
+	var list []*models.CicdPipeline
+	err := d.db.WithContext(ctx).
+		Where("status = ? AND is_del = 0", models.PipelineStatusRunning).
+		Find(&list).Error
+	return list, err
 }
 
 // PipelineRunListCompletedUnsynced 获取已完成但未同步到发布记录的运行记录

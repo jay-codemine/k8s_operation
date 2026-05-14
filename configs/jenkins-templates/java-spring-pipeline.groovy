@@ -68,6 +68,14 @@ pipeline {
         string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/test/**,**/generated/**', description: '排除扫描的文件模式')
         booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
 
+        // 平台注入的质量门禁阈值（由平台 UI 配置，自动传入）
+        string(name: 'SONAR_COVERAGE_THRESHOLD', defaultValue: '80', description: '代码覆盖率阈值（%）')
+        string(name: 'SONAR_NEW_BUGS_MAX', defaultValue: '0', description: '新增 Bug 最大允许数')
+        string(name: 'SONAR_CODE_SMELLS_MAX', defaultValue: '10', description: '代码异味最大允许数')
+        string(name: 'SONAR_VULNERABILITIES_MAX', defaultValue: '0', description: '安全漏洞最大允许数')
+        string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '代码重复率阈值（%）')
+        string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁失败策略: block(阻断) | warn(告警) | skip(跳过)')
+
         // 制品上传参数
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
     }
@@ -301,30 +309,49 @@ MAVEN_HOME=${MAVEN_HOME}
             }
         }
 
-        // ==================== SonarQube 质量门禁检查 ====================
+        // ==================== SonarQube 质量门禁检查（平台阈值驱动） ====================
+        // 门禁策略由平台 SONAR_GATE_ACTION 参数控制：
+        //   block → 门禁失败则标记构建失败（默认）
+        //   warn  → 门禁失败仅发通知，不阻断构建
+        //   skip  → 仅执行扫描，不判定门禁
         stage('Quality Gate') {
             when {
                 allOf {
                     expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE }
                     expression { return env.SONAR_ANALYSIS_FAILED != 'true' }
+                    expression { return (params.SONAR_GATE_ACTION ?: 'block') != 'skip' }
                 }
             }
             steps {
-                echo "=== 质量门禁检查 ==="
+                echo "=== 质量门禁检查（策略: ${params.SONAR_GATE_ACTION ?: 'block'}） ==="
                 script {
-                    // 等待 SonarQube 分析完成（最多 2 分钟，轻量扫描通常 30s 内返回）
+                    def gateAction = params.SONAR_GATE_ACTION ?: 'block'
+
+                    // 等待 SonarQube 分析完成（最多 2 分钟）
                     def qg = waitForQualityGate(webhookSecretId: '', abortPipeline: false)
                     env.SONAR_QUALITY_GATE_STATUS = qg.status
+
+                    // 查询平台阈值对应的 SonarQube 指标
+                    def metricsReport = checkPlatformThresholds()
+                    env.SONAR_METRICS_REPORT = metricsReport
+
                     if (qg.status != 'OK') {
-                        echo "[Quality Gate] 状态: ${qg.status}"
-                        echo "[Quality Gate] 代码质量未达标，请登录 SonarQube 查看详细报告"
-                        // 即使未通过也回传报告数据，让平台展示具体问题
+                        echo "[Quality Gate] ❌ SonarQube 门禁状态: ${qg.status}"
+                        echo "[Quality Gate] 平台阈值检查:\n${metricsReport}"
                         sonarReportCallback(qg.status)
-                        error("SonarQube Quality Gate 未通过: ${qg.status}")
+
+                        if (gateAction == 'block') {
+                            error("SonarQube Quality Gate 未通过: ${qg.status}")
+                        } else {
+                            // warn 模式：标记 UNSTABLE 但不终止
+                            echo "[Quality Gate] ⚠️ 门禁未通过但策略为 warn，继续构建"
+                            currentBuild.result = 'UNSTABLE'
+                        }
+                    } else {
+                        echo "[Quality Gate] ✅ 通过！状态: ${qg.status}"
+                        echo "[Quality Gate] 平台阈值检查:\n${metricsReport}"
+                        sonarReportCallback(qg.status)
                     }
-                    echo "[Quality Gate] ✅ 通过！状态: ${qg.status}"
-                    // 质量门禁通过后，将 SonarQube 指标数据回传平台
-                    sonarReportCallback(qg.status)
                 }
             }
             post {
@@ -735,6 +762,58 @@ def sonarReportCallback(String qualityGateStatus) {
     } catch (e) {
         echo "[SonarQube] 指标回传非致命错误: ${e.message}"
     }
+}
+
+// ==================== 平台阈值检查（对比 SonarQube 实际指标与平台配置） ====================
+def checkPlatformThresholds() {
+    def report = []
+    try {
+        def projectKey = params.SONAR_PROJECT_KEY?.trim() ?: env.JOB_NAME.replaceAll('/', '_')
+        def metrics = [:]
+
+        withSonarQubeEnv('SonarQube') {
+            def apiUrl = "${env.SONAR_HOST_URL}/api/measures/component?component=${projectKey}&metricKeys=coverage,bugs,code_smells,vulnerabilities,duplicated_lines_density"
+            def resp = httpRequest(url: apiUrl, httpMode: 'GET', validResponseCodes: '200', quiet: true)
+            def json = readJSON text: resp.content
+            json.component?.measures?.each { m -> metrics[m.metric] = m.value }
+        }
+
+        // 代码覆盖率
+        def actualCoverage = (metrics.coverage ?: '0') as Double
+        def thresholdCoverage = (params.SONAR_COVERAGE_THRESHOLD ?: '80') as Double
+        def coveragePass = actualCoverage >= thresholdCoverage
+        report << "  覆盖率: ${actualCoverage}% (${coveragePass ? '✅' : '❌'} 阈值: ≥${thresholdCoverage}%)"
+
+        // 新增 Bug
+        def actualBugs = (metrics.bugs ?: '0') as Integer
+        def maxBugs = (params.SONAR_NEW_BUGS_MAX ?: '0') as Integer
+        def bugsPass = actualBugs <= maxBugs
+        report << "  Bug: ${actualBugs} (${bugsPass ? '✅' : '❌'} 阈值: ≤${maxBugs})"
+
+        // 代码异味
+        def actualSmells = (metrics.code_smells ?: '0') as Integer
+        def maxSmells = (params.SONAR_CODE_SMELLS_MAX ?: '10') as Integer
+        def smellsPass = actualSmells <= maxSmells
+        report << "  异味: ${actualSmells} (${smellsPass ? '✅' : '❌'} 阈值: ≤${maxSmells})"
+
+        // 安全漏洞
+        def actualVulns = (metrics.vulnerabilities ?: '0') as Integer
+        def maxVulns = (params.SONAR_VULNERABILITIES_MAX ?: '0') as Integer
+        def vulnsPass = actualVulns <= maxVulns
+        report << "  漏洞: ${actualVulns} (${vulnsPass ? '✅' : '❌'} 阈值: ≤${maxVulns})"
+
+        // 重复率
+        def actualDup = (metrics['duplicated_lines_density'] ?: '0') as Double
+        def maxDup = (params.SONAR_DUPLICATIONS_MAX ?: '3') as Double
+        def dupPass = actualDup <= maxDup
+        report << "  重复率: ${actualDup}% (${dupPass ? '✅' : '❌'} 阈值: ≤${maxDup}%)"
+
+        def allPass = coveragePass && bugsPass && smellsPass && vulnsPass && dupPass
+        report.add(0, allPass ? "✅ 平台阈值全部通过" : "❌ 部分指标未达平台阈值")
+    } catch (e) {
+        report << "  ⚠️ 指标查询失败: ${e.message}"
+    }
+    return report.join('\n')
 }
 
 // SonarQube rating 数值转字母: 1.0=A, 2.0=B, 3.0=C, 4.0=D, 5.0=E

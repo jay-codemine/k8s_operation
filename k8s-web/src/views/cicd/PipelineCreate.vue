@@ -358,6 +358,234 @@
                     <span class="toggle-slider"></span>
                   </label>
                 </div>
+
+                <!-- SonarQube 质量门禁配置面板（展开式） -->
+                <transition name="sonar-expand">
+                  <div v-if="pipelineData.enable_sonar" class="sonar-config-panel">
+                    <div class="sonar-panel-header">
+                      <div class="sonar-panel-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 20V10M18 20V4M6 20v-4"/>
+                        </svg>
+                        质量门禁规则配置
+                      </div>
+                      <span class="sonar-panel-badge">Quality Gate</span>
+                    </div>
+
+                    <div class="sonar-metrics-grid">
+                      <!-- 代码覆盖率 -->
+                      <div class="sonar-metric-card">
+                        <div class="metric-header">
+                          <div class="metric-icon coverage">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">代码覆盖率</div>
+                            <div class="metric-desc">新增代码单测覆盖率阈值</div>
+                          </div>
+                        </div>
+                        <div class="metric-input-row">
+                          <div class="metric-slider-wrap">
+                            <input type="range" v-model.number="sonarConfig.coverage" min="0" max="100" step="5" class="metric-slider" />
+                            <div class="metric-slider-track">
+                              <div class="metric-slider-fill" :style="{ width: sonarConfig.coverage + '%' }"></div>
+                            </div>
+                          </div>
+                          <div class="metric-value-box">
+                            <input type="number" v-model.number="sonarConfig.coverage" min="0" max="100" class="metric-num-input" />
+                            <span class="metric-unit">%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 新代码 Bug -->
+                      <div class="sonar-metric-card">
+                        <div class="metric-header">
+                          <div class="metric-icon bugs">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <line x1="12" y1="8" x2="12" y2="12"/>
+                              <line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">新增 Bug</div>
+                            <div class="metric-desc">允许的最大新增 Bug 数量</div>
+                          </div>
+                        </div>
+                        <div class="metric-input-row">
+                          <div class="metric-presets">
+                            <button v-for="v in [0, 1, 3, 5, 10]" :key="v"
+                              :class="['preset-btn', { active: sonarConfig.newBugs === v }]"
+                              @click="sonarConfig.newBugs = v" type="button"
+                            >{{ v }}</button>
+                          </div>
+                          <div class="metric-value-box">
+                            <input type="number" v-model.number="sonarConfig.newBugs" min="0" max="999" class="metric-num-input" />
+                            <span class="metric-unit">个</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 代码异味 -->
+                      <div class="sonar-metric-card">
+                        <div class="metric-header">
+                          <div class="metric-icon smells">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M8 12.5c0 1.38-1.12 2.5-2.5 2.5S3 13.88 3 12.5 4.12 10 5.5 10 8 11.12 8 12.5z"/>
+                              <path d="M14.5 7c1.38 0 2.5 1.12 2.5 2.5S15.88 12 14.5 12 12 10.88 12 9.5 13.12 7 14.5 7z"/>
+                              <path d="M16 19.5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5-2.5-1.12-2.5-2.5z"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">代码异味</div>
+                            <div class="metric-desc">允许的最大 Code Smells 数</div>
+                          </div>
+                        </div>
+                        <div class="metric-input-row">
+                          <div class="metric-presets">
+                            <button v-for="v in [0, 5, 10, 20, 50]" :key="v"
+                              :class="['preset-btn', { active: sonarConfig.codeSmells === v }]"
+                              @click="sonarConfig.codeSmells = v" type="button"
+                            >{{ v }}</button>
+                          </div>
+                          <div class="metric-value-box">
+                            <input type="number" v-model.number="sonarConfig.codeSmells" min="0" max="999" class="metric-num-input" />
+                            <span class="metric-unit">个</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 安全漏洞 -->
+                      <div class="sonar-metric-card">
+                        <div class="metric-header">
+                          <div class="metric-icon vulnerabilities">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">安全漏洞</div>
+                            <div class="metric-desc">允许的最大安全漏洞数</div>
+                          </div>
+                        </div>
+                        <div class="metric-input-row">
+                          <div class="metric-presets">
+                            <button v-for="v in [0, 1, 3, 5]" :key="v"
+                              :class="['preset-btn', { active: sonarConfig.vulnerabilities === v }]"
+                              @click="sonarConfig.vulnerabilities = v" type="button"
+                            >{{ v }}</button>
+                          </div>
+                          <div class="metric-value-box">
+                            <input type="number" v-model.number="sonarConfig.vulnerabilities" min="0" max="999" class="metric-num-input" />
+                            <span class="metric-unit">个</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 重复率 -->
+                      <div class="sonar-metric-card">
+                        <div class="metric-header">
+                          <div class="metric-icon duplications">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">代码重复率</div>
+                            <div class="metric-desc">新增代码最大重复率阈值</div>
+                          </div>
+                        </div>
+                        <div class="metric-input-row">
+                          <div class="metric-slider-wrap">
+                            <input type="range" v-model.number="sonarConfig.duplications" min="0" max="50" step="1" class="metric-slider" />
+                            <div class="metric-slider-track">
+                              <div class="metric-slider-fill" :style="{ width: (sonarConfig.duplications / 50 * 100) + '%' }"></div>
+                            </div>
+                          </div>
+                          <div class="metric-value-box">
+                            <input type="number" v-model.number="sonarConfig.duplications" min="0" max="50" class="metric-num-input" />
+                            <span class="metric-unit">%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 质量门禁阻断策略 -->
+                      <div class="sonar-metric-card full-width">
+                        <div class="metric-header">
+                          <div class="metric-icon gate">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                              <polyline points="2 17 12 22 22 17"/>
+                              <polyline points="2 12 12 17 22 12"/>
+                            </svg>
+                          </div>
+                          <div class="metric-info">
+                            <div class="metric-name">门禁失败策略</div>
+                            <div class="metric-desc">质量门禁未通过时的处理方式</div>
+                          </div>
+                        </div>
+                        <div class="gate-strategy-selector">
+                          <div :class="['gate-option', { active: sonarConfig.gateAction === 'block' }]"
+                               @click="sonarConfig.gateAction = 'block'">
+                            <div class="gate-option-icon block">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <div class="gate-option-title">阻断构建</div>
+                              <div class="gate-option-desc">门禁失败则标记构建失败</div>
+                            </div>
+                          </div>
+                          <div :class="['gate-option', { active: sonarConfig.gateAction === 'warn' }]"
+                               @click="sonarConfig.gateAction = 'warn'">
+                            <div class="gate-option-icon warn">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <div class="gate-option-title">仅告警</div>
+                              <div class="gate-option-desc">门禁失败仅发通知，不阻断</div>
+                            </div>
+                          </div>
+                          <div :class="['gate-option', { active: sonarConfig.gateAction === 'skip' }]"
+                               @click="sonarConfig.gateAction = 'skip'">
+                            <div class="gate-option-icon skip">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="4 17 10 11 4 5"/>
+                                <line x1="12" y1="19" x2="20" y2="19"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <div class="gate-option-title">跳过门禁</div>
+                              <div class="gate-option-desc">仅执行扫描，不判定门禁</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="sonar-panel-footer">
+                      <div class="sonar-tip">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 16v-4"/>
+                          <path d="M12 8h.01"/>
+                        </svg>
+                        以上参数将通过环境变量注入 Jenkins，由 SonarQube Scanner 执行检查
+                      </div>
+                    </div>
+                  </div>
+                </transition>
               </div>
 
               <!-- 制品上传到平台制品库开关 -->
@@ -1346,6 +1574,7 @@ export default {
       env_vars: [],
       enable_sonar: false,  // SonarQube 代码质量扫描开关（Java 项目默认启用）
       enable_artifact_upload: false,  // 制品上传到平台制品库开关
+
       deploy_config: {
         replicas: 3,
         strategy: 'rollingUpdate',
@@ -1366,6 +1595,16 @@ export default {
     })
 
     const submitting = ref(false)
+
+    // SonarQube 质量门禁配置
+    const sonarConfig = ref({
+      coverage: 80,          // 代码覆盖率阈值 %
+      newBugs: 0,            // 新增 Bug 最大允许数
+      codeSmells: 10,        // 代码异味最大允许数
+      vulnerabilities: 0,    // 安全漏洞最大允许数
+      duplications: 3,       // 代码重复率阈值 %
+      gateAction: 'block',   // 门禁失败策略: block | warn | skip
+    })
 
     // 步骤导航
     const nextStep = () => {
@@ -1768,13 +2007,20 @@ export default {
           }
           const gateIdx = envVars.findIndex(e => e.name === 'SONAR_QUALITY_GATE')
           if (gateIdx >= 0) {
-            envVars[gateIdx].value = 'true'
+            envVars[gateIdx].value = sonarConfig.value.gateAction === 'skip' ? 'false' : 'true'
           } else {
-            envVars.push({ name: 'SONAR_QUALITY_GATE', value: 'true' })
+            envVars.push({ name: 'SONAR_QUALITY_GATE', value: sonarConfig.value.gateAction === 'skip' ? 'false' : 'true' })
           }
+          // 注入质量门禁参数
+          injectEnv('SONAR_COVERAGE_THRESHOLD', String(sonarConfig.value.coverage))
+          injectEnv('SONAR_NEW_BUGS_MAX', String(sonarConfig.value.newBugs))
+          injectEnv('SONAR_CODE_SMELLS_MAX', String(sonarConfig.value.codeSmells))
+          injectEnv('SONAR_VULNERABILITIES_MAX', String(sonarConfig.value.vulnerabilities))
+          injectEnv('SONAR_DUPLICATIONS_MAX', String(sonarConfig.value.duplications))
+          injectEnv('SONAR_GATE_ACTION', sonarConfig.value.gateAction)
         } else {
           // 关闭 SonarQube：移除相关环境变量，避免残留导致 Jenkins 仍执行扫描
-          const sonarKeys = ['ENABLE_SONAR', 'SONAR_QUALITY_GATE']
+          const sonarKeys = ['ENABLE_SONAR', 'SONAR_QUALITY_GATE', 'SONAR_COVERAGE_THRESHOLD', 'SONAR_NEW_BUGS_MAX', 'SONAR_CODE_SMELLS_MAX', 'SONAR_VULNERABILITIES_MAX', 'SONAR_DUPLICATIONS_MAX', 'SONAR_GATE_ACTION']
           for (let i = envVars.length - 1; i >= 0; i--) {
             if (sonarKeys.includes(envVars[i].name)) {
               envVars.splice(i, 1)
@@ -2007,6 +2253,7 @@ export default {
       selectedTemplateId,
       pipelineData,
       submitting,
+      sonarConfig,
       showEnvVars,
       showResources,
       deployStrategies,
@@ -4115,6 +4362,359 @@ export default {
 
 @media (max-width: 768px) {
   .dockerfile-mode-selector {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==================== SonarQube 质量门禁配置面板 ==================== */
+.sonar-expand-enter-active,
+.sonar-expand-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.sonar-expand-enter-from,
+.sonar-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-8px);
+}
+.sonar-expand-enter-to,
+.sonar-expand-leave-from {
+  opacity: 1;
+  max-height: 1200px;
+}
+
+.sonar-config-panel {
+  margin-top: 14px;
+  border: 1.5px solid #e0e7ff;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fafbff 0%, #f5f7ff 100%);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06);
+}
+
+.sonar-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border-bottom: 1px solid #e0e7ff;
+}
+
+.sonar-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3730a3;
+}
+
+.sonar-panel-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.sonar-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.sonar-metric-card {
+  background: white;
+  border: 1px solid #e8ecf2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: all 0.2s ease;
+}
+
+.sonar-metric-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+}
+
+.sonar-metric-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.metric-icon.coverage {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+}
+
+.metric-icon.bugs {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  color: #dc2626;
+}
+
+.metric-icon.smells {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #d97706;
+}
+
+.metric-icon.vulnerabilities {
+  background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
+  color: #db2777;
+}
+
+.metric-icon.duplications {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  color: #7c3aed;
+}
+
+.metric-icon.gate {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  color: #4f46e5;
+}
+
+.metric-info {
+  min-width: 0;
+}
+
+.metric-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.metric-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.metric-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-slider-wrap {
+  flex: 1;
+  position: relative;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.metric-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.metric-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+  cursor: pointer;
+}
+
+.metric-slider-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.metric-slider-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
+.metric-value-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.metric-num-input {
+  width: 52px;
+  height: 32px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+  transition: all 0.15s;
+}
+
+.metric-num-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.metric-unit {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.metric-presets {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.preset-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 7px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.preset-btn:hover {
+  border-color: #c7d2fe;
+  color: #4f46e5;
+}
+
+.preset-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+
+/* 门禁策略选择器 */
+.gate-strategy-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.gate-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gate-option:hover {
+  border-color: #c7d2fe;
+  background: #fafbff;
+}
+
+.gate-option.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.12);
+}
+
+.gate-option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gate-option-icon.block {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.gate-option-icon.warn {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.gate-option-icon.skip {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.gate-option-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.gate-option-desc {
+  font-size: 10.5px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.sonar-panel-footer {
+  padding: 12px 18px;
+  border-top: 1px solid #e8ecf2;
+  background: #f8fafc;
+}
+
+.sonar-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .sonar-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  .gate-strategy-selector {
     grid-template-columns: 1fr;
   }
 }

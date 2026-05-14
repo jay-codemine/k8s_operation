@@ -19,6 +19,8 @@ import (
 var (
 	// cicdWorker CICD 部署任务消费者
 	cicdWorker *worker.CicdWorker
+	// pollWorker 流水线状态轮询 Worker
+	pollWorker *worker.PipelinePollWorker
 )
 
 func InitAll() error {
@@ -47,16 +49,18 @@ func InitAll() error {
 		return fmt.Errorf("init db failed: %w", err)
 	}
 
-	// 初始化Redis-session
+	// 初始化 Session（依赖 Redis）
 	if err := initialize.SetupSession(); err != nil {
-		return err
+		global.Logger.Error("init session failed", zap.Error(err))
+		return fmt.Errorf("init session failed: %w", err)
 	}
 
-	// 初始化Redis客户端
+	// 初始化 Redis 客户端
+	// Redis 存储用户认证信息，属于核心依赖，初始化失败必须终止启动
 	if err := initialize.SetupRedis(); err != nil {
-		panic(err)
+		global.Logger.Error("init redis failed", zap.Error(err))
+		return fmt.Errorf("init redis failed: %w", err)
 	}
-
 	// 初始化K8s（失败不阻塞启动，登录/RBAC/CICD 等功能仍可用）
 	if err := initialize.SetupK8sBootstrap(); err != nil {
 		global.Logger.Warn("K8s 集群初始化失败，集群管理功能暂不可用，其他功能正常", zap.Error(err))
@@ -115,6 +119,14 @@ func StartCicdWorker() error {
 	}
 
 	global.Logger.Info("cicd worker started successfully")
+
+	// 启动流水线状态轮询 Worker（兼容回调失败的儹底机制）
+	if global.JenkinsSetting != nil && global.JenkinsSetting.URL != "" {
+		pollWorker = worker.NewPipelinePollWorker()
+		pollWorker.Start(context.Background())
+		global.Logger.Info("pipeline poll worker started successfully")
+	}
+
 	return nil
 }
 
@@ -122,6 +134,9 @@ func StartCicdWorker() error {
 func StopCicdWorker() {
 	if cicdWorker != nil {
 		cicdWorker.Stop()
+	}
+	if pollWorker != nil {
+		pollWorker.Stop()
 	}
 }
 
@@ -224,3 +239,4 @@ func SyncApprovalData() {
 		zap.Int("synced", synced),
 	)
 }
+

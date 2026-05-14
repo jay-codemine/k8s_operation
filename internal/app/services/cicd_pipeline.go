@@ -570,27 +570,65 @@ func (s *Services) PipelineStop(ctx context.Context, req *requests.PipelineStopR
 	if buildNumber == 0 {
 		buildNumber = pipeline.LastBuildNumber
 	}
+
+	// 如果没有构建号（构建还没触发成功或还在队列中），直接更新平台状态
 	if buildNumber == 0 {
-		return errors.New("无法确定要停止的构建号")
+		global.Logger.Info("[流水线] 停止流水线：无构建号，直接更新平台状态",
+			zap.Int64("pipeline_id", pipeline.ID),
+		)
+		_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusAborted)
+		// 更新最新的运行记录
+		latestRun, err := s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+		if err == nil && latestRun != nil && (latestRun.Status == models.PipelineRunStatusPending || latestRun.Status == models.PipelineRunStatusRunning) {
+			_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
+		}
+		return nil
 	}
 
-	// 创建 Jenkins 客户端并停止构建
+	// 尝试通过 Jenkins 停止构建
+	jenkinsStopErr := false
 	client := s.getJenkinsClient(pipeline.JenkinsURL)
-	if client == nil {
-		return errors.New("Jenkins 未配置或配置不完整")
+	if client != nil {
+		if err := client.StopBuild(ctx, pipeline.JenkinsJob, buildNumber); err != nil {
+			// Jenkins 停止失败不阻断平台状态更新（可能构建已经结束了）
+			global.Logger.Warn("[流水线] Jenkins 停止构建失败（构建可能已结束）",
+				zap.Int64("pipeline_id", pipeline.ID),
+				zap.Int("build_number", buildNumber),
+				zap.Error(err),
+			)
+			jenkinsStopErr = true
+		}
+	} else {
+		global.Logger.Warn("[流水线] Jenkins 客户端不可用，直接更新平台状态",
+			zap.Int64("pipeline_id", pipeline.ID),
+		)
+		jenkinsStopErr = true
 	}
 
-	if err := client.StopBuild(ctx, pipeline.JenkinsJob, buildNumber); err != nil {
-		return fmt.Errorf("停止构建失败: %w", err)
+	// 无论 Jenkins 停止是否成功，都更新平台状态
+	// 如果 Jenkins 停止失败，可能是构建已经完成，先查询 Jenkins 实际状态
+	finalStatus := models.PipelineRunStatusAborted
+	if jenkinsStopErr && client != nil {
+		buildInfo, err := client.GetBuildInfo(ctx, pipeline.JenkinsJob, buildNumber)
+		if err == nil && buildInfo != nil && !buildInfo.Building {
+			// 构建已经结束，使用实际状态
+			finalStatus = jenkins.BuildStatusToRunStatus(false, buildInfo.Result)
+			global.Logger.Info("[流水线] 构建已结束，使用实际状态",
+				zap.Int64("pipeline_id", pipeline.ID),
+				zap.String("actual_status", finalStatus),
+			)
+		}
 	}
 
-	// 更新状态
-	_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusAborted)
+	// 更新流水线状态
+	_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, finalStatus)
 
 	// 更新运行记录
 	latestRun, err := s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
-	if err == nil && latestRun.BuildNumber == buildNumber {
-		_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
+	if err == nil && latestRun != nil {
+		if latestRun.BuildNumber == buildNumber || latestRun.Status == models.PipelineRunStatusPending || latestRun.Status == models.PipelineRunStatusRunning {
+			_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, finalStatus)
+		}
 	}
 
 	return nil

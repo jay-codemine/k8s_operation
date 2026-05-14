@@ -1,15 +1,91 @@
 <template>
   <div class="cluster-view">
-    <!-- 页面头部 -->
+    <!-- 页面头部：大厂 Dashboard 风格 -->
     <div class="page-header">
       <div class="page-title-section">
-        <h1>集群管理</h1>
-        <span class="cluster-count">{{ filteredClusters.length }} 个集群</span>
+        <div class="title-icon">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+            <path d="M16 6L16 16M16 16L24 20M16 16L8 20M16 16L16 26" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="16" cy="6" r="2" fill="currentColor"/>
+            <circle cx="24" cy="20" r="2" fill="currentColor"/>
+            <circle cx="8" cy="20" r="2" fill="currentColor"/>
+            <circle cx="16" cy="26" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h1>集群管理</h1>
+          <p class="page-subtitle">统一管理和监控 Kubernetes 集群的健康状态与生命周期</p>
+        </div>
       </div>
       <div class="header-actions">
-        <button v-if="canOperate" class="btn btn-primary" @click="openCreate">
-          <span class="btn-icon">+</span> 创建集群
+        <button class="btn btn-ghost" :disabled="loading" @click="fetchList">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+          刷新
         </button>
+        <button v-if="canOperate" class="btn btn-primary" @click="openCreate">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          接入集群
+        </button>
+      </div>
+    </div>
+
+    <!-- 统计概览卡片 -->
+    <div class="stats-overview">
+      <div class="stat-card">
+        <div class="stat-icon total">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="3"/>
+            <path d="M12 6v12M6 12h12"/>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ clusters.length }}</div>
+          <div class="stat-label">集群总数</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon healthy">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ clusterStats.healthy }}</div>
+          <div class="stat-label">运行正常</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon unhealthy">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ clusterStats.unhealthy }}</div>
+          <div class="stat-label">连接异常</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon pending">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ clusterStats.pending }}</div>
+          <div class="stat-label">待检测</div>
+        </div>
       </div>
     </div>
 
@@ -17,11 +93,14 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <div class="search-box">
-          <span class="search-icon">🔍</span>
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
           <input
             type="text"
             v-model="searchQuery"
-            placeholder="搜索集群..."
+            placeholder="搜索集群名称..."
             @keyup.enter="fetchList"
           />
         </div>
@@ -33,6 +112,7 @@
             :class="{ active: statusFilter === f.key }"
             @click="setFilter(f.key)"
           >
+            <span class="filter-dot" :class="f.key"></span>
             {{ f.label }}
           </button>
         </div>
@@ -40,10 +120,14 @@
       <div class="toolbar-right">
         <button 
           v-if="canOperate && selectedIds.length > 0" 
-          class="btn btn-danger" 
+          class="btn btn-danger-solid" 
           :disabled="loading"
           @click="onBatchDelete"
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
           批量删除 ({{ selectedIds.length }})
         </button>
         <div class="view-switch">
@@ -51,10 +135,15 @@
             class="view-btn" 
             :class="{ active: viewMode === 'table' }" 
             @click="viewMode = 'table'"
-            title="表格视图"
+            title="列表视图"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
             </svg>
           </button>
           <button 
@@ -63,14 +152,14 @@
             @click="viewMode = 'card'"
             title="卡片视图"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
             </svg>
           </button>
         </div>
-        <button class="btn btn-ghost" :disabled="loading" @click="fetchList">
-          <span class="btn-icon">↻</span> 刷新
-        </button>
       </div>
     </div>
 
@@ -80,7 +169,7 @@
         <table class="resource-table">
           <thead>
           <tr>
-            <th v-if="canOperate" style="width: 40px;">
+            <th v-if="canOperate" style="width: 48px;">
               <input 
                 type="checkbox" 
                 :checked="isAllSelected" 
@@ -89,12 +178,12 @@
                 class="row-checkbox"
               />
             </th>
-            <th style="width: 80px;">ID</th>
+            <th style="width: 70px;">ID</th>
             <th>集群名称</th>
-            <th style="width: 140px;">版本</th>
-            <th style="width: 140px;">状态</th>
-            <th style="width: 160px;">最近检测</th>
-            <th style="width: 260px;">操作</th>
+            <th style="width: 150px;">K8s 版本</th>
+            <th style="width: 120px;">状态</th>
+            <th style="width: 180px;">最近检测</th>
+            <th style="width: 240px;">操作</th>
           </tr>
           </thead>
 
@@ -108,51 +197,84 @@
                 class="row-checkbox"
               />
             </td>
-            <td>{{ c.id }}</td>
+            <td>
+              <span class="id-badge">{{ c.id }}</span>
+            </td>
 
             <td>
-              <a href="javascript:void(0)" class="cluster-link" @click.prevent="enterCluster(c)">
-                {{ c.cluster_name }}
-              </a>
-              <div v-if="c.last_error" class="row-sub muted" :title="c.last_error">
-                {{ c.last_error }}
+              <div class="cluster-name-cell">
+                <div class="cluster-avatar" :class="statusClass(c.status)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                </div>
+                <div class="cluster-name-info">
+                  <a href="javascript:void(0)" class="cluster-link" @click.prevent="enterCluster(c)">
+                    {{ c.cluster_name }}
+                  </a>
+                  <div v-if="c.last_error" class="cluster-error-hint" :title="c.last_error">
+                    {{ c.last_error }}
+                  </div>
+                </div>
               </div>
             </td>
 
-            <td>{{ c.cluster_version || '-' }}</td>
-
             <td>
-                <span class="status-indicator" :class="statusClass(c.status)">
-                  {{ statusText(c.status) }}
-                </span>
+              <span class="version-tag" v-if="c.cluster_version">{{ c.cluster_version }}</span>
+              <span v-else class="text-muted">-</span>
             </td>
 
             <td>
-              <span class="muted">{{ formatCheckAt(c.last_check_at) }}</span>
+              <span class="status-badge" :class="statusClass(c.status)">
+                <span class="status-dot"></span>
+                {{ statusText(c.status) }}
+              </span>
             </td>
 
             <td>
-              <div class="op">
-                <button v-if="canOperate" class="btn btn-mini" :disabled="testingId === c.id || loading"
-                        @click="openEdit(c)">
+              <span class="time-text">{{ formatCheckAt(c.last_check_at) }}</span>
+            </td>
+
+            <td>
+              <div class="action-group">
+                <button v-if="canOperate" class="action-btn" :disabled="testingId === c.id || loading"
+                        @click="openEdit(c)" title="编辑集群">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
                   编辑
                 </button>
 
                 <button
-                  class="btn btn-mini btn-info"
+                  class="action-btn action-btn-primary"
                   :disabled="testingId === c.id || loading"
                   @click="testCluster(c)"
+                  title="执行健康检查"
                 >
-                  {{ testingId === c.id ? '检测中...' : '健康检查' }}
+                  <svg v-if="testingId !== c.id" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                  <span v-else class="spin-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                  </span>
+                  {{ testingId === c.id ? '检测中' : '检查' }}
                 </button>
 
                 <button
                   v-if="canOperate"
-                  class="btn btn-mini btn-danger"
+                  class="action-btn action-btn-danger"
                   :disabled="testingId === c.id || loading"
                   @click="onDelete(c)"
+                  title="删除集群"
                 >
-                  删除
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
                 </button>
               </div>
             </td>
@@ -162,10 +284,26 @@
       </div>
 
       <div v-if="filteredClusters.length === 0" class="empty-state">
-        <div class="empty-icon">📦</div>
-        <div class="empty-text">
-          {{ searchQuery ? '没有匹配结果' : '暂无集群，请先创建' }}
+        <div class="empty-illustration">
+          <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+            <circle cx="60" cy="60" r="50" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="6 4"/>
+            <circle cx="60" cy="60" r="20" stroke="#cbd5e1" stroke-width="2"/>
+            <path d="M60 40v20l12 6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </div>
+        <div class="empty-title">
+          {{ searchQuery ? '没有找到匹配的集群' : '还没有接入集群' }}
+        </div>
+        <div class="empty-desc">
+          {{ searchQuery ? '尝试调整搜索关键词或筛选条件' : '点击「接入集群」开始管理您的 Kubernetes 集群' }}
+        </div>
+        <button v-if="!searchQuery && canOperate" class="btn btn-primary" @click="openCreate" style="margin-top: 16px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          接入集群
+        </button>
       </div>
 
       <Pagination
@@ -179,87 +317,121 @@
     <!-- 卡片视图 -->
     <div v-if="viewMode === 'card'" class="cards-container">
       <div v-if="filteredClusters.length === 0" class="empty-state">
-        <div class="empty-icon">📦</div>
-        <div class="empty-text">
-          {{ searchQuery ? '没有匹配结果' : '暂无集群，请先创建' }}
+        <div class="empty-illustration">
+          <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+            <circle cx="60" cy="60" r="50" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="6 4"/>
+            <circle cx="60" cy="60" r="20" stroke="#cbd5e1" stroke-width="2"/>
+            <path d="M60 40v20l12 6" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </div>
+        <div class="empty-title">{{ searchQuery ? '没有找到匹配的集群' : '还没有接入集群' }}</div>
+        <div class="empty-desc">{{ searchQuery ? '尝试调整搜索关键词' : '点击「接入集群」开始管理' }}</div>
       </div>
       
       <div class="cards-grid">
-        <div v-for="c in paginatedClusters" :key="c.id" class="cluster-card">
+        <div v-for="c in paginatedClusters" :key="c.id" class="cluster-card" :class="statusClass(c.status)">
+          <!-- 卡片状态条 -->
+          <div class="card-status-bar" :class="statusClass(c.status)"></div>
+          
           <!-- 卡片头部 -->
           <div class="card-header">
             <div class="card-title-row">
-              <span class="card-icon">☸️</span>
-              <h3 class="card-title">
-                <a href="javascript:void(0)" class="cluster-link" @click.prevent="enterCluster(c)">
-                  {{ c.cluster_name }}
-                </a>
-              </h3>
-              <span class="status-indicator" :class="statusClass(c.status)">
+              <div class="card-avatar" :class="statusClass(c.status)">
+                <svg width="22" height="22" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="16" cy="16" r="12"/>
+                  <path d="M16 8v8l5 3"/>
+                </svg>
+              </div>
+              <div class="card-title-info">
+                <h3 class="card-title">
+                  <a href="javascript:void(0)" class="cluster-link" @click.prevent="enterCluster(c)">
+                    {{ c.cluster_name }}
+                  </a>
+                </h3>
+                <span class="card-id">ID: {{ c.id }}</span>
+              </div>
+              <span class="status-badge" :class="statusClass(c.status)">
+                <span class="status-dot"></span>
                 {{ statusText(c.status) }}
               </span>
             </div>
-            <div class="card-id">集群 ID: {{ c.id }}</div>
           </div>
 
           <!-- 卡片主体 -->
           <div class="card-body">
-            <!-- K8s 版本 -->
-            <div class="card-section">
-              <div class="section-label">Kubernetes 版本</div>
-              <div class="meta-value">{{ c.cluster_version || '-' }}</div>
+            <div class="card-meta-grid">
+              <div class="card-meta-item">
+                <div class="meta-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                    <line x1="7" y1="7" x2="7.01" y2="7"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="meta-label">K8s 版本</div>
+                  <div class="meta-value">{{ c.cluster_version || '-' }}</div>
+                </div>
+              </div>
+              <div class="card-meta-item">
+                <div class="meta-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="meta-label">最近检查</div>
+                  <div class="meta-value">{{ formatCheckAt(c.last_check_at) }}</div>
+                </div>
+              </div>
             </div>
 
-            <!-- 最近检测 -->
-            <div class="card-section">
-              <div class="section-label">最近健康检查</div>
-              <div class="meta-value">{{ formatCheckAt(c.last_check_at) }}</div>
-            </div>
-
-            <!-- 错误信息（如果有） -->
-            <div v-if="c.last_error" class="card-section">
-              <div class="section-label">错误信息</div>
-              <div class="error-text">{{ c.last_error }}</div>
+            <!-- 错误信息 -->
+            <div v-if="c.last_error" class="card-error">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>{{ c.last_error }}</span>
             </div>
           </div>
 
-          <!-- 卡片底部按钮 -->
+          <!-- 卡片底部 -->
           <div class="card-footer">
             <button 
-              class="card-action-btn" 
+              class="card-btn card-btn-enter" 
               :disabled="testingId === c.id || loading"
               @click="enterCluster(c)"
-              title="进入集群"
             >
-              🔗 进入
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+              进入管理
             </button>
             <button 
-              v-if="canOperate"
-              class="card-action-btn" 
-              :disabled="testingId === c.id || loading"
-              @click="openEdit(c)"
-              title="编辑"
-            >
-              ✏️ 编辑
-            </button>
-            <button 
-              class="card-action-btn" 
+              class="card-btn"
               :disabled="testingId === c.id || loading"
               @click="testCluster(c)"
-              title="健康检查"
             >
-              {{ testingId === c.id ? '⏳ 检测中' : '🔍 检查' }}
+              {{ testingId === c.id ? '检测中...' : '健康检查' }}
             </button>
-            <button 
-              v-if="canOperate"
-              class="card-action-btn danger" 
-              :disabled="testingId === c.id || loading"
-              @click="onDelete(c)"
-              title="删除"
-            >
-              🗑️ 删除
-            </button>
+            <div class="card-btn-more" v-if="canOperate">
+              <button class="card-btn card-btn-icon" @click="openEdit(c)" title="编辑">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button class="card-btn card-btn-icon card-btn-danger" @click="onDelete(c)" title="删除">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -405,6 +577,16 @@ const clusters = ref([])
 
 // 视图模式：table（表格） 或 card（卡片）
 const viewMode = ref('table')
+
+// 集群统计
+const clusterStats = computed(() => {
+  const all = clusters.value
+  return {
+    healthy: all.filter(c => Number(c.status) === 0).length,
+    unhealthy: all.filter(c => Number(c.status) === 1).length,
+    pending: all.filter(c => Number(c.status) === 2).length,
+  }
+})
 
 // ===== 批量选择 =====
 const selectedIds = ref([])
@@ -814,13 +996,14 @@ const formatCheckAt = (ts) => {
 </script>
 
 <style scoped>
-/* ===== 容器 ===== */
+/* ===== 全局容器 ===== */
 .cluster-view {
   width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
+  gap: 20px;
 }
 
 /* ===== 页面头部 ===== */
@@ -828,28 +1011,111 @@ const formatCheckAt = (ts) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
 }
 
 .page-title-section {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 16px;
+}
+
+.title-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #326ce5 0%, #1d4ed8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 12px rgba(50, 108, 229, 0.3);
 }
 
 .page-title-section h1 {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
   margin: 0;
-  color: #1e293b;
+  color: #0f172a;
+  letter-spacing: -0.3px;
 }
 
-.cluster-count {
-  font-size: 14px;
+.page-subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
   color: #64748b;
-  background: #f1f5f9;
-  padding: 4px 10px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ===== 统计卡片 ===== */
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e8ecf2;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  transform: translateY(-1px);
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
   border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon.total {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  color: #4f46e5;
+}
+
+.stat-icon.healthy {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+}
+
+.stat-icon.unhealthy {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  color: #dc2626;
+}
+
+.stat-icon.pending {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #d97706;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+  font-weight: 500;
 }
 
 /* ===== 工具栏 ===== */
@@ -858,11 +1124,11 @@ const formatCheckAt = (ts) => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
-  padding: 16px;
+  padding: 14px 18px;
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  border: 1px solid #e8ecf2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .toolbar-left {
@@ -875,12 +1141,12 @@ const formatCheckAt = (ts) => {
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .search-box {
   position: relative;
-  width: 280px;
+  width: 260px;
 }
 
 .search-box .search-icon {
@@ -888,39 +1154,43 @@ const formatCheckAt = (ts) => {
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
-  opacity: 0.5;
+  color: #94a3b8;
+  pointer-events: none;
 }
 
 .search-box input {
   width: 100%;
-  padding: 10px 12px 10px 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 9px 12px 9px 38px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
   outline: none;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.2s;
   background: #f8fafc;
+  color: #1e293b;
 }
 
 .search-box input:focus {
   border-color: #326ce5;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
+  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.08);
 }
 
 .filter-group {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: #f1f5f9;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .filter-btn {
-  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: #64748b;
   font-size: 13px;
@@ -929,30 +1199,41 @@ const formatCheckAt = (ts) => {
   transition: all 0.15s;
 }
 
-.filter-btn:hover {
-  color: #1e293b;
-}
+.filter-btn:hover { color: #1e293b; }
 
 .filter-btn.active {
   background: #fff;
   color: #326ce5;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  font-weight: 600;
 }
+
+.filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.filter-dot.ok { background: #22c55e; }
+.filter-dot.bad { background: #ef4444; }
+.filter-dot.pending { background: #f59e0b; }
+.filter-dot.all { background: #6366f1; }
 
 .view-switch {
   display: flex;
   gap: 2px;
-  padding: 4px;
+  padding: 3px;
   background: #f1f5f9;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .view-btn {
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: #64748b;
+  color: #94a3b8;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
@@ -960,108 +1241,71 @@ const formatCheckAt = (ts) => {
   justify-content: center;
 }
 
-.view-btn:hover {
-  color: #1e293b;
-}
+.view-btn:hover { color: #475569; }
 
 .view-btn.active {
   background: #fff;
   color: #326ce5;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
-/* ===== 按钮 ===== */
+/* ===== 按钮系统 ===== */
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
+  gap: 7px;
+  padding: 9px 18px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.15s;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
   white-space: nowrap;
 }
 
-.btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-icon {
-  font-size: 16px;
-  line-height: 1;
-}
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
-  background: #326ce5;
+  background: linear-gradient(135deg, #326ce5 0%, #2557c5 100%);
   color: #fff;
+  box-shadow: 0 2px 8px rgba(50, 108, 229, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2557c5;
+  box-shadow: 0 4px 14px rgba(50, 108, 229, 0.4);
 }
 
 .btn-ghost {
-  background: transparent;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  border: 1.5px solid #e2e8f0;
 }
 
 .btn-ghost:hover:not(:disabled) {
   background: #f8fafc;
-  color: #1e293b;
-}
-
-.btn-mini {
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: #f8fafc;
-  font-size: 13px;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-mini:hover:not(:disabled) {
-  background: #f1f5f9;
   border-color: #cbd5e1;
 }
 
-.btn-danger {
-  background: #fef2f2;
-  color: #dc2626;
-  border-color: #fecaca;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #fee2e2;
-}
-
-.btn-info {
-  background: #eff6ff;
-  color: #2563eb;
-  border-color: #bfdbfe;
-}
-
-.btn-info:hover:not(:disabled) {
-  background: #dbeafe;
+.btn-danger-solid {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 /* ===== 表格 ===== */
 .table-container {
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  border: 1px solid #e8ecf2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   overflow: hidden;
 }
 
 .table-scroll {
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 380px);
   min-height: 300px;
   overflow: auto;
 }
@@ -1074,13 +1318,13 @@ const formatCheckAt = (ts) => {
 .resource-table th {
   background: #f8fafc;
   text-align: left;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 13px 16px;
+  border-bottom: 1px solid #e8ecf2;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -1089,12 +1333,13 @@ const formatCheckAt = (ts) => {
 .resource-table td {
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
-  font-size: 14px;
+  font-size: 13px;
   color: #334155;
+  vertical-align: middle;
 }
 
 .resource-table tbody tr {
-  transition: background 0.1s;
+  transition: background 0.15s;
 }
 
 .resource-table tbody tr:hover {
@@ -1105,58 +1350,62 @@ const formatCheckAt = (ts) => {
   background: #eff6ff;
 }
 
-.resource-table tbody tr.row-selected:hover {
-  background: #dbeafe;
-}
-
 .row-checkbox {
   width: 16px;
   height: 16px;
   cursor: pointer;
   accent-color: #326ce5;
+  border-radius: 4px;
 }
 
-.op {
+/* 集群名称单元格 */
+.cluster-name-cell {
   display: flex;
-  gap: 8px;
-}
-
-/* 状态标签 */
-.status-indicator {
-  display: inline-flex;
   align-items: center;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
+  gap: 12px;
 }
 
-.status-indicator.connected {
-  background: rgba(34, 197, 94, 0.1);
-  color: #16a34a;
+.cluster-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.status-indicator.disconnected {
-  background: rgba(239, 68, 68, 0.1);
+.cluster-avatar.connected {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+}
+
+.cluster-avatar.disconnected {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
   color: #dc2626;
 }
 
-.status-indicator.pending {
-  background: rgba(245, 158, 11, 0.1);
+.cluster-avatar.pending {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   color: #d97706;
 }
 
-.status-indicator.unknown {
-  background: rgba(148, 163, 184, 0.15);
+.cluster-avatar.unknown {
+  background: #f1f5f9;
   color: #64748b;
 }
 
+.cluster-name-info {
+  min-width: 0;
+}
+
 .cluster-link {
-  color: #326ce5;
+  color: #1e40af;
   cursor: pointer;
   font-weight: 600;
+  font-size: 13.5px;
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: color 0.15s;
 }
 
 .cluster-link:hover {
@@ -1164,39 +1413,200 @@ const formatCheckAt = (ts) => {
   text-decoration: underline;
 }
 
-.row-sub {
-  margin-top: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-  max-width: 400px;
+.cluster-error-hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 320px;
 }
 
-.muted {
+.id-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: 'SF Mono', monospace;
+}
+
+.version-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.text-muted { color: #94a3b8; }
+
+.time-text {
+  font-size: 12.5px;
   color: #64748b;
 }
 
-/* 空状态 */
+/* 状态徽章 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.connected {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+
+.status-badge.disconnected {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.status-badge.pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.status-badge.unknown {
+  background: rgba(148, 163, 184, 0.1);
+  color: #64748b;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-badge.connected .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+  animation: pulse-green 2s infinite;
+}
+
+.status-badge.disconnected .status-dot {
+  background: #ef4444;
+}
+
+.status-badge.pending .status-dot {
+  background: #f59e0b;
+  animation: pulse-yellow 2s infinite;
+}
+
+.status-badge.unknown .status-dot {
+  background: #94a3b8;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2); }
+  50% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+}
+
+@keyframes pulse-yellow {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0); }
+}
+
+/* 操作按钮组 */
+.action-group {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn-primary {
+  color: #2563eb;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.action-btn-primary:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.action-btn-danger {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+  padding: 6px 8px;
+}
+
+.action-btn-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.spin-icon {
+  display: inline-flex;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 空状态 ===== */
 .empty-state {
   padding: 80px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.empty-illustration {
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.empty-desc {
+  font-size: 13px;
   color: #94a3b8;
 }
 
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.empty-text {
-  font-size: 15px;
-}
-
-/* ===== Modal：响应式弹窗 ===== */
+/* ===== Modal ===== */
 .modal {
   position: fixed;
   inset: 0;
@@ -1221,7 +1631,7 @@ const formatCheckAt = (ts) => {
   max-width: 720px;
   max-height: calc(100vh - 80px);
   background: #fff;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: flex;
@@ -1232,29 +1642,29 @@ const formatCheckAt = (ts) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 18px 24px;
   background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e8ecf2;
   flex-shrink: 0;
 }
 
 .modal-header h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .close-btn {
   border: none;
   background: transparent;
-  font-size: 24px;
+  font-size: 22px;
   cursor: pointer;
   line-height: 1;
   color: #94a3b8;
-  padding: 4px;
+  padding: 6px;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: all 0.15s;
 }
 
 .close-btn:hover {
@@ -1263,7 +1673,7 @@ const formatCheckAt = (ts) => {
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
   flex: 1;
 }
@@ -1272,7 +1682,7 @@ const formatCheckAt = (ts) => {
 .form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .topbar {
@@ -1282,7 +1692,7 @@ const formatCheckAt = (ts) => {
   gap: 12px;
   flex-wrap: wrap;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e8ecf2;
   border-radius: 12px;
   padding: 12px 16px;
 }
@@ -1298,22 +1708,22 @@ const formatCheckAt = (ts) => {
 
 .card {
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
+  border: 1px solid #e8ecf2;
+  border-radius: 14px;
+  padding: 18px;
 }
 
-.card-title {
+.card > .card-title {
   font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 12px;
+  color: #0f172a;
+  margin-bottom: 14px;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 15px;
+  font-size: 14px;
 }
 
-.card-title .hint {
+.card > .card-title .hint {
   font-size: 12px;
   color: #94a3b8;
   font-weight: 400;
@@ -1337,17 +1747,17 @@ const formatCheckAt = (ts) => {
   width: 100%;
   height: 40px;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid #e2e8f0;
   padding: 0 14px;
   outline: none;
-  font-size: 14px;
-  transition: all 0.15s ease;
+  font-size: 13px;
+  transition: all 0.15s;
   box-sizing: border-box;
 }
 
 .field input:focus {
   border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
+  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.08);
 }
 
 .field input:disabled {
@@ -1355,9 +1765,7 @@ const formatCheckAt = (ts) => {
   color: #64748b;
 }
 
-.required {
-  color: #ef4444;
-}
+.required { color: #ef4444; }
 
 .upload-row {
   display: flex;
@@ -1376,20 +1784,17 @@ const formatCheckAt = (ts) => {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.15);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 12px;
 }
 
-.alert-icon {
-  font-size: 16px;
-  line-height: 1.4;
-}
+.alert-icon { font-size: 16px; line-height: 1.4; }
 
 .alert-text {
-  font-size: 13px;
+  font-size: 12.5px;
   color: #92400e;
   line-height: 1.5;
 }
@@ -1398,21 +1803,21 @@ const formatCheckAt = (ts) => {
   width: 100%;
   min-height: 200px;
   resize: vertical;
-  border-radius: 10px;
-  border: 1px solid #1e293b;
+  border-radius: 12px;
+  border: 1.5px solid #1e293b;
   padding: 14px;
   background: #0f172a;
   color: #e2e8f0;
   font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.6;
   outline: none;
   box-sizing: border-box;
 }
 
 .codebox:focus {
   border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.15);
+  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.12);
 }
 
 .footer {
@@ -1427,6 +1832,7 @@ const formatCheckAt = (ts) => {
 .btn.primary {
   background: linear-gradient(135deg, #326ce5 0%, #2557c5 100%);
   color: #fff;
+  box-shadow: 0 2px 8px rgba(50, 108, 229, 0.3);
 }
 
 .btn.ghost {
@@ -1438,25 +1844,257 @@ const formatCheckAt = (ts) => {
   background: #e2e8f0;
 }
 
-.btn.info {
-  background: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
-}
-
 .btn.small {
   padding: 8px 14px;
   border-radius: 8px;
 }
 
-.test-tip {
-  font-size: 12px;
+.muted { color: #64748b; }
+
+/* ===== 卡片视图 ===== */
+.cards-container {
+  padding: 0;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.cluster-card {
+  background: white;
+  border: 1px solid #e8ecf2;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  position: relative;
+}
+
+.cluster-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  transform: translateY(-3px);
+  border-color: #cbd5e1;
+}
+
+.card-status-bar {
+  height: 3px;
+  width: 100%;
+}
+
+.card-status-bar.connected { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.card-status-bar.disconnected { background: linear-gradient(90deg, #ef4444, #f87171); }
+.card-status-bar.pending { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.card-status-bar.unknown { background: #e2e8f0; }
+
+.card-header {
+  padding: 18px 20px 0;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-avatar.connected {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+}
+
+.card-avatar.disconnected {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  color: #dc2626;
+}
+
+.card-avatar.pending {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #d97706;
+}
+
+.card-avatar.unknown {
+  background: #f1f5f9;
   color: #64748b;
 }
 
-/* 响应式优化 */
+.card-title-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.card-title .cluster-link {
+  color: #1e293b;
+}
+
+.card-title .cluster-link:hover {
+  color: #1d4ed8;
+}
+
+.card-id {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'SF Mono', monospace;
+  margin-top: 2px;
+}
+
+.card-body {
+  padding: 16px 20px;
+}
+
+.card-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.card-meta-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.meta-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.meta-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.meta-value {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.card-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.card-error span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.card-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.card-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-btn-enter {
+  background: linear-gradient(135deg, #326ce5 0%, #2557c5 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(50, 108, 229, 0.2);
+}
+
+.card-btn-enter:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2557c5 0%, #1e40af 100%);
+  border-color: transparent;
+}
+
+.card-btn-more {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.card-btn-icon {
+  padding: 7px;
+  min-width: 32px;
+  justify-content: center;
+}
+
+.card-btn-danger {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.card-btn-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 1024px) {
+  .stats-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
-  .cluster-view {
-    padding: 16px;
+  .stats-overview {
+    grid-template-columns: 1fr 1fr;
   }
   
   .page-header {
@@ -1479,7 +2117,11 @@ const formatCheckAt = (ts) => {
   }
   
   .table-scroll {
-    max-height: calc(100vh - 360px);
+    max-height: calc(100vh - 440px);
+  }
+  
+  .cards-grid {
+    grid-template-columns: 1fr;
   }
   
   .modal {
@@ -1490,170 +2132,4 @@ const formatCheckAt = (ts) => {
     max-height: calc(100vh - 32px);
   }
 }
-
-/* ==================== */
-/* 卡片视图样式 */
-/* ==================== */
-.cards-container {
-  padding: 0;
-}
-
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.cluster-card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-  transition: all 0.3s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.cluster-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transform: translateY(-2px);
-}
-
-/* 卡片头部 */
-.card-header {
-  padding: 16px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.card-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.card-icon {
-  font-size: 28px;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  flex: 1;
-}
-
-.card-title .cluster-link {
-  color: #3b82f6;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-.card-title .cluster-link:hover {
-  color: #2563eb;
-  text-decoration: underline;
-}
-
-.card-id {
-  font-size: 12px;
-  color: #64748b;
-  font-family: monospace;
-}
-
-/* 卡片主体 */
-.card-body {
-  padding: 16px;
-}
-
-.card-section {
-  margin-bottom: 14px;
-}
-
-.card-section:last-child {
-  margin-bottom: 0;
-}
-
-.section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
-}
-
-.meta-value {
-  font-size: 14px;
-  color: #1e293b;
-  word-break: break-all;
-}
-
-.error-text {
-  font-size: 13px;
-  color: #dc2626;
-  background: #fef2f2;
-  padding: 8px;
-  border-radius: 6px;
-  word-break: break-all;
-}
-
-/* 卡片底部按钮 */
-.card-footer {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  flex-wrap: wrap;
-}
-
-.card-action-btn {
-  flex: 1;
-  min-width: 80px;
-  padding: 8px 12px;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.card-action-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #9ca3af;
-}
-
-.card-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.card-action-btn.danger {
-  color: #dc2626;
-}
-
-.card-action-btn.danger:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fca5a5;
-}
-
-/* 响应式 - 小屏幕单列 */
-@media (max-width: 768px) {
-  .cards-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .card-footer {
-    flex-direction: column;
-  }
-  
-  .card-action-btn {
-    width: 100%;
-  }
-}
-
 </style>
