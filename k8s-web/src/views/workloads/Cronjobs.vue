@@ -1080,6 +1080,9 @@ import cronjobsApi from '@/api/cluster/workloads/cronjobs'
 import namespaceApi from '@/api/cluster/config/namespace'
 import permissionStore from '@/stores/permission'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -1570,7 +1573,18 @@ const copyYamlContent = async () => {
 
 // 重置 YAML 内容
 const resetYamlContent = () => {
-  if (createYamlContent.value.trim() && !confirm('确定要重置 YAML 内容吗？')) {
+  if (createYamlContent.value.trim()) {
+    confirm({
+      title: '重置确认',
+      content: '确定要重置 YAML 内容吗？',
+      type: 'warning',
+      confirmText: '确认重置'
+    }).then(ok => {
+      if (ok) {
+        createYamlContent.value = ''
+        createYamlError.value = ''
+      }
+    })
     return
   }
   createYamlContent.value = ''
@@ -1653,9 +1667,13 @@ const suspendCronJob = async (cj, suspend) => {
   showMoreOptions.value = false
   
   const action = suspend ? '暂停' : '恢复'
-  if (!confirm(`确定要${action} CronJob ${cj.namespace}/${cj.name} 吗？`)) {
-    return
-  }
+  const okS = await confirm({
+    title: `${action}确认`,
+    content: `确定要${action} CronJob ${cj.namespace}/${cj.name} 吗？`,
+    type: 'warning',
+    confirmText: `确认${action}`
+  })
+  if (!okS) return
 
   try {
     await cronjobsApi.suspend({
@@ -2007,9 +2025,14 @@ const toggleMoreOptions = (cj, event) => {
 const triggerCronJob = async (cj) => {
   showMoreOptions.value = false
   
-  if (!confirm(`确定要立即触发 CronJob ${cj.namespace}/${cj.name} 吗？\n\n这将创建一个新的 Job 立即执行。`)) {
-    return
-  }
+  const okT = await confirm({
+    title: '手动触发确认',
+    content: `确定要立即触发 CronJob ${cj.namespace}/${cj.name} 吗？`,
+    type: 'warning',
+    tip: '这将创建一个新的 Job 立即执行',
+    confirmText: '确认触发'
+  })
+  if (!okT) return
 
   try {
     const res = await cronjobsApi.trigger({
@@ -2139,9 +2162,14 @@ const toggleSelectAll = () => {
 // 批量暂停/恢复
 const batchSuspend = async (suspend) => {
   const action = suspend ? '暂停' : '恢复'
-  if (!confirm(`确定要${action} ${selectedCronjobs.value.length} 个 CronJob 吗？`)) {
-    return
-  }
+  const okBs = await confirm({
+    title: `批量${action}确认`,
+    content: `确定要${action} ${selectedCronjobs.value.length} 个 CronJob 吗？`,
+    type: 'warning',
+    details: [{ label: '操作数量', value: `${selectedCronjobs.value.length} 个 CronJob` }],
+    confirmText: `确认${action}`
+  })
+  if (!okBs) return
 
   batchExecuting.value = true
   let successCount = 0
@@ -2293,9 +2321,13 @@ const applyYamlChanges = async () => {
     return
   }
 
-  if (!confirm('确定要应用 YAML 更改吗？')) {
-    return
-  }
+  const okYaml = await confirm({
+    title: '应用 YAML 确认',
+    content: '确定要应用 YAML 更改吗？',
+    type: 'warning',
+    confirmText: '确认应用'
+  })
+  if (!okYaml) return
 
   try {
     savingYaml.value = true
