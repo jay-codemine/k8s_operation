@@ -1341,24 +1341,57 @@
       @close="closeTerminal"
     />
 
-    <!-- 资源状态监听浮窗 -->
+    <!-- 资源状态监听浮窗 - 大厂风格 Rollout Tracker -->
     <transition name="watcher-slide">
       <div v-if="watchingStatus" class="resource-watcher-panel">
         <div class="watcher-header">
-          <span class="watcher-title">{{ phaseIcon(watchPhase) }} Rollout 监听</span>
-          <span class="watcher-elapsed">{{ formatElapsed(watchElapsed) }}</span>
-          <button class="watcher-close" @click="stopWatching" title="停止监听">×</button>
-        </div>
-        <div class="watcher-body">
-          <div class="watcher-progress">
-            <div class="watcher-progress-bar" :style="{ width: watchProgress + '%', background: phaseColor(watchPhase) }"></div>
+          <div class="watcher-header-left">
+            <span class="watcher-icon-pulse" :class="watchPhase?.toLowerCase()"></span>
+            <span class="watcher-title">Rollout Tracker</span>
           </div>
-          <div class="watcher-phase" :style="{ color: phaseColor(watchPhase) }">{{ watchPhase }} ({{ watchProgress }}%)</div>
-          <div class="watcher-events" v-if="watchEvents.length > 0">
-            <div v-for="(ev, i) in watchEvents.slice(0, 8)" :key="i" class="watcher-event" :class="{ warning: ev.type === 'Warning' }">
-              <span class="ev-type">{{ ev.type === 'Warning' ? '⚠' : 'ℹ️' }}</span>
-              <span class="ev-reason">{{ ev.reason }}</span>
-              <span class="ev-msg">{{ ev.message }}</span>
+          <div class="watcher-header-right">
+            <span class="watcher-elapsed-badge">{{ formatElapsed(watchElapsed) }}</span>
+            <button class="watcher-close" @click="stopWatching" title="停止监听">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="watcher-progress-section">
+          <div class="watcher-progress-track">
+            <div class="watcher-progress-fill" :class="watchPhase?.toLowerCase()" :style="{ width: Math.round(watchProgress) + '%' }"></div>
+          </div>
+          <div class="watcher-progress-meta">
+            <span class="watcher-phase-text" :class="watchPhase?.toLowerCase()">{{ phaseLabel(watchPhase) }}</span>
+            <span class="watcher-progress-pct">{{ Math.round(watchProgress) }}%</span>
+          </div>
+        </div>
+        <div class="watcher-steps" v-if="watchSteps.length > 0">
+          <div v-for="(step, i) in watchSteps" :key="step.key" class="watcher-step" :class="step.status">
+            <div class="step-indicator">
+              <div class="step-dot">
+                <svg v-if="step.status === 'done'" width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else-if="step.status === 'error'" width="10" height="10" viewBox="0 0 10 10"><path d="M3 3l4 4M7 3l-4 4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <span v-else-if="step.status === 'active'" class="step-dot-pulse"></span>
+              </div>
+              <div v-if="i < watchSteps.length - 1" class="step-connector" :class="step.status"></div>
+            </div>
+            <span class="step-label">{{ step.label }}</span>
+          </div>
+        </div>
+        <div class="watcher-replicas" v-if="watchDetail">
+          <div class="replica-item"><span class="replica-num">{{ watchDetail.updated }}/{{ watchDetail.desired }}</span><span class="replica-label">已更新</span></div>
+          <div class="replica-divider"></div>
+          <div class="replica-item"><span class="replica-num">{{ watchDetail.ready }}/{{ watchDetail.desired }}</span><span class="replica-label">已就绪</span></div>
+          <div class="replica-divider"></div>
+          <div class="replica-item"><span class="replica-num">{{ watchDetail.available }}/{{ watchDetail.desired }}</span><span class="replica-label">可用</span></div>
+        </div>
+        <div class="watcher-events-section" v-if="watchEvents.length > 0">
+          <div class="watcher-events-header"><span>实时事件</span><span class="events-count">{{ watchEvents.length }}</span></div>
+          <div class="watcher-events-list">
+            <div v-for="(ev, i) in watchEvents.slice(0, 6)" :key="i" class="watcher-event-item" :class="{ warning: ev.type === 'Warning' }">
+              <span class="event-dot" :class="ev.type === 'Warning' ? 'warn' : 'info'"></span>
+              <span class="event-reason">{{ ev.reason }}</span>
+              <span class="event-msg">{{ ev.message }}</span>
             </div>
           </div>
         </div>
@@ -1379,6 +1412,7 @@ import storageclassApi from '@/api/cluster/storage/storageclass'
 import { useClusterStore } from '@/stores/cluster'
 import { useResizableModal } from '@/composables/useResizableModal'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
 
 // ===== 容器终端 =====
@@ -1428,12 +1462,17 @@ const {
   watchProgress,
   watchEvents,
   watchElapsed,
+  watchDetail,
+  watchSteps,
   startWatching,
   stopWatching,
   formatElapsed,
   phaseColor,
   phaseIcon,
+  phaseLabel,
 } = useResourceWatcher()
+
+const { confirm } = useConfirmDialog()
 
 const startStatefulSetWatcher = (sts) => {
   startWatching(
@@ -2156,7 +2195,17 @@ const viewPods = async (sts) => {
 }
 
 const deletePod = async (pod) => {
-  if (!confirm(`确认删除 Pod：${pod.name}？`)) return
+  const ok = await confirm({
+    title: '确认删除 Pod',
+    type: 'danger',
+    details: [
+      { label: '命名空间', value: pod.namespace },
+      { label: 'Pod', value: pod.name },
+    ],
+    tip: 'StatefulSet 控制器将自动重建新实例',
+    confirmText: '确认删除',
+  })
+  if (!ok) return
   try {
     await podsApi.graceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 已删除' })
@@ -2258,7 +2307,16 @@ const openPodEvents = async (pod) => {
 // 重启 Pod
 const restartPodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认重启 Pod：${pod.name}？\n\n注意：StatefulSet 的 Pod 将被删除并由控制器重建。`)) return
+  const ok = await confirm({
+    title: '确认重启 Pod',
+    content: 'StatefulSet 的 Pod 将被删除并由控制器重建。',
+    type: 'warning',
+    details: [
+      { label: 'Pod', value: pod.name },
+    ],
+    confirmText: '确认重启',
+  })
+  if (!ok) return
   try {
     await podsApi.graceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 重启中（已删除，等待重建）' })
@@ -2271,7 +2329,13 @@ const restartPodFromList = async (pod) => {
 // 优雅删除 Pod
 const deletePodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认优雅删除 Pod：${pod.name}？`)) return
+  const ok = await confirm({
+    title: '确认优雅删除 Pod',
+    type: 'info',
+    details: [{ label: 'Pod', value: pod.name }],
+    confirmText: '确认删除',
+  })
+  if (!ok) return
   try {
     await podsApi.graceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 已删除' })
@@ -2282,7 +2346,15 @@ const deletePodFromList = async (pod) => {
 // 强制删除 Pod
 const forceDeletePodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认强制删除 Pod：${pod.name}？\n\n警告：强制删除可能导致资源未完全清理！`)) return
+  const ok = await confirm({
+    title: '确认强制删除 Pod',
+    content: '强制删除可能导致资源未完全清理！',
+    type: 'danger',
+    details: [{ label: 'Pod', value: pod.name }],
+    tip: '建议优先使用优雅删除，仅在 Pod 卡死时使用强制删除',
+    confirmText: '强制删除',
+  })
+  if (!ok) return
   try {
     await podsApi.forceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 已强制删除' })
@@ -2322,7 +2394,19 @@ const saveInlineImage = async (sts) => {
   
   _savingInlineImage = true
   try {
-    if (!confirm(`⚠️ 确认更新镜像？\n\nStatefulSet: ${sts.namespace}/${sts.name}\n容器: ${containerList.value[0] || ''}\n旧镜像: ${inlineEdit.value.original}\n新镜像: ${newVal}\n\n此操作将触发滚动更新，请确认！`)) {
+    const ok = await confirm({
+      title: '确认更新镜像',
+      content: '此操作将触发滚动更新。',
+      type: 'warning',
+      details: [
+        { label: 'StatefulSet', value: `${sts.namespace}/${sts.name}` },
+        { label: '容器', value: containerList.value[0] || '' },
+        { label: '旧镜像', value: inlineEdit.value.original },
+        { label: '新镜像', value: newVal, highlight: true },
+      ],
+      confirmText: '确认更新',
+    })
+    if (!ok) {
       cancelInlineEdit()
       return
     }
@@ -2365,7 +2449,19 @@ const decreaseReplicas = async (sts) => {
 }
 
 const stopService = async (sts) => {
-  if (!confirm(`确认停服（副本数调为0）：${sts.name}？`)) return
+  const ok = await confirm({
+    title: '确认停服',
+    content: '将副本数调整为 0，所有 Pod 将被终止。',
+    type: 'danger',
+    details: [
+      { label: 'StatefulSet', value: sts.name },
+      { label: '当前副本数', value: String(sts.desiredReplicas) },
+      { label: '目标副本数', value: '0', danger: true },
+    ],
+    tip: '停服后服务将完全中断，可通过扩容恢复',
+    confirmText: '确认停服',
+  })
+  if (!ok) return
   scalingMap.value[sts.name] = true
   try {
     await statefulsetsApi.scale({ namespace: sts.namespace, name: sts.name, scale_num: 0 })
@@ -2381,7 +2477,17 @@ const stopService = async (sts) => {
 // 重启
 const restartStatefulset = async (sts) => {
   showMoreOptions.value = false
-  if (!confirm(`确认重启 StatefulSet：${sts.name}？`)) return
+  const ok = await confirm({
+    title: '确认重启 StatefulSet',
+    content: '将滚动重启所有 Pod。',
+    type: 'warning',
+    details: [
+      { label: 'StatefulSet', value: sts.name },
+      { label: '命名空间', value: sts.namespace },
+    ],
+    confirmText: '确认重启',
+  })
+  if (!ok) return
   try {
     await statefulsetsApi.restart({ namespace: sts.namespace, name: sts.name })
     Message.success({ content: '重启中...' })
@@ -2663,9 +2769,19 @@ const submitUpdateImage = async () => {
     return
   }
   // 二次确认
-  if (!confirm(`⚠️ 确认更新镜像？\n\nStatefulSet: ${updateImageForm.value.namespace}/${updateImageForm.value.name}\n容器: ${updateImageForm.value.container}\n当前镜像: ${updateImageForm.value.currentImage || '未知'}\n新镜像: ${updateImageForm.value.image.trim()}\n\n此操作将触发滚动更新，请确认！`)) {
-    return
-  }
+  const ok = await confirm({
+    title: '确认更新镜像',
+    content: '此操作将触发滚动更新。',
+    type: 'warning',
+    details: [
+      { label: 'StatefulSet', value: `${updateImageForm.value.namespace}/${updateImageForm.value.name}` },
+      { label: '容器', value: updateImageForm.value.container },
+      { label: '当前镜像', value: updateImageForm.value.currentImage || '未知' },
+      { label: '新镜像', value: updateImageForm.value.image.trim(), highlight: true },
+    ],
+    confirmText: '确认更新',
+  })
+  if (!ok) return
   updatingImage.value = true
   try {
     await statefulsetsApi.updateImage({
@@ -3535,43 +3651,115 @@ const createStatefulSetFromYaml = async () => {
   box-shadow: none;
 }
 
-/* 资源监听浮窗 */
+/* Rollout Tracker 浮窗 - 大厂风格 */
 .resource-watcher-panel {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 380px;
+  width: 400px;
   background: #1a1b26;
-  border: 1px solid #2f3549;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  z-index: 1000;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+  z-index: 9000;
   overflow: hidden;
   color: #c0caf5;
+  font-size: 13px;
+  backdrop-filter: blur(20px);
 }
 .watcher-header {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  background: #24283b;
-  border-bottom: 1px solid #2f3549;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg, rgba(78,143,247,0.08), rgba(155,106,237,0.06));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.watcher-title { flex: 1; font-weight: 600; font-size: 14px; }
-.watcher-elapsed { font-size: 12px; color: #565f89; margin-right: 8px; font-family: monospace; }
-.watcher-close { background: none; border: none; color: #565f89; font-size: 18px; cursor: pointer; padding: 0 4px; }
-.watcher-close:hover { color: #f7768e; }
-.watcher-body { padding: 12px 16px; }
-.watcher-progress { height: 4px; background: #2f3549; border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
-.watcher-progress-bar { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
-.watcher-phase { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
-.watcher-events { max-height: 160px; overflow-y: auto; }
-.watcher-event { display: flex; gap: 6px; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #2f3549; }
-.watcher-event.warning { color: #e0af68; }
-.ev-type { flex-shrink: 0; }
-.ev-reason { flex-shrink: 0; font-weight: 500; color: #7aa2f7; }
-.ev-msg { color: #9aa5ce; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.watcher-slide-enter-active, .watcher-slide-leave-active { transition: all 0.3s ease; }
-.watcher-slide-enter-from, .watcher-slide-leave-to { opacity: 0; transform: translateY(20px); }
+.watcher-header-left { display: flex; align-items: center; gap: 10px; }
+.watcher-header-right { display: flex; align-items: center; gap: 8px; }
+.watcher-icon-pulse {
+  width: 8px; height: 8px; border-radius: 50%; background: #4e8ff7;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+.watcher-icon-pulse.updating { background: #f0a020; }
+.watcher-icon-pulse.progressing { background: #4e8ff7; }
+.watcher-icon-pulse.complete, .watcher-icon-pulse.running { background: #52c41a; animation: none; }
+.watcher-icon-pulse.failed { background: #ff4d4f; animation: none; }
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(78,143,247,0.3); }
+}
+.watcher-title { font-weight: 700; font-size: 13px; letter-spacing: 0.5px; color: #e0e0e0; }
+.watcher-elapsed-badge { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #7982a9; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 10px; }
+.watcher-close {
+  width: 24px; height: 24px; border: none; background: rgba(255,255,255,0.04);
+  color: #565f89; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+}
+.watcher-close:hover { background: rgba(255,77,79,0.15); color: #ff4d4f; }
+.watcher-progress-section { padding: 14px 16px 10px; }
+.watcher-progress-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.watcher-progress-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative; overflow: hidden;
+}
+.watcher-progress-fill.updating { background: linear-gradient(90deg, #f0a020, #f5c842); }
+.watcher-progress-fill.progressing { background: linear-gradient(90deg, #4e8ff7, #7c5cfc); }
+.watcher-progress-fill.complete, .watcher-progress-fill.running { background: linear-gradient(90deg, #52c41a, #73d13d); }
+.watcher-progress-fill.failed { background: linear-gradient(90deg, #ff4d4f, #ff7875); }
+.watcher-progress-fill::after {
+  content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s ease-in-out infinite;
+}
+.watcher-progress-fill.complete::after, .watcher-progress-fill.running::after, .watcher-progress-fill.failed::after { animation: none; }
+@keyframes shimmer { 0% { left: -100%; } 100% { left: 100%; } }
+.watcher-progress-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.watcher-phase-text { font-weight: 600; font-size: 12px; }
+.watcher-phase-text.updating { color: #f0a020; }
+.watcher-phase-text.progressing { color: #4e8ff7; }
+.watcher-phase-text.complete, .watcher-phase-text.running { color: #52c41a; }
+.watcher-phase-text.failed { color: #ff4d4f; }
+.watcher-progress-pct { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #e0e0e0; }
+.watcher-steps { display: flex; align-items: flex-start; justify-content: space-between; padding: 0 16px 14px; gap: 4px; }
+.watcher-step { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 6px; }
+.step-indicator { display: flex; align-items: center; width: 100%; }
+.step-dot {
+  width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.12); transition: all 0.3s; position: relative;
+}
+.watcher-step.done .step-dot { background: #52c41a; border-color: #52c41a; }
+.watcher-step.active .step-dot { background: #4e8ff7; border-color: #4e8ff7; box-shadow: 0 0 0 3px rgba(78,143,247,0.2); }
+.watcher-step.error .step-dot { background: #ff4d4f; border-color: #ff4d4f; }
+.step-dot-pulse { width: 6px; height: 6px; background: #fff; border-radius: 50%; animation: dot-pulse 1s ease-in-out infinite; }
+@keyframes dot-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.6); opacity: 0.5; } }
+.step-connector { flex: 1; height: 2px; background: rgba(255,255,255,0.08); margin: 0 2px; border-radius: 1px; transition: background 0.3s; }
+.step-connector.done { background: #52c41a; }
+.step-label { font-size: 11px; color: #565f89; text-align: center; white-space: nowrap; }
+.watcher-step.done .step-label { color: #52c41a; }
+.watcher-step.active .step-label { color: #4e8ff7; font-weight: 600; }
+.watcher-step.error .step-label { color: #ff4d4f; }
+.watcher-replicas {
+  display: flex; align-items: center; justify-content: center; padding: 10px 16px;
+  background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.04);
+}
+.replica-item { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
+.replica-num { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #e0e0e0; }
+.replica-label { font-size: 10px; color: #565f89; text-transform: uppercase; letter-spacing: 0.5px; }
+.replica-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.06); }
+.watcher-events-section { border-top: 1px solid rgba(255,255,255,0.04); padding: 10px 16px 12px; }
+.watcher-events-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 11px; color: #565f89; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.events-count { background: rgba(78,143,247,0.15); color: #4e8ff7; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+.watcher-events-list { max-height: 130px; overflow-y: auto; }
+.watcher-event-item { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; font-size: 11px; color: #787c99; line-height: 1.4; }
+.watcher-event-item.warning { color: #f0a020; }
+.event-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.event-dot.info { background: #4e8ff7; }
+.event-dot.warn { background: #f0a020; }
+.event-reason { flex-shrink: 0; font-weight: 600; min-width: 70px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watcher-slide-enter-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.watcher-slide-leave-active { transition: all 0.25s cubic-bezier(0.4, 0, 1, 1); }
+.watcher-slide-enter-from, .watcher-slide-leave-to { opacity: 0; transform: translateY(24px) scale(0.92); }
 
 .current-image-display {
   padding: 10px 12px;

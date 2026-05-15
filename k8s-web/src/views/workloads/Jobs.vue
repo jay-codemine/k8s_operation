@@ -1319,6 +1319,9 @@ import namespacesApi from '@/api/cluster/namespaces'
 import namespaceApi from '@/api/cluster/config/namespace'
 import permissionStore from '@/stores/permission'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -2109,9 +2112,14 @@ const viewJobDetail = async (job) => {
 const restartJob = async (job) => {
   showMoreOptions.value = false
   
-  if (!confirm(`确定要重启 Job "${job.name}" 吗？这将创建一个新的Job实例。`)) {
-    return
-  }
+  const okR = await confirm({
+    title: '重启确认',
+    content: `确定要重启 Job "${job.name}" 吗？`,
+    type: 'warning',
+    tip: '这将创建一个新的 Job 实例',
+    confirmText: '确认重启'
+  })
+  if (!okR) return
   
   try {
     const res = await jobsApi.restart({ namespace: job.namespace, name: job.name })
@@ -2152,9 +2160,14 @@ const suspendJob = async (job) => {
 const deleteJob = async (job) => {
   showMoreOptions.value = false
   
-  if (!confirm(`确定要删除 Job "${job.name}" 吗？此操作无法撤销。`)) {
-    return
-  }
+  const okD = await confirm({
+    title: '删除确认',
+    content: `确定要删除 Job "${job.name}" 吗？`,
+    type: 'danger',
+    tip: '此操作无法撤销',
+    confirmText: '确认删除'
+  })
+  if (!okD) return
   
   try {
     const res = await jobsApi.delete({ namespace: job.namespace, name: job.name })
@@ -2637,7 +2650,20 @@ const saveInlineImage = async (job) => {
   _savingInlineImage = true
   try {
     // 二次确认 - 镜像更新是高危操作
-    if (!confirm(`⚠️ 确认更新镜像？\n\nJob: ${job.namespace}/${job.name}\n容器: ${container}\n旧镜像: ${oldImage}\n新镜像: ${newImage}\n\n⚠️ 注意: Job 不支持滚动更新！\n更新镜像只会修改模板，已运行的 Pod 不会自动重启。\n如需使用新镜像，请手动删除 Pod 或重新创建 Job。`)) {
+    const okImg = await confirm({
+      title: '镜像更新确认',
+      content: 'Job 不支持滚动更新，更新镜像只会修改模板',
+      type: 'warning',
+      details: [
+        { label: 'Job', value: `${job.namespace}/${job.name}` },
+        { label: '容器', value: container },
+        { label: '旧镜像', value: oldImage },
+        { label: '新镜像', value: newImage, highlight: true }
+      ],
+      tip: '已运行的 Pod 不会自动重启，需手动删除 Pod 或重新创建 Job',
+      confirmText: '确认更新'
+    })
+    if (!okImg) {
       cancelInlineEdit()
       return
     }

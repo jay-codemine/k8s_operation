@@ -886,7 +886,10 @@ import podsApi from '@/api/cluster/workloads/pods'
 import namespaceApi from '@/api/cluster/config/namespace'
 import { useClusterStore } from '@/stores/cluster'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
+
+const { confirm } = useConfirmDialog()
 
 // ===== 容器终端 =====
 const showTerminal = ref(false)
@@ -1072,7 +1075,14 @@ const toggleSelectAll = () => {
 // 批量重启
 const batchRestart = async () => {
   if (selectedDaemonsets.value.length === 0) return
-  if (!confirm(`确定要重启选中的 ${selectedDaemonsets.value.length} 个 DaemonSet 吗？`)) return
+  const ok1 = await confirm({
+    title: '批量重启确认',
+    content: `确定要重启选中的 ${selectedDaemonsets.value.length} 个 DaemonSet 吗？`,
+    type: 'warning',
+    details: [{ label: '操作数量', value: `${selectedDaemonsets.value.length} 个 DaemonSet` }],
+    confirmText: '确认重启'
+  })
+  if (!ok1) return
   
   batchExecuting.value = true
   let successCount = 0, failCount = 0
@@ -1096,7 +1106,15 @@ const batchRestart = async () => {
 // 批量删除
 const batchDelete = async () => {
   if (selectedDaemonsets.value.length === 0) return
-  if (!confirm(`确定要删除选中的 ${selectedDaemonsets.value.length} 个 DaemonSet 吗？此操作不可恢复！`)) return
+  const ok2 = await confirm({
+    title: '批量删除确认',
+    content: `确定要删除选中的 ${selectedDaemonsets.value.length} 个 DaemonSet 吗？`,
+    type: 'danger',
+    details: [{ label: '操作数量', value: `${selectedDaemonsets.value.length} 个 DaemonSet`, danger: true }],
+    tip: '此操作不可恢复！',
+    confirmText: '确认删除'
+  })
+  if (!ok2) return
   
   batchExecuting.value = true
   let successCount = 0, failCount = 0
@@ -1669,9 +1687,19 @@ const submitUpdateImage = async () => {
     return
   }
   // 二次确认
-  if (!confirm(`⚠️ 确认更新镜像？\n\nDaemonSet: ${updateImageForm.value.namespace}/${updateImageForm.value.name}\n容器: ${updateImageForm.value.container}\n当前镜像: ${updateImageForm.value.currentImage || '未知'}\n新镜像: ${updateImageForm.value.image}\n\n此操作将触发滚动更新，请确认！`)) {
-    return
-  }
+  const okImg = await confirm({
+    title: '镜像更新确认',
+    content: '此操作将触发滚动更新，请确认以下信息',
+    type: 'warning',
+    details: [
+      { label: 'DaemonSet', value: `${updateImageForm.value.namespace}/${updateImageForm.value.name}` },
+      { label: '容器', value: updateImageForm.value.container },
+      { label: '当前镜像', value: updateImageForm.value.currentImage || '未知' },
+      { label: '新镜像', value: updateImageForm.value.image, highlight: true }
+    ],
+    confirmText: '确认更新'
+  })
+  if (!okImg) return
   updatingImage.value = true
   try {
     const res = await daemonsetsApi.updateImage({
@@ -1702,7 +1730,13 @@ const submitUpdateImage = async () => {
 // =========================
 const restartDaemonset = async (ds) => {
   showMoreOptions.value = false
-  if (!confirm(`确定重启 DaemonSet: ${ds.name}？`)) return
+  const okR = await confirm({
+    title: '重启确认',
+    content: `确定重启 DaemonSet: ${ds.name}？`,
+    type: 'warning',
+    confirmText: '确认重启'
+  })
+  if (!okR) return
   try {
     const res = await daemonsetsApi.restart({ namespace: ds.namespace, name: ds.name })
     if (res.code === 0) {
@@ -1723,7 +1757,14 @@ const restartDaemonset = async (ds) => {
 // =========================
 const deleteDaemonset = async (ds) => {
   showMoreOptions.value = false
-  if (!confirm(`确定删除 DaemonSet: ${ds.name}？此操作不可恢复！`)) return
+  const okD = await confirm({
+    title: '删除确认',
+    content: `确定删除 DaemonSet: ${ds.name}？`,
+    type: 'danger',
+    tip: '此操作不可恢复！',
+    confirmText: '确认删除'
+  })
+  if (!okD) return
   try {
     const res = await daemonsetsApi.delete({ namespace: ds.namespace, name: ds.name })
     if (res.code === 0) {
@@ -1756,7 +1797,14 @@ const viewHistory = async (ds) => {
 // 从版本记录直接回滚
 const rollbackToVersion = async (rev) => {
   if (!historyDaemonset.value) return
-  if (!confirm(`确定回滚到版本 ${rev.revision}？`)) return
+  const okRb = await confirm({
+    title: '回滚确认',
+    content: `确定回滚到版本 ${rev.revision}？`,
+    type: 'warning',
+    details: [{ label: '目标版本', value: `Revision ${rev.revision}`, highlight: true }],
+    confirmText: '确认回滚'
+  })
+  if (!okRb) return
   rollingBack.value = true
   try {
     const res = await daemonsetsApi.rollback({
@@ -2102,7 +2150,13 @@ const openPodEvents = async (pod) => {
 // =========================
 const restartPodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认重启 Pod: ${pod.name}？`)) return
+  const okPr = await confirm({
+    title: 'Pod 重启确认',
+    content: `确认重启 Pod: ${pod.name}？`,
+    type: 'warning',
+    confirmText: '确认重启'
+  })
+  if (!okPr) return
   try {
     await podsApi.graceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 重启中...' })
@@ -2114,7 +2168,13 @@ const restartPodFromList = async (pod) => {
 
 const deletePodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认删除 Pod: ${pod.name}？`)) return
+  const okPd = await confirm({
+    title: 'Pod 删除确认',
+    content: `确认删除 Pod: ${pod.name}？`,
+    type: 'danger',
+    confirmText: '确认删除'
+  })
+  if (!okPd) return
   try {
     await podsApi.graceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 已删除' })
@@ -2126,7 +2186,14 @@ const deletePodFromList = async (pod) => {
 
 const forceDeletePodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认强制删除 Pod: ${pod.name}？此操作会立即终止 Pod，不会等待优雅终止！`)) return
+  const okFd = await confirm({
+    title: '强制删除确认',
+    content: `确认强制删除 Pod: ${pod.name}？`,
+    type: 'danger',
+    tip: '此操作会立即终止 Pod，不会等待优雅终止！',
+    confirmText: '强制删除'
+  })
+  if (!okFd) return
   try {
     await podsApi.forceDelete({ namespace: pod.namespace, name: pod.name })
     Message.success({ content: 'Pod 已强制删除' })

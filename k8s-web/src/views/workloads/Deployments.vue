@@ -2656,33 +2656,90 @@
       @close="closeTerminal"
     />
 
-    <!-- 资源状态监听浮窗 -->
+    <!-- 资源状态监听浮窗 - 大厂风格 Rollout Tracker -->
     <transition name="watcher-slide">
       <div v-if="watchingStatus" class="resource-watcher-panel">
+        <!-- 头部 -->
         <div class="watcher-header">
-          <span class="watcher-title">
-            {{ phaseIcon(watchPhase) }} Rollout 监听
-          </span>
-          <span class="watcher-elapsed">{{ formatElapsed(watchElapsed) }}</span>
-          <button class="watcher-close" @click="stopWatching" title="停止监听">×</button>
+          <div class="watcher-header-left">
+            <span class="watcher-icon-pulse" :class="watchPhase?.toLowerCase()"></span>
+            <span class="watcher-title">Rollout Tracker</span>
+          </div>
+          <div class="watcher-header-right">
+            <span class="watcher-elapsed-badge">{{ formatElapsed(watchElapsed) }}</span>
+            <button class="watcher-close" @click="stopWatching" title="停止监听">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
         </div>
-        <div class="watcher-body">
-          <div class="watcher-progress">
-            <div class="watcher-progress-bar" :style="{ width: watchProgress + '%', background: phaseColor(watchPhase) }"></div>
+
+        <!-- 进度条区域 -->
+        <div class="watcher-progress-section">
+          <div class="watcher-progress-track">
+            <div class="watcher-progress-fill" :class="watchPhase?.toLowerCase()" :style="{ width: Math.round(watchProgress) + '%' }"></div>
           </div>
-          <div class="watcher-phase" :style="{ color: phaseColor(watchPhase) }">
-            {{ watchPhase }} ({{ watchProgress }}%)
+          <div class="watcher-progress-meta">
+            <span class="watcher-phase-text" :class="watchPhase?.toLowerCase()">
+              {{ phaseLabel(watchPhase) }}
+            </span>
+            <span class="watcher-progress-pct">{{ Math.round(watchProgress) }}%</span>
           </div>
-          <div class="watcher-events" v-if="watchEvents.length > 0">
+        </div>
+
+        <!-- 多阶段步骤指示器 -->
+        <div class="watcher-steps" v-if="watchSteps.length > 0">
+          <div
+            v-for="(step, i) in watchSteps"
+            :key="step.key"
+            class="watcher-step"
+            :class="step.status"
+          >
+            <div class="step-indicator">
+              <div class="step-dot">
+                <svg v-if="step.status === 'done'" width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else-if="step.status === 'error'" width="10" height="10" viewBox="0 0 10 10"><path d="M3 3l4 4M7 3l-4 4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <span v-else-if="step.status === 'active'" class="step-dot-pulse"></span>
+              </div>
+              <div v-if="i < watchSteps.length - 1" class="step-connector" :class="step.status"></div>
+            </div>
+            <span class="step-label">{{ step.label }}</span>
+          </div>
+        </div>
+
+        <!-- 副本状态数据 -->
+        <div class="watcher-replicas" v-if="watchDetail">
+          <div class="replica-item">
+            <span class="replica-num">{{ watchDetail.updated }}/{{ watchDetail.desired }}</span>
+            <span class="replica-label">已更新</span>
+          </div>
+          <div class="replica-divider"></div>
+          <div class="replica-item">
+            <span class="replica-num">{{ watchDetail.ready }}/{{ watchDetail.desired }}</span>
+            <span class="replica-label">已就绪</span>
+          </div>
+          <div class="replica-divider"></div>
+          <div class="replica-item">
+            <span class="replica-num">{{ watchDetail.available }}/{{ watchDetail.desired }}</span>
+            <span class="replica-label">可用</span>
+          </div>
+        </div>
+
+        <!-- 事件时间线 -->
+        <div class="watcher-events-section" v-if="watchEvents.length > 0">
+          <div class="watcher-events-header">
+            <span>实时事件</span>
+            <span class="events-count">{{ watchEvents.length }}</span>
+          </div>
+          <div class="watcher-events-list">
             <div
-              v-for="(ev, i) in watchEvents.slice(0, 8)"
+              v-for="(ev, i) in watchEvents.slice(0, 6)"
               :key="i"
-              class="watcher-event"
+              class="watcher-event-item"
               :class="{ warning: ev.type === 'Warning' }"
             >
-              <span class="ev-type">{{ ev.type === 'Warning' ? '⚠' : 'ℹ️' }}</span>
-              <span class="ev-reason">{{ ev.reason }}</span>
-              <span class="ev-msg">{{ ev.message }}</span>
+              <span class="event-dot" :class="ev.type === 'Warning' ? 'warn' : 'info'"></span>
+              <span class="event-reason">{{ ev.reason }}</span>
+              <span class="event-msg">{{ ev.message }}</span>
             </div>
           </div>
         </div>
@@ -2703,6 +2760,7 @@ import namespaceApi from '@/api/cluster/config/namespace'
 import { useClusterStore } from '@/stores/cluster'
 import { useResizableModal } from '@/composables/useResizableModal'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
 
 // ===== 容器终端 =====
@@ -2757,12 +2815,17 @@ const {
   watchProgress,
   watchEvents,
   watchElapsed,
+  watchDetail,
+  watchSteps,
   startWatching,
   stopWatching,
   formatElapsed,
   phaseColor,
   phaseIcon,
+  phaseLabel,
 } = useResourceWatcher()
+
+const { confirm } = useConfirmDialog()
 
 // 镜像更新后启动状态监听
 const startDeploymentWatcher = (deployment) => {
@@ -2775,7 +2838,10 @@ const startDeploymentWatcher = (deployment) => {
             namespace: deployment.namespace,
             name: deployment.name,
           })
-          return res?.data || res || {}
+          // 后端返回 { code:0, data: { data: {...status...}, message:"..." } }
+          // axios 拦截后 res = { code, data: { data, message }, msg }
+          const statusData = res?.data?.data || res?.data || res || {}
+          return statusData
         } catch { return null }
       },
       getEvents: async () => {
@@ -2791,7 +2857,7 @@ const startDeploymentWatcher = (deployment) => {
       },
       onComplete: ({ success, elapsed }) => {
         if (success) {
-          Message.success({ content: `Deployment ${deployment.name} 已就绪（耗时 ${elapsed}s）`, duration: 3000 })
+          Message.success({ content: `✅ ${deployment.name} 部署完成（${elapsed}s）`, duration: 4000 })
         }
         fetchDeployments()
       },
@@ -4290,7 +4356,18 @@ const openPodEvents = async (pod) => {
 // =========================
 const restartPodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认重启（删除重建）Pod：${pod.namespace}/${pod.name} ?`)) return
+  const ok = await confirm({
+    title: '确认重启 Pod',
+    content: '重启将删除当前 Pod，由控制器自动重建新实例。',
+    type: 'warning',
+    details: [
+      { label: '命名空间', value: pod.namespace },
+      { label: 'Pod', value: pod.name },
+    ],
+    tip: '重启期间该 Pod 上的连接将中断',
+    confirmText: '确认重启',
+  })
+  if (!ok) return
   try {
     await podsApi.graceDelete({namespace: pod.namespace, name: pod.name})
     Message.success({ content: 'Pod 重启中...' })
@@ -4359,7 +4436,17 @@ const closePodUpdateImage = () => {
 // =========================
 const evictPodFromList = async (pod) => {
   showPodMoreOptions.value = false
-  if (!confirm(`确认驱逐 Pod：${pod.namespace}/${pod.name}？\n\n驱逐会受 PDB（Pod Disruption Budget）约束，相比直接删除更安全。`)) return
+  const ok = await confirm({
+    title: '确认驱逐 Pod',
+    content: '驱逐操作会受 PDB（Pod Disruption Budget）约束，相比直接删除更安全。',
+    type: 'info',
+    details: [
+      { label: '命名空间', value: pod.namespace },
+      { label: 'Pod', value: pod.name },
+    ],
+    confirmText: '确认驱逐',
+  })
+  if (!ok) return
   try {
     await podsApi.evict({
       namespace: pod.namespace,
@@ -4740,9 +4827,19 @@ const decreaseReplicas = async (deployment) => {
 const stopService = async (deployment) => {
   if (deployment.desiredReplicas === 0) return
   
-  if (!confirm(`确认停服 ${deployment.namespace}/${deployment.name}？\n\n将副本数调整为 0，所有 Pod 将被终止。`)) {
-    return
-  }
+  const ok = await confirm({
+    title: '确认停服',
+    content: '将副本数调整为 0，所有 Pod 将被终止，服务将不可用。',
+    type: 'danger',
+    details: [
+      { label: 'Deployment', value: `${deployment.namespace}/${deployment.name}` },
+      { label: '当前副本数', value: String(deployment.desiredReplicas) },
+      { label: '目标副本数', value: '0', danger: true },
+    ],
+    tip: '停服后服务将完全中断，可通过扩容恢复',
+    confirmText: '确认停服',
+  })
+  if (!ok) return
   
   await updateReplicaCount(deployment, 0)
 }
@@ -4818,7 +4915,20 @@ const saveInlineImage = async (deployment) => {
   _savingInlineImage = true
   try {
     // 二次确认 - 镜像更新是高危操作
-    if (!confirm(`⚠️ 确认更新镜像？\n\nDeployment: ${deployment.namespace}/${deployment.name}\n容器: ${container}\n旧镜像: ${oldImage}\n新镜像: ${newImage}\n\n此操作将触发滚动更新，请确认！`)) {
+    const ok = await confirm({
+      title: '确认更新镜像',
+      content: '此操作将触发滚动更新，逐步替换所有 Pod。',
+      type: 'warning',
+      details: [
+        { label: 'Deployment', value: `${deployment.namespace}/${deployment.name}` },
+        { label: '容器', value: container },
+        { label: '旧镜像', value: oldImage },
+        { label: '新镜像', value: newImage, highlight: true },
+      ],
+      tip: '滚动更新期间服务不会中断，但可能存在短暂的请求延迟',
+      confirmText: '确认更新',
+    })
+    if (!ok) {
       cancelInlineEdit()
       return
     }
@@ -4957,16 +5067,20 @@ const onUpdateImageContainerChange = () => {
 
 const submitUpdateImage = async () => {
   // 二次确认 - 镜像更新是高危操作
-  if (!confirm(`⚠️ 确认更新镜像？
-
-Deployment: ${updateImageForm.value.namespace}/${updateImageForm.value.name}
-容器: ${updateImageForm.value.container}
-当前镜像: ${updateImageForm.value.currentImage || '未知'}
-新镜像: ${updateImageForm.value.image}
-
-此操作将触发滚动更新，请确认！`)) {
-    return
-  }
+  const ok = await confirm({
+    title: '确认更新镜像',
+    content: '此操作将触发滚动更新，逐步替换所有 Pod。',
+    type: 'warning',
+    details: [
+      { label: 'Deployment', value: `${updateImageForm.value.namespace}/${updateImageForm.value.name}` },
+      { label: '容器', value: updateImageForm.value.container },
+      { label: '当前镜像', value: updateImageForm.value.currentImage || '未知' },
+      { label: '新镜像', value: updateImageForm.value.image, highlight: true },
+    ],
+    tip: '滚动更新期间服务不会中断，但可能存在短暂的请求延迟',
+    confirmText: '确认更新',
+  })
+  if (!ok) return
   
   updatingImage.value = true
   try {
@@ -5005,14 +5119,18 @@ const restartDeployment = async (deployment) => {
   showMoreOptions.value = false
   
   // 二次确认 - 重启是高危操作
-  if (!confirm(`⚠️ 确认重启 Deployment？
-
-Deployment: ${deployment.namespace}/${deployment.name}
-副本数: ${deployment.desiredReplicas}
-
-此操作将滚动重启所有 Pod，请确认！`)) {
-    return
-  }
+  const ok = await confirm({
+    title: '确认重启 Deployment',
+    content: '此操作将滚动重启所有 Pod，服务不会中断但可能有短暂延迟。',
+    type: 'warning',
+    details: [
+      { label: 'Deployment', value: `${deployment.namespace}/${deployment.name}` },
+      { label: '副本数', value: String(deployment.desiredReplicas) },
+    ],
+    tip: '滚动重启期间服务保持可用，但流量可能波动',
+    confirmText: '确认重启',
+  })
+  if (!ok) return
   
   try {
     const res = await deploymentsApi.restart({ namespace: deployment.namespace, name: deployment.name })
@@ -5075,12 +5193,19 @@ const viewHistory = async (deployment) => {
 const rollbackToVersion = async (history) => {
   if (!historyDeployment.value || !history.name) return
   
-  const confirmed = confirm(`确认回滚到版本 ${history.revision} 吗？
-
-ReplicaSet: ${history.name}
-副本数: ${history.replicas}
-创建时间: ${history.createdAt}`)
-  if (!confirmed) return
+  const ok = await confirm({
+    title: '确认回滚版本',
+    content: '回滚将触发滚动更新到历史版本。',
+    type: 'warning',
+    details: [
+      { label: '目标版本', value: `Revision ${history.revision}`, highlight: true },
+      { label: 'ReplicaSet', value: history.name },
+      { label: '副本数', value: String(history.replicas) },
+      { label: '创建时间', value: history.createdAt },
+    ],
+    confirmText: '确认回滚',
+  })
+  if (!ok) return
   
   rollingBack.value = true
   try {
@@ -5143,15 +5268,19 @@ const openRollback = async (deployment) => {
 const submitRollback = async () => {
   // 二次确认 - 回滚是高危操作
   const selectedRS = historyList.value.find(h => h.name === rollbackForm.value.replica_set)
-  if (!confirm(`⚠️ 确认回滚 Deployment？
-
-Deployment: ${rollbackForm.value.namespace}/${rollbackForm.value.name}
-回滚到版本: ${selectedRS?.revision || '-'}
-ReplicaSet: ${rollbackForm.value.replica_set}
-
-此操作将触发滚动更新到历史版本，请确认！`)) {
-    return
-  }
+  const ok = await confirm({
+    title: '确认回滚 Deployment',
+    content: '此操作将触发滚动更新到历史版本。',
+    type: 'warning',
+    details: [
+      { label: 'Deployment', value: `${rollbackForm.value.namespace}/${rollbackForm.value.name}` },
+      { label: '回滚版本', value: `Revision ${selectedRS?.revision || '-'}`, highlight: true },
+      { label: 'ReplicaSet', value: rollbackForm.value.replica_set },
+    ],
+    tip: '回滚后将使用历史版本的镜像和配置',
+    confirmText: '确认回滚',
+  })
+  if (!ok) return
   
   rollingBack.value = true
   try {
@@ -5229,7 +5358,16 @@ const refreshRolloutStatus = async () => {
 
 const pauseRollout = async () => {
   if (!rolloutDeployment.value) return
-  if (!confirm(`ℹ️ 确认暂停 ${rolloutDeployment.value.name} 的滚动更新？\n\n暂停后新 Pod 将不再创建，旧 Pod 不会被替换。`)) return
+  const ok = await confirm({
+    title: '确认暂停滚动更新',
+    content: '暂停后新 Pod 将不再创建，旧 Pod 不会被替换。',
+    type: 'info',
+    details: [
+      { label: 'Deployment', value: rolloutDeployment.value.name },
+    ],
+    confirmText: '确认暂停',
+  })
+  if (!ok) return
   try {
     const res = await deploymentsApi.pauseRollout({
       namespace: rolloutDeployment.value.namespace,
@@ -5248,7 +5386,16 @@ const pauseRollout = async () => {
 
 const resumeRollout = async () => {
   if (!rolloutDeployment.value) return
-  if (!confirm(`ℹ️ 确认恢复 ${rolloutDeployment.value.name} 的滚动更新？\n\n恢复后将继续进行滚动更新。`)) return
+  const ok = await confirm({
+    title: '确认恢复滚动更新',
+    content: '恢复后将继续进行滚动更新。',
+    type: 'success',
+    details: [
+      { label: 'Deployment', value: rolloutDeployment.value.name },
+    ],
+    confirmText: '确认恢复',
+  })
+  if (!ok) return
   try {
     const res = await deploymentsApi.resumeRollout({
       namespace: rolloutDeployment.value.namespace,
@@ -9340,85 +9487,374 @@ const downloadYaml = () => {
   cursor: not-allowed;
 }
 
-/* ========== 资源监听浮窗 ========== */
+/* ========== Rollout Tracker 浮窗 - 大厂风格 ========== */
 .resource-watcher-panel {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 380px;
+  width: 400px;
   background: #1a1b26;
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
+  border-radius: 16px;
+  box-shadow: 
+    0 20px 60px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(255,255,255,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.05);
   z-index: 9000;
   overflow: hidden;
-  color: #a9b1d6;
+  color: #c0caf5;
   font-size: 13px;
+  backdrop-filter: blur(20px);
 }
 
 .watcher-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, #24283b, #1f2335);
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg, rgba(78,143,247,0.08), rgba(155,106,237,0.06));
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
-.watcher-title { font-weight: 600; flex: 1; }
-.watcher-elapsed { font-size: 11px; color: #565f89; font-family: 'JetBrains Mono', monospace; }
+.watcher-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.watcher-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.watcher-icon-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4e8ff7;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+.watcher-icon-pulse.updating { background: #f0a020; }
+.watcher-icon-pulse.progressing { background: #4e8ff7; }
+.watcher-icon-pulse.complete, .watcher-icon-pulse.running { background: #52c41a; animation: none; }
+.watcher-icon-pulse.failed { background: #ff4d4f; animation: none; }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(78,143,247,0.3); }
+}
+
+.watcher-title {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: #e0e0e0;
+}
+
+.watcher-elapsed-badge {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  color: #7982a9;
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
 .watcher-close {
-  width: 22px; height: 22px; border: none; background: transparent;
-  color: #565f89; cursor: pointer; border-radius: 4px; font-size: 16px; line-height: 1;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(255,255,255,0.04);
+  color: #565f89;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
-.watcher-close:hover { background: rgba(247,118,142,0.2); color: #f7768e; }
+.watcher-close:hover {
+  background: rgba(255,77,79,0.15);
+  color: #ff4d4f;
+}
 
-.watcher-body { padding: 12px 14px; }
+/* 进度条 */
+.watcher-progress-section {
+  padding: 14px 16px 10px;
+}
 
-.watcher-progress {
-  height: 4px;
+.watcher-progress-track {
+  height: 6px;
   background: rgba(255,255,255,0.06);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
-  margin-bottom: 8px;
+  position: relative;
 }
 
-.watcher-progress-bar {
+.watcher-progress-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s ease, background 0.3s;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.watcher-progress-fill.updating {
+  background: linear-gradient(90deg, #f0a020, #f5c842);
+}
+.watcher-progress-fill.progressing {
+  background: linear-gradient(90deg, #4e8ff7, #7c5cfc);
+}
+.watcher-progress-fill.complete, .watcher-progress-fill.running {
+  background: linear-gradient(90deg, #52c41a, #73d13d);
+}
+.watcher-progress-fill.failed {
+  background: linear-gradient(90deg, #ff4d4f, #ff7875);
 }
 
-.watcher-phase {
+/* 进度条光晕动画 */
+.watcher-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s ease-in-out infinite;
+}
+.watcher-progress-fill.complete::after,
+.watcher-progress-fill.running::after,
+.watcher-progress-fill.failed::after { animation: none; }
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.watcher-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.watcher-phase-text {
   font-weight: 600;
   font-size: 12px;
-  margin-bottom: 8px;
+}
+.watcher-phase-text.updating { color: #f0a020; }
+.watcher-phase-text.progressing { color: #4e8ff7; }
+.watcher-phase-text.complete, .watcher-phase-text.running { color: #52c41a; }
+.watcher-phase-text.failed { color: #ff4d4f; }
+.watcher-phase-text.timeout { color: #fa8c16; }
+
+.watcher-progress-pct {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  color: #e0e0e0;
 }
 
-.watcher-events {
-  max-height: 180px;
-  overflow-y: auto;
-  border-top: 1px solid rgba(255,255,255,0.04);
-  padding-top: 8px;
-}
-
-.watcher-event {
+/* 多阶段步骤 */
+.watcher-steps {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 16px 14px;
+  gap: 4px;
+}
+
+.watcher-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
   gap: 6px;
-  padding: 3px 0;
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.step-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,255,255,0.12);
+  transition: all 0.3s;
+  position: relative;
+}
+
+.watcher-step.done .step-dot {
+  background: #52c41a;
+  border-color: #52c41a;
+}
+.watcher-step.active .step-dot {
+  background: #4e8ff7;
+  border-color: #4e8ff7;
+  box-shadow: 0 0 0 3px rgba(78,143,247,0.2);
+}
+.watcher-step.error .step-dot {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+.step-dot-pulse {
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border-radius: 50%;
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.6); opacity: 0.5; }
+}
+
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  margin: 0 2px;
+  border-radius: 1px;
+  transition: background 0.3s;
+}
+.step-connector.done {
+  background: #52c41a;
+}
+
+.step-label {
+  font-size: 11px;
+  color: #565f89;
+  text-align: center;
+  white-space: nowrap;
+}
+.watcher-step.done .step-label { color: #52c41a; }
+.watcher-step.active .step-label { color: #4e8ff7; font-weight: 600; }
+.watcher-step.error .step-label { color: #ff4d4f; }
+
+/* 副本状态 */
+.watcher-replicas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid rgba(255,255,255,0.04);
+  gap: 0;
+}
+
+.replica-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 2px;
+}
+
+.replica-num {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  color: #e0e0e0;
+}
+
+.replica-label {
+  font-size: 10px;
+  color: #565f89;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.replica-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255,255,255,0.06);
+}
+
+/* 事件区域 */
+.watcher-events-section {
+  border-top: 1px solid rgba(255,255,255,0.04);
+  padding: 10px 16px 12px;
+}
+
+.watcher-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #565f89;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.events-count {
+  background: rgba(78,143,247,0.15);
+  color: #4e8ff7;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.watcher-events-list {
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.watcher-event-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
   font-size: 11px;
   color: #787c99;
   line-height: 1.4;
 }
-.watcher-event.warning { color: #e0af68; }
-.ev-type { flex-shrink: 0; }
-.ev-reason { flex-shrink: 0; font-weight: 600; min-width: 80px; }
-.ev-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watcher-event-item.warning { color: #f0a020; }
 
-.watcher-slide-enter-active { transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
-.watcher-slide-leave-active { transition: all 0.2s; }
+.event-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.event-dot.info { background: #4e8ff7; }
+.event-dot.warn { background: #f0a020; }
+
+.event-reason {
+  flex-shrink: 0;
+  font-weight: 600;
+  min-width: 70px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 动画 */
+.watcher-slide-enter-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.watcher-slide-leave-active { transition: all 0.25s cubic-bezier(0.4, 0, 1, 1); }
 .watcher-slide-enter-from, .watcher-slide-leave-to {
-  opacity: 0; transform: translateY(20px) scale(0.95);
+  opacity: 0;
+  transform: translateY(24px) scale(0.92);
 }
 
 </style>
