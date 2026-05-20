@@ -385,6 +385,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import {
   getPipelineTemplates,
   getPipelineTemplateDetail,
@@ -522,6 +523,8 @@ const typeText = (type) => {
   return typeMap[type] || type
 }
 
+const { confirm: showConfirm } = useConfirmDialog()
+
 // 处理详情查看
 const handleDetail = (template) => {
   selectedTemplate.value = template
@@ -536,9 +539,17 @@ const handleEdit = (template) => {
 
 // 处理删除 - 调用真实后端接口
 const handleDelete = async (template) => {
-  if (!confirm(`确定要删除模板「${template.name}」吗？此操作不可恢复！`)) {
-    return
-  }
+  const ok = await showConfirm({
+    title: '确认删除模板',
+    content: '删除后不可恢复，请谨慎操作。',
+    type: 'danger',
+    details: [
+      { label: '模板名称', value: template.name },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     Message.info({ content: `正在删除模板 #${template.id}...` })

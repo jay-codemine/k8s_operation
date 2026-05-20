@@ -714,10 +714,12 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import configmapApi from '@/api/cluster/config/configmap'
 import namespaceApi from '@/api/cluster/config/namespace'
 import permissionStore from '@/stores/permission'
 import { useClusterStore } from '@/stores/cluster'
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -1466,11 +1468,19 @@ const copyYamlContent = () => {
     .catch(() => alert('复制失败'))
 }
 
-const resetYamlContent = () => {
-  if (!yamlCreateContent.value || confirm('确定要清空当前 YAML 内容吗？')) {
-    yamlCreateContent.value = ''
-    yamlCreateError.value = ''
+const resetYamlContent = async () => {
+  if (yamlCreateContent.value) {
+    const ok = await showConfirm({
+      title: '清空 YAML 内容',
+      content: '确定要清空当前 YAML 内容吗？',
+      type: 'warning',
+      confirmText: '确认清空',
+      cancelText: '取消',
+    })
+    if (!ok) return
   }
+  yamlCreateContent.value = ''
+  yamlCreateError.value = ''
 }
 
 const createConfigMapFromYaml = async () => {

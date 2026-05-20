@@ -60,6 +60,12 @@ const routePermissions = {
   // ==================== 环境管理 ====================
   '/environments': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
   
+  // ==================== 监控中心 ====================
+  '/monitoring': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
+  '/monitoring/datasources': ['super_admin', 'platform_admin', 'cluster_admin'],
+  '/monitoring/alert-rules': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin'],
+  '/monitoring/alert-events': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
+  
   // ==================== 集群管理 ====================
   '/clusters': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer']
 }
@@ -172,6 +178,20 @@ const router = createRouter({
         {path: 'images/:repoId', component: () => import('@/views/images/Images.vue')},
 
         {path: 'environments', component: () => import('@/views/environments/K8sEnvironments.vue')},
+        
+        // 监控中心（子路由架构）
+        {
+          path: 'monitoring',
+          component: () => import('@/views/monitoring/MonitorLayout.vue'),
+          children: [
+            { path: '', component: () => import('@/views/monitoring/Monitoring.vue') },
+            { path: 'datasources', component: () => import('@/views/monitoring/Datasources.vue') },
+            { path: 'alert-rules', component: () => import('@/views/monitoring/AlertRules.vue') },
+            { path: 'alert-events', component: () => import('@/views/monitoring/AlertEvents.vue') },
+            { path: 'notify-channels', component: () => import('@/views/monitoring/NotifyChannels.vue') },
+            { path: 'silence-rules', component: () => import('@/views/monitoring/SilenceRules.vue') },
+          ],
+        },
 
         // // ✅ 旧路径：统一引导去 clusters（让用户先选集群）
         // {path: 'workloads/pods', redirect: '/clusters'},

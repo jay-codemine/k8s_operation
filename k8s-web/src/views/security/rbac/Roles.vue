@@ -354,6 +354,9 @@ import { listRoles, createRole as createRoleApi, deleteRole as deleteRoleApi } f
 import { getClusterList } from '@/api/cluster'
 import { getNamespaces } from '@/api/namespace'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // 数据状态
 const loading = ref(false)
@@ -531,7 +534,17 @@ const submitRole = async () => {
 
 // 删除 Role
 const deleteRole = async (role) => {
-  if (!confirm(`确认删除 ${role.type} "${role.name}"？`)) return
+  const ok = await showConfirm({
+    title: '确认删除 Role',
+    type: 'danger',
+    details: [
+      { label: '类型', value: role.type },
+      { label: '名称', value: role.name, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   loading.value = true
   try {
     await deleteRoleApi(selectedClusterId.value, role.type, role.namespace || '', role.name)

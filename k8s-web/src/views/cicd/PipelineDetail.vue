@@ -1656,6 +1656,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import {
   getPipelineDetail,
   runPipeline,
@@ -1683,6 +1684,7 @@ export default {
     CodeQualityPanel
   },
   setup() {
+    const { confirm: showConfirm } = useConfirmDialog()
     const router = useRouter()
     const route = useRoute()
     const pipelineId = computed(() => route.params.id)
@@ -2727,9 +2729,17 @@ export default {
       }
 
       // 确认回滚
-      const confirmed = window.confirm(
-        `确定要回滚到上一个版本吗？`
-      )
+      const confirmed = await showConfirm({
+        title: '回滚确认',
+        content: '确定要回滚到上一个版本吗？',
+        type: 'warning',
+        details: [
+          { label: '命名空间', value: stage.deploy_info?.namespace || '-' },
+          { label: '工作负载', value: stage.deploy_info?.workload_name || '-' },
+        ],
+        confirmText: '确认回滚',
+        cancelText: '取消',
+      })
       if (!confirmed) return
 
       // 先刷新获取最新配置
@@ -2802,9 +2812,14 @@ export default {
       }
 
       // 确认取消
-      const confirmed = window.confirm(
-        `确定要取消部署吗？\n\n- 如果部署未执行，将直接取消\n- 如果部署已执行，将回滚到上一个版本`
-      )
+      const confirmed = await showConfirm({
+        title: '取消部署',
+        content: '确定要取消部署吗？',
+        type: 'warning',
+        tip: '如果部署未执行，将直接取消；如果部署已执行，将回滚到上一个版本。',
+        confirmText: '确认取消',
+        cancelText: '返回',
+      })
       if (!confirmed) return
 
       // 先刷新获取最新配置

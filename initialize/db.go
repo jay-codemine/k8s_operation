@@ -105,6 +105,28 @@ func autoMigrateTables() error {
 		log.Printf("[AutoMigrate] 表 %s 迁移成功", m.name)
 	}
 
+	// 监控中心模块
+	monitorModels := []struct {
+		name  string
+		model interface{}
+	}{
+		{"monitor_datasource", &models.MonitorDatasource{}},
+		{"monitor_alert_rule", &models.MonitorAlertRule{}},
+		{"monitor_alert_event", &models.MonitorAlertEvent{}},
+		{"monitor_notify_channel", &models.MonitorNotifyChannel{}},
+		{"monitor_silence_rule", &models.MonitorSilenceRule{}},
+		{"monitor_inhibit_rule", &models.MonitorInhibitRule{}},
+		{"monitor_aggregate_rule", &models.MonitorAggregateRule{}},
+		{"monitor_notify_template", &models.MonitorNotifyTemplate{}},
+	}
+	for _, m := range monitorModels {
+		if err := global.DB.AutoMigrate(m.model); err != nil {
+			log.Printf("[AutoMigrate] 创建表 %s 失败: %v", m.name, err)
+			return fmt.Errorf("migrate %s: %w", m.name, err)
+		}
+		log.Printf("[AutoMigrate] 表 %s 迁移成功", m.name)
+	}
+
 	return nil
 }
 

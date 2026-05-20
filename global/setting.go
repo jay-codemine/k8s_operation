@@ -20,6 +20,7 @@ var (
 	JenkinsSetting   *setting.JenkinsSettingS   // Jenkins CI/CD 配置
 	SecuritySetting  *setting.SecuritySettingS  // 安全配置（加密密钥等）
 	PlatformSetting  *setting.PlatformSettingsS // 平台系统设置（默认值，优先级低于数据库）
-	AISetting        *setting.AIAssistantSettingS // AI 助手配置
-	AIRegistry       *openai.Registry             // AI 多模型注册中心
+	MonitoringSetting *setting.MonitoringSettingS  // 监控配置
+	AISetting         *setting.AIAssistantSettingS // AI 助手配置
+	AIRegistry        *openai.Registry             // AI 多模型注册中心
 )

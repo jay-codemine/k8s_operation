@@ -476,6 +476,9 @@ import deploymentsApi from '@/api/cluster/workloads/deployments'
 import namespaceApi from '@/api/cluster/config/namespace'
 import permissionStore from '@/stores/permission'
 import { useClusterStore } from '@/stores/cluster'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -1144,7 +1147,19 @@ const confirmTypeChange = async (service) => {
     cancelTypeEdit()
     return
   }
-  if (!confirm(`确定将 Service 「${service.name}」的类型从 ${service.type} 改为 ${editingTypeValue.value} 吗？`)) {
+  const ok = await showConfirm({
+    title: '确认修改 Service 类型',
+    content: '修改类型可能影响服务访问方式。',
+    type: 'warning',
+    details: [
+      { label: 'Service', value: service.name, mono: true },
+      { label: '当前类型', value: service.type },
+      { label: '目标类型', value: editingTypeValue.value, highlight: true },
+    ],
+    confirmText: '确认修改',
+    cancelText: '取消',
+  })
+  if (!ok) {
     cancelTypeEdit()
     return
   }

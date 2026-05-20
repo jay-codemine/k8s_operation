@@ -264,10 +264,12 @@ import {
   getCleanupLogs
 } from '@/api/image.js'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 export default {
   name: 'CleanupPolicies',
   setup() {
+    const { confirm: showConfirm } = useConfirmDialog()
     const policies = ref([])
     const registries = ref([])
     const loading = ref(false)
@@ -409,7 +411,17 @@ export default {
     
     // 立即执行
     const runPolicy = async (policy) => {
-      if (!confirm(`确定要立即执行策略"${policy.name}"吗？`)) return
+      const ok = await showConfirm({
+        title: '确认立即执行',
+        content: '将立即执行此清理策略。',
+        type: 'warning',
+        details: [
+          { label: '策略名称', value: policy.name },
+        ],
+        confirmText: '确认执行',
+        cancelText: '取消',
+      })
+      if (!ok) return
       
       try {
         const res = await runCleanupPolicy(policy.id)

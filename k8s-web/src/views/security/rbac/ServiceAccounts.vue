@@ -240,6 +240,9 @@ import { listServiceAccounts, createServiceAccount as createSAApi, deleteService
 import { getClusterList } from '@/api/cluster'
 import { getNamespaces } from '@/api/namespace'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // 数据状态
 const loading = ref(false)
@@ -373,7 +376,16 @@ const createServiceAccount = async () => {
 
 // 删除 ServiceAccount
 const deleteServiceAccount = async (sa) => {
-  if (!confirm(`确认删除 ServiceAccount "${sa.name}"？`)) return
+  const ok = await showConfirm({
+    title: '确认删除 ServiceAccount',
+    type: 'danger',
+    details: [
+      { label: '名称', value: sa.name, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   loading.value = true
   try {
     await deleteSAApi(selectedClusterId.value, sa.namespace, sa.name)

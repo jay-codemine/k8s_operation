@@ -623,7 +623,9 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, h } from 'vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { getArtifacts, getArtifactStats, getArtifactDetail, deleteArtifact, downloadArtifact, updateArtifact, batchDeleteArtifacts, createArtifactRecord, getArtifactDownloadUrl, attachArtifactFile, uploadArtifact } from '@/api/cicd'
+const { confirm: showConfirm } = useConfirmDialog()
 
 const getToken = () => localStorage.getItem('token') || sessionStorage.getItem('token')
 // ====== 轻量 Toast 提示 ======
@@ -803,7 +805,18 @@ const getDownloadTitle = (a) => {
 }
 
 const handleDelete = async (a) => {
-  if (!window.confirm(`确定要删除制品「${a.name}」吗？此操作不可恢复。`)) return
+  const ok = await showConfirm({
+    title: '删除制品',
+    content: `确定要删除制品「${a.name}」吗？`,
+    type: 'danger',
+    details: [
+      { label: '制品名称', value: a.name },
+    ],
+    tip: '此操作不可恢复！',
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     await deleteArtifact(a.id)
     showToast('删除成功', 'success')
@@ -823,7 +836,15 @@ const toggleSelectAll = () => {
 }
 const handleBatchDelete = async () => {
   if (selectedIds.value.length === 0) { showToast('请先选择要删除的制品', 'warning'); return }
-  if (!window.confirm(`确定要批量删除 ${selectedIds.value.length} 个制品吗？此操作不可恢复。`)) return
+  const ok = await showConfirm({
+    title: '批量删除制品',
+    content: `确定要批量删除 ${selectedIds.value.length} 个制品吗？`,
+    type: 'danger',
+    tip: '此操作不可恢复！',
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     const res = await batchDeleteArtifacts(selectedIds.value)
     const affected = res.data?.data?.affected || res.data?.affected || selectedIds.value.length

@@ -230,6 +230,9 @@ import { getUserList } from '@/api/user'
 import { getAllRoles, getClusterPermissionList, assignUserRole, createClusterPermission, deleteClusterPermission, getRoleUsers, getUserRBACInfo } from '@/api/rbac'
 import { getClusterList } from '@/api/cluster'
 import { listServiceAccounts, listRoleBindings as listK8sRoleBindings } from '@/api/k8sRbac'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 const viewMode = ref('user')
 const clusters = ref([])
@@ -447,7 +450,17 @@ const editUserAuth = (user) => {
 }
 
 const revokeUserAuth = async (user) => {
-  if (!confirm(`确定撤销用户 "${user.username}" 的所有授权吗？`)) return
+  const ok = await showConfirm({
+    title: '确认撤销授权',
+    content: '将撤销该用户的所有角色和集群权限。',
+    type: 'danger',
+    details: [
+      { label: '用户名', value: user.username },
+    ],
+    confirmText: '确认撤销',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     // 清空角色
     await assignUserRole({
@@ -468,7 +481,17 @@ const revokeUserAuth = async (user) => {
 }
 
 const removeBinding = async (binding) => {
-  if (!confirm(`确定移除用户 "${binding.subject_name}" 的角色绑定吗？`)) return
+  const ok = await showConfirm({
+    title: '确认移除角色绑定',
+    content: '移除后该用户将失去对应角色权限。',
+    type: 'danger',
+    details: [
+      { label: '用户名', value: binding.subject_name },
+    ],
+    confirmText: '确认移除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     // 获取用户当前角色，移除当前角色
     const user = userAuthorizations.value.find(u => u.id === binding.id)

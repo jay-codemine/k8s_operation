@@ -1576,9 +1576,16 @@ const copyYamlContent = async () => {
 }
 
 // 重置 YAML 内容
-const resetYamlContent = () => {
-  if (yamlContent.value.trim() && !confirm('确定要重置 YAML 内容吗？')) {
-    return
+const resetYamlContent = async () => {
+  if (yamlContent.value.trim()) {
+    const ok = await confirm({
+      title: '重置 YAML 内容',
+      content: '确定要清空当前编辑的 YAML 内容吗？',
+      type: 'warning',
+      confirmText: '确认重置',
+      cancelText: '取消',
+    })
+    if (!ok) return
   }
   yamlContent.value = ''
   yamlError.value = ''

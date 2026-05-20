@@ -281,13 +281,13 @@ func (s *PlatformHealthService) getClusterSummary(ctx context.Context) ClusterHe
 	if global.DB != nil {
 		global.DB.WithContext(ctx).
 			Table("kube_cluster").
-			Where("deleted_at = 0").
+			Where("is_del = 0").
 			Count(&total)
 
 		// status=0 表示在线，status=2 表示异常
 		global.DB.WithContext(ctx).
 			Table("kube_cluster").
-			Where("deleted_at = 0 AND status = ?", 0).
+			Where("is_del = 0 AND status = ?", 0).
 			Count(&online)
 	}
 
@@ -316,7 +316,7 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 	var clusters []clusterInfo
 	global.DB.Table("kube_cluster").
 		Select("id, cluster_name, status").
-		Where("deleted_at = 0").
+		Where("is_del = 0").
 		Order("id ASC").
 		Find(&clusters)
 
@@ -335,6 +335,23 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 				StatusCode: cluster.Status,
 			}
 
+			// panic recovery：防止单个集群检查 panic 导致整个健康检查失败
+			defer func() {
+				if r := recover(); r != nil {
+					global.Logger.Error("集群健康检查 panic",
+						zap.Int64("cluster_id", cluster.ID),
+						zap.String("cluster_name", cluster.ClusterName),
+						zap.Any("panic", r))
+					detail.Status = "error"
+					detail.Connectable = false
+					detail.Latency = "-"
+				}
+				// 无论是否 panic，都确保 detail 被添加到列表
+				mu.Lock()
+				details = append(details, detail)
+				mu.Unlock()
+			}()
+
 			// 设置状态文本（初始状态基于数据库）
 			if cluster.Status == 0 {
 				detail.Status = "online"
@@ -342,8 +359,8 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 				detail.Status = "offline"
 			}
 
-			// 为每个集群的检查设置30秒整体超时
-			clusterCtx, clusterCancel := context.WithTimeout(ctx, 30*time.Second)
+			// 为每个集群的检查设置10秒整体超时（降低超时避免总响应超过前端30秒限制）
+			clusterCtx, clusterCancel := context.WithTimeout(ctx, 10*time.Second)
 			defer clusterCancel()
 
 			// 尝试获取 K8s 客户端
@@ -351,11 +368,13 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 			if s.factory != nil {
 				start := time.Now()
 				clients, err := s.factory.GetClient(clusterCtx, cluster.ID)
-				if err != nil || clients == nil {
+				if err != nil || clients == nil || clients.Kube == nil {
 					// 获取客户端失败（可能是超时或其他错误）
 					detail.Status = "error"
 					detail.Connectable = false
-					s.factory.Invalidate(uint32(cluster.ID))
+					if clients == nil || clients.Kube == nil {
+						s.factory.Invalidate(uint32(cluster.ID))
+					}
 					if clusterCtx.Err() == context.DeadlineExceeded {
 						detail.Latency = "timeout"
 						global.Logger.Warn("集群健康检查超时",
@@ -404,10 +423,6 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 				detail.Services = s.getClusterServiceSummary(clusterCtx, client)
 				detail.Events = s.getClusterEventSummary(clusterCtx, client)
 			}
-
-			mu.Lock()
-			details = append(details, detail)
-			mu.Unlock()
 		}(c)
 	}
 
@@ -928,11 +943,11 @@ func (s *PlatformHealthService) getAllK8sClients(ctx context.Context) []*kuberne
 	if s.factory != nil && global.DB != nil {
 		var clusterIDs []int64
 		global.DB.Table("kube_cluster").
-			Where("deleted_at = 0 AND status = ?", 0).
+			Where("is_del = 0 AND status = ?", 0).
 			Pluck("id", &clusterIDs)
 
 		for _, clusterID := range clusterIDs {
-			if c, err := s.factory.GetClient(ctx, clusterID); err == nil && c != nil {
+			if c, err := s.factory.GetClient(ctx, clusterID); err == nil && c != nil && c.Kube != nil {
 				clients = append(clients, c.Kube)
 			}
 		}
@@ -954,7 +969,7 @@ func (s *PlatformHealthService) getK8sClient() *kubernetes.Clientset {
 		var clusterID int64
 		if global.DB != nil {
 			global.DB.Table("kube_cluster").
-				Where("deleted_at = 0 AND status = ?", 0).
+				Where("is_del = 0 AND status = ?", 0).
 				Order("id ASC").
 				Limit(1).
 				Pluck("id", &clusterID)
@@ -1348,7 +1363,7 @@ func (s *PlatformHealthService) CheckClusterConnectivity(ctx context.Context, cl
 		var clusterName string
 		global.DB.Table("kube_cluster").
 			Select("cluster_name").
-			Where("id = ? AND deleted_at = 0", clusterID).
+			Where("id = ? AND is_del = 0", clusterID).
 			Pluck("cluster_name", &clusterName)
 		result.ClusterName = clusterName
 	}
@@ -1432,7 +1447,7 @@ func (s *PlatformHealthService) updateClusterHealthStatus(clusterID int64, conne
 	}
 
 	global.DB.Table("kube_cluster").
-		Where("id = ? AND deleted_at = 0", clusterID).
+		Where("id = ? AND is_del = 0", clusterID).
 		Updates(map[string]interface{}{
 			"status":        status,
 			"last_check_at": checkTime.Unix(),

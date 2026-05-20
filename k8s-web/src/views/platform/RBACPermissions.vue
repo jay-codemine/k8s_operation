@@ -464,6 +464,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 import {
   getRoleList,
   getAllRoles,
@@ -637,7 +640,17 @@ const handleDeleteRole = async (role) => {
     Message.warning('系统内置角色不可删除')
     return
   }
-  if (!confirm(`确定要删除角色 "${role.display_name}" 吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除角色',
+    content: '删除后关联用户将失去该角色权限。',
+    type: 'danger',
+    details: [
+      { label: '角色名称', value: role.display_name },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     await deleteRole(role.id)
@@ -689,7 +702,14 @@ const submitClusterPerm = async () => {
 }
 
 const handleDeleteClusterPerm = async (perm) => {
-  if (!confirm(`确定要删除此权限配置吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除权限配置',
+    content: '删除后用户将失去对应集群的访问权限。',
+    type: 'danger',
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     await deleteClusterPermission(perm.id)

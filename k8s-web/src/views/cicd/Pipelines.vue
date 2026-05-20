@@ -529,10 +529,12 @@ import {
   deletePipeline as removePipeline
 } from '@/api/platform/pipeline'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 export default {
   name: 'Pipelines',
   setup() {
+    const { confirm: showConfirm } = useConfirmDialog()
     const router = useRouter()
     const pipelines = ref([])
     const searchQuery = ref('')
@@ -731,9 +733,17 @@ export default {
 
     // 删除流水线
     const handleDeletePipeline = async (pipeline) => {
-      if (!confirm(`确定要删除流水线 "${pipeline.name}" 吗？此操作不可恢复！`)) {
-        return
-      }
+      const ok = await showConfirm({
+        title: '确认删除流水线',
+        content: '删除后不可恢复，请谨慎操作。',
+        type: 'danger',
+        details: [
+          { label: '流水线名称', value: pipeline.name },
+        ],
+        confirmText: '确认删除',
+        cancelText: '取消',
+      })
+      if (!ok) return
       try {
         const response = await removePipeline(pipeline.id)
         if (response.code === 0) {
@@ -756,7 +766,17 @@ export default {
         Message.warning({ content: '所选流水线均在运行中' })
         return
       }
-      if (!confirm(`确定要批量发布 ${toRun.length} 条流水线吗？`)) return
+      const ok1 = await showConfirm({
+        title: '确认批量发布',
+        content: `即将启动 ${toRun.length} 条流水线构建。`,
+        type: 'info',
+        details: [
+          { label: '发布数量', value: `${toRun.length} 条`, highlight: true },
+        ],
+        confirmText: '确认发布',
+        cancelText: '取消',
+      })
+      if (!ok1) return
       Message.info({ content: `正在启动 ${toRun.length} 条流水线...` })
       
       try {
@@ -785,7 +805,17 @@ export default {
         Message.warning({ content: '所选流水线均未在运行' })
         return
       }
-      if (!confirm(`确定要取消发布 ${toStop.length} 条流水线吗？`)) return
+      const ok2 = await showConfirm({
+        title: '确认批量停止',
+        content: `即将停止 ${toStop.length} 条流水线构建。`,
+        type: 'warning',
+        details: [
+          { label: '停止数量', value: `${toStop.length} 条`, highlight: true },
+        ],
+        confirmText: '确认停止',
+        cancelText: '取消',
+      })
+      if (!ok2) return
       Message.info({ content: `正在停止 ${toStop.length} 条流水线...` })
       
       try {
@@ -809,7 +839,17 @@ export default {
     // 批量删除流水线
     const batchDeletePipelines = async () => {
       if (selectedIds.value.length === 0) return
-      if (!confirm(`确定要删除 ${selectedIds.value.length} 条流水线吗？此操作不可恢复！`)) return
+      const ok3 = await showConfirm({
+        title: '确认批量删除',
+        content: `即将删除 ${selectedIds.value.length} 条流水线，此操作不可恢复！`,
+        type: 'danger',
+        details: [
+          { label: '删除数量', value: `${selectedIds.value.length} 条`, danger: true },
+        ],
+        confirmText: '确认删除',
+        cancelText: '取消',
+      })
+      if (!ok3) return
       let deleteSuccessCount = 0
       for (const id of selectedIds.value) {
         try {

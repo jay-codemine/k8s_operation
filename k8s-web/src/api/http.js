@@ -7,6 +7,24 @@ import {pinia} from '@/stores'
 // 判断是否通过穿透地址访问（非 localhost）
 const isRemoteAccess = !['localhost', '127.0.0.1'].includes(window.location.hostname)
 
+// ===== 错误消息去重，防止短时间内重复 toast =====
+const recentErrors = new Map()
+const ERROR_DEDUP_INTERVAL = 3000 // 3秒内相同消息不重复弹出
+
+function showDedupError(msg) {
+  const now = Date.now()
+  const lastShown = recentErrors.get(msg)
+  if (lastShown && now - lastShown < ERROR_DEDUP_INTERVAL) return
+  recentErrors.set(msg, now)
+  // 清理过期记录
+  if (recentErrors.size > 20) {
+    for (const [key, time] of recentErrors) {
+      if (now - time > ERROR_DEDUP_INTERVAL) recentErrors.delete(key)
+    }
+  }
+  Message.error({ content: msg, duration: 2000 })
+}
+
 // 动态计算远程 API 地址：
 // 1. 优先使用环境变量 VITE_REMOTE_API_URL
 // 2. 否则使用当前域名 + 后端穿透端口（从环境变量 VITE_REMOTE_API_PORT 获取，默认 59979）
@@ -70,6 +88,7 @@ const needsClusterID = (url = '') => {
     '/platform/',       // 平台功能
     '/image/',          // 镜像管理
     '/ai/',             // AI 助手
+    '/monitoring/',      // 监控
     '/helloworld',      // 健康检查
   ]
   return !skipPrefixes.some(prefix => url.includes(prefix))
@@ -140,7 +159,7 @@ http.interceptors.response.use(
           data?.message ||
           error?.message ||
           '请求失败'
-        Message.error({content: msg, duration: 2000})
+        showDedupError(msg)
       }
       return Promise.reject(data || error)
     }

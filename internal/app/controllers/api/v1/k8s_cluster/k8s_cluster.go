@@ -97,7 +97,7 @@ func (c *K8sClusterController) Update(ctx *gin.Context) {
 	svc := services.NewServices()
 	if err := svc.K8sClusterUpdate(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("修改K8s集群失败", zap.Error(err))
-		rsp.ToErrorResponse(errorcode.ErrorClusterUpdateFail)
+		rsp.ToErrorResponse(errorcode.ErrorClusterUpdateFail.WithDetails(err.Error()))
 		return
 	}
 	rsp.Success(gin.H{"data": "修改K8s集群成功"})

@@ -573,6 +573,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import http from '@/api/http'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 const activeSection = ref('basic')
 const showToast = ref(false)
@@ -752,7 +755,14 @@ const saveSettings = async () => {
 
 // 重置设置
 const resetSettings = async () => {
-  if (!confirm('确定要重置为默认设置吗？')) return
+  const ok = await showConfirm({
+    title: '确认重置设置',
+    content: '所有配置将恢复为默认值，当前修改将丢失。',
+    type: 'warning',
+    confirmText: '确认重置',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   loading.value = true
   try {
