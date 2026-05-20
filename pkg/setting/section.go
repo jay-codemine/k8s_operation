@@ -230,6 +230,13 @@ type PlatformAboutSettings struct {
 	K8sSupport string `mapstructure:"K8sSupport"`
 }
 
+// MonitoringSettingS 监控配置结构体
+type MonitoringSettingS struct {
+	Enabled       bool   `mapstructure:"Enabled"`       // 是否启用监控
+	PrometheusURL string `mapstructure:"PrometheusURL"` // Prometheus 地址
+	QueryTimeout  int    `mapstructure:"QueryTimeout"`  // 查询超时（秒）
+}
+
 // AIAssistantSettingS AI 助手配置（支持多模型提供商）
 type AIAssistantSettingS struct {
 	Enabled         bool              `mapstructure:"Enabled"`         // 是否启用 AI 助手

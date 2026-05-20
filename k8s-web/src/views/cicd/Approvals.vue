@@ -392,6 +392,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getApprovalList, approvalAction, getApprovalStats, createApproval, updateApproval, deleteApproval } from '@/api/cicd/environment.js'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 const router = useRouter()
 
@@ -668,7 +671,17 @@ const submitForm = async () => {
 
 // 删除审批
 const handleDelete = async (approval) => {
-  if (!confirm(`确定删除审批记录 #${approval.id} 吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除审批记录',
+    content: '删除后不可恢复。',
+    type: 'danger',
+    details: [
+      { label: '审批 ID', value: `#${approval.id}`, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   actionLoading.value = true
   try {
     const res = await deleteApproval(approval.id)

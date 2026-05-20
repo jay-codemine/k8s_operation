@@ -386,6 +386,9 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import storageclassesApi from '@/api/cluster/storage/storageclasses'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -605,13 +608,21 @@ const clearSelection = () => {
   selectedItems.value = []
 }
 
-const batchDelete = () => {
+const batchDelete = async () => {
   if (selectedItems.value.length === 0) return
   
-  const names = selectedItems.value.map(sc => sc.name).join(', ')
-  if (!confirm(`确定要删除这 ${selectedItems.value.length} 个 StorageClass 吗？\n${names}`)) {
-    return
-  }
+  const ok = await showConfirm({
+    title: '确认批量删除',
+    content: `即将删除 ${selectedItems.value.length} 个 StorageClass。`,
+    type: 'danger',
+    details: [
+      { label: '删除数量', value: `${selectedItems.value.length} 个`, danger: true },
+      { label: '名称', value: selectedItems.value.map(sc => sc.name).join(', '), mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
 
   const promises = selectedItems.value.map(sc => 
     storageclassesApi.delete({ name: sc.name })
@@ -633,7 +644,16 @@ const batchDelete = () => {
 
 // =============== 单个操作 ===============
 const deleteItem = async (sc) => {
-  if (!confirm(`确定要删除 StorageClass "${sc.name}" 吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除 StorageClass',
+    type: 'danger',
+    details: [
+      { label: '名称', value: sc.name, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
 
   try {
     const res = await storageclassesApi.delete({ name: sc.name })

@@ -15,8 +15,8 @@ export function createCluster(data) {
 }
 
 // 修改 K8s 集群
-export function updateCluster(data) {
-  return http.post(`${API_BASE}/k8s/cluster/update`, data)
+export function updateCluster(data, options = {}) {
+  return http.post(`${API_BASE}/k8s/cluster/update`, data, options)
 }
 
 // 删除 K8s 集群

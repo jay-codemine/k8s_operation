@@ -826,6 +826,9 @@ import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
 import nodesApi from '@/api/cluster/nodes'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ========== 状态变量 ==========
 const searchQuery = ref('')
@@ -1101,19 +1104,20 @@ const batchCordon = async (unschedulable) => {
   
   // 二次确认
   const nodeNames = selectedNodes.value.map(n => n.name).join('\n  - ')
-  const confirmMsg = unschedulable
-    ? `⚠️ 确认将以下 ${selectedNodes.value.length} 个节点标记为不可调度？
-
-  - ${nodeNames}
-
-标记后，新的 Pod 将不会被调度到这些节点。`
-    : `确认取消以下 ${selectedNodes.value.length} 个节点的不可调度状态？
-
-  - ${nodeNames}
-
-取消后，新的 Pod 可以被调度到这些节点。`
-  
-  if (!confirm(confirmMsg)) return
+  const okCordon = await showConfirm({
+    title: unschedulable ? '确认批量 Cordon' : '确认批量 Uncordon',
+    content: unschedulable
+      ? '标记后，新的 Pod 将不会被调度到这些节点。'
+      : '取消后，新的 Pod 可以被调度到这些节点。',
+    type: unschedulable ? 'warning' : 'info',
+    details: [
+      { label: '节点数量', value: `${selectedNodes.value.length} 个`, highlight: true },
+      { label: '节点列表', value: selectedNodes.value.map(n => n.name).join(', '), mono: true },
+    ],
+    confirmText: `确认 ${action}`,
+    cancelText: '取消',
+  })
+  if (!okCordon) return
   
   let successCount = 0
   let failCount = 0
@@ -1437,11 +1441,19 @@ const toggleCordon = async (node) => {
   const newState = !node.unschedulable
   
   // 二次确认
-  const confirmMsg = node.unschedulable 
-    ? `确认取消节点 "${node.name}" 的不可调度状态？\n\n取消后，新的 Pod 可以被调度到此节点。`
-    : `⚠️ 确认将节点 "${node.name}" 标记为不可调度？\n\n标记后，新的 Pod 将不会被调度到此节点，但已有 Pod 不受影响。`
-  
-  if (!confirm(confirmMsg)) return
+  const okToggle = await showConfirm({
+    title: node.unschedulable ? '确认 Uncordon 节点' : '确认 Cordon 节点',
+    content: node.unschedulable
+      ? '取消后，新的 Pod 可以被调度到此节点。'
+      : '标记后，新的 Pod 将不会被调度到此节点，但已有 Pod 不受影响。',
+    type: node.unschedulable ? 'info' : 'warning',
+    details: [
+      { label: '节点名称', value: node.name, mono: true },
+    ],
+    confirmText: `确认 ${action}`,
+    cancelText: '取消',
+  })
+  if (!okToggle) return
 
   try {
     await nodesApi.cordon({

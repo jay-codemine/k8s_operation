@@ -299,6 +299,9 @@ import {
   cancelApproval, deleteApproval, updateApproval, getApprovalStats
 } from '@/api/ai'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ====== State ======
 const loading = ref(false)
@@ -430,7 +433,17 @@ const submitEdit = async () => {
 }
 
 const handleDelete = async (item) => {
-  if (!confirm(`确认删除审批 #${item.id}？此操作不可恢复。`)) return
+  const ok = await showConfirm({
+    title: '确认删除审批',
+    content: '此操作不可恢复。',
+    type: 'danger',
+    details: [
+      { label: '审批 ID', value: `#${item.id}`, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     const res = await deleteApproval(item.id)
     if (res.code === 0) loadData(); else alert(res.msg || '删除失败')
@@ -438,7 +451,16 @@ const handleDelete = async (item) => {
 }
 
 const handleCancel = async (item) => {
-  if (!confirm(`确认取消审批 #${item.id}？`)) return
+  const ok = await showConfirm({
+    title: '确认取消审批',
+    type: 'warning',
+    details: [
+      { label: '审批 ID', value: `#${item.id}`, mono: true },
+    ],
+    confirmText: '确认取消',
+    cancelText: '返回',
+  })
+  if (!ok) return
   try {
     const res = await cancelApproval(item.id)
     if (res.code === 0) loadData(); else alert(res.msg || '取消失败')

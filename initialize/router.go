@@ -4,6 +4,7 @@ package initialize
 import (
 	"github.com/gin-gonic/gin"
 
+	"k8soperation/global"
 	"k8soperation/middlewares"
 
 	_ "k8soperation/docs"
@@ -55,6 +56,9 @@ import (
 
 	// AI 助手路由
 	"k8soperation/internal/app/routers/ai_assistant"
+
+	// 监控路由
+	"k8soperation/internal/app/routers/monitoring"
 
 	// 你需要的 factory 类型
 	"k8soperation/internal/app/services"
@@ -137,6 +141,16 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// 包含 AI 对话、高危操作审批等
 	// ======================================================
 	ai_assistant.NewAIAssistantRouter().Inject(protected)
+
+	// ======================================================
+	// 监控分组（需要 JWT）
+	// /api/v1/monitoring/...
+	// ======================================================
+	prometheusURL := ""
+	if global.MonitoringSetting != nil && global.MonitoringSetting.Enabled {
+		prometheusURL = global.MonitoringSetting.PrometheusURL
+	}
+	monitoring.NewMonitoringRouter(prometheusURL).Inject(protected)
 
 	// ======================================================
 	// 镜像管理分组（需要 JWT）

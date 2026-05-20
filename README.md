@@ -18,6 +18,8 @@
 | 构建产物无追踪 | 制品库全生命周期管理（上传/下载/版本/统计） |
 | 镜像管理混乱 | 多仓库接入 + 自动清理策略 |
 | 可观测性集成复杂 | 构建探针管理，上传即生效，全自动注入 Agent |
+| 日志分散难检索 | 集成 Loki，LogQL 实时查询，日志量趋势可视化 |
+| 监控工具异构 | 多数据源统一管理（Prometheus/Loki/VictoriaMetrics），视图自动切换 |
 | kubectl 操作不便 | 容器 Web 终端，浏览器内直接进入容器 Shell |
 | 基础组件部署繁琐 | 应用商城一键部署开源组件 |
 | 运维门槛高 | AI 智能助手，自然语言操作平台 |
@@ -34,6 +36,8 @@
 - 🏪 **应用商城** - 内置应用市场，一键部署开源组件与自有应用
 - ⚙ **平台运维监控** - 健康检查、ETCD/核心组件监控、审计日志、系统配置
 - 🤖 **AI 智能助手** - 自然语言操作 K8s，多模型支持，高危自动审批
+- 📊 **多数据源监控** - Prometheus 指标视图 + Loki 日志探索，统一告警体系
+- 🔍 **Loki 日志探索** - LogQL 专业查询、标签筛选、日志量趋势、健康状态实时检测
 
 ------
 
@@ -75,6 +79,8 @@
 | 容器终端 | xterm.js + WebSocket | 浏览器内交互式 Shell，SPDY 桥接 K8s exec |
 | 应用商城 | 内置 App Store | 一键部署开源组件，组件化安装管理 |
 | 日志系统 | Zap | 高性能、结构化日志、三日志分类（系统/业务/AI） |
+| 日志存储 | Loki | 云原生日志聚合，LogQL 查询，与 Prometheus 同源的可观测生态 |
+| 监控指标 | Prometheus / VictoriaMetrics | 多数据源统一接入，指标视图自动切换 |
 
 ------
 
@@ -482,6 +488,152 @@ AI 助手拥有独立的日志系统（`storage/logs/ai.log`），方便排查�
 
 ------
 
+### 📊 多数据源监控与 Loki 日志探索（全新能力）
+
+平台构建了 **统一可观测性控制台**，将 Prometheus 指标监控与 Loki 日志探索整合为一体，根据所选数据源类型自动切换视图，打造大厂级监控体验。
+
+#### 架构设计
+
+```
+                   数据源管理
+          ┌──────────────────────────┐
+          │  Prometheus  │  Loki     │
+          │  VictoriaM   │  自定义   │
+          └──────┬───────┴─────┬────┘
+                 │             │
+         ┌───────┴──┐   ┌──────┴──────┐
+         │ Metrics  │   │    Logs     │
+         │  视图    │   │   视图      │
+         │ 指标大盘  │   │ LogQL 探索  │
+         └──────────┘   └────────────┘
+```
+
+#### 数据源管理
+
+| 数据源类型 | 图标 | 说明 |
+|-----------|------|------|
+| Prometheus | 🔥 | 指标采集，支持 PromQL |
+| Loki | 📜 | 日志聚合，支持 LogQL |
+| VictoriaMetrics | 📈 | 高性能 Prometheus 兼容替代 |
+| Alertmanager | 🚨 | 告警路由管理 |
+| Grafana | 📊 | 可视化大盘 |
+| Thanos | ♾️ | 长存储/多集群 Prometheus |
+
+- ✅ **CRUD 管理**：支持增删改查数据源，设置默认数据源
+- ✅ **连通性测试**：一键测试数据源连接是否正常
+- ✅ **分组展示**：下拉菜单按类型分组，视觉区分清晰
+- ✅ **视图自动切换**：选择 Loki 数据源自动切换为日志探索视图，选 Prometheus 自动切换为指标视图
+
+#### 🔍 Loki 日志探索
+
+专业的 LogQL 日志探索界面，对标 Grafana Explore。
+
+##### 健康状态实时检测
+
+```
+  ● Loki 已连接    http://loki:3100    [↻ 刷新]
+  ●（绿色呼吸灯）  URL 显示            一键刷新
+
+  状态：
+  🟢 已连接（breathing animation）
+  🔴 未连接（红色警示）
+  🟡 检测中（黄色闪烁）
+```
+
+进入页面自动执行健康检查，若 Loki 未配置则给出引导提示跳转数据源管理页面。
+
+##### LogQL 查询界面
+
+```
+  ┌──────────────────────────────────────────────────────┐
+  │ LogQL │ {job="varlogs"} |= "error"      [×]         │
+  └──────────────────────────────────────────────────────┘
+       [近 1 小时 ▼]  [100 条 ▼]  [▶ 查询]
+  
+  标签筛选: [job] [namespace] [app] [container] [+12 更多]
+```
+
+| 功能 | 说明 |
+|------|------|
+| LogQL 输入框 | 单行输入，Enter 快速查询，支持清空按钮 |
+| 时间范围 | 近 5 分钟 / 15 分钟 / 1 小时 / 3h / 6h / 12h / 24h |
+| 查询条数 | 50 / 100 / 200 / 500 条可选 |
+| 排序方向 | 最新在前（backward）/ 最旧在前（forward）|
+| 标签快捷筛选 | 自动拉取 Loki 标签列表，点击选值自动构建 LogQL |
+| 自动查询 | 进入页面自动用第一个活跃日志流执行查询，无需手动输入 |
+
+##### 日志量趋势图
+
+基于 ECharts 绘制的堆叠柱状图，按 `count_over_time` 聚合日志量：
+
+```
+日志量趋势                                        收起 ▴
+  │                      ██
+  │          ██         ████
+  │      ██ ████    ██  ████ ██
+  └────────────────────────────────── 时间
+      14:00  14:15  14:30  14:45  15:00
+```
+
+##### 日志列表
+
+```
+日志结果  123 条记录      [↩ 换行]  [🏷️ 标签]  [最新在前 ▼]
+
+  14:35:22.568   [job=varlogs]   INFO  server started on :8080
+  14:35:22.359   [job=varlogs]  ERROR  failed to connect redis  ← 红色高亮
+  14:35:21.846   [job=varlogs]   WARN  retry attempt 3          ← 黄色高亮
+```
+
+| 功能 | 说明 |
+|------|------|
+| 级别自动高亮 | ERROR/FATAL/PANIC 红色，WARN 黄色，DEBUG 灰色 |
+| 自动换行 | 长日志行可切换 wrap 模式 |
+| 标签显示 | 可开关显示每条日志的 stream labels |
+| 活跃日志流 | 右侧展示活跃流列表，点击即可快速构建查询 |
+
+##### 智能引导与错误反馈
+
+```
+─ 空状态引导：📋 该时间范围内未匹配到日志，尝试调整时间范围
+─ 查询出错：⚠️ 查询出错  [具体错误原因]  [重试]
+─ Loki 未配置：弹出 Warning，引导前往数据源管理页面
+─ 示例查询：点击示例代码片段自动填入并执行
+```
+
+#### 🚨 告警体系
+
+| 模块 | 功能 |
+|------|------|
+| 告警规则 | 支持 CPU/内存/磁盘等阈值告警，自定义 PromQL 规则 |
+| 告警事件 | 实时事件列表，支持确认（Ack）和解决（Resolve）|
+| 通知渠道 | 支持邮件/钉钉/企业微信/Webhook 多渠道推送 |
+| 告警降噪 | 静默规则（Silence）+ 抑制规则（Inhibit）+ 聚合规则 |
+
+#### 后端 API（6 个 Loki 接口）
+
+```
+GET /api/v1/monitoring/loki/health          # Loki 健康检查
+GET /api/v1/monitoring/loki/query           # LogQL 日志查询
+GET /api/v1/monitoring/loki/labels          # 获取所有标签名
+GET /api/v1/monitoring/loki/label/:name/values  # 获取标签值列表
+GET /api/v1/monitoring/loki/streams         # 获取活跃日志流
+GET /api/v1/monitoring/loki/volume          # 获取日志量趋势数据
+```
+
+##### Loki 配置方式
+
+**方式一（推荐）**：通过平台【监控 → 数据源管理】页面新增 Loki 数据源，设为默认即可自动识别。
+
+**方式二**：通过 `configs/config.yaml` 静态配置：
+
+```yaml
+monitoring:
+  loki_url: "http://loki:3100"   # Loki 服务地址
+```
+
+------
+
 ### 🔍 SonarQube 代码质量扫描
 
 平台深度集成 SonarQube，为 **Go/Java/Python/前端** 四种语言提供统一的代码质量管控能力。
@@ -764,7 +916,9 @@ func (s *AIService) AIChat(msg string) {
 | 构建探针全自动注入 | 平台 API 自动拉取 + 动态 Dockerfile 生成 + 三级降级策略 |
 | 容器终端桥接 | WebSocket ↔ SPDY 双协议桥接 + Shell 自动检测 + 心跳保活 |
 | 应用商城组件化部署 | 多组件自动创建 + Pod Ready 等待 + 部分就绪降级 |
-| Jenkins 高并发优化 | Client 连接池化 + Job 信息 5min TTL 缓存 + PollWorker 5 并行 |
+| Loki 多数据源实时切换 | 数据源管理 DB + currentDs.type 计算属性自动切换 Metrics/Logs 视图 |
+| Loki 后端日志接入 | `pkg/loki/client.go` 封装 QueryRange/Labels/Series/Healthy API，层次分明 |
+| LogQL 自动查询 | 进入页面健康检查 → 拉取活跃流 → 自动构建表达式并执行，体验零门槛起步 |
 
 ------
 
@@ -808,6 +962,7 @@ k8soperation/
 │   └── errorcode/             # 统一错误码
 ├── pkg/
 │   ├── k8s/                   # K8s 客户端封装（含容器终端 WebSocket 桥接）
+│   ├── loki/                  # Loki HTTP API 客户端（QueryRange/Labels/Series/健康检查）
 │   ├── openai/                # AI 多模型 Provider Registry
 │   ├── jwt/                   # JWT 认证
 │   └── jenkins/               # Jenkins CI 集成（连接池化 + 缓存优化）
@@ -819,7 +974,14 @@ k8soperation/
 │   │   └── frontend-pipeline.groovy
 │   └── dockerfile-templates/  # 多语言 Dockerfile 模板
 ├── k8s-web/                   # Vue3 前端项目
-│   └── src/components/AiAssistant.vue  # AI 助手前端组件
+│   └── src/
+│       ├── views/monitoring/
+│       │   ├── Monitoring.vue      # 监控主页（数据源切换器）
+│       │   ├── LokiView.vue        # Loki 日志探索（LogQL查询/健康检查/趋势图）
+│       │   ├── Datasources.vue     # 数据源管理 CRUD
+│       │   ├── AlertRules.vue      # 告警规则
+│       │   └── AlertEvents.vue     # 告警事件
+│       └── components/AiAssistant.vue  # AI 助手前端组件
 ├── build/                     # Docker / Containerd 构建
 ├── storage/
 │   ├── logs/                  # 日志（app.log / biz.log / ai.log）

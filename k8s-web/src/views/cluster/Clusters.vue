@@ -548,6 +548,9 @@ import Pagination from '@/components/Pagination.vue'
 import {useClusterStore} from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
 import http from '@/api/http'
+import {useConfirmDialog} from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 import {
   createCluster,
@@ -681,10 +684,11 @@ const statusClass = (s) => {
 
 const pickMsg = (body, fallback = '') => {
   if (!body) return fallback
+  // 优先取 details 中的详细错误信息
+  if (Array.isArray(body?.details) && body.details.length > 0) return body.details.join('；')
   if (body?.data?.message) return body.data.message
   if (body?.msg) return body.msg
   if (body?.message) return body.message
-  if (Array.isArray(body?.details) && body.details.length > 0) return body.details.join('；')
   return fallback
 }
 const unwrapErrorBody = (e) => {
@@ -823,17 +827,20 @@ const submitForm = async () => {
     
     // 二次确认 - 更新 kubeconfig 是高危操作
     if (hasKubeconfigUpdate) {
-      if (!confirm(`⚠️ 确认更新集群配置？
-
-集群名称: ${form.value.cluster_name}
-集群 ID: ${form.value.id}
-版本: ${form.value.cluster_version}
-
-您正在更新 kubeconfig 配置！
-此操作将替换现有的集群连接凭证，可能导致连接失败。
-建议更新后立即执行健康检查。
-
-确认继续？`)) {
+      const ok = await showConfirm({
+        title: '确认更新集群配置',
+        content: '此操作将替换现有的集群连接凭证，可能导致连接失败。',
+        type: 'warning',
+        details: [
+          { label: '集群名称', value: form.value.cluster_name },
+          { label: '集群 ID', value: String(form.value.id), mono: true },
+          { label: 'K8s 版本', value: form.value.cluster_version },
+        ],
+        tip: '更新 kubeconfig 后建议立即执行健康检查，确保集群连接正常。',
+        confirmText: '确认更新',
+        cancelText: '取消',
+      })
+      if (!ok) {
         loading.value = false
         return
       }
@@ -848,7 +855,7 @@ const submitForm = async () => {
       payload.kube_config = form.value.kube_config
     }
 
-    const body = await updateCluster(payload)
+    const body = await updateCluster(payload, { _silent: true })
     Message.success({
       content: hasKubeconfigUpdate 
         ? (body?.msg || '更新成功，建议立即执行健康检查') 
@@ -871,15 +878,21 @@ const submitForm = async () => {
 
 const onDelete = async (c) => {
   // 二次确认 - 删除集群是高危操作
-  if (!confirm(`⚠️ 确认删除集群？
-
-集群名称: ${c.cluster_name}
-集群 ID: ${c.id}
-版本: ${c.cluster_version || '-'}
-状态: ${statusText(c.status)}
-
-警告：删除集群将移除所有关联配置和 kubeconfig！
-此操作不可逆，请确认！`)) return;
+  const okDel = await showConfirm({
+    title: '确认删除集群',
+    content: '删除集群将移除所有关联配置和 kubeconfig，此操作不可逆！',
+    type: 'danger',
+    details: [
+      { label: '集群名称', value: c.cluster_name },
+      { label: '集群 ID', value: String(c.id), mono: true },
+      { label: 'K8s 版本', value: c.cluster_version || '-' },
+      { label: '当前状态', value: statusText(c.status), highlight: true },
+    ],
+    tip: '此操作不可逆，请谨慎确认。',
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!okDel) return;
   
   loading.value = true
   try {
@@ -905,12 +918,19 @@ const onBatchDelete = async () => {
     Message.warning({content: '请先选择要删除的集群', duration: 1800})
     return
   }
-  if (!confirm(`⚠️ 确认批量删除 ${selectedIds.value.length} 个集群？
-
-已选集群 ID: ${selectedIds.value.join(', ')}
-
-警告：删除集群将移除所有关联配置和 kubeconfig！
-此操作不可逆，请确认！`)) return;
+  const okBatch = await showConfirm({
+    title: `确认批量删除 ${selectedIds.value.length} 个集群`,
+    content: '删除集群将移除所有关联配置和 kubeconfig，此操作不可逆！',
+    type: 'danger',
+    details: [
+      { label: '删除数量', value: `${selectedIds.value.length} 个集群`, danger: true },
+      { label: '集群 ID', value: selectedIds.value.join(', '), mono: true },
+    ],
+    tip: '批量删除不可恢复，请仔细核对已选集群。',
+    confirmText: '确认批量删除',
+    cancelText: '取消',
+  })
+  if (!okBatch) return;
 
   loading.value = true
   try {

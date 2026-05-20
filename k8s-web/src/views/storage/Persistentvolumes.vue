@@ -819,8 +819,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import pvApi from '@/api/cluster/storage/pv'
 import permissionStore from '@/stores/permission'
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -1346,7 +1348,19 @@ const downloadYaml = async (pv) => {
 }
 
 const changeReclaimPolicy = async (pv) => {
-  if (confirm(`确定要将 ${pv.name} 的回收策略改为 Retain 吗？`)) {
+  const ok = await showConfirm({
+    title: '修改回收策略',
+    content: `确定要将 ${pv.name} 的回收策略改为 Retain 吗？`,
+    type: 'warning',
+    details: [
+      { label: 'PV 名称', value: pv.name },
+      { label: '当前策略', value: pv.reclaimPolicy || '-' },
+      { label: '目标策略', value: 'Retain', highlight: true },
+    ],
+    confirmText: '确认修改',
+    cancelText: '取消',
+  })
+  if (ok) {
     try {
       await pvApi.reclaim({ name: pv.name, reclaimPolicy: 'Retain' })
       refreshList()

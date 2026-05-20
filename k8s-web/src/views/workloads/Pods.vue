@@ -997,6 +997,9 @@ import KubeTerminal from '@/components/KubeTerminal.vue'
 import { Message } from '@arco-design/web-vue'
 import { useFilteredNamespaces } from '@/composables/useFilteredNamespaces'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 容器终端 =====
 const showTerminal = ref(false)
@@ -1838,14 +1841,19 @@ const evictPod = async (pod) => {
   showMoreOptions.value = false;
   
   // 二次确认 - 驱逐是高危操作
-  if (!confirm(`⚠️ 确认驱逐 Pod？
-
-Pod: ${pod.namespace}/${pod.name}
-状态: ${pod.status || '-'}
-节点: ${pod.node || '-'}
-
-驱逐会受 PDB（Pod Disruption Budget）约束，相比直接删除更安全。
-此操作会将 Pod 从当前节点驱逐，请确认！`)) return;
+  const ok = await showConfirm({
+    title: '确认驱逐 Pod',
+    content: '驱逐会受 PDB（Pod Disruption Budget）约束，相比直接删除更安全。',
+    type: 'warning',
+    details: [
+      { label: 'Pod', value: `${pod.namespace}/${pod.name}`, mono: true },
+      { label: '状态', value: pod.status || '-' },
+      { label: '节点', value: pod.node || '-' },
+    ],
+    confirmText: '确认驱逐',
+    cancelText: '取消',
+  })
+  if (!ok) return;
   
   try {
     // 注意：后端字段名必须为 podName
@@ -2258,17 +2266,21 @@ const submitPatchImage = async () => {
   const oldImage = currentContainer?.image || '-';
 
   // 二次确认 - 镜像更新是高危操作
-  if (!confirm(`⚠️ 确认更新 Pod 镜像？
-
-Pod: ${selectedPod.value.namespace}/${selectedPod.value.name}
-容器: ${patchImageForm.value.container}
-旧镜像: ${oldImage}
-新镜像: ${patchImageForm.value.newImage}
-
-警告：Pod 镜像更新后，Pod 将会被删除重建，可能导致服务中断！
-建议通过 Deployment/StatefulSet 更新镜像以实现滚动更新。
-
-确认继续？`)) {
+  const okImg = await showConfirm({
+    title: '确认更新 Pod 镜像',
+    content: 'Pod 镜像更新后，Pod 将被删除重建，可能导致服务中断。',
+    type: 'danger',
+    details: [
+      { label: 'Pod', value: `${selectedPod.value.namespace}/${selectedPod.value.name}`, mono: true },
+      { label: '容器', value: patchImageForm.value.container },
+      { label: '旧镜像', value: oldImage, mono: true },
+      { label: '新镜像', value: patchImageForm.value.newImage, highlight: true, mono: true },
+    ],
+    tip: '建议通过 Deployment/StatefulSet 更新镜像以实现滚动更新。',
+    confirmText: '确认更新',
+    cancelText: '取消',
+  })
+  if (!okImg) {
     return;
   }
 

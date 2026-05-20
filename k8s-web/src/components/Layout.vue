@@ -255,6 +255,12 @@ const menuPermissions = {
   '/cicd/templates': ['super_admin', 'platform_admin'],
   '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin'],
   
+  // ==================== 监控中心 ====================
+  '/monitoring': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
+  '/monitoring/datasources': ['super_admin', 'platform_admin', 'cluster_admin'],
+  '/monitoring/alert-rules': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin'],
+  '/monitoring/alert-events': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
+  
   // ==================== 镜像管理 ====================
   '/images/repositories': ['super_admin', 'platform_admin'],
   '/images/browse': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'viewer'],
@@ -363,6 +369,20 @@ const menuGroupsConfig = reactive([
       { path: '/images/repositories', label: '镜像仓库管理' },
       { path: '/images/browse', label: '镜像浏览' },
       { path: '/images/cleanup', label: '清理策略' },
+    ],
+  },
+  // 监控中心
+  {
+    name: '监控中心',
+    icon: '📊',
+    count: 4,
+    collapsed: true,
+    match: ['/monitoring'],
+    items: [
+      { path: '/monitoring', label: '监控总览' },
+      { path: '/monitoring/datasources', label: '数据源管理' },
+      { path: '/monitoring/alert-rules', label: '告警规则' },
+      { path: '/monitoring/alert-events', label: '告警事件' },
     ],
   },
 ])

@@ -297,6 +297,9 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
 import { getUserList, createUser as createUserApi, updateUser as updateUserApi, deleteUser as deleteUserApi } from '@/api/user'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // 加载状态
 const loading = ref(false)
@@ -361,7 +364,17 @@ const handleEdit = (user) => {
 }
 
 const handleDelete = async (user) => {
-  if (!confirm(`确定要删除用户 ${user.username} 吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除用户',
+    content: '删除后该用户将无法登录系统。',
+    type: 'danger',
+    details: [
+      { label: '用户名', value: user.username },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     loading.value = true
@@ -537,7 +550,17 @@ const toggleSelectAll = () => {
 }
 
 const batchDelete = async () => {
-  if (!confirm(`确定要删除选中的 ${selectedUsers.value.length} 个用户吗？`)) return
+  const ok = await showConfirm({
+    title: '确认批量删除',
+    content: `即将删除 ${selectedUsers.value.length} 个用户，此操作不可恢复。`,
+    type: 'danger',
+    details: [
+      { label: '删除数量', value: `${selectedUsers.value.length} 个用户`, danger: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     loading.value = true

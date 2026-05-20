@@ -669,6 +669,9 @@ import namespaceApi from '@/api/cluster/config/namespace'
 import { useClusterStore } from '@/stores/cluster'
 import { useResizableModal } from '@/composables/useResizableModal'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // ===== 操作权限控制 =====
 // viewer 角色只能查看，不能执行任何修改操作
@@ -886,7 +889,18 @@ const refreshList = () => {
 
 // 删除单个 PVC
 const deleteSinglePVC = async (pvc) => {
-  if (!confirm(`确定要删除 PVC "${pvc.name}" 吗？此操作无法撤销。`)) return
+  const ok = await showConfirm({
+    title: '确认删除 PVC',
+    content: '删除后无法撤销，请谨慎操作。',
+    type: 'danger',
+    details: [
+      { label: 'PVC 名称', value: pvc.name, mono: true },
+      { label: '命名空间', value: pvc.namespace },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   
   try {
     await pvcApi.delete({
@@ -1027,8 +1041,15 @@ const copyYamlContent = async () => {
 }
 
 // 重置 YAML 内容
-const resetYamlContent = () => {
-  if (confirm('确定要重置 YAML 内容吗？')) {
+const resetYamlContent = async () => {
+  const ok = await showConfirm({
+    title: '确认重置 YAML',
+    content: '将清空当前 YAML 内容。',
+    type: 'warning',
+    confirmText: '确认重置',
+    cancelText: '取消',
+  })
+  if (ok) {
     yamlContent.value = ''
     yamlError.value = ''
     Message.info({ content: 'YAML 内容已重置', duration: 2000 })

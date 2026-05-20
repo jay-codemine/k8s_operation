@@ -300,6 +300,9 @@ import { listRoleBindings, createRoleBinding as createBindingApi, deleteRoleBind
 import { getClusterList } from '@/api/cluster'
 import { getNamespaces } from '@/api/namespace'
 import permissionStore from '@/stores/permission'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 // 数据状态
 const loading = ref(false)
@@ -447,7 +450,18 @@ const submitBinding = async () => {
 
 // 删除绑定
 const deleteBinding = async (binding) => {
-  if (!confirm(`确认删除 ${binding.type} "${binding.name}"？\n这将移除相关主体的权限！`)) return
+  const ok = await showConfirm({
+    title: '确认删除角色绑定',
+    content: '删除后相关主体将失去对应权限。',
+    type: 'danger',
+    details: [
+      { label: '类型', value: binding.type },
+      { label: '名称', value: binding.name, mono: true },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   loading.value = true
   try {
     await deleteBindingApi(selectedClusterId.value, binding.type, binding.namespace || '', binding.name)

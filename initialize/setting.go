@@ -182,6 +182,24 @@ func SetupSetting() error {
 
 	// 读取 AI 助手配置
 	// 对应 config.yaml 中的：
+	// Monitoring:
+	if err = s.ReadSection("Monitoring", &global.MonitoringSetting); err != nil {
+		log.Println("[Monitoring] 配置块未找到，监控功能将不可用")
+		global.MonitoringSetting = &setting.MonitoringSettingS{Enabled: false}
+	} else if global.MonitoringSetting != nil {
+		if global.MonitoringSetting.PrometheusURL == "" {
+			global.MonitoringSetting.Enabled = false
+			log.Println("[Monitoring] PrometheusURL 未配置，监控功能将不可用")
+		} else {
+			log.Printf("[Monitoring] 配置加载成功: enabled=%v, url=%s, timeout=%ds\n",
+				global.MonitoringSetting.Enabled,
+				global.MonitoringSetting.PrometheusURL,
+				global.MonitoringSetting.QueryTimeout)
+		}
+	}
+
+	// 读取 AI 助手配置
+	// 对应 config.yaml 中的：
 	// AIAssistant:
 	if err = s.ReadSection("AIAssistant", &global.AISetting); err != nil {
 		log.Println("[AIAssistant] 配置块未找到，AI 助手功能将不可用")

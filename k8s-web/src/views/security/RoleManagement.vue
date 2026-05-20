@@ -255,6 +255,9 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { getRoleList, getAllRoles, createRole, updateRole, deleteRole as deleteRoleApi, getPermissionList, getRolePermissions, updateRolePermissions, getRoleUsers } from '@/api/rbac'
 import { getClusterList } from '@/api/cluster'
 import { listRoles } from '@/api/k8sRbac'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { confirm: showConfirm } = useConfirmDialog()
 
 const activeTab = ref('platform')
 const roles = ref([])
@@ -425,7 +428,17 @@ const saveRole = async () => {
 }
 
 const deleteRole = async (role) => {
-  if (!confirm(`确定删除角色 "${role.display_name || role.name}" 吗？`)) return
+  const ok = await showConfirm({
+    title: '确认删除角色',
+    content: '删除后关联用户将失去该角色权限。',
+    type: 'danger',
+    details: [
+      { label: '角色名称', value: role.display_name || role.name },
+    ],
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!ok) return
   try {
     const res = await deleteRoleApi(role.id)
     if (res.code === 0) {
