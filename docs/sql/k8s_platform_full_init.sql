@@ -1508,6 +1508,31 @@ CREATE TABLE IF NOT EXISTS `monitor_datasource` (
   KEY `idx_cluster_id` (`cluster_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控数据源表';
 
+-- 【兼容存量集群】monitor_datasource 幂等补丁：若老库已存在该表但缺 `cluster_id`字段/索引，自动补上
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'monitor_datasource'
+      AND column_name = 'cluster_id'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `monitor_datasource` ADD COLUMN `cluster_id` BIGINT NOT NULL DEFAULT 0 COMMENT ''关联 K8s 集群 ID（0=全局/未关联）'' AFTER `description`',
+    'SELECT ''column cluster_id already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'monitor_datasource'
+      AND index_name = 'idx_cluster_id'
+);
+SET @sql := IF(@idx_exists = 0,
+    'ALTER TABLE `monitor_datasource` ADD INDEX `idx_cluster_id` (`cluster_id`)',
+    'SELECT ''index idx_cluster_id already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- =====================================================
 -- 44. 监控 - 告警规则表
 -- =====================================================
