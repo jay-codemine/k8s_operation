@@ -166,20 +166,11 @@ func setGlobalClients(cli *services.K8sClients) {
 	if cli.Metrics == nil {
 		global.Logger.Warn("metrics client not initialized (metrics-server not installed?)")
 	}
-
-	global.Logger.Warn(
-		"【多集群模式】global.KubeClient 仅代表管理集群，请勿在业务请求中直接使用",
-	)
 }
 
 // printClusterInfo 打印集群初始化成功信息
 func printClusterInfo(source string) {
 	fmt.Printf("K8s 集群初始化成功（来源：%s）\n", source)
-	if global.SupportsEventsV1 {
-		fmt.Println("→ 支持新版事件 API：events.k8s.io/v1")
-	} else {
-		fmt.Println("→ 不支持新版事件 API，自动回退至 core/v1")
-	}
 }
 
 // printEmptyStartWarning 打印空启动警告

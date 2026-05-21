@@ -12,6 +12,7 @@ type MonitorDatasource struct {
 	Type        string `gorm:"type:varchar(30);not null;index" json:"type"`                  // 类型: prometheus/loki/alertmanager/grafana/victoriametrics
 	URL         string `gorm:"type:varchar(500);not null" json:"url"`                        // 连接地址
 	Description string `gorm:"type:varchar(500)" json:"description"`                         // 描述
+	ClusterID   int64  `gorm:"column:cluster_id;type:bigint;default:0;index" json:"cluster_id"` // 关联 K8s 集群 ID（0=全局/未关联）
 	AccessMode  string `gorm:"type:varchar(20);default:'proxy'" json:"access_mode"`          // 访问模式: proxy/direct
 	AuthType    string `gorm:"type:varchar(20);default:'none'" json:"auth_type"`             // 认证方式: none/basic/bearer/tls
 	AuthUser    string `gorm:"type:varchar(100)" json:"auth_user"`                           // 认证用户名

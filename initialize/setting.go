@@ -132,7 +132,6 @@ func SetupSetting() error {
 	// 初始化全局加密服务
 	if global.SecuritySetting != nil && global.SecuritySetting.KubeConfigEncryptKey != "" {
 		utils.InitGlobalCrypto(global.SecuritySetting.KubeConfigEncryptKey)
-		log.Println("[Security] 全局加密服务初始化成功")
 	} else {
 		log.Println("[Security] 警告: 加密密钥未配置，数据将不加密存储")
 	}
@@ -177,7 +176,7 @@ func SetupSetting() error {
 			},
 		}
 	} else {
-		log.Println("[PlatformSettings] 配置加载成功（数据库设置优先级更高）")
+		// PlatformSettings 加载成功，静默不打印
 	}
 
 	// 读取 AI 助手配置

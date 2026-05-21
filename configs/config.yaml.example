@@ -89,6 +89,23 @@ Jenkins:
   # 钉钉通知配置
   DingTalkWebhook: "xxxx"
 
+# ============================================================
+# 监控数据源（仅作为首次启动的引导值，不是运行期的权威配置）
+#
+# 设计原则（生产环境推荐）：
+#   1. 启动期：若 DB 中无任何 prometheus 数据源，则把下方 PrometheusURL 自动 INSERT 一条作为默认数据源；
+#      若 DB 中已有数据源，则忽略此处配置。
+#   2. 运行期：所有增/删/改、切换默认 全部由前端【数据源管理】写入 DB，无需改 config.yaml、无需重启。
+#   3. 多副本部署：DB 是共享存储，前端改一次所有副本即时生效；config.yaml 是各副本独立的。
+#   4. 正式上线后，建议把下方配置块删掉（或留空），完全以 DB 为准；启动日志会打印"实际生效数据源"。
+#
+# 优先级：DB.is_default=1 > DB.任一 enabled=1 > 下方 PrometheusURL（最低兜底）
+# ============================================================
+Monitoring:
+  Enabled: true
+  PrometheusURL: "http://prometheus.monitoring.svc:9090"  # 首次启动引导值，DB 有数据后此项将被忽略
+  QueryTimeout: 30
+
 # AI 助手配置（基于 ChatGPT）
 AIAssistant:
   Enabled: false                          # 是否启用 AI 助手

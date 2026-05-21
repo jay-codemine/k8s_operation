@@ -13,42 +13,70 @@ import (
 )
 
 // LokiService Loki 日志查询服务
+//
+// 设计：懒加载 + 每次请求实时解析数据源
+//   - 若构造时传入了显式 URL（来自配置文件），则始终使用该 URL（向后兼容）
+//   - 否则每次调用都会从数据库实时查询 monitor_datasource 表，
+//     这样用户在前端【数据源管理】页面新增/启用/修改 Loki 数据源后无需重启即可生效。
+//   - 数据源筛选优先级：is_default=1 优先；若无默认则取任一 enabled=1 且未删除的 Loki 数据源（按 ID DESC）。
 type LokiService struct {
-	client  *loki.Client
-	enabled bool
-	lokiURL string
+	staticURL string // 构造时传入的固定 URL（来自 config.yaml），优先级最高
 }
 
 // NewLokiService 创建 Loki 服务
 func NewLokiService(lokiURL string) *LokiService {
-	// 如果未指定 URL，从数据库获取默认 Loki 数据源
-	if lokiURL == "" && global.DB != nil {
-		var ds models.MonitorDatasource
-		err := global.DB.Where("type = ? AND is_default = 1 AND enabled = 1 AND is_del = 0", "loki").First(&ds).Error
-		if err == nil && ds.URL != "" {
-			lokiURL = ds.URL
-		}
-	}
-
-	client := loki.NewClient(lokiURL, 30*time.Second)
-	return &LokiService{
-		client:  client,
-		enabled: lokiURL != "",
-		lokiURL: lokiURL,
-	}
+	return &LokiService{staticURL: lokiURL}
 }
 
-// GetLokiURL 返回当前 Loki 地址
+// resolveURL 实时解析当前应使用的 Loki 地址
+// 优先级：staticURL（配置文件）> is_default=1 > 任一 enabled=1 的 Loki 数据源
+func (s *LokiService) resolveURL() string {
+	if s.staticURL != "" {
+		return s.staticURL
+	}
+	if global.DB == nil {
+		return ""
+	}
+	var ds models.MonitorDatasource
+	// 1) 优先取默认 Loki 数据源
+	if err := global.DB.Where("type = ? AND is_default = 1 AND enabled = 1 AND is_del = 0", "loki").
+		First(&ds).Error; err == nil && ds.URL != "" {
+		return ds.URL
+	}
+	// 2) 回退：取任一启用的 Loki 数据源（按 ID DESC，最新创建优先）
+	if err := global.DB.Where("type = ? AND enabled = 1 AND is_del = 0", "loki").
+		Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
+		return ds.URL
+	}
+	return ""
+}
+
+// resolveClient 解析 URL 并返回临时 client（每次调用新建，loki client 是轻量 http 包装）
+func (s *LokiService) resolveClient() (*loki.Client, string, bool) {
+	url := s.resolveURL()
+	if url == "" {
+		return nil, "", false
+	}
+	return loki.NewClient(url, 30*time.Second), url, true
+}
+
+// GetLokiURL 返回当前 Loki 地址（实时解析）
 func (s *LokiService) GetLokiURL() string {
-	return s.lokiURL
+	return s.resolveURL()
 }
 
-// IsHealthy 检查 Loki 连通性
+// IsEnabled 当前是否有可用的 Loki 数据源
+func (s *LokiService) IsEnabled() bool {
+	return s.resolveURL() != ""
+}
+
+// IsHealthy 检查 Loki 连通性（实时解析数据源）
 func (s *LokiService) IsHealthy(ctx context.Context) bool {
-	if !s.enabled {
+	client, _, ok := s.resolveClient()
+	if !ok {
 		return false
 	}
-	return s.client.Healthy(ctx)
+	return client.Healthy(ctx)
 }
 
 // ===== 数据结构 =====
@@ -89,8 +117,9 @@ type StreamInfo struct {
 
 // QueryLogs 查询日志
 func (s *LokiService) QueryLogs(ctx context.Context, query string, start, end time.Time, limit int, direction string) (*LogQueryResult, error) {
-	if !s.enabled {
-		return nil, fmt.Errorf("Loki 未配置，请在【数据源管理】页面添加 Loki 数据源")
+	client, _, ok := s.resolveClient()
+	if !ok {
+		return nil, fmt.Errorf("Loki 未配置，请在【数据源管理】页面添加并启用 Loki 数据源")
 	}
 
 	if limit <= 0 {
@@ -100,7 +129,7 @@ func (s *LokiService) QueryLogs(ctx context.Context, query string, start, end ti
 		direction = "backward"
 	}
 
-	resp, err := s.client.QueryRange(ctx, query, start, end, limit, direction)
+	resp, err := client.QueryRange(ctx, query, start, end, limit, direction)
 	if err != nil {
 		return nil, err
 	}
@@ -132,23 +161,26 @@ func (s *LokiService) QueryLogs(ctx context.Context, query string, start, end ti
 
 // GetLabels 获取所有标签
 func (s *LokiService) GetLabels(ctx context.Context, start, end time.Time) ([]string, error) {
-	if !s.enabled {
+	client, _, ok := s.resolveClient()
+	if !ok {
 		return nil, fmt.Errorf("Loki 未配置")
 	}
-	return s.client.GetLabels(ctx, start, end)
+	return client.GetLabels(ctx, start, end)
 }
 
 // GetLabelValues 获取指定标签的值列表
 func (s *LokiService) GetLabelValues(ctx context.Context, label string, start, end time.Time) ([]string, error) {
-	if !s.enabled {
+	client, _, ok := s.resolveClient()
+	if !ok {
 		return nil, fmt.Errorf("Loki 未配置")
 	}
-	return s.client.GetLabelValues(ctx, label, start, end)
+	return client.GetLabelValues(ctx, label, start, end)
 }
 
 // GetStreams 获取日志流列表
 func (s *LokiService) GetStreams(ctx context.Context, matcher string, start, end time.Time) ([]StreamInfo, error) {
-	if !s.enabled {
+	client, _, ok := s.resolveClient()
+	if !ok {
 		return nil, fmt.Errorf("Loki 未配置")
 	}
 
@@ -157,7 +189,7 @@ func (s *LokiService) GetStreams(ctx context.Context, matcher string, start, end
 		matchers = []string{`{job=~".+"}`}
 	}
 
-	series, err := s.client.GetSeries(ctx, matchers, start, end)
+	series, err := client.GetSeries(ctx, matchers, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +216,8 @@ func (s *LokiService) GetStreams(ctx context.Context, matcher string, start, end
 
 // GetLogVolume 获取日志量趋势（使用 count_over_time）
 func (s *LokiService) GetLogVolume(ctx context.Context, query string, start, end time.Time, step time.Duration) ([]LogVolumeSeries, error) {
-	if !s.enabled {
+	client, _, ok := s.resolveClient()
+	if !ok {
 		return nil, fmt.Errorf("Loki 未配置")
 	}
 
@@ -196,7 +229,7 @@ func (s *LokiService) GetLogVolume(ctx context.Context, query string, start, end
 		query = fmt.Sprintf(`sum by (job) (count_over_time(%s[1m]))`, query)
 	}
 
-	resp, err := s.client.QueryRange(ctx, query, start, end, 0, "")
+	resp, err := client.QueryRange(ctx, query, start, end, 0, "")
 	if err != nil {
 		return nil, err
 	}
@@ -233,11 +266,16 @@ type LokiHealthCheck struct {
 	URL     string `json:"url"`
 }
 
-// HealthCheck 执行健康检查
+// HealthCheck 执行健康检查（实时解析数据源）
 func (s *LokiService) HealthCheck(ctx context.Context) *LokiHealthCheck {
+	url := s.resolveURL()
+	healthy := false
+	if url != "" {
+		healthy = loki.NewClient(url, 30*time.Second).Healthy(ctx)
+	}
 	return &LokiHealthCheck{
-		Healthy: s.IsHealthy(ctx),
-		URL:     s.lokiURL,
+		Healthy: healthy,
+		URL:     url,
 	}
 }
 
