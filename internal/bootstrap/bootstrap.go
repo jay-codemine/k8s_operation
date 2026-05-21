@@ -49,6 +49,10 @@ func InitAll() error {
 		return fmt.Errorf("init db failed: %w", err)
 	}
 
+	// 监控数据源引导：把 config.yaml 中的 PrometheusURL 一次性导入 DB（仅当 DB 中无任何 prometheus 数据源）
+	// 并打印当前实际生效的数据源，方便运维确认
+	BootstrapMonitorDatasource()
+
 	// 初始化 Session（依赖 Redis）
 	if err := initialize.SetupSession(); err != nil {
 		global.Logger.Error("init session failed", zap.Error(err))
@@ -118,13 +122,10 @@ func StartCicdWorker() error {
 		return err
 	}
 
-	global.Logger.Info("cicd worker started successfully")
-
-	// 启动流水线状态轮询 Worker（兼容回调失败的儹底机制）
+	// 启动流水线状态轮询 Worker（兼容回调失败的傅底机制）
 	if global.JenkinsSetting != nil && global.JenkinsSetting.URL != "" {
 		pollWorker = worker.NewPipelinePollWorker()
 		pollWorker.Start(context.Background())
-		global.Logger.Info("pipeline poll worker started successfully")
 	}
 
 	return nil
@@ -158,7 +159,7 @@ func SyncApprovalData() {
 	}
 
 	if len(stages) == 0 {
-		global.Logger.Info("审批数据补全: 无审批阶段，跳过")
+		// 无审批阶段，静默跳过
 		return
 	}
 
@@ -238,5 +239,74 @@ func SyncApprovalData() {
 		zap.Int("total_stages", len(stages)),
 		zap.Int("synced", synced),
 	)
+}
+
+// BootstrapMonitorDatasource 启动引导：把 config.yaml 中的 Monitoring.PrometheusURL 一次性导入 DB，后续完全由【数据源管理】维护。
+// 设计原则：
+//   - config.yaml 仅作为首次启动的引导值（bootstrap），不是运行期以上为准的来源
+//   - 所有运行期修改（增/删/改默认）由前端【数据源管理】写入 DB，MonitoringService 实时从 DB 读取
+//   - 启动后明确打印“实际生效”的数据源地址（避免运维误以为“前端改了没生效”）
+func BootstrapMonitorDatasource() {
+	if global.DB == nil {
+		return
+	}
+	ctx := context.Background()
+
+	// 1) 在 DB 中查是否已有 prometheus 数据源
+	var count int64
+	if err := global.DB.WithContext(ctx).Model(&models.MonitorDatasource{}).
+		Where("type = ? AND is_del = 0", "prometheus").Count(&count).Error; err != nil {
+		global.Logger.Warn("[Monitoring Bootstrap] 查询 DB 数据源失败，跳过引导", zap.Error(err))
+		return
+	}
+
+	// 2) 若 DB 中一条没有且 config.yaml 配了 URL，自动 INSERT 作为默认数据源（首次启动引导）
+	if count == 0 && global.MonitoringSetting != nil && global.MonitoringSetting.PrometheusURL != "" {
+		ds := &models.MonitorDatasource{
+			Name:           "Prometheus-默认",
+			Type:           "prometheus",
+			URL:            global.MonitoringSetting.PrometheusURL,
+			Description:    "由 config.yaml 首次启动自动引导，后续请在【数据源管理】中维护",
+			AccessMode:     "proxy",
+			AuthType:       "none",
+			IsDefault:      true,
+			Enabled:        true,
+			Timeout:        30,
+			ScrapeInterval: 15,
+			Status:         "unknown",
+		}
+		if err := global.DB.WithContext(ctx).Create(ds).Error; err != nil {
+			global.Logger.Warn("[Monitoring Bootstrap] 引导写入默认数据源失败", zap.Error(err))
+		} else {
+			global.Logger.Info("[Monitoring Bootstrap] 首次启动：已将 config.yaml 中的 PrometheusURL 引导至 DB",
+				zap.Int64("id", ds.ID), zap.String("url", ds.URL))
+		}
+	}
+
+	// 3) 打印当前实际生效的数据源（优先级：DB is_default=1 > DB 任一 enabled=1 > config.yaml staticURL）
+	var active models.MonitorDatasource
+	found := false
+	if err := global.DB.WithContext(ctx).
+		Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
+			"prometheus", "victoriametrics", "thanos").First(&active).Error; err == nil {
+		found = true
+	} else if err := global.DB.WithContext(ctx).
+		Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
+			"prometheus", "victoriametrics", "thanos").Order("id DESC").First(&active).Error; err == nil {
+		found = true
+	}
+	if found {
+		global.Logger.Info("[Monitoring] 实际生效数据源（来自 DB）",
+			zap.Int64("id", active.ID),
+			zap.String("name", active.Name),
+			zap.String("type", active.Type),
+			zap.String("url", active.URL),
+			zap.Bool("is_default", active.IsDefault))
+	} else if global.MonitoringSetting != nil && global.MonitoringSetting.PrometheusURL != "" {
+		global.Logger.Warn("[Monitoring] DB 中无可用数据源，将使用 config.yaml 中的兜底地址",
+			zap.String("url", global.MonitoringSetting.PrometheusURL))
+	} else {
+		global.Logger.Warn("[Monitoring] DB 和 config.yaml 都未配置 Prometheus 数据源，监控功能不可用")
+	}
 }
 

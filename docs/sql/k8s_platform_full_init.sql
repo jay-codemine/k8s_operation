@@ -1,10 +1,22 @@
 -- =====================================================
--- K8s Platform 完整数据库初始化脚本
--- 版本: 2.2.0
--- 日期: 2026-03-15
--- 说明: 一键创建数据库、所有表结构、视图和初始数据
--- 使用: mysql -u root -p123456 --default-character-set=utf8mb4 -e "source k8s_platform_full_init.sql"
+-- K8s Platform 完整数据库初始化脚本（FULL）
+-- 版本: 2.3.0
+-- 日期: 2026-05-18
+-- 说明: 一键创建数据库 + 全部 50 张表 + 默认种子数据
+--      已整合: 用户/RBAC/集群/CI-CD/制品/资源模板/镜像/IAM/应用商城/AI助手/监控
+-- 数据库账号: root / 123456
+-- 使用方式（任选其一）:
+--   ⚠️ PowerShell 不支持 `<` 重定向，请用以下方式之一：
+--   1) PowerShell（推荐）:
+--      mysql -u root -p123456 --default-character-set=utf8mb4 -e "source D:/k8s-go/k8s_operation/docs/sql/k8s_platform_full_init.sql"
+--   2) PowerShell + cmd 包装（支持 < 重定向）:
+--      cmd /c "mysql -u root -p123456 --default-character-set=utf8mb4 < docs\sql\k8s_platform_full_init.sql"
+--   3) MySQL 客户端内:
+--      source D:/k8s-go/k8s_operation/docs/sql/k8s_platform_full_init.sql
+--   4) Linux / Git Bash / CMD:
+--      mysql -u root -p123456 --default-character-set=utf8mb4 < k8s_platform_full_init.sql
 -- =====================================================
+
 
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS `k8s-platform` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -1223,7 +1235,7 @@ CREATE TABLE IF NOT EXISTS `cicd_artifact` (
 -- =====================================================
 
 -- Java 服务模板
-INSERT INTO cicd_resource_template 
+INSERT IGNORE INTO cicd_resource_template 
 (name, service_type, env, replicas_default, replicas_min, replicas_max, cpu_request, cpu_limit, memory_request, memory_limit, hpa_enabled, description, is_default, sort_order, created_at, modified_at)
 VALUES
 ('small',  'java', 'dev',  1, 1, 2,  '200m', '500m', '512Mi', '1Gi',   0, 'Java开发环境-小型，适合本地调试', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -1233,7 +1245,7 @@ VALUES
 ('large',  'java', 'prod', 3, 2, 20, '2',    '4',    '4Gi',   '8Gi',   1, 'Java生产环境-大型，适合高流量核心服务', 0, 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- Go 服务模板
-INSERT INTO cicd_resource_template 
+INSERT IGNORE INTO cicd_resource_template 
 (name, service_type, env, replicas_default, replicas_min, replicas_max, cpu_request, cpu_limit, memory_request, memory_limit, hpa_enabled, description, is_default, sort_order, created_at, modified_at)
 VALUES
 ('small',  'go', 'dev',  1, 1, 2,  '100m', '200m', '128Mi', '256Mi', 0, 'Go开发环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -1243,7 +1255,7 @@ VALUES
 ('large',  'go', 'prod', 3, 2, 20, '1',    '2',    '1Gi',   '2Gi',   1, 'Go生产环境-大型', 0, 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- Node 服务模板
-INSERT INTO cicd_resource_template 
+INSERT IGNORE INTO cicd_resource_template 
 (name, service_type, env, replicas_default, replicas_min, replicas_max, cpu_request, cpu_limit, memory_request, memory_limit, hpa_enabled, description, is_default, sort_order, created_at, modified_at)
 VALUES
 ('small',  'node', 'dev',  1, 1, 2,  '100m', '300m', '256Mi', '512Mi', 0, 'Node开发环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -1252,7 +1264,7 @@ VALUES
 ('medium', 'node', 'prod', 2, 2, 10, '500m', '1',    '1Gi',   '2Gi',   1, 'Node生产环境-中型', 0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- Python 服务模板
-INSERT INTO cicd_resource_template 
+INSERT IGNORE INTO cicd_resource_template 
 (name, service_type, env, replicas_default, replicas_min, replicas_max, cpu_request, cpu_limit, memory_request, memory_limit, hpa_enabled, description, is_default, sort_order, created_at, modified_at)
 VALUES
 ('small',  'python', 'dev',  1, 1, 2,  '100m', '300m', '256Mi', '512Mi', 0, 'Python开发环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -1261,7 +1273,7 @@ VALUES
 ('medium', 'python', 'prod', 2, 2, 10, '500m', '1',    '1Gi',   '2Gi',   1, 'Python生产环境-中型', 0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- 环境资源规则
-INSERT INTO cicd_env_resource_rule 
+INSERT IGNORE INTO cicd_env_resource_rule 
 (env, service_type, cpu_limit_max, memory_limit_max, replicas_max, cpu_request_min, memory_request_min, replicas_min, require_approval, approval_role, description, created_at, modified_at)
 VALUES
 ('dev', '', '1', '2Gi', 3, '', '', 1, 0, '', '开发环境通用规则，资源受限，无需审批', UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -1271,14 +1283,562 @@ VALUES
 ('prod', 'java', '4', '8Gi', 20, '500m', '1Gi', 2, 1, 'sre', '生产环境Java服务规则，内存最低1Gi', UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- =====================================================
--- 完成
+-- 35. CI/CD - 构建探针表（Build Agent）
+-- 管理 OTEL Java Agent、SkyWalking、Arthas 等构建探针
 -- =====================================================
-SELECT '=====================================================';
-SELECT 'K8s Platform 数据库初始化完成!';
-SELECT '=====================================================';
-SELECT CONCAT('表数量: ', COUNT(*)) as info FROM information_schema.tables WHERE table_schema = 'k8s-platform';
-SELECT '默认管理员账户: admin / admin123';
-SELECT '包含 35 张表 + 2 个视图: 用户表、集群表、RBAC表(4张)、CI/CD表(14张+制品库)、镜像表(3张)、IAM表(9张)、审计表';
-SELECT '包含 4 条流水线模板: Vue3/Go/Java/Python';
-SELECT '包含 CICD资源模板(18条) + 环境规则(5条)';
-SELECT '=====================================================';
+CREATE TABLE IF NOT EXISTS `cicd_build_agent` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT '探针名称',
+  `display_name` varchar(200) DEFAULT '' COMMENT '显示名称',
+  `description` varchar(1000) DEFAULT '' COMMENT '描述说明',
+  `category` varchar(30) DEFAULT '' COMMENT '分类: observability/diagnostics/security/custom',
+  `scope` varchar(20) DEFAULT '' COMMENT '适用语言: java/go/python/all',
+  `version` varchar(50) DEFAULT '' COMMENT '版本号',
+  `file_name` varchar(300) DEFAULT '' COMMENT '文件名',
+  `file_path` varchar(500) DEFAULT '' COMMENT '存储路径',
+  `file_size` bigint DEFAULT 0 COMMENT '文件大小(字节)',
+  `sha256` varchar(64) DEFAULT '' COMMENT 'SHA256校验和',
+  `download_url` varchar(500) DEFAULT '' COMMENT '官方下载地址',
+  `doc_url` varchar(500) DEFAULT '' COMMENT '文档地址',
+  `icon` varchar(50) DEFAULT '' COMMENT '图标',
+  `docker_copy_dest` varchar(200) DEFAULT '' COMMENT '镜像内目标路径',
+  `env_key` varchar(100) DEFAULT '' COMMENT '注入的环境变量名',
+  `env_value` varchar(2000) DEFAULT '' COMMENT '环境变量默认值模板',
+  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT '状态: active/inactive',
+  `download_count` int NOT NULL DEFAULT 0 COMMENT '下载次数',
+  `used_count` int NOT NULL DEFAULT 0 COMMENT '被引用次数',
+  `created_user_id` bigint DEFAULT 0,
+  `created_at` bigint unsigned NOT NULL DEFAULT 0,
+  `modified_at` bigint unsigned NOT NULL DEFAULT 0,
+  `deleted_at` bigint unsigned NOT NULL DEFAULT 0,
+  `is_del` tinyint unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_category` (`category`),
+  KEY `idx_scope` (`scope`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CI/CD 构建探针表';
+
+-- =====================================================
+-- 36. 应用商城 - 应用表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `app_store_apps` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(128) NOT NULL COMMENT '应用名称',
+  `display_name` varchar(256) DEFAULT '' COMMENT '显示名称',
+  `category` varchar(64) NOT NULL COMMENT '分类',
+  `version` varchar(64) NOT NULL COMMENT '版本号',
+  `icon` varchar(512) DEFAULT '' COMMENT '图标URL或icon名',
+  `description` varchar(1024) DEFAULT '' COMMENT '应用描述',
+  `provider` varchar(128) DEFAULT '' COMMENT '提供方',
+  `chart_url` varchar(512) DEFAULT '' COMMENT 'Helm Chart地址',
+  `doc_url` varchar(512) DEFAULT '' COMMENT '文档地址',
+  `status` tinyint unsigned DEFAULT 1 COMMENT '1可用 2维护 3下架',
+  `featured` tinyint unsigned DEFAULT 0 COMMENT '是否推荐',
+  `sort_order` int DEFAULT 0 COMMENT '排序权重',
+  `tags` varchar(512) DEFAULT '' COMMENT '标签,逗号分隔',
+  `min_k8s` varchar(32) DEFAULT '' COMMENT '最低K8s版本',
+  `namespace` varchar(128) DEFAULT '' COMMENT '默认安装命名空间',
+  `values_yaml` text COMMENT '默认values.yaml',
+  `created_at` int unsigned DEFAULT 0,
+  `modified_at` int unsigned DEFAULT 0,
+  `deleted_at` int unsigned DEFAULT 0,
+  `is_del` tinyint unsigned DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_category` (`category`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用商城应用表';
+
+-- =====================================================
+-- 37. 应用商城 - 组件表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `app_store_components` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `app_id` int unsigned NOT NULL COMMENT '关联应用ID',
+  `name` varchar(128) NOT NULL COMMENT '组件名称',
+  `image` varchar(512) NOT NULL COMMENT '容器镜像',
+  `replicas` int DEFAULT 1 COMMENT '副本数',
+  `ports` varchar(512) DEFAULT '' COMMENT '端口定义JSON',
+  `args` varchar(1024) DEFAULT '' COMMENT '启动参数JSON',
+  `cpu_req` varchar(32) DEFAULT '50m' COMMENT 'CPU Request',
+  `cpu_lim` varchar(32) DEFAULT '200m' COMMENT 'CPU Limit',
+  `mem_req` varchar(32) DEFAULT '64Mi' COMMENT 'Memory Request',
+  `mem_lim` varchar(32) DEFAULT '256Mi' COMMENT 'Memory Limit',
+  `sort_order` int DEFAULT 0 COMMENT '排序(越大越靠前)',
+  `created_at` int unsigned DEFAULT 0,
+  `modified_at` int unsigned DEFAULT 0,
+  `deleted_at` int unsigned DEFAULT 0,
+  `is_del` tinyint unsigned DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_app_id` (`app_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用商城组件表';
+
+-- =====================================================
+-- 38. 应用商城 - 安装记录表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `app_store_installs` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `app_id` int unsigned NOT NULL COMMENT '应用ID',
+  `app_name` varchar(128) NOT NULL COMMENT '应用名称(冗余)',
+  `cluster_id` int unsigned NOT NULL COMMENT '集群ID',
+  `cluster_name` varchar(128) DEFAULT '' COMMENT '集群名称(冗余)',
+  `namespace` varchar(128) NOT NULL COMMENT '安装命名空间',
+  `release_name` varchar(128) NOT NULL COMMENT 'Release名称',
+  `version` varchar(64) DEFAULT '' COMMENT '安装版本',
+  `values` text COMMENT '自定义values',
+  `status` tinyint unsigned DEFAULT 1 COMMENT '1安装中 2已安装 3失败 4卸载中 5已卸载 6部分就绪',
+  `message` varchar(1024) DEFAULT '' COMMENT '状态消息',
+  `operator` varchar(64) DEFAULT '' COMMENT '操作人',
+  `created_at` int unsigned DEFAULT 0,
+  `modified_at` int unsigned DEFAULT 0,
+  `deleted_at` int unsigned DEFAULT 0,
+  `is_del` tinyint unsigned DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_cluster_id` (`cluster_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用商城安装记录表';
+
+-- =====================================================
+-- 39. AI 助手 - 会话表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `ai_conversations` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int unsigned NOT NULL COMMENT '关联用户ID',
+  `title` varchar(200) NOT NULL DEFAULT '新对话' COMMENT '会话标题',
+  `status` tinyint unsigned NOT NULL DEFAULT 1 COMMENT '1=活跃 2=归档',
+  `created_at` int unsigned NOT NULL DEFAULT 0,
+  `modified_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 助手会话表';
+
+-- =====================================================
+-- 40. AI 助手 - 聊天消息表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `ai_messages` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `conversation_id` int unsigned NOT NULL COMMENT '关联会话ID',
+  `role` varchar(20) NOT NULL COMMENT 'system/user/assistant/tool',
+  `content` text COMMENT '消息内容',
+  `intent_json` text COMMENT '意图识别结果JSON',
+  `token_used` int NOT NULL DEFAULT 0 COMMENT 'Token消耗',
+  `created_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_conversation_id` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 助手消息表';
+
+-- =====================================================
+-- 41. AI 助手 - 高危操作审批请求表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `ai_approval_requests` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `conversation_id` int unsigned NOT NULL DEFAULT 0 COMMENT '关联AI会话ID',
+  `request_user_id` int unsigned NOT NULL COMMENT '发起人ID',
+  `approver_user_id` int unsigned NOT NULL DEFAULT 0 COMMENT '审批人ID',
+  `intent` varchar(50) NOT NULL COMMENT '操作意图: delete/drain/scale',
+  `resource` varchar(100) NOT NULL DEFAULT '' COMMENT '资源类型',
+  `resource_name` varchar(200) NOT NULL DEFAULT '' COMMENT '资源名称',
+  `namespace` varchar(100) NOT NULL DEFAULT '' COMMENT '命名空间',
+  `cluster_id` int unsigned NOT NULL DEFAULT 0 COMMENT '目标集群ID',
+  `risk_level` varchar(20) NOT NULL DEFAULT 'medium' COMMENT '风险等级',
+  `operation_json` text COMMENT '完整操作参数JSON',
+  `tool_name` varchar(100) NOT NULL DEFAULT '' COMMENT 'Function Calling工具名',
+  `tool_args_json` text COMMENT '工具调用参数JSON',
+  `tool_call_id` varchar(100) NOT NULL DEFAULT '' COMMENT 'OpenAI tool_call_id',
+  `execute_result` text COMMENT '执行结果',
+  `executed` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已执行',
+  `summary` varchar(500) NOT NULL DEFAULT '' COMMENT '操作摘要(AI生成)',
+  `status` tinyint unsigned NOT NULL DEFAULT 1 COMMENT '1=待审批 2=已通过 3=已拒绝 4=已过期 5=已取消',
+  `approve_comment` varchar(500) NOT NULL DEFAULT '' COMMENT '审批备注',
+  `expire_at` int unsigned NOT NULL DEFAULT 0 COMMENT '过期时间戳',
+  `created_at` int unsigned NOT NULL DEFAULT 0,
+  `modified_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_request_user_id` (`request_user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_conversation_id` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 高危操作审批请求表';
+
+-- =====================================================
+-- 42. AI 助手 - 审批操作日志表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `ai_approval_logs` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `approval_id` int unsigned NOT NULL COMMENT '关联审批请求ID',
+  `user_id` int unsigned NOT NULL COMMENT '操作人ID',
+  `action` varchar(50) NOT NULL COMMENT 'create/approve/reject/cancel/expire',
+  `comment` varchar(500) NOT NULL DEFAULT '' COMMENT '操作说明',
+  `created_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_approval_id` (`approval_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 审批操作日志表';
+
+-- =====================================================
+-- 43. 监控 - 数据源表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_datasource` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT '数据源名称',
+  `type` varchar(30) NOT NULL COMMENT 'prometheus/loki/alertmanager/grafana/victoriametrics',
+  `url` varchar(500) NOT NULL COMMENT '连接地址',
+  `description` varchar(500) DEFAULT '' COMMENT '描述',
+  `cluster_id` bigint NOT NULL DEFAULT 0 COMMENT '关联 K8s 集群 ID（0=全局/未关联）',
+  `access_mode` varchar(20) DEFAULT 'proxy' COMMENT 'proxy/direct',
+  `auth_type` varchar(20) DEFAULT 'none' COMMENT 'none/basic/bearer/tls',
+  `auth_user` varchar(100) DEFAULT '',
+  `auth_pass` varchar(500) DEFAULT '',
+  `tls_cert` text,
+  `tls_key` text,
+  `ca_cert` text,
+  `is_default` tinyint(1) DEFAULT 0,
+  `enabled` tinyint(1) DEFAULT 1,
+  `timeout` int DEFAULT 30,
+  `scrape_interval` int DEFAULT 15,
+  `status` varchar(20) DEFAULT 'unknown' COMMENT 'connected/disconnected/unknown',
+  `last_check_at` bigint DEFAULT 0,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_type` (`type`),
+  KEY `idx_cluster_id` (`cluster_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控数据源表';
+
+-- =====================================================
+-- 44. 监控 - 告警规则表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_alert_rule` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `datasource_id` bigint NOT NULL COMMENT '关联数据源',
+  `name` varchar(200) NOT NULL COMMENT '规则名称',
+  `group` varchar(100) DEFAULT 'default' COMMENT '规则分组',
+  `severity` varchar(20) NOT NULL COMMENT 'critical/warning/info',
+  `expr` text NOT NULL COMMENT 'PromQL 表达式',
+  `duration` varchar(20) DEFAULT '5m' COMMENT '持续时间(for)',
+  `summary` varchar(500) DEFAULT '' COMMENT '告警摘要模板',
+  `description` text COMMENT '告警描述模板',
+  `labels` text COMMENT '额外标签JSON',
+  `annotations` text COMMENT '额外注解JSON',
+  `enabled` tinyint(1) DEFAULT 1,
+  `notify_channels` varchar(500) DEFAULT '' COMMENT '通知渠道',
+  `notify_url` varchar(500) DEFAULT '' COMMENT 'webhook URL',
+  `eval_interval` int DEFAULT 60 COMMENT '评估间隔(秒)',
+  `last_eval_at` bigint DEFAULT 0,
+  `last_eval_result` varchar(20) DEFAULT '' COMMENT 'normal/firing/pending/error',
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_datasource_id` (`datasource_id`),
+  KEY `idx_severity` (`severity`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控告警规则表';
+
+-- =====================================================
+-- 45. 监控 - 告警事件表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_alert_event` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `rule_id` bigint NOT NULL COMMENT '关联告警规则',
+  `datasource_id` bigint NOT NULL COMMENT '关联数据源',
+  `rule_name` varchar(200) DEFAULT '' COMMENT '冗余规则名',
+  `severity` varchar(20) NOT NULL COMMENT '严重级别',
+  `status` varchar(20) NOT NULL COMMENT 'firing/resolved/silenced',
+  `value` varchar(100) DEFAULT '' COMMENT '触发时的值',
+  `labels` text COMMENT '标签JSON',
+  `annotations` text COMMENT '注解JSON',
+  `summary` varchar(500) DEFAULT '',
+  `description` text,
+  `fired_at` bigint NOT NULL COMMENT '触发时间',
+  `resolved_at` bigint DEFAULT 0 COMMENT '恢复时间',
+  `acked_by` bigint DEFAULT 0 COMMENT '确认人',
+  `acked_at` bigint DEFAULT 0 COMMENT '确认时间',
+  `silenced_until` bigint DEFAULT 0 COMMENT '静默截止',
+  `notify_result` varchar(200) DEFAULT '' COMMENT '通知结果',
+  `created_at` bigint DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_rule_id` (`rule_id`),
+  KEY `idx_datasource_id` (`datasource_id`),
+  KEY `idx_severity` (`severity`),
+  KEY `idx_status` (`status`),
+  KEY `idx_fired_at` (`fired_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控告警事件表';
+
+-- =====================================================
+-- 46. 监控 - 通知渠道表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_notify_channel` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT '渠道名称',
+  `type` varchar(30) NOT NULL COMMENT 'dingtalk/feishu/webhook/email/wechat',
+  `description` varchar(500) DEFAULT '',
+  `webhook_url` varchar(500) DEFAULT '',
+  `secret` varchar(500) DEFAULT '' COMMENT '签名密钥',
+  `at_mobiles` varchar(500) DEFAULT '' COMMENT '@手机号列表',
+  `at_all` tinyint(1) DEFAULT 0,
+  `smtp_host` varchar(200) DEFAULT '',
+  `smtp_port` int DEFAULT 465,
+  `smtp_user` varchar(200) DEFAULT '',
+  `smtp_pass` varchar(200) DEFAULT '',
+  `smtp_to` text COMMENT '收件人列表',
+  `msg_template` text COMMENT '消息模板',
+  `enabled` tinyint(1) DEFAULT 1,
+  `send_resolved` tinyint(1) DEFAULT 1,
+  `rate_limit` int DEFAULT 10 COMMENT '限流',
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控通知渠道表';
+
+-- =====================================================
+-- 47. 监控 - 告警静默规则表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_silence_rule` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `type` varchar(30) NOT NULL COMMENT 'silence/inhibit/aggregate',
+  `matchers` text NOT NULL COMMENT '匹配条件JSON',
+  `starts_at` bigint DEFAULT 0,
+  `ends_at` bigint DEFAULT 0,
+  `duration` varchar(30) DEFAULT '',
+  `repeat_type` varchar(20) DEFAULT 'once' COMMENT 'once/daily/weekly/cron',
+  `repeat_cron` varchar(100) DEFAULT '',
+  `comment` varchar(500) DEFAULT '',
+  `enabled` tinyint(1) DEFAULT 1,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控告警静默规则表';
+
+-- =====================================================
+-- 48. 监控 - 告警抑制规则表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_inhibit_rule` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `source_matchers` text NOT NULL COMMENT '源告警匹配JSON',
+  `target_matchers` text NOT NULL COMMENT '目标告警匹配JSON',
+  `equal_labels` varchar(500) DEFAULT '' COMMENT '关联标签',
+  `description` varchar(500) DEFAULT '',
+  `enabled` tinyint(1) DEFAULT 1,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控告警抑制规则表';
+
+-- =====================================================
+-- 49. 监控 - 告警聚合规则表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_aggregate_rule` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `group_by` varchar(500) NOT NULL COMMENT '聚合维度',
+  `group_wait` varchar(20) DEFAULT '30s',
+  `group_interval` varchar(20) DEFAULT '5m',
+  `repeat_interval` varchar(20) DEFAULT '4h',
+  `matchers` text COMMENT '匹配条件JSON',
+  `channel_ids` varchar(200) DEFAULT '' COMMENT '通知渠道ID列表',
+  `enabled` tinyint(1) DEFAULT 1,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控告警聚合规则表';
+
+-- =====================================================
+-- 50. 监控 - 通知模板表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_notify_template` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `type` varchar(30) NOT NULL COMMENT 'dingtalk/feishu/wechat/email/webhook',
+  `scene` varchar(30) NOT NULL DEFAULT 'alert' COMMENT 'alert/resolved/test',
+  `title` varchar(200) DEFAULT '',
+  `content` text NOT NULL COMMENT '模板内容',
+  `description` varchar(500) DEFAULT '',
+  `is_default` tinyint(1) DEFAULT 0,
+  `enabled` tinyint(1) DEFAULT 1,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控通知模板表';
+
+-- =====================================================
+-- 构建探针种子数据（OpenTelemetry Java Agent）
+-- =====================================================
+INSERT IGNORE INTO `cicd_build_agent`
+(name, display_name, description, category, scope, version, file_name, file_path, file_size, download_url, doc_url, icon, docker_copy_dest, env_key, env_value, status, created_at, modified_at)
+VALUES
+('opentelemetry-javaagent', 'OpenTelemetry Java Agent',
+ 'OpenTelemetry 官方 Java 自动埋点 Agent，通过 -javaagent 注入，自动采集 Trace/Metrics 并通过 OTLP 协议上报到 Collector。',
+ 'observability', 'java', '1.33.0',
+ 'opentelemetry-javaagent.jar', './storage/agents/observability/opentelemetry-javaagent/opentelemetry-javaagent.jar',
+ 0,
+ 'https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases',
+ 'https://opentelemetry.io/docs/instrumentation/java/automatic/',
+ 'OTEL',
+ '/app/opentelemetry-javaagent.jar',
+ 'OTEL_OPTS',
+ '-javaagent:/app/opentelemetry-javaagent.jar -Dotel.service.name=${SERVICE_NAME} -Dotel.traces.exporter=otlp -Dotel.metrics.exporter=none -Dotel.logs.exporter=none -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318',
+ 'active', UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+
+-- =====================================================
+-- CICD 资源档位模板（必需字典数据）
+-- 唯一键 (service_type, env, name, deleted_at) 保证幂等
+-- =====================================================
+INSERT IGNORE INTO cicd_resource_template
+(name, service_type, env, replicas_default, replicas_min, replicas_max, cpu_request, cpu_limit, memory_request, memory_limit, hpa_enabled, description, is_default, sort_order, created_at, modified_at)
+VALUES
+-- Java 服务模板
+('small',  'java', 'dev',  1, 1, 2,  '200m', '500m', '512Mi', '1Gi',   0, 'Java开发环境-小型，适合本地调试',     1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'java', 'test', 1, 1, 3,  '500m', '1',    '1Gi',   '2Gi',   0, 'Java测试环境-小型，适合功能测试',     1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'java', 'prod', 2, 2, 5,  '500m', '1',    '1Gi',   '2Gi',   0, 'Java生产环境-小型，适合低流量服务',   1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('medium', 'java', 'prod', 2, 2, 10, '1',    '2',    '2Gi',   '4Gi',   1, 'Java生产环境-中型，适合中等流量服务', 0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('large',  'java', 'prod', 3, 2, 20, '2',    '4',    '4Gi',   '8Gi',   1, 'Java生产环境-大型，适合高流量核心',   0, 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- Go 服务模板
+('small',  'go', 'dev',  1, 1, 2,  '100m', '200m', '128Mi', '256Mi', 0, 'Go开发环境-小型',  1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'go', 'test', 1, 1, 3,  '200m', '500m', '256Mi', '512Mi', 0, 'Go测试环境-小型',  1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'go', 'prod', 2, 2, 5,  '200m', '500m', '256Mi', '512Mi', 0, 'Go生产环境-小型',  1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('medium', 'go', 'prod', 2, 2, 10, '500m', '1',    '512Mi', '1Gi',   1, 'Go生产环境-中型',  0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('large',  'go', 'prod', 3, 2, 20, '1',    '2',    '1Gi',   '2Gi',   1, 'Go生产环境-大型',  0, 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- Node 服务模板
+('small',  'node', 'dev',  1, 1, 2,  '100m', '300m', '256Mi', '512Mi', 0, 'Node开发环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'node', 'test', 1, 1, 3,  '200m', '500m', '512Mi', '1Gi',   0, 'Node测试环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'node', 'prod', 2, 2, 5,  '200m', '500m', '512Mi', '1Gi',   0, 'Node生产环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('medium', 'node', 'prod', 2, 2, 10, '500m', '1',    '1Gi',   '2Gi',   1, 'Node生产环境-中型', 0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- Python 服务模板
+('small',  'python', 'dev',  1, 1, 2,  '100m', '300m', '256Mi', '512Mi', 0, 'Python开发环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'python', 'test', 1, 1, 3,  '200m', '500m', '512Mi', '1Gi',   0, 'Python测试环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('small',  'python', 'prod', 2, 2, 5,  '200m', '500m', '512Mi', '1Gi',   0, 'Python生产环境-小型', 1, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('medium', 'python', 'prod', 2, 2, 10, '500m', '1',    '1Gi',   '2Gi',   1, 'Python生产环境-中型', 0, 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+
+-- 环境资源规则
+INSERT IGNORE INTO cicd_env_resource_rule
+(env, service_type, cpu_limit_max, memory_limit_max, replicas_max, cpu_request_min, memory_request_min, replicas_min, require_approval, approval_role, description, created_at, modified_at)
+VALUES
+('dev',     '',     '1', '2Gi',  3,  '',     '',     1, 0, '',    '开发环境通用规则，资源受限，无需审批',   UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('test',    '',     '2', '4Gi',  5,  '',     '',     1, 0, '',    '测试环境通用规则，资源适中，无需审批',   UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('staging', '',     '4', '8Gi',  10, '200m', '256Mi', 2, 0, '',    '预发环境通用规则，接近生产配置',         UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('prod',    '',     '4', '8Gi',  20, '200m', '256Mi', 2, 1, 'sre', '生产环境通用规则，需要SRE审批',          UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('prod',    'java', '4', '8Gi',  20, '500m', '1Gi',   2, 1, 'sre', '生产环境Java服务规则，内存最低1Gi',      UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+
+-- =====================================================
+-- 演示种子数据（可选）
+-- 包含：4 流水线 + 6 运行 + 11 阶段 + 4 制品 + 2 监控数据源
+-- 全部使用 INSERT IGNORE + 显式主键，重复执行幂等
+-- 依赖：kube_cluster.id=1, image_registry.id=1, user.id=1
+-- =====================================================
+SET @now := UNIX_TIMESTAMP();
+
+-- 流水线
+INSERT IGNORE INTO cicd_pipeline
+(id, name, description, git_repo, git_branch, jenkins_url, jenkins_job, jenkins_credential_id,
+ language_type, auto_deploy, target_cluster_id, target_namespace, target_workload_kind, target_workload_name,
+ target_container, deploy_env, require_approval, enable_sonar, enable_artifact_upload,
+ last_deploy_image, last_deploy_time, last_deploy_status, last_deploy_version,
+ status, last_run_status, last_run_time, last_build_number, last_build_url,
+ created_user_id, created_at, modified_at)
+VALUES
+(1, 'order-service-go', '订单服务 Go 后端流水线', 'https://github.com/demo/order-service.git', 'main',
+ 'http://jenkins.local:8080', 'order-service-go', 'jenkins-cred-1',
+ 'go', 1, 1, 'demo', 'Deployment', 'order-service', 'order-service', 'dev', 0, 1, 1,
+ 'registry.local/demo/order-service:v1.2.3', @now-3600, 'success', 'v1.2.3',
+ 'idle', 'success', @now-3600, 12, 'http://jenkins.local:8080/job/order-service-go/12/',
+ 1, @now-86400*7, @now-3600),
+(2, 'user-center-java', '用户中心 Java Spring Boot 流水线', 'https://github.com/demo/user-center.git', 'release/v2',
+ 'http://jenkins.local:8080', 'user-center-java', 'jenkins-cred-1',
+ 'java', 1, 1, 'demo', 'Deployment', 'user-center', 'user-center', 'staging', 1, 1, 1,
+ 'registry.local/demo/user-center:2.0.5', @now-7200, 'success', '2.0.5',
+ 'idle', 'success', @now-7200, 8, 'http://jenkins.local:8080/job/user-center-java/8/',
+ 1, @now-86400*5, @now-7200),
+(3, 'admin-portal-frontend', '管理后台前端 Vue3 流水线', 'https://github.com/demo/admin-portal.git', 'develop',
+ 'http://jenkins.local:8080', 'admin-portal-frontend', 'jenkins-cred-1',
+ 'frontend', 0, 1, 'demo', 'Deployment', 'admin-portal', 'web', 'dev', 0, 0, 1,
+ 'registry.local/demo/admin-portal:dev-202605181030', @now-1800, 'failed', 'dev-202605181030',
+ 'idle', 'failed', @now-1800, 5, 'http://jenkins.local:8080/job/admin-portal-frontend/5/',
+ 1, @now-86400*3, @now-1800),
+(4, 'data-pipeline-python', '数据处理 Python 流水线', 'https://github.com/demo/data-pipeline.git', 'main',
+ 'http://jenkins.local:8080', 'data-pipeline-python', 'jenkins-cred-1',
+ 'python', 0, 1, 'demo', 'CronJob', 'data-pipeline', 'worker', 'prod', 1, 1, 1,
+ 'registry.local/demo/data-pipeline:1.0.0', @now-86400, 'success', '1.0.0',
+ 'idle', 'success', @now-86400, 3, 'http://jenkins.local:8080/job/data-pipeline-python/3/',
+ 1, @now-86400*10, @now-86400);
+
+-- 流水线运行记录
+INSERT IGNORE INTO cicd_pipeline_run
+(id, pipeline_id, build_number, status, trigger_type, trigger_user_id,
+ git_commit, git_branch, git_commit_message, jenkins_build_url,
+ duration_sec, started_at, finished_at, created_at, modified_at,
+ image_url, image_digest, callback_received)
+VALUES
+(1, 1, 12, 'success',  'manual',    1, 'a1b2c3d4e5f6', 'main',       'feat: support batch order create', 'http://jenkins.local:8080/job/order-service-go/12/',     185, @now-3785,        @now-3600,        @now-3785,        @now-3600,        'registry.local/demo/order-service:v1.2.3', 'sha256:abc123def456', 1),
+(2, 1, 11, 'success',  'webhook',   1, 'b2c3d4e5f6a1', 'main',       'fix: order amount precision',      'http://jenkins.local:8080/job/order-service-go/11/',     172, @now-86400-200,   @now-86400-28,    @now-86400-200,   @now-86400-28,    'registry.local/demo/order-service:v1.2.2', 'sha256:bbb222ccc333', 1),
+(3, 2,  8, 'success',  'manual',    1, 'c3d4e5f6a1b2', 'release/v2', 'release: 2.0.5',                    'http://jenkins.local:8080/job/user-center-java/8/',     412, @now-7612,        @now-7200,        @now-7612,        @now-7200,        'registry.local/demo/user-center:2.0.5',    'sha256:ccc333ddd444', 1),
+(4, 3,  5, 'failed',   'manual',    1, 'd4e5f6a1b2c3', 'develop',    'wip: refactor menu component',     'http://jenkins.local:8080/job/admin-portal-frontend/5/',  65, @now-1865,        @now-1800,        @now-1865,        @now-1800,        '',                                          '',                     1),
+(5, 3,  4, 'success',  'webhook',   1, 'e5f6a1b2c3d4', 'develop',    'feat: add dark mode',              'http://jenkins.local:8080/job/admin-portal-frontend/4/', 128, @now-86400*2-200, @now-86400*2-72,  @now-86400*2-200, @now-86400*2-72,  'registry.local/demo/admin-portal:dev-202605161830', 'sha256:eee555fff666', 1),
+(6, 4,  3, 'success',  'scheduled', 1, 'f6a1b2c3d4e5', 'main',       'release: 1.0.0',                    'http://jenkins.local:8080/job/data-pipeline-python/3/', 256, @now-86400-256,   @now-86400,       @now-86400-256,   @now-86400,       'registry.local/demo/data-pipeline:1.0.0',  'sha256:fff666aaa777', 1);
+
+-- 流水线阶段（显式 id 保证幂等）
+INSERT IGNORE INTO cicd_pipeline_stage
+(id, run_id, pipeline_id, stage_order, stage_type, stage_name, status,
+ started_at, finished_at, duration_sec, jenkins_stage_id, created_at, modified_at)
+VALUES
+(1,  1, 1, 1, 'checkout',     '代码拉取',      'success', @now-3785, @now-3780,  5, 'stage-1', @now-3785, @now-3780),
+(2,  1, 1, 2, 'dependencies', '依赖安装',      'success', @now-3780, @now-3760, 20, 'stage-2', @now-3780, @now-3760),
+(3,  1, 1, 3, 'compile',      '编译构建',      'success', @now-3760, @now-3720, 40, 'stage-3', @now-3760, @now-3720),
+(4,  1, 1, 4, 'test',         '单元测试',      'success', @now-3720, @now-3690, 30, 'stage-4', @now-3720, @now-3690),
+(5,  1, 1, 5, 'sonar',        'SonarQube扫描', 'success', @now-3690, @now-3660, 30, 'stage-5', @now-3690, @now-3660),
+(6,  1, 1, 6, 'build',        '镜像构建',      'success', @now-3660, @now-3625, 35, 'stage-6', @now-3660, @now-3625),
+(7,  1, 1, 7, 'push',         '镜像推送',      'success', @now-3625, @now-3610, 15, 'stage-7', @now-3625, @now-3610),
+(8,  1, 1, 8, 'deploy',       'K8s部署',       'success', @now-3610, @now-3600, 10, 'stage-8', @now-3610, @now-3600),
+(9,  4, 3, 1, 'checkout',     '代码拉取',      'success', @now-1865, @now-1860,  5, 'stage-1', @now-1865, @now-1860),
+(10, 4, 3, 2, 'dependencies', 'npm install',   'success', @now-1860, @now-1820, 40, 'stage-2', @now-1860, @now-1820),
+(11, 4, 3, 3, 'compile',      'vite build',    'failed',  @now-1820, @now-1800, 20, 'stage-3', @now-1820, @now-1800);
+
+-- 制品库（显式 id 保证幂等）
+INSERT IGNORE INTO cicd_artifact
+(id, pipeline_id, run_id, build_number, name, artifact_type, version, language_type,
+ file_path, file_size, sha256, storage_type,
+ git_repo, git_branch, git_commit,
+ image_repo, image_tag, image_digest,
+ build_duration, status, download_count, created_user_id, created_at, modified_at)
+VALUES
+(1, 1, 1, 12, 'order-service-v1.2.3',           'binary', 'v1.2.3',           'go',       'storage/artifacts/1/12/order-service',                          18874368, 'a1b2c3d4e5f60011223344556677889900aabbccddeeff0011223344', 'local', 'https://github.com/demo/order-service.git',  'main',       'a1b2c3d4e5f6', 'registry.local/demo/order-service',  'v1.2.3',           'sha256:abc123def456', 185, 'ready', 3, 1, @now-3600,         @now-3600),
+(2, 2, 3,  8, 'user-center-2.0.5.jar',          'jar',    '2.0.5',            'java',     'storage/artifacts/2/8/user-center-2.0.5.jar',                  41943040, 'c3d4e5f6a1b20011223344556677889900aabbccddeeff0011223344', 'local', 'https://github.com/demo/user-center.git',    'release/v2', 'c3d4e5f6a1b2', 'registry.local/demo/user-center',    '2.0.5',            'sha256:ccc333ddd444', 412, 'ready', 1, 1, @now-7200,         @now-7200),
+(3, 3, 5,  4, 'admin-portal-dist-202605161830', 'dist',   'dev-202605161830', 'frontend', 'storage/artifacts/3/4/dist.tar.gz',                              8388608, 'e5f6a1b2c3d40011223344556677889900aabbccddeeff0011223344', 'local', 'https://github.com/demo/admin-portal.git',   'develop',    'e5f6a1b2c3d4', 'registry.local/demo/admin-portal',   'dev-202605161830', 'sha256:eee555fff666', 128, 'ready', 0, 1, @now-86400*2-72,   @now-86400*2-72),
+(4, 4, 6,  3, 'data-pipeline-1.0.0.whl',        'wheel',  '1.0.0',            'python',   'storage/artifacts/4/3/data_pipeline-1.0.0-py3-none-any.whl',     2097152, 'f6a1b2c3d4e50011223344556677889900aabbccddeeff0011223344', 'local', 'https://github.com/demo/data-pipeline.git',  'main',       'f6a1b2c3d4e5', 'registry.local/demo/data-pipeline',  '1.0.0',            'sha256:fff666aaa777', 256, 'ready', 2, 1, @now-86400,        @now-86400);
+
+-- 监控数据源（name 唯一键保证幂等）
+INSERT IGNORE INTO monitor_datasource
+(name, type, url, description, access_mode, auth_type,
+ is_default, enabled, timeout, scrape_interval, status,
+ created_by, created_at, modified_at)
+VALUES
+('Prometheus-默认', 'prometheus', 'http://prometheus.monitoring.svc:9090', '集群默认 Prometheus 数据源',  'proxy', 'none', 1, 1, 30, 15, 'unknown', 1, @now-86400*30, @now-86400*30),
+('Loki-默认',       'loki',       'http://loki.monitoring.svc:3100',      '集群默认 Loki 日志数据源',    'proxy', 'none', 0, 1, 30, 15, 'unknown', 1, @now-86400*30, @now-86400*30);
+
+-- =====================================================
+-- 完成（仅输出关键信息）
+-- =====================================================
+SELECT CONCAT('✅ 初始化完成 | 表数: ', COUNT(*), ' | 账号: admin / admin123 | 演示流水线: ',
+              (SELECT COUNT(*) FROM cicd_pipeline)) AS result
+FROM information_schema.tables WHERE table_schema = 'k8s-platform';
+

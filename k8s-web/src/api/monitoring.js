@@ -5,23 +5,52 @@ import http from './http'
 const silentConfig = { _silent: true }
 
 // ==================== 监控指标查询 ====================
+// 所有指标查询函数支持可选的 extra 参数对象（如 { datasource_id: 3 }），
+// 用于把前端选择的数据源 ID 透传到后端，让 service 层按指定 ID 解析数据源
 
 // 获取集群监控总览
-export const getClusterOverview = () => http.get('/api/v1/monitoring/overview', silentConfig)
+export const getClusterOverview = (extra = {}) =>
+  http.get('/api/v1/monitoring/overview', { params: extra, ...silentConfig })
 
 // 获取节点指标列表
-export const getNodeMetrics = () => http.get('/api/v1/monitoring/nodes', silentConfig)
+export const getNodeMetrics = (extra = {}) =>
+  http.get('/api/v1/monitoring/nodes', { params: extra, ...silentConfig })
 
 // 获取资源趋势数据
-export const getResourceTrend = (resource, duration = '1h') =>
-  http.get(`/api/v1/monitoring/trend/${resource}`, { params: { duration }, ...silentConfig })
+export const getResourceTrend = (resource, duration = '1h', extra = {}) =>
+  http.get(`/api/v1/monitoring/trend/${resource}`, { params: { duration, ...extra }, ...silentConfig })
 
 // 获取 Top N Pods
-export const getTopPods = (metric = 'cpu') =>
-  http.get('/api/v1/monitoring/top-pods', { params: { metric }, ...silentConfig })
+export const getTopPods = (metric = 'cpu', extra = {}) =>
+  http.get('/api/v1/monitoring/top-pods', { params: { metric, ...extra }, ...silentConfig })
 
 // Prometheus 健康检查
-export const checkHealth = () => http.get('/api/v1/monitoring/health', silentConfig)
+export const checkHealth = (extra = {}) =>
+  http.get('/api/v1/monitoring/health', { params: extra, ...silentConfig })
+
+// 集群健康评分
+export const getHealthScore = (extra = {}) =>
+  http.get('/api/v1/monitoring/score', { params: extra, ...silentConfig })
+
+// 节点热力图（metric=cpu|memory, duration=1h|3h|6h）
+export const getNodeHeatmap = (metric = 'cpu', duration = '1h', extra = {}) =>
+  http.get('/api/v1/monitoring/heatmap', { params: { metric, duration, ...extra }, ...silentConfig })
+
+// Pod 状态分布
+export const getPodStatusDistribution = (extra = {}) =>
+  http.get('/api/v1/monitoring/pod-status', { params: extra, ...silentConfig })
+
+// 异常 Pod（重启超过阈值）
+export const getAbnormalPods = (extra = {}) =>
+  http.get('/api/v1/monitoring/abnormal-pods', { params: extra, ...silentConfig })
+
+// Namespace 维度聚合指标
+export const getNamespaceMetrics = (extra = {}) =>
+  http.get('/api/v1/monitoring/namespaces', { params: extra, ...silentConfig })
+
+// 单节点详情聚合（当前指标 + 5 维趋势 + Top Pod + 元信息）
+export const getNodeDetail = (instance, duration = '1h', extra = {}) =>
+  http.get('/api/v1/monitoring/node-detail', { params: { instance, duration, ...extra }, ...silentConfig })
 
 // ==================== 数据源管理 ====================
 

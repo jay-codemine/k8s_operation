@@ -4,7 +4,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/health"
@@ -111,10 +110,6 @@ func RegisterSession(r *gin.Engine) {
 	if name == "" {
 		name = "k8soperation_sid" // 兜底
 	}
-
-	global.Logger.Info("install session middleware",
-		zap.String("cookie_name", name),
-	)
 
 	r.Use(sessions.Sessions(name, global.SessionStore))
 }

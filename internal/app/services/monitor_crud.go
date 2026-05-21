@@ -24,11 +24,12 @@ func NewMonitorCRUDService() *MonitorCRUDService {
 
 // DatasourceListReq 数据源列表查询
 type DatasourceListReq struct {
-	Page    int    `form:"page" json:"page"`
-	Size    int    `form:"size" json:"size"`
-	Type    string `form:"type" json:"type"`
-	Keyword string `form:"keyword" json:"keyword"`
-	Enabled *bool  `form:"enabled" json:"enabled"`
+	Page      int    `form:"page" json:"page"`
+	Size      int    `form:"size" json:"size"`
+	Type      string `form:"type" json:"type"`
+	Keyword   string `form:"keyword" json:"keyword"`
+	Enabled   *bool  `form:"enabled" json:"enabled"`
+	ClusterID *int64 `form:"cluster_id" json:"cluster_id"` // 可选：按集群过滤（0=全局数据源，不传=不过滤）
 }
 
 // DatasourceListResp 数据源列表响应
@@ -49,6 +50,9 @@ func (s *MonitorCRUDService) ListDatasources(ctx context.Context, req Datasource
 	}
 	if req.Enabled != nil {
 		db = db.Where("enabled = ?", *req.Enabled)
+	}
+	if req.ClusterID != nil {
+		db = db.Where("cluster_id = ?", *req.ClusterID)
 	}
 
 	var total int64
@@ -85,18 +89,37 @@ func (s *MonitorCRUDService) GetDatasource(ctx context.Context, id int64) (*mode
 // CreateDatasource 创建
 func (s *MonitorCRUDService) CreateDatasource(ctx context.Context, ds *models.MonitorDatasource) error {
 	ds.Status = "unknown"
-	return global.DB.WithContext(ctx).Create(ds).Error
+	db := global.DB.WithContext(ctx)
+	// 若新增的是默认，先把同 type 的其他默认取消，保证同 type 只有一条 is_default=1
+	if ds.IsDefault {
+		if err := db.Model(&models.MonitorDatasource{}).
+			Where("type = ? AND is_del = 0", ds.Type).
+			Update("is_default", false).Error; err != nil {
+			return err
+		}
+	}
+	return db.Create(ds).Error
 }
 
 // UpdateDatasource 更新
 func (s *MonitorCRUDService) UpdateDatasource(ctx context.Context, ds *models.MonitorDatasource) error {
-	return global.DB.WithContext(ctx).Model(ds).
+	db := global.DB.WithContext(ctx)
+	// 若本次更新把它设为默认，先把同 type 内其他记录的 is_default 全部置 false
+	if ds.IsDefault {
+		if err := db.Model(&models.MonitorDatasource{}).
+			Where("type = ? AND id <> ? AND is_del = 0", ds.Type, ds.ID).
+			Update("is_default", false).Error; err != nil {
+			return err
+		}
+	}
+	return db.Model(ds).
 		Where("id = ? AND is_del = 0", ds.ID).
 		Updates(map[string]interface{}{
 			"name":            ds.Name,
 			"type":            ds.Type,
 			"url":             ds.URL,
 			"description":     ds.Description,
+			"cluster_id":      ds.ClusterID,
 			"access_mode":     ds.AccessMode,
 			"auth_type":       ds.AuthType,
 			"auth_user":       ds.AuthUser,

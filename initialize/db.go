@@ -102,7 +102,6 @@ func autoMigrateTables() error {
 			log.Printf("[AutoMigrate] 创建表 %s 失败: %v", m.name, err)
 			return fmt.Errorf("migrate %s: %w", m.name, err)
 		}
-		log.Printf("[AutoMigrate] 表 %s 迁移成功", m.name)
 	}
 
 	// 监控中心模块
@@ -124,9 +123,10 @@ func autoMigrateTables() error {
 			log.Printf("[AutoMigrate] 创建表 %s 失败: %v", m.name, err)
 			return fmt.Errorf("migrate %s: %w", m.name, err)
 		}
-		log.Printf("[AutoMigrate] 表 %s 迁移成功", m.name)
 	}
 
+	// 汇总一行（只记总数，有错才刷详情）
+	log.Printf("[AutoMigrate] OK (ai: %d, monitor: %d)", len(aiModels), len(monitorModels))
 	return nil
 }
 

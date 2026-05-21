@@ -19642,7 +19642,15 @@ const docTemplate = `{
                 "approval_id": {
                     "type": "integer"
                 },
+                "context_round": {
+                    "description": "当前对话轮次（本次对话是第几轮）",
+                    "type": "integer"
+                },
                 "conversation_id": {
+                    "type": "integer"
+                },
+                "history_count": {
+                    "description": "本次请求携带的历史消息数（不含本次）",
                     "type": "integer"
                 },
                 "need_approval": {

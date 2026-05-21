@@ -24,7 +24,12 @@
 
   <!-- 聊天面板 -->
   <transition name="panel-slide">
-    <div v-if="isOpen" class="ai-panel">
+    <div
+      v-if="isOpen"
+      class="ai-panel"
+      :class="['mode-' + panelMode]"
+      :style="panelStyle"
+    >
       <!-- 头部 -->
       <div class="panel-header">
         <div class="header-left">
@@ -89,6 +94,19 @@
           <button class="header-btn" @click="activeTab = activeTab === 'history' ? 'chat' : 'history'" title="历史记录">
             <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
           </button>
+          <!-- 窗口控制按钮（3 个：最小化 / 最大化 / 关闭） -->
+          <span class="header-divider"></span>
+          <button class="header-btn win-ctrl" @click="toggleMinimize" :title="panelMode === 'minimized' ? '展开' : '最小化'">
+            <svg v-if="panelMode !== 'minimized'" viewBox="0 0 20 20" fill="currentColor"><rect x="4" y="13" width="12" height="2" rx="1"/></svg>
+            <svg v-else viewBox="0 0 20 20" fill="currentColor"><path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          </button>
+          <button class="header-btn win-ctrl" @click="toggleMaximize" :title="panelMode === 'maximized' ? '还原' : '最大化'">
+            <svg v-if="panelMode !== 'maximized'" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/></svg>
+            <svg v-else viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="4" width="9" height="9" rx="1.2"/><rect x="4" y="7" width="9" height="9" rx="1.2" fill="#fff"/></svg>
+          </button>
+          <button class="header-btn win-ctrl close" @click="isOpen = false" title="关闭">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg>
+          </button>
         </div>
       </div>
 
@@ -98,6 +116,23 @@
         <button :class="['tab-btn', { active: activeTab === 'approvals' }]" @click="activeTab = 'approvals'">
           {{ isApprovalAdmin ? '待审批' : '我的申请' }}
           <span v-if="pendingCount > 0" class="tab-badge">{{ pendingCount }}</span>
+        </button>
+      </div>
+
+      <!-- 多轮对话状态条（仅 chat tab 且有消息时显示） -->
+      <div v-if="activeTab === 'chat' && messages.length > 0" class="context-bar">
+        <div class="context-bar-left">
+          <span class="ctx-dot"></span>
+          <span class="ctx-text">
+            <strong>多轮对话</strong>
+            · 第 <b class="ctx-round">{{ contextRound || Math.ceil(messages.length / 2) }}</b> 轮
+            <span class="ctx-sep">|</span>
+            已记忆 <b>{{ historyCount }}</b> 条上下文
+          </span>
+        </div>
+        <button class="ctx-clear-btn" @click="startNewChat" title="清空上下文，开启全新对话">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.5 1a1 1 0 00-1 1v1a1 1 0 001 1H3v9a2 2 0 002 2h6a2 2 0 002-2V4h.5a1 1 0 001-1V2a1 1 0 00-1-1H10a1 1 0 00-1-1H7a1 1 0 00-1 1H2.5zm3 4a.5.5 0 01.5.5v7a.5.5 0 01-1 0v-7a.5.5 0 01.5-.5zM8 5a.5.5 0 01.5.5v7a.5.5 0 01-1 0v-7A.5.5 0 018 5zm3 .5v7a.5.5 0 01-1 0v-7a.5.5 0 011 0z"/></svg>
+          <span>新对话</span>
         </button>
       </div>
 
@@ -117,6 +152,12 @@
           </div>
           <h3 class="welcome-title">Hi，我是 K8s AI 助手</h3>
           <p class="welcome-desc">我可以回答任何问题，也能直接操作 K8s 平台。<br/>高危操作会自动触发审批流程。</p>
+          <div class="welcome-features">
+            <span class="feat-chip">💬 多轮对话</span>
+            <span class="feat-chip">🧠 上下文记忆</span>
+            <span class="feat-chip">🔧 Function Calling</span>
+            <span class="feat-chip">⚠️ 高危审批</span>
+          </div>
           <!-- 分组快捷按钮 -->
           <div class="quick-group">
             <div class="quick-group-label"><span class="qg-icon">💬</span> 常规问答</div>
@@ -363,12 +404,30 @@
           <span>AI 自动识别</span>
         </div>
       </div>
+
+      <!-- 调整大小的拖拽手柄（左上角，大厂风格） -->
+      <div
+        v-if="panelMode === 'normal'"
+        class="resize-handle resize-tl"
+        @mousedown.prevent="startResize($event, 'tl')"
+        title="拖动调整大小"
+      ></div>
+      <div
+        v-if="panelMode === 'normal'"
+        class="resize-handle resize-t"
+        @mousedown.prevent="startResize($event, 't')"
+      ></div>
+      <div
+        v-if="panelMode === 'normal'"
+        class="resize-handle resize-l"
+        @mousedown.prevent="startResize($event, 'l')"
+      ></div>
     </div>
   </transition>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { aiChat, getAIStatus, getAIModels, getConversations, getConversationMessages, deleteConversation, getApprovals, approveApproval, rejectApproval, cancelApproval, getPendingApprovalCount } from '@/api/ai'
 import { Message } from '@arco-design/web-vue'
 import MarkdownIt from 'markdown-it'
@@ -382,8 +441,110 @@ const inputRef = ref(null)
 const chatBody = ref(null)
 const aiEnabled = ref(false)
 const conversationId = ref(null)
+const contextRound = ref(0)   // 当前对话轮次（后端返回）
+const historyCount = ref(0)  // 已记忆上下文条数（后端返回）
 const pendingCount = ref(0)
 const isApprovalAdmin = ref(false)  // 后端返回的审批管理员标识
+
+// 窗口状态：normal | maximized | minimized
+const PANEL_STORAGE_KEY = 'ai-panel-state-v1'
+const MIN_WIDTH = 360
+const MIN_HEIGHT = 420
+const DEFAULT_WIDTH = 416   // 26rem
+const DEFAULT_HEIGHT = 608  // 38rem
+
+const panelMode = ref('normal')
+const panelSize = reactive({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
+
+// 从 localStorage 恢复
+const _saved = (() => {
+  try { return JSON.parse(localStorage.getItem(PANEL_STORAGE_KEY) || '{}') } catch { return {} }
+})()
+if (_saved.width && _saved.height) {
+  panelSize.width = Math.max(MIN_WIDTH, Math.min(_saved.width, window.innerWidth - 32))
+  panelSize.height = Math.max(MIN_HEIGHT, Math.min(_saved.height, window.innerHeight - 32))
+}
+if (_saved.mode === 'maximized') panelMode.value = 'maximized'
+
+const panelStyle = computed(() => {
+  if (panelMode.value === 'maximized') {
+    return {
+      width: 'calc(100vw - 4rem)',
+      height: 'calc(100vh - 4rem)',
+      bottom: '2rem',
+      right: '2rem',
+      maxHeight: 'calc(100vh - 4rem)',
+    }
+  }
+  if (panelMode.value === 'minimized') {
+    return {
+      width: panelSize.width + 'px',
+      height: 'auto',
+      maxHeight: 'none',
+    }
+  }
+  return {
+    width: panelSize.width + 'px',
+    height: panelSize.height + 'px',
+  }
+})
+
+const saveState = () => {
+  try {
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify({
+      width: panelSize.width,
+      height: panelSize.height,
+      mode: panelMode.value === 'minimized' ? 'normal' : panelMode.value,
+    }))
+  } catch {}
+}
+
+const toggleMaximize = () => {
+  panelMode.value = panelMode.value === 'maximized' ? 'normal' : 'maximized'
+  saveState()
+}
+const toggleMinimize = () => {
+  panelMode.value = panelMode.value === 'minimized' ? 'normal' : 'minimized'
+}
+
+// 拖拽调整大小（面板错右下角固定，拖动左上顶调整宽高）
+let _resize = null
+const startResize = (e, dir) => {
+  if (panelMode.value !== 'normal') return
+  _resize = {
+    dir,
+    startX: e.clientX,
+    startY: e.clientY,
+    startW: panelSize.width,
+    startH: panelSize.height,
+  }
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = dir === 'tl' ? 'nwse-resize' : (dir === 't' ? 'ns-resize' : 'ew-resize')
+  window.addEventListener('mousemove', onResize)
+  window.addEventListener('mouseup', stopResize)
+}
+const onResize = (e) => {
+  if (!_resize) return
+  const dx = _resize.startX - e.clientX  // 左侧拖：向左为正
+  const dy = _resize.startY - e.clientY  // 顶部拖：向上为正
+  if (_resize.dir === 'tl' || _resize.dir === 'l') {
+    const newW = Math.max(MIN_WIDTH, Math.min(_resize.startW + dx, window.innerWidth - 32))
+    panelSize.width = newW
+  }
+  if (_resize.dir === 'tl' || _resize.dir === 't') {
+    const newH = Math.max(MIN_HEIGHT, Math.min(_resize.startH + dy, window.innerHeight - 32))
+    panelSize.height = newH
+  }
+}
+const stopResize = () => {
+  if (!_resize) return
+  _resize = null
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  window.removeEventListener('mousemove', onResize)
+  window.removeEventListener('mouseup', stopResize)
+  saveState()
+}
 
 // 多模型选择器状态
 const showModelPicker = ref(false)
@@ -514,6 +675,8 @@ const loadPendingCount = async () => {
 const startNewChat = () => {
   messages.length = 0
   conversationId.value = null
+  contextRound.value = 0
+  historyCount.value = 0
   activeTab.value = 'chat'
 }
 
@@ -541,6 +704,9 @@ const sendMessage = async () => {
     })
     const data = res?.data || res
     conversationId.value = data.conversation_id || conversationId.value
+    // 同步多轮对话状态
+    if (typeof data.context_round === 'number') contextRound.value = data.context_round
+    if (typeof data.history_count === 'number') historyCount.value = data.history_count
 
     const toolsCalled = data.tools_called || []
     const pendingTools = data.pending_tools || []
@@ -588,6 +754,10 @@ const loadConversation = async (id) => {
     list.forEach(m => {
       messages.push({ role: m.role, content: m.content, time: new Date(m.created_at) })
     })
+    // 恢复多轮对话轮次统计（仅计 user/assistant）
+    const valid = list.filter(m => m.role === 'user' || (m.role === 'assistant' && m.content))
+    contextRound.value = valid.filter(m => m.role === 'user').length
+    historyCount.value = Math.max(0, valid.length - 1)
     activeTab.value = 'chat'
     scrollToBottom()
   } catch { Message.error('加载会话失败') }
@@ -877,6 +1047,67 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column;
   z-index: 9998;
   overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              right 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              border-radius 0.25s ease;
+}
+.ai-panel.mode-maximized {
+  border-radius: 0.75rem;
+  box-shadow: 0 30px 80px -10px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.ai-panel.mode-minimized {
+  height: auto !important;
+}
+.ai-panel.mode-minimized .panel-tabs,
+.ai-panel.mode-minimized .panel-body,
+.ai-panel.mode-minimized .panel-footer,
+.ai-panel.mode-minimized .resize-handle {
+  display: none !important;
+}
+.ai-panel.mode-minimized .panel-header {
+  border-radius: 1.25rem;
+}
+
+/* 调整大小的拖拽手柄（仅 normal 模式可见） */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.resize-handle.resize-tl {
+  top: 0; left: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize;
+  border-top-left-radius: 1.25rem;
+}
+.resize-handle.resize-tl::before {
+  content: '';
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 8px; height: 8px;
+  background:
+    linear-gradient(135deg, transparent 40%, rgba(99,102,241,0.5) 40%, rgba(99,102,241,0.5) 50%, transparent 50%, transparent 70%, rgba(99,102,241,0.5) 70%, rgba(99,102,241,0.5) 80%, transparent 80%);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  border-radius: 2px;
+}
+.resize-handle.resize-tl:hover::before { opacity: 1; }
+.resize-handle.resize-t {
+  top: 0; left: 18px; right: 0;
+  height: 5px;
+  cursor: ns-resize;
+}
+.resize-handle.resize-l {
+  top: 18px; left: 0; bottom: 0;
+  width: 5px;
+  cursor: ew-resize;
+}
+.resize-handle.resize-t:hover,
+.resize-handle.resize-l:hover {
+  background: rgba(99, 102, 241, 0.12);
 }
 .panel-slide-enter-active { transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .panel-slide-leave-active { transition: all 0.2s ease-in; }
@@ -898,7 +1129,13 @@ onBeforeUnmount(() => {
 .header-status { font-size: 0.6875rem; opacity: 0.8; display: flex; align-items: center; gap: 0.3rem; }
 .header-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; }
 .header-status.online::before { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
-.header-actions { display: flex; gap: 0.25rem; }
+.header-actions { display: flex; gap: 0.25rem; align-items: center; }
+.header-divider {
+  display: inline-block;
+  width: 1px; height: 1.1rem;
+  background: rgba(255,255,255,0.3);
+  margin: 0 0.25rem;
+}
 .header-btn {
   width: 2rem; height: 2rem;
   background: rgba(255,255,255,0.15); border: none; border-radius: 0.5rem;
@@ -908,6 +1145,13 @@ onBeforeUnmount(() => {
   position: relative;
 }
 .header-btn:hover { background: rgba(255,255,255,0.25); }
+.header-btn.win-ctrl {
+  width: 1.75rem; height: 1.75rem;
+  background: rgba(255,255,255,0.1);
+  border-radius: 0.4rem;
+}
+.header-btn.win-ctrl:hover { background: rgba(255,255,255,0.22); transform: scale(1.05); }
+.header-btn.win-ctrl.close:hover { background: rgba(239, 68, 68, 0.85); }
 .header-btn svg { width: 1rem; height: 1rem; }
 .btn-badge {
   position: absolute; top: -0.2rem; right: -0.2rem;
@@ -951,6 +1195,65 @@ onBeforeUnmount(() => {
 .welcome-icon svg { width: 100%; height: 100%; }
 .welcome-title { font-size: 1.125rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem; }
 .welcome-desc { font-size: 0.8125rem; color: #64748b; line-height: 1.6; margin-bottom: 1rem; }
+
+/* ===== 欢迎区能力胶囊 ===== */
+.welcome-features {
+  display: flex; flex-wrap: wrap; gap: 0.375rem;
+  justify-content: center; margin-bottom: 1rem;
+}
+.feat-chip {
+  padding: 0.25rem 0.625rem;
+  background: linear-gradient(135deg, #eef2ff, #f5f3ff);
+  border: 1px solid #e0e7ff;
+  border-radius: 1rem;
+  font-size: 0.6875rem; font-weight: 600;
+  color: #4f46e5;
+  letter-spacing: 0.2px;
+}
+
+/* ===== 多轮对话状态条 ===== */
+.context-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.04));
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+  font-size: 0.6875rem; color: #475569;
+  flex-shrink: 0;
+}
+.context-bar-left {
+  display: flex; align-items: center; gap: 0.4375rem;
+  min-width: 0; flex: 1;
+}
+.ctx-dot {
+  width: 0.4375rem; height: 0.4375rem; border-radius: 50%;
+  background: #10b981; flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+  animation: ctx-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ctx-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.85); }
+}
+.ctx-text { font-size: 0.6875rem; color: #475569; line-height: 1.4; }
+.ctx-text strong { color: #4f46e5; font-weight: 700; }
+.ctx-text b { color: #1e293b; font-weight: 700; padding: 0 0.0625rem; }
+.ctx-text .ctx-round { color: #6366f1; }
+.ctx-sep { color: #cbd5e1; margin: 0 0.25rem; }
+.ctx-clear-btn {
+  display: flex; align-items: center; gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem; color: #64748b; cursor: pointer;
+  transition: all 0.18s;
+  flex-shrink: 0;
+}
+.ctx-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+}
+.ctx-clear-btn svg { width: 0.75rem; height: 0.75rem; }
 .quick-group {
   width: 100%; text-align: left; margin-bottom: 0.75rem;
 }

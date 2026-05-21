@@ -78,6 +78,8 @@
                 <span class="ds-name">{{ ds.name }}</span>
                 <span class="ds-default-tag" v-if="ds.is_default">默认</span>
                 <span class="ds-type-tag">{{ getTypeLabel(ds.type) }}</span>
+              <span class="ds-cluster-tag global" v-if="!ds.cluster_id">🌐 全局</span>
+              <span class="ds-cluster-tag bound" v-else>☸️ {{ getClusterName(ds.cluster_id) }}</span>
               </div>
               <span class="ds-url">{{ ds.url }}</span>
             </div>
@@ -194,6 +196,22 @@
                 <select v-model="form.type" @change="onTypeChange">
                   <option v-for="t in typePresets" :key="t.type" :value="t.type">{{ t.label }}</option>
                 </select>
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:14px;">
+              <div class="form-item">
+                <label>关联监控集群 <span class="hint-mini">（决定该数据源在哪个 K8s 集群下展示）</span></label>
+                <select v-model.number="form.cluster_id">
+                  <option :value="0">🌐 全局共享（不绑定集群）</option>
+                  <option v-for="c in clusterList" :key="c.id" :value="Number(c.id)">☸️ {{ c.cluster_name }}</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>当前归属</label>
+                <div class="cluster-badge-preview">
+                  <span v-if="!form.cluster_id" class="cluster-chip global">🌐 全局共享</span>
+                  <span v-else class="cluster-chip bound">☸️ {{ getClusterName(form.cluster_id) || '未知集群' }}</span>
+                </div>
               </div>
             </div>
             <div class="form-item full">
@@ -324,6 +342,7 @@ import {
   testDatasourceConnection,
   testDatasourceById,
 } from '@/api/monitoring'
+import { getK8sClusterList } from '@/api/platform/cluster.js'
 
 // ===== 类型预设 =====
 const typePresets = [
@@ -355,9 +374,24 @@ const authTypeMap = { none: '无认证', basic: 'Basic Auth', bearer: 'Bearer To
 
 const defaultForm = () => ({
   name: '', type: 'prometheus', url: '', description: '',
+  cluster_id: 0,
   access_mode: 'proxy', auth_type: 'none', auth_user: '', auth_pass: '',
   is_default: false, enabled: true, timeout: 30, scrape_interval: 15,
 })
+
+// 集群列表（用于关联下拉）
+const clusterList = ref([])
+async function loadClusters() {
+  try {
+    const res = await getK8sClusterList({ page: 1, limit: 200 })
+    clusterList.value = res?.data?.list || []
+  } catch { clusterList.value = [] }
+}
+function getClusterName(id) {
+  if (!id || Number(id) === 0) return ''
+  const c = clusterList.value.find(x => Number(x.id) === Number(id))
+  return c?.cluster_name || ('#' + id)
+}
 const form = reactive(defaultForm())
 
 // ===== 计算属性 =====
@@ -537,7 +571,7 @@ async function refreshAll() {
   } catch {} finally { refreshing.value = false }
 }
 
-onMounted(loadList)
+onMounted(() => { loadClusters(); loadList() })
 </script>
 
 <style scoped>
@@ -692,6 +726,16 @@ onMounted(loadList)
 .switch-slider::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .switch-label input:checked + .switch-slider { background: #4f46e5; }
 .switch-label input:checked + .switch-slider::after { left: 18px; }
+
+/* Cluster binding */
+.hint-mini { font-size: 11px; color: #94a3b8; font-weight: 400; margin-left: 4px; }
+.cluster-badge-preview { display: flex; align-items: center; min-height: 40px; }
+.cluster-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+.cluster-chip.global { background: linear-gradient(135deg, #f0fdfa, #ccfbf1); color: #0f766e; border: 1px solid #99f6e4; }
+.cluster-chip.bound { background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #1d4ed8; border: 1px solid #bfdbfe; }
+.ds-cluster-tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+.ds-cluster-tag.global { background: #ccfbf1; color: #0f766e; }
+.ds-cluster-tag.bound { background: #dbeafe; color: #1d4ed8; }
 
 /* Delete */
 .delete-info p { margin: 0 0 12px; font-size: 15px; color: #334155; }

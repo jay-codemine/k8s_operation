@@ -297,6 +297,8 @@ type AIChatResponse struct {
 	ApprovalID     uint32           `json:"approval_id,omitempty"`
 	ToolsCalled    []string         `json:"tools_called,omitempty"`  // 本次对话调用了哪些工具
 	PendingTools   []PendingToolInfo `json:"pending_tools,omitempty"` // 等待审批的工具
+	ContextRound   int              `json:"context_round"`           // 当前对话轮次（本次对话是第几轮）
+	HistoryCount   int              `json:"history_count"`           // 本次请求携带的历史消息数（不含本次）
 }
 
 // PendingToolInfo 等待审批的工具信息
@@ -350,16 +352,36 @@ func (s *Services) AIChat(ctx context.Context, req *AIChatRequest, factory *Clus
 		global.Logger.Error("保存用户消息失败", zap.Error(err))
 	}
 
-	// 3. 构建历史上下文
+	// 3. 构建历史上下文（含本次 user 消息，因为已先 save 再读 DB）
 	messages, err := s.buildHistoryMessages(convID)
 	if err != nil {
 		global.Logger.Warn("获取历史消息失败", zap.Error(err))
 		messages = []openai.Message{{Role: "user", Content: req.Message}}
 	}
+	// 统计上下文轮次（user/assistant 成对算一轮，包含本次）
+	userMsgCount := 0
+	for _, m := range messages {
+		if m.Role == "user" {
+			userMsgCount++
+		}
+	}
+	resp_historyCount := len(messages) - 1 // 不含本次 user 消息
+	if resp_historyCount < 0 {
+		resp_historyCount = 0
+	}
+	l.Info("[AI-Chat] 多轮上下文已构建",
+		zap.Int("total_messages", len(messages)),
+		zap.Int("history_count", resp_historyCount),
+		zap.Int("current_round", userMsgCount),
+	)
 
 	// 4. 智能路由：判断是否需要工具调用
 	useTools := needToolCalling(req.Message)
-	resp := &AIChatResponse{ConversationID: convID}
+	resp := &AIChatResponse{
+		ConversationID: convID,
+		ContextRound:   userMsgCount,
+		HistoryCount:   resp_historyCount,
+	}
 
 	if !useTools {
 		// 简单对话（问候/闲聊/知识问答）→ 直接 Chat，不发送工具定义，大幅提速
@@ -891,7 +913,11 @@ func (s *Services) IsApprovalAdmin(userID int64) bool {
 // 内部辅助方法
 // =========================================================================
 
-// buildHistoryMessages 构建历史消息上下文
+// buildHistoryMessages 构建历史消息上下文（多轮对话核心）
+// 规则：
+//  1. 跳过 tool 角色消息（中间态 Function Calling 结果，对应 assistant.tool_calls 已丢失，API 会 400）
+//  2. 跳过 assistant 空 content 消息（仅含 tool_calls 的中间态，直接发送会污染上下文）
+//  3. 滑动窗口截取最近 N 轮（默认 20 轮，可通过 AISetting.MaxHistoryRound 配置）
 func (s *Services) buildHistoryMessages(convID uint32) ([]openai.Message, error) {
 	history, err := s.dao.AIMessageListByConversation(convID)
 	if err != nil {
@@ -903,19 +929,27 @@ func (s *Services) buildHistoryMessages(convID uint32) ([]openai.Message, error)
 		maxRounds = global.AISetting.MaxHistoryRound
 	}
 
-	// 只取最近 N 轮
-	start := 0
-	if len(history) > maxRounds*2 {
-		start = len(history) - maxRounds*2
-	}
-
-	var messages []openai.Message
-	for _, msg := range history[start:] {
-		// 跳过 tool 角色消息（中间态 Function Calling 结果，无法在历史中重放，
-		// 因为对应的 assistant tool_calls 已丢失，API 会报 400 错误）
+	// 先过滤无效消息（tool / 空 assistant），再做窗口截取
+	var filtered []*models.AIMessage
+	for _, msg := range history {
 		if msg.Role == "tool" {
 			continue
 		}
+		if msg.Role == "assistant" && strings.TrimSpace(msg.Content) == "" {
+			// 仅含 tool_calls 的中间态 assistant，content 为空，跳过
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+
+	// 只取最近 N 轮（一轮 = user + assistant）
+	start := 0
+	if len(filtered) > maxRounds*2 {
+		start = len(filtered) - maxRounds*2
+	}
+
+	var messages []openai.Message
+	for _, msg := range filtered[start:] {
 		messages = append(messages, openai.Message{
 			Role:    msg.Role,
 			Content: msg.Content,
