@@ -48,9 +48,10 @@ mysql -u root -p123456 < k8s_platform_full_init.sql
 
 | 文件 | 说明 |
 |------|------|
-| `k8s_platform_full_init.sql` | **【唯一脚本】** 数据库 + 50 张表 DDL + 字典数据（资源模板 18 / 环境规则 5 / 流水线模板 4 / 默认 admin / 系统角色等） + 演示业务数据（4 流水线 + 6 运行 + 11 阶段 + 4 制品 + 2 监控数据源）。Source 一次即可，幂等可重复执行 |
+| `k8s_platform_full_init.sql` | **【唯一脚本】** 数据库 + 50 张表 DDL + 字典数据（资源模板 18 / 环境规则 5 / 流水线模板 4 / 默认 admin / 系统角色等） + 演示业务数据（4 流水线 + 6 运行 + 11 阶段 + 4 制品 + 2 监控数据源）。全新部署与存量升级均适用：Source 一次即可，幂等可重复执行；包含针对存量集群的兼容补丁（例如自动为老库 `monitor_datasource` 补 `cluster_id` 字段及索引） |
 
-> 此前分散的 `ai_assistant.sql` / `cicd_artifact.sql` / `cicd_resource_config.sql` / `demo_seed.sql` 已全部合并到主脚本，不再单独维护。
+> 此前分散的 `ai_assistant.sql` / `cicd_artifact.sql` / `cicd_resource_config.sql` / `demo_seed.sql` / `migrate_monitor_datasource_cluster_id.sql` 已全部合并到主脚本，不再单独维护。
+> 后续新增字段一律在 `k8s_platform_full_init.sql` 中同步提供 CREATE TABLE + 幂等 ALTER 补丁，保证全量/存量场景都只需跳一个脚本。
 
 ## 🗂️ 完整表清单（50 张）
 
@@ -199,6 +200,7 @@ mysql --default-character-set=utf8mb4 -u root -p123456 -e "USE ``k8s-platform``;
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 2.6.0 | 2026-05-18 | **多集群 × 多数据源**：`monitor_datasource` 新增 `cluster_id BIGINT NOT NULL DEFAULT 0` 字段及 `idx_cluster_id` 索引，支撑「监控视野按集群隔离」能力（0=全局共享、>0=集群专属）。所有逻辑合并进主脚本 `k8s_platform_full_init.sql`，同时依靠 `information_schema` 提供存量集群的幂等补丁（老库补字段/索引不报错）。**单脚本同时覆盖全新部署 + 存量升级两种场景**，不再需要单独的 `migrate_*.sql` |
 | 2.5.0 | 2026-05-18 | **真正一键初始化**：合并 `ai_assistant.sql` / `cicd_artifact.sql` / `cicd_resource_config.sql` / `demo_seed.sql` 到主脚本（53 表 + 18 资源模板 + 5 环境规则 + 4 演示流水线 + 6 运行 + 11 阶段 + 4 制品 + 2 监控数据源）。全部 INSERT 改用 `INSERT IGNORE` + 显式主键/唯一键，支持反复 source 不报错 |
 | 2.4.0 | 2026-05-18 | 新增 `demo_seed.sql` 演示种子数据脚本（4 流水线 + 6 运行 + 11 阶段 + 4 制品 + 2 监控数据源），新增「演示种子数据导入」章节及 PowerShell 字符集/source 顺序常见问题 |
 | 2.3.0 | 2026-05-18 | 新增 AI 助手 4 表、监控 8 表、应用商城 3 表、构建探针 1 表（共 16 张），表总数 35 → 50 |
