@@ -58,6 +58,12 @@
             <span v-else class="system-badge">系统</span>
           </div>
           <div class="role-desc">{{ role.description || '暂无描述' }}</div>
+          <!-- ⭐ 三域 scope 标签 -->
+          <div class="role-scopes" v-if="role.scope_platform || role.scope_cluster || role.scope_cicd">
+            <span :class="['scope-tag', `scope-${role.scope_platform || 'none'}`]">🏛 {{ scopeLabel(role.scope_platform) }}</span>
+            <span :class="['scope-tag', `scope-${role.scope_cluster || 'none'}`]">☸ {{ scopeLabel(role.scope_cluster) }}</span>
+            <span :class="['scope-tag', `scope-${role.scope_cicd || 'none'}`]">🚀 {{ scopeLabel(role.scope_cicd) }}</span>
+          </div>
           <div class="role-meta">
             <span class="meta-item">
               <span class="meta-icon">👥</span>
@@ -135,17 +141,93 @@
           </div>
           <div class="form-group">
             <label>角色类型</label>
-            <select v-model="roleForm.role_type">
+            <select v-model="roleForm.role_type" @change="onRoleTypePreset">
+              <option value="super_admin">超级管理员</option>
               <option value="platform_admin">平台管理员</option>
-              <option value="cluster_admin">集群管理员</option>
-              <option value="developer">开发者</option>
-              <option value="viewer">只读用户</option>
+              <option value="devops">运维工程师</option>
+              <option value="developer">开发工程师</option>
+              <option value="tester">测试工程师</option>
+              <option value="viewer">观察者</option>
               <option value="custom">自定义</option>
             </select>
           </div>
+
+          <!-- ⭐ 三域权限级别配置 -->
+          <div class="scope-section">
+            <label class="scope-title">三域权限级别</label>
+            <div class="scope-grid">
+              <div class="scope-item">
+                <span class="scope-icon">🏛</span>
+                <span class="scope-label">平台域</span>
+                <select v-model="roleForm.scope_platform" class="scope-select">
+                  <option value="none">禁止</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">全权</option>
+                </select>
+              </div>
+              <div class="scope-item">
+                <span class="scope-icon">☸</span>
+                <span class="scope-label">集群域</span>
+                <select v-model="roleForm.scope_cluster" class="scope-select">
+                  <option value="none">禁止</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">全权</option>
+                </select>
+              </div>
+              <div class="scope-item">
+                <span class="scope-icon">🚀</span>
+                <span class="scope-label">发布域</span>
+                <select v-model="roleForm.scope_cicd" class="scope-select">
+                  <option value="none">禁止</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">全权</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label>描述</label>
             <textarea v-model="roleForm.description" rows="3" placeholder="角色描述..."></textarea>
+          </div>
+          <!-- 三域权限级别选择器 -->
+          <div class="scope-section">
+            <span class="scope-title">三域权限级别</span>
+            <div class="scope-grid">
+              <div class="scope-item">
+                <span class="scope-icon">🏛</span>
+                <span class="scope-label">平台域</span>
+                <select v-model="roleForm.scope_platform" class="scope-select">
+                  <option value="none">无权限</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">管理</option>
+                </select>
+              </div>
+              <div class="scope-item">
+                <span class="scope-icon">☸</span>
+                <span class="scope-label">集群域</span>
+                <select v-model="roleForm.scope_cluster" class="scope-select">
+                  <option value="none">无权限</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">管理</option>
+                </select>
+              </div>
+              <div class="scope-item">
+                <span class="scope-icon">🚀</span>
+                <span class="scope-label">发布域</span>
+                <select v-model="roleForm.scope_cicd" class="scope-select">
+                  <option value="none">无权限</option>
+                  <option value="read">只读</option>
+                  <option value="write">读写</option>
+                  <option value="admin">管理</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -279,6 +361,9 @@ const roleForm = ref({
   name: '',
   display_name: '',
   role_type: 'developer',
+  scope_platform: 'none',
+  scope_cluster: 'none',
+  scope_cicd: 'none',
   description: '',
   color: '#326ce5'
 })
@@ -294,46 +379,30 @@ const permSubmitting = ref(false)
 const showUsersModal = ref(false)
 const roleUsers = ref([])
 
-// 权限模块分组（5大模块）
+// 权限模块分组（v2: 按三域划分）
 const permissionModules = reactive([
   {
     key: 'platform',
-    name: '平台权限',
-    icon: '🏠',
-    description: '控制菜单可见性、系统功能、平台管理能力',
+    name: '🏛 平台域',
+    icon: '🏛',
+    description: '用户管理/角色权限/系统设置/审计日志',
     collapsed: false,
     permissions: []
   },
   {
-    key: 'k8s',
-    name: 'K8s资源权限',
+    key: 'cluster',
+    name: '☸ 集群域',
     icon: '☸️',
-    description: '控制集群资源操作：Pod/Deployment/Service/Namespace等',
+    description: '集群管理/工作负载/服务与路由/配置管理/存储/节点/监控日志',
     collapsed: false,
     permissions: []
   },
   {
     key: 'cicd',
-    name: 'CI/CD权限',
-    icon: '⚡',
-    description: '控制流水线、发布、审批、回滚等能力',
+    name: '🚀 发布域',
+    icon: '🚀',
+    description: '流水线管理/制品与镜像/审批管理',
     collapsed: false,
-    permissions: []
-  },
-  {
-    key: 'image',
-    name: '镜像与环境',
-    icon: '📦',
-    description: '控制镜像仓库、环境配置的访问权限',
-    collapsed: true,
-    permissions: []
-  },
-  {
-    key: 'security',
-    name: '安全权限',
-    icon: '🛡️',
-    description: '控制用户管理、角色管理、审计日志等',
-    collapsed: true,
     permissions: []
   }
 ])
@@ -395,6 +464,9 @@ const openCreateModal = () => {
     name: '',
     display_name: '',
     role_type: 'developer',
+    scope_platform: 'none',
+    scope_cluster: 'write',
+    scope_cicd: 'write',
     description: '',
     color: '#326ce5'
   }
@@ -453,13 +525,36 @@ const getRoleTypeLabel = (type) => {
   const labels = {
     super_admin: '超级管理员',
     platform_admin: '平台管理员',
+    devops: '运维工程师',
+    developer: '开发工程师',
+    tester: '测试工程师',
+    viewer: '观察者',
     cluster_admin: '集群管理员',
-    cicd_admin: 'CI/CD管理员',
-    developer: '开发者',
-    viewer: '只读用户',
     custom: '自定义'
   }
   return labels[type] || type
+}
+
+const scopeLabel = (level) => {
+  const labels = { none: '禁止', read: '只读', write: '读写', admin: '全权' }
+  return labels[level] || '禁止'
+}
+
+// 选择角色类型时自动预设 scope
+const onRoleTypePreset = () => {
+  const presets = {
+    super_admin:    { scope_platform: 'admin', scope_cluster: 'admin', scope_cicd: 'admin' },
+    platform_admin: { scope_platform: 'admin', scope_cluster: 'read',  scope_cicd: 'read' },
+    devops:         { scope_platform: 'read',  scope_cluster: 'admin', scope_cicd: 'admin' },
+    developer:      { scope_platform: 'none',  scope_cluster: 'write', scope_cicd: 'write' },
+    tester:         { scope_platform: 'none',  scope_cluster: 'read',  scope_cicd: 'write' },
+    viewer:         { scope_platform: 'read',  scope_cluster: 'read',  scope_cicd: 'read' },
+    custom:         { scope_platform: 'none',  scope_cluster: 'none',  scope_cicd: 'none' }
+  }
+  const preset = presets[roleForm.value.role_type]
+  if (preset) {
+    Object.assign(roleForm.value, preset)
+  }
 }
 
 const formatTime = (ts) => {
@@ -512,20 +607,20 @@ const openPermissionModal = async (role) => {
   }
 }
 
-// 分类权限到各模块
+// 分类权限到各模块（v2: 基于 scope 字段）
 const categorizePermissions = () => {
-  const moduleMap = {
-    platform: ['platform', 'cluster', 'health'],
-    k8s: ['namespace', 'deployment', 'pod', 'service', 'configmap', 'secret', 'ingress', 'pvc', 'statefulset', 'daemonset', 'job', 'cronjob'],
-    cicd: ['pipeline', 'release', 'approval', 'build'],
-    image: ['image', 'registry', 'environment', 'env'],
-    security: ['user', 'role', 'permission', 'audit', 'rbac']
-  }
-  
   permissionModules.forEach(module => {
     module.permissions = allPermissions.value.filter(p => {
+      // 优先用 scope 字段
+      if (p.scope) return p.scope === module.key
+      // 兼容旧数据
       const resourceType = p.resource_type || p.name?.split(':')[0] || ''
-      return moduleMap[module.key]?.some(k => resourceType.includes(k))
+      const scopeMap = {
+        platform: ['user', 'role', 'settings', 'audit', 'platform'],
+        cluster: ['cluster', 'workload', 'network', 'config', 'storage', 'node', 'monitor', 'namespace', 'deployment', 'pod', 'service', 'configmap', 'secret', 'ingress', 'pvc'],
+        cicd: ['pipeline', 'artifact', 'release', 'approval', 'build', 'image']
+      }
+      return scopeMap[module.key]?.some(k => resourceType.includes(k))
     })
   })
 }
@@ -1257,4 +1352,77 @@ onMounted(() => {
 .btn-text.primary {
   font-weight: 600;
 }
+
+/* 三域 scope 样式 */
+.scope-section {
+  margin: 16px 0;
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.scope-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 12px;
+}
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.scope-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.scope-icon {
+  font-size: 18px;
+}
+
+.scope-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.scope-select {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  background: white;
+}
+
+/* 角色卡片三域标签 */
+.role-scopes {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.scope-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.scope-tag.scope-none { background: #f1f5f9; color: #94a3b8; }
+.scope-tag.scope-read { background: #dbeafe; color: #1e40af; }
+.scope-tag.scope-write { background: #fef3c7; color: #92400e; }
+.scope-tag.scope-admin { background: #dcfce7; color: #166534; }
 </style>

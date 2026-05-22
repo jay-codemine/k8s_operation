@@ -7,13 +7,55 @@ import (
 // ==================== 角色类型常量 ====================
 
 const (
-	RoleTypeSuperAdmin   = "super_admin"   // 超级管理员
-	RoleTypeClusterAdmin = "cluster_admin" // 集群管理员
-	RoleTypeDeveloper    = "developer"     // 开发者
-	RoleTypeViewer       = "viewer"        // 只读用户
+	RoleTypeSuperAdmin    = "super_admin"    // 超级管理员
+	RoleTypePlatformAdmin = "platform_admin" // 平台管理员
+	RoleTypeDevOps        = "devops"         // 运维工程师
+	RoleTypeDeveloper     = "developer"      // 开发工程师
+	RoleTypeTester        = "tester"         // 测试工程师
+	RoleTypeViewer        = "viewer"         // 观察者
+
+	// 兼容旧值
+	RoleTypeClusterAdmin = "cluster_admin" // deprecated: 映射到 devops
 )
 
-// ==================== 权限操作常量 ====================
+// ==================== 权限域常量（三大功能域） ====================
+
+const (
+	ScopePlatform = "platform" // 🏛 平台域：用户/角色/系统设置/审计/数据源/告警
+	ScopeCluster  = "cluster"  // ☸ 集群域：集群/NS/Workload/Service/Config/Node/监控/日志/终端
+	ScopeCICD     = "cicd"     // 🚀 发布域：流水线/构建/部署/制品/镜像/代码扫描/审批
+)
+
+// ==================== 权限级别常量（每域通用） ====================
+
+const (
+	AccessLevelNone  = "none"  // 不可见
+	AccessLevelRead  = "read"  // 只读
+	AccessLevelWrite = "write" // 读写（可创建/更新/触发，不可删除系统级资源）
+	AccessLevelAdmin = "admin" // 全权（含删除/批量/管理他人资源）
+)
+
+// AccessLevelGte 判断 a 级别 >= b 级别
+func AccessLevelGte(a, b string) bool {
+	return accessLevelOrder(a) >= accessLevelOrder(b)
+}
+
+func accessLevelOrder(level string) int {
+	switch level {
+	case AccessLevelAdmin:
+		return 4
+	case AccessLevelWrite:
+		return 3
+	case AccessLevelRead:
+		return 2
+	case AccessLevelNone:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// ==================== 权限操作常量（兼容旧代码） ====================
 
 const (
 	PermissionActionView   = "view"   // 查看
@@ -24,56 +66,90 @@ const (
 	PermissionActionManage = "manage" // 管理（完整权限）
 )
 
-// ==================== 资源类型常量 ====================
+// ==================== 资源类型/模块常量 ====================
 
 const (
-	ResourceTypeCluster     = "cluster"     // 集群
-	ResourceTypeNamespace   = "namespace"   // 命名空间
-	ResourceTypeDeployment  = "deployment"  // Deployment
-	ResourceTypePod         = "pod"         // Pod
-	ResourceTypeService     = "service"     // Service
-	ResourceTypeConfigMap   = "configmap"   // ConfigMap
-	ResourceTypeSecret      = "secret"      // Secret
-	ResourceTypePVC         = "pvc"         // PVC
-	ResourceTypeIngress     = "ingress"     // Ingress
-	ResourceTypePipeline    = "pipeline"    // CI/CD 流水线
-	ResourceTypeUser        = "user"        // 用户管理
-	ResourceTypeRole        = "role"        // 角色管理
+	// 平台域模块
+	ResourceTypeUser     = "user"     // 用户管理
+	ResourceTypeRole     = "role"     // 角色管理
+	ResourceTypeSettings = "settings" // 系统设置
+	ResourceTypeAudit    = "audit"    // 审计日志
+
+	// 集群域模块
+	ResourceTypeCluster    = "cluster"    // 集群管理
+	ResourceTypeWorkload   = "workload"   // 工作负载（Deployment/Pod/DaemonSet...）
+	ResourceTypeNetwork    = "network"    // 服务与路由（Service/Ingress）
+	ResourceTypeConfig     = "config"     // 配置管理（ConfigMap/Secret）
+	ResourceTypeStorage    = "storage"    // 存储管理（PV/PVC/SC）
+	ResourceTypeNode       = "node"       // 节点管理
+	ResourceTypeMonitor    = "monitor"    // 监控与日志
+
+	// 发布域模块
+	ResourceTypePipeline = "pipeline" // 流水线管理
+	ResourceTypeArtifact = "artifact" // 制品与镜像
+
+	// deprecated: 保留兼容
+	ResourceTypeNamespace  = "namespace"
+	ResourceTypeDeployment = "deployment"
+	ResourceTypePod        = "pod"
+	ResourceTypeService    = "service"
+	ResourceTypeConfigMap  = "configmap"
+	ResourceTypeSecret     = "secret"
+	ResourceTypePVC        = "pvc"
+	ResourceTypeIngress    = "ingress"
 )
 
 // ==================== 系统角色表 ====================
 
 // SysRole 系统角色
 type SysRole struct {
-	ID          int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name        string `gorm:"column:name;uniqueIndex" json:"name"`                 // 角色标识（唯一）
-	DisplayName string `gorm:"column:display_name" json:"display_name"`             // 显示名称
-	Description string `gorm:"column:description" json:"description"`               // 描述
-	RoleType    string `gorm:"column:role_type" json:"role_type"`                   // 角色类型
-	IsSystem    bool   `gorm:"column:is_system;default:false" json:"is_system"`     // 是否系统内置
-	Color       string `gorm:"column:color;default:'#1890ff'" json:"color"`         // 角色颜色标识
-	Icon        string `gorm:"column:icon;default:'user'" json:"icon"`              // 图标
-	SortOrder   int    `gorm:"column:sort_order;default:0" json:"sort_order"`       // 排序
-	CreatedAt   uint64 `gorm:"column:created_at" json:"created_at"`
-	ModifiedAt  uint64 `gorm:"column:modified_at" json:"modified_at"`
-	DeletedAt   uint64 `gorm:"column:deleted_at" json:"deleted_at"`
-	IsDel       uint8  `gorm:"column:is_del;default:0" json:"is_del"`
+	ID            int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name          string `gorm:"column:name;size:50;uniqueIndex" json:"name"`          // 角色标识（唯一）
+	DisplayName   string `gorm:"column:display_name;size:100" json:"display_name"`    // 显示名称
+	Description   string `gorm:"column:description;size:500" json:"description"`      // 描述
+	RoleType      string `gorm:"column:role_type;size:30" json:"role_type"`           // 角色类型
+	ScopePlatform string `gorm:"column:scope_platform;size:10;default:'none'" json:"scope_platform"` // 平台域级别
+	ScopeCluster  string `gorm:"column:scope_cluster;size:10;default:'none'" json:"scope_cluster"`   // 集群域级别
+	ScopeCICD     string `gorm:"column:scope_cicd;size:10;default:'none'" json:"scope_cicd"`         // 发布域级别
+	IsSystem      bool   `gorm:"column:is_system;default:false" json:"is_system"`     // 是否系统内置
+	Color         string `gorm:"column:color;size:20;default:'#1890ff'" json:"color"` // 角色颜色标识
+	Icon          string `gorm:"column:icon;size:50;default:'user'" json:"icon"`      // 图标
+	SortOrder     int    `gorm:"column:sort_order;default:0" json:"sort_order"`       // 排序
+	CreatedAt     uint64 `gorm:"column:created_at" json:"created_at"`
+	ModifiedAt    uint64 `gorm:"column:modified_at" json:"modified_at"`
+	DeletedAt     uint64 `gorm:"column:deleted_at" json:"deleted_at"`
+	IsDel         uint8  `gorm:"column:is_del;default:0" json:"is_del"`
 }
 
 func (SysRole) TableName() string { return "sys_role" }
 
+// GetEffectiveScope 获取角色在指定域的有效级别
+func (r *SysRole) GetEffectiveScope(scope string) string {
+	switch scope {
+	case ScopePlatform:
+		return r.ScopePlatform
+	case ScopeCluster:
+		return r.ScopeCluster
+	case ScopeCICD:
+		return r.ScopeCICD
+	default:
+		return AccessLevelNone
+	}
+}
+
 // ==================== 系统权限表 ====================
 
-// SysPermission 系统权限定义
+// SysPermission 系统权限定义（v2: 按功能模块聚合，不再逐资源拆分）
 type SysPermission struct {
 	ID           int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name         string `gorm:"column:name;uniqueIndex" json:"name"`           // 权限标识（唯一）
-	DisplayName  string `gorm:"column:display_name" json:"display_name"`       // 显示名称
-	Description  string `gorm:"column:description" json:"description"`         // 描述
-	ResourceType string `gorm:"column:resource_type" json:"resource_type"`     // 资源类型
-	Action       string `gorm:"column:action" json:"action"`                   // 操作类型
-	ParentID     int64  `gorm:"column:parent_id;default:0" json:"parent_id"`   // 父权限ID
-	Path         string `gorm:"column:path" json:"path"`                       // 权限路径（用于树形展示）
+	Name         string `gorm:"column:name;size:100;uniqueIndex" json:"name"`   // 权限标识（唯一）
+	DisplayName  string `gorm:"column:display_name;size:100" json:"display_name"` // 显示名称
+	Description  string `gorm:"column:description;size:500" json:"description"`   // 描述
+	Scope        string `gorm:"column:scope;size:20;default:'cluster'" json:"scope"` // 所属功能域：platform/cluster/cicd
+	ResourceType string `gorm:"column:resource_type;size:50" json:"resource_type"` // 模块标识
+	Action       string `gorm:"column:action;size:30" json:"action"`             // 操作类型（兼容旧字段）
+	ParentID     int64  `gorm:"column:parent_id;default:0" json:"parent_id"`     // 父权限ID
+	Path         string `gorm:"column:path;size:200" json:"path"`               // 权限路径（用于树形展示）
 	SortOrder    int    `gorm:"column:sort_order;default:0" json:"sort_order"` // 排序
 	CreatedAt    uint64 `gorm:"column:created_at" json:"created_at"`
 	ModifiedAt   uint64 `gorm:"column:modified_at" json:"modified_at"`
@@ -113,17 +189,36 @@ type SysUserCluster struct {
 	ID          int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	UserID      int64  `gorm:"column:user_id;index" json:"user_id"`               // 用户ID
 	ClusterID   int64  `gorm:"column:cluster_id;index" json:"cluster_id"`         // 集群ID
-	RoleType    string `gorm:"column:role_type" json:"role_type"`                 // 在该集群的角色类型
+	RoleType    string `gorm:"column:role_type;size:30" json:"role_type"`          // 在该集群的角色类型
+	AccessLevel string `gorm:"column:access_level;size:10;default:'read'" json:"access_level"` // 权限级别：none/read/write/admin
 	Namespaces  string `gorm:"column:namespaces;type:text" json:"namespaces"`     // 可访问的命名空间（JSON数组，空表示全部）
-	CanView     bool   `gorm:"column:can_view;default:true" json:"can_view"`      // 查看权限
-	CanCreate   bool   `gorm:"column:can_create;default:false" json:"can_create"` // 创建权限
-	CanUpdate   bool   `gorm:"column:can_update;default:false" json:"can_update"` // 更新权限
-	CanDelete   bool   `gorm:"column:can_delete;default:false" json:"can_delete"` // 删除权限
-	CanExec     bool   `gorm:"column:can_exec;default:false" json:"can_exec"`     // 执行权限（进入容器等）
+	CanView     bool   `gorm:"column:can_view;default:true" json:"can_view"`      // deprecated: 用 access_level 代替
+	CanCreate   bool   `gorm:"column:can_create;default:false" json:"can_create"` // deprecated
+	CanUpdate   bool   `gorm:"column:can_update;default:false" json:"can_update"` // deprecated
+	CanDelete   bool   `gorm:"column:can_delete;default:false" json:"can_delete"` // deprecated
+	CanExec     bool   `gorm:"column:can_exec;default:false" json:"can_exec"`     // deprecated
 	ExpireAt    uint64 `gorm:"column:expire_at;default:0" json:"expire_at"`       // 过期时间（0表示永不过期）
 	CreatedAt   uint64 `gorm:"column:created_at" json:"created_at"`
 	ModifiedAt  uint64 `gorm:"column:modified_at" json:"modified_at"`
 	CreatedBy   int64  `gorm:"column:created_by" json:"created_by"` // 授权人
+}
+
+// GetAccessLevel 获取有效权限级别（兼容旧 bool 字段）
+func (c *SysUserCluster) GetAccessLevel() string {
+	if c.AccessLevel != "" && c.AccessLevel != "none" {
+		return c.AccessLevel
+	}
+	// 兼容旧数据：从 bool 字段推导
+	if c.CanDelete {
+		return AccessLevelAdmin
+	}
+	if c.CanCreate || c.CanUpdate || c.CanExec {
+		return AccessLevelWrite
+	}
+	if c.CanView {
+		return AccessLevelRead
+	}
+	return AccessLevelNone
 }
 
 func (SysUserCluster) TableName() string { return "sys_user_cluster" }
@@ -184,26 +279,47 @@ func GetUserClusterPermissions(db *gorm.DB, userID int64) ([]*SysUserCluster, er
 	return permissions, err
 }
 
-// HasClusterPermission 检查用户是否有集群权限
+// HasClusterPermission 检查用户是否有集群权限（兼容新旧两种模式）
 func HasClusterPermission(db *gorm.DB, userID, clusterID int64, action string) bool {
-	var count int64
-	query := db.Model(&SysUserCluster{}).Where("user_id = ? AND cluster_id = ?", userID, clusterID)
-	
+	var record SysUserCluster
+	err := db.Where("user_id = ? AND cluster_id = ?", userID, clusterID).First(&record).Error
+	if err != nil {
+		return false
+	}
+
+	// 优先使用新 access_level 字段
+	level := record.GetAccessLevel()
 	switch action {
 	case PermissionActionView:
-		query = query.Where("can_view = true")
-	case PermissionActionCreate:
-		query = query.Where("can_create = true")
-	case PermissionActionUpdate:
-		query = query.Where("can_update = true")
-	case PermissionActionDelete:
-		query = query.Where("can_delete = true")
-	case PermissionActionExec:
-		query = query.Where("can_exec = true")
+		return AccessLevelGte(level, AccessLevelRead)
+	case PermissionActionCreate, PermissionActionUpdate, PermissionActionExec:
+		return AccessLevelGte(level, AccessLevelWrite)
+	case PermissionActionDelete, PermissionActionManage:
+		return AccessLevelGte(level, AccessLevelAdmin)
+	default:
+		return AccessLevelGte(level, AccessLevelRead)
 	}
-	
-	query.Count(&count)
-	return count > 0
+}
+
+// HasScopePermission 检查用户是否满足指定域的最低权限级别
+func HasScopePermission(db *gorm.DB, userID int64, scope, minLevel string) bool {
+	// 超管直接通过
+	if IsSuperAdmin(db, userID) {
+		return true
+	}
+
+	// 获取用户所有角色，取最高 scope 级别
+	roles, err := GetUserRoles(db, userID)
+	if err != nil || len(roles) == 0 {
+		return false
+	}
+
+	for _, role := range roles {
+		if AccessLevelGte(role.GetEffectiveScope(scope), minLevel) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsSuperAdmin 检查用户是否为超级管理员

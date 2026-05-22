@@ -21,6 +21,8 @@ var (
 	cicdWorker *worker.CicdWorker
 	// pollWorker 流水线状态轮询 Worker
 	pollWorker *worker.PipelinePollWorker
+	// auditCleanupWorker 审计日志清理 Worker
+	auditCleanupWorker *worker.AuditCleanupWorker
 )
 
 func InitAll() error {
@@ -87,6 +89,10 @@ func InitAll() error {
 	// 数据补全：同步历史流水线审批阶段到 cicd_approval 表
 	SyncApprovalData()
 
+	// 启动审计日志清理 Worker
+	auditCleanupWorker = worker.NewAuditCleanupWorker()
+	auditCleanupWorker.Start()
+
 	return nil
 }
 
@@ -138,6 +144,9 @@ func StopCicdWorker() {
 	}
 	if pollWorker != nil {
 		pollWorker.Stop()
+	}
+	if auditCleanupWorker != nil {
+		auditCleanupWorker.Stop()
 	}
 }
 

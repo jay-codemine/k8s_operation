@@ -77,6 +77,7 @@ func (s *Engine) injectMiddlewares() {
 	s.Use(middlewares.Logger())
 	s.Use(middlewares.Recovery())
 	s.Use(middlewares.K8sError())
+	s.Use(middlewares.Audit(nil)) // 审计日志中间件（默认配置）
 
 	// 注册 session 中间件
 	RegisterSession(s.Engine)

@@ -15,6 +15,9 @@ func (s *Services) RoleCreate(req *requests.RoleCreateRequest) (*models.SysRole,
 		req.DisplayName,
 		req.Description,
 		req.RoleType,
+		req.ScopePlatform,
+		req.ScopeCluster,
+		req.ScopeCICD,
 		req.Color,
 		req.Icon,
 	)
@@ -28,20 +31,26 @@ func (s *Services) RoleUpdate(req *requests.RoleUpdateRequest) error {
 		return err
 	}
 	if role.IsSystem {
-		// 系统内置角色只能修改显示名称和描述
+		// 系统内置角色只能修改显示名称、描述和 scope
 		values := map[string]interface{}{
-			"display_name": req.DisplayName,
-			"description":  req.Description,
+			"display_name":   req.DisplayName,
+			"description":    req.Description,
+			"scope_platform": req.ScopePlatform,
+			"scope_cluster":  req.ScopeCluster,
+			"scope_cicd":     req.ScopeCICD,
 		}
 		return s.dao.RoleUpdate(req.ID, values)
 	}
 
 	values := map[string]interface{}{
-		"display_name": req.DisplayName,
-		"description":  req.Description,
-		"color":        req.Color,
-		"icon":         req.Icon,
-		"sort_order":   req.SortOrder,
+		"display_name":   req.DisplayName,
+		"description":    req.Description,
+		"scope_platform": req.ScopePlatform,
+		"scope_cluster":  req.ScopeCluster,
+		"scope_cicd":     req.ScopeCICD,
+		"color":          req.Color,
+		"icon":           req.Icon,
+		"sort_order":     req.SortOrder,
 	}
 	return s.dao.RoleUpdate(req.ID, values)
 }
@@ -129,6 +138,7 @@ func (s *Services) ClusterPermissionCreate(req *requests.ClusterPermissionCreate
 		req.UserID,
 		req.ClusterID,
 		req.RoleType,
+		req.AccessLevel,
 		req.Namespaces,
 		req.CanView,
 		req.CanCreate,
@@ -150,14 +160,15 @@ func (s *Services) ClusterPermissionUpdate(req *requests.ClusterPermissionUpdate
 	}
 
 	values := map[string]interface{}{
-		"role_type":  req.RoleType,
-		"namespaces": nsJSON,
-		"can_view":   req.CanView,
-		"can_create": req.CanCreate,
-		"can_update": req.CanUpdate,
-		"can_delete": req.CanDelete,
-		"can_exec":   req.CanExec,
-		"expire_at":  req.ExpireAt,
+		"role_type":    req.RoleType,
+		"access_level": req.AccessLevel,
+		"namespaces":   nsJSON,
+		"can_view":     req.CanView,
+		"can_create":   req.CanCreate,
+		"can_update":   req.CanUpdate,
+		"can_delete":   req.CanDelete,
+		"can_exec":     req.CanExec,
+		"expire_at":    req.ExpireAt,
 	}
 	return s.dao.ClusterPermissionUpdate(req.ID, values)
 }
@@ -183,6 +194,7 @@ func (s *Services) BatchClusterPermissionCreate(req *requests.BatchClusterPermis
 		req.UserID,
 		req.ClusterIDs,
 		req.RoleType,
+		req.AccessLevel,
 		req.CanView,
 		req.CanCreate,
 		req.CanUpdate,
@@ -200,7 +212,43 @@ func (s *Services) CheckClusterPermission(userID, clusterID int64, action string
 	if s.dao.IsSuperAdmin(userID) {
 		return true
 	}
+	// 检查用户角色的 scope_cluster 级别
+	roles, _ := s.dao.UserRoleList(userID)
+	for _, role := range roles {
+		switch action {
+		case models.PermissionActionView:
+			if models.AccessLevelGte(role.ScopeCluster, models.AccessLevelRead) {
+				return true
+			}
+		case models.PermissionActionCreate, models.PermissionActionUpdate, models.PermissionActionExec:
+			if models.AccessLevelGte(role.ScopeCluster, models.AccessLevelWrite) {
+				return true
+			}
+		case models.PermissionActionDelete, models.PermissionActionManage:
+			if models.AccessLevelGte(role.ScopeCluster, models.AccessLevelAdmin) {
+				return true
+			}
+		}
+	}
+	// 回退到细粒度集群权限表
 	return s.dao.ClusterPermissionCheck(userID, clusterID, action)
+}
+
+// CheckScopePermission 检查用户是否满足指定域的最低权限级别
+func (s *Services) CheckScopePermission(userID int64, scope, minLevel string) bool {
+	if s.dao.IsSuperAdmin(userID) {
+		return true
+	}
+	roles, err := s.dao.UserRoleList(userID)
+	if err != nil || len(roles) == 0 {
+		return false
+	}
+	for _, role := range roles {
+		if models.AccessLevelGte(role.GetEffectiveScope(scope), minLevel) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsSuperAdmin 检查用户是否为超级管理员
@@ -222,6 +270,14 @@ type UserWithRBACInfo struct {
 	IsSuperAdmin       bool                             `json:"is_super_admin"`
 	Roles              []*models.SysRole                `json:"roles"`
 	ClusterPermissions []*models.ClusterPermissionDetail `json:"cluster_permissions"`
+	Scopes             *UserScopes                      `json:"scopes"` // 三域有效权限级别
+}
+
+// UserScopes 用户三域有效权限级别（取所有角色的最高值）
+type UserScopes struct {
+	Platform string `json:"platform"` // none/read/write/admin
+	Cluster  string `json:"cluster"`  // none/read/write/admin
+	CICD     string `json:"cicd"`     // none/read/write/admin
 }
 
 // GetUserWithRBACInfo 获取用户完整RBAC信息
@@ -247,12 +303,37 @@ func (s *Services) GetUserWithRBACInfo(userID int64) (*UserWithRBACInfo, error) 
 		username = user.Username
 	}
 
+	// 计算三域有效级别（取所有角色中的最高值）
+	scopes := &UserScopes{
+		Platform: models.AccessLevelNone,
+		Cluster:  models.AccessLevelNone,
+		CICD:     models.AccessLevelNone,
+	}
+	if isSuperAdmin {
+		scopes.Platform = models.AccessLevelAdmin
+		scopes.Cluster = models.AccessLevelAdmin
+		scopes.CICD = models.AccessLevelAdmin
+	} else {
+		for _, role := range roles {
+			if models.AccessLevelGte(role.ScopePlatform, scopes.Platform) {
+				scopes.Platform = role.ScopePlatform
+			}
+			if models.AccessLevelGte(role.ScopeCluster, scopes.Cluster) {
+				scopes.Cluster = role.ScopeCluster
+			}
+			if models.AccessLevelGte(role.ScopeCICD, scopes.CICD) {
+				scopes.CICD = role.ScopeCICD
+			}
+		}
+	}
+
 	return &UserWithRBACInfo{
 		UserID:             userID,
 		Username:           username,
 		IsSuperAdmin:       isSuperAdmin,
 		Roles:              roles,
 		ClusterPermissions: clusterPerms,
+		Scopes:             scopes,
 	}, nil
 }
 

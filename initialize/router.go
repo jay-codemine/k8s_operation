@@ -129,6 +129,12 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	platform.NewPlatformSettingsRouter().Inject(protected)
 
 	// ======================================================
+	// 审计日志分组（需要 JWT）
+	// /api/v1/platform/audit/...
+	// ======================================================
+	platform.NewAuditLogRouter().Inject(protected)
+
+	// ======================================================
 	// 应用商城分组（需要 JWT）
 	// /api/v1/platform/appstore/...
 	// 注入 factory 以支持安装应用到集群

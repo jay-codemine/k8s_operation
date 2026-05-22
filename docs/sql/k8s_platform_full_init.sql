@@ -82,7 +82,10 @@ CREATE TABLE IF NOT EXISTS `sys_role` (
   `name` varchar(50) NOT NULL COMMENT '角色标识(唯一)',
   `display_name` varchar(100) NOT NULL COMMENT '显示名称',
   `description` varchar(500) DEFAULT '' COMMENT '描述',
-  `role_type` varchar(30) NOT NULL DEFAULT 'custom' COMMENT '角色类型:super_admin,cluster_admin,developer,viewer,custom',
+  `role_type` varchar(30) NOT NULL DEFAULT 'custom' COMMENT '角色类型:super_admin,platform_admin,devops,developer,tester,viewer,custom',
+  `scope_platform` varchar(10) NOT NULL DEFAULT 'none' COMMENT '平台域权限级别:none/read/write/admin',
+  `scope_cluster` varchar(10) NOT NULL DEFAULT 'none' COMMENT '集群域权限级别:none/read/write/admin',
+  `scope_cicd` varchar(10) NOT NULL DEFAULT 'none' COMMENT '发布域权限级别:none/read/write/admin',
   `is_system` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否系统内置',
   `color` varchar(20) DEFAULT '#1890ff' COMMENT '角色颜色标识',
   `icon` varchar(50) DEFAULT 'user' COMMENT '图标',
@@ -95,6 +98,19 @@ CREATE TABLE IF NOT EXISTS `sys_role` (
   UNIQUE KEY `idx_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统角色表';
 
+-- 【兼容存量集群】sys_role 幂等补丁：若老库缺 scope_platform/scope_cluster/scope_cicd 字段，自动补上
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_role' AND column_name = 'scope_platform');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_role` ADD COLUMN `scope_platform` VARCHAR(10) NOT NULL DEFAULT ''none'' COMMENT ''平台域权限级别:none/read/write/admin'' AFTER `role_type`', 'SELECT ''scope_platform exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_role' AND column_name = 'scope_cluster');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_role` ADD COLUMN `scope_cluster` VARCHAR(10) NOT NULL DEFAULT ''none'' COMMENT ''集群域权限级别:none/read/write/admin'' AFTER `scope_platform`', 'SELECT ''scope_cluster exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_role' AND column_name = 'scope_cicd');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_role` ADD COLUMN `scope_cicd` VARCHAR(10) NOT NULL DEFAULT ''none'' COMMENT ''发布域权限级别:none/read/write/admin'' AFTER `scope_cluster`', 'SELECT ''scope_cicd exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- =====================================================
 -- 4. RBAC - 系统权限表
 -- =====================================================
@@ -103,8 +119,9 @@ CREATE TABLE IF NOT EXISTS `sys_permission` (
   `name` varchar(100) NOT NULL COMMENT '权限标识(唯一)',
   `display_name` varchar(100) NOT NULL COMMENT '显示名称',
   `description` varchar(500) DEFAULT '' COMMENT '描述',
-  `resource_type` varchar(50) NOT NULL COMMENT '资源类型:cluster,namespace,deployment,pod等',
-  `action` varchar(30) NOT NULL COMMENT '操作类型:view,create,update,delete,exec,manage',
+  `scope` varchar(20) NOT NULL DEFAULT 'cluster' COMMENT '所属功能域:platform/cluster/cicd',
+  `resource_type` varchar(50) NOT NULL COMMENT '模块标识',
+  `action` varchar(30) NOT NULL COMMENT '操作类型:view,manage',
   `parent_id` bigint DEFAULT 0 COMMENT '父权限ID',
   `path` varchar(200) DEFAULT '' COMMENT '权限路径(树形展示用)',
   `sort_order` int DEFAULT 0 COMMENT '排序',
@@ -113,6 +130,11 @@ CREATE TABLE IF NOT EXISTS `sys_permission` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统权限定义表';
+
+-- 【兼容存量集群】sys_permission 幂等补丁：若老库缺 scope 字段，自动补上
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_permission' AND column_name = 'scope');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_permission` ADD COLUMN `scope` VARCHAR(20) NOT NULL DEFAULT ''cluster'' COMMENT ''所属功能域:platform/cluster/cicd'' AFTER `description`', 'SELECT ''scope exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =====================================================
 -- 5. RBAC - 角色权限关联表
@@ -149,12 +171,13 @@ CREATE TABLE IF NOT EXISTS `sys_user_cluster` (
   `user_id` bigint NOT NULL COMMENT '用户ID',
   `cluster_id` bigint NOT NULL COMMENT '集群ID',
   `role_type` varchar(30) NOT NULL DEFAULT 'viewer' COMMENT '在该集群的角色类型',
+  `access_level` varchar(10) NOT NULL DEFAULT 'read' COMMENT '权限级别:none/read/write/admin',
   `namespaces` text DEFAULT NULL COMMENT '可访问的命名空间(JSON数组,空表示全部)',
-  `can_view` tinyint(1) NOT NULL DEFAULT 1 COMMENT '查看权限',
-  `can_create` tinyint(1) NOT NULL DEFAULT 0 COMMENT '创建权限',
-  `can_update` tinyint(1) NOT NULL DEFAULT 0 COMMENT '更新权限',
-  `can_delete` tinyint(1) NOT NULL DEFAULT 0 COMMENT '删除权限',
-  `can_exec` tinyint(1) NOT NULL DEFAULT 0 COMMENT '执行权限(进入容器等)',
+  `can_view` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'deprecated:查看权限',
+  `can_create` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'deprecated:创建权限',
+  `can_update` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'deprecated:更新权限',
+  `can_delete` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'deprecated:删除权限',
+  `can_exec` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'deprecated:执行权限',
   `expire_at` bigint unsigned NOT NULL DEFAULT 0 COMMENT '过期时间(0=永不过期)',
   `created_at` bigint unsigned NOT NULL DEFAULT 0,
   `modified_at` bigint unsigned NOT NULL DEFAULT 0,
@@ -163,6 +186,11 @@ CREATE TABLE IF NOT EXISTS `sys_user_cluster` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_cluster_id` (`cluster_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户集群权限表';
+
+-- 【兼容存量集群】sys_user_cluster 幂等补丁：若老库缺 access_level 字段，自动补上
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_user_cluster' AND column_name = 'access_level');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_user_cluster` ADD COLUMN `access_level` VARCHAR(10) NOT NULL DEFAULT ''read'' COMMENT ''权限级别:none/read/write/admin'' AFTER `role_type`', 'SELECT ''access_level exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =====================================================
 -- 8. CI/CD - 流水线表
@@ -900,68 +928,95 @@ DROP PROCEDURE IF EXISTS add_column_if_not_exists;
 -- =====================================================
 -- 初始化 RBAC 角色数据
 -- =====================================================
-INSERT IGNORE INTO `sys_role` (`id`, `name`, `display_name`, `description`, `role_type`, `is_system`, `color`, `icon`, `sort_order`, `created_at`, `modified_at`) VALUES
-(1, 'super_admin', '超级管理员', '拥有系统所有权限，可管理所有集群和用户', 'super_admin', 1, '#f5222d', 'crown', 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(2, 'cluster_admin', '集群管理员', '可管理指定集群的所有资源', 'cluster_admin', 1, '#fa8c16', 'cluster', 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(3, 'developer', '开发者', '可查看和操作指定命名空间的资源', 'developer', 1, '#1890ff', 'code', 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(4, 'viewer', '只读用户', '只能查看指定资源，无法进行修改操作', 'viewer', 1, '#52c41a', 'eye', 4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+INSERT IGNORE INTO `sys_role` (`id`, `name`, `display_name`, `description`, `role_type`, `scope_platform`, `scope_cluster`, `scope_cicd`, `is_system`, `color`, `icon`, `sort_order`, `created_at`, `modified_at`) VALUES
+(1, 'super_admin',    '超级管理员', '拥有系统所有权限，可管理所有集群、用户和发布', 'super_admin',    'admin', 'admin', 'admin', 1, '#f5222d', 'crown',    1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(2, 'platform_admin', '平台管理员', '管理用户/角色/系统设置，集群和CI/CD只读',     'platform_admin', 'admin', 'read',  'read',  1, '#fa8c16', 'setting',  2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(3, 'devops',         '运维工程师', '集群全权+CI/CD全权，平台域只读',                'devops',         'read',  'admin', 'admin', 1, '#722ed1', 'tool',     3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(4, 'developer',      '开发工程师', '集群域读写(指定NS)+CI/CD读写(自己的流水线)',    'developer',      'none',  'write', 'write', 1, '#1890ff', 'code',     4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(5, 'tester',         '测试工程师', '集群域只读(指定NS)+CI/CD读写(测试环境流水线)',    'tester',         'none',  'read',  'write', 1, '#52c41a', 'bug',      5, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(6, 'viewer',         '观察者',     '全域只读，无任何修改权限',                        'viewer',         'read',  'read',  'read',  1, '#8c8c8c', 'eye',      6, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- =====================================================
--- 初始化系统权限数据
+-- 初始化系统权限数据（v2: 按功能模块聚合，12条模块级权限）
 -- =====================================================
-INSERT IGNORE INTO `sys_permission` (`id`, `name`, `display_name`, `description`, `resource_type`, `action`, `parent_id`, `path`, `sort_order`, `created_at`, `modified_at`) VALUES
--- 集群权限
-(1, 'cluster:view', '查看集群', '查看集群列表和详情', 'cluster', 'view', 0, '/cluster', 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(2, 'cluster:create', '创建集群', '添加新的K8s集群', 'cluster', 'create', 0, '/cluster', 2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(3, 'cluster:update', '更新集群', '修改集群配置', 'cluster', 'update', 0, '/cluster', 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(4, 'cluster:delete', '删除集群', '删除K8s集群', 'cluster', 'delete', 0, '/cluster', 4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- 命名空间权限
-(5, 'namespace:view', '查看命名空间', '查看命名空间列表', 'namespace', 'view', 0, '/namespace', 5, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(6, 'namespace:create', '创建命名空间', '创建新命名空间', 'namespace', 'create', 0, '/namespace', 6, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(7, 'namespace:delete', '删除命名空间', '删除命名空间', 'namespace', 'delete', 0, '/namespace', 7, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- 工作负载权限
-(8, 'deployment:view', '查看Deployment', '查看Deployment列表和详情', 'deployment', 'view', 0, '/deployment', 10, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(9, 'deployment:create', '创建Deployment', '创建新的Deployment', 'deployment', 'create', 0, '/deployment', 11, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(10, 'deployment:update', '更新Deployment', '修改Deployment配置、扩缩容', 'deployment', 'update', 0, '/deployment', 12, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(11, 'deployment:delete', '删除Deployment', '删除Deployment', 'deployment', 'delete', 0, '/deployment', 13, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- Pod权限
-(12, 'pod:view', '查看Pod', '查看Pod列表、日志', 'pod', 'view', 0, '/pod', 20, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(13, 'pod:delete', '删除Pod', '删除Pod', 'pod', 'delete', 0, '/pod', 21, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(14, 'pod:exec', '进入容器', '执行exec进入容器终端', 'pod', 'exec', 0, '/pod', 22, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- Service权限
-(15, 'service:view', '查看Service', '查看Service列表', 'service', 'view', 0, '/service', 30, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(16, 'service:create', '创建Service', '创建新Service', 'service', 'create', 0, '/service', 31, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(17, 'service:update', '更新Service', '修改Service配置', 'service', 'update', 0, '/service', 32, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(18, 'service:delete', '删除Service', '删除Service', 'service', 'delete', 0, '/service', 33, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- ConfigMap/Secret权限
-(19, 'configmap:view', '查看ConfigMap', '查看ConfigMap', 'configmap', 'view', 0, '/configmap', 40, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(20, 'configmap:manage', '管理ConfigMap', '创建、修改、删除ConfigMap', 'configmap', 'manage', 0, '/configmap', 41, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(21, 'secret:view', '查看Secret', '查看Secret', 'secret', 'view', 0, '/secret', 42, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(22, 'secret:manage', '管理Secret', '创建、修改、删除Secret', 'secret', 'manage', 0, '/secret', 43, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- CI/CD权限
-(23, 'pipeline:view', '查看流水线', '查看CI/CD流水线', 'pipeline', 'view', 0, '/pipeline', 50, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(24, 'pipeline:manage', '管理流水线', '创建、修改、删除、执行流水线', 'pipeline', 'manage', 0, '/pipeline', 51, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
--- 用户权限
-(25, 'user:view', '查看用户', '查看用户列表', 'user', 'view', 0, '/user', 60, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(26, 'user:manage', '管理用户', '创建、修改、删除用户，分配角色', 'user', 'manage', 0, '/user', 61, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+INSERT IGNORE INTO `sys_permission` (`id`, `name`, `display_name`, `description`, `scope`, `resource_type`, `action`, `parent_id`, `path`, `sort_order`, `created_at`, `modified_at`) VALUES
+-- 🏛 平台域
+(1,  'platform:user',     '用户管理',   '创建/编辑/禁用用户，分配角色',           'platform', 'user',     'manage', 0, '/platform/user',     1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(2,  'platform:role',     '角色权限',   '管理角色、分配权限、集群授权',         'platform', 'role',     'manage', 0, '/platform/role',     2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(3,  'platform:settings', '系统设置',   '平台参数/告警配置/数据源管理',           'platform', 'settings', 'manage', 0, '/platform/settings', 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(4,  'platform:audit',    '审计日志',   '查看操作审计日志',                       'platform', 'audit',    'view',   0, '/platform/audit',    4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- ☸ 集群域
+(5,  'cluster:manage',    '集群管理',   '添加/编辑/删除K8s集群',                 'cluster',  'cluster',  'manage', 0, '/cluster/manage',    10, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(6,  'cluster:workload',  '工作负载',   'Deployment/Pod/DaemonSet/Job等生命周期管理', 'cluster',  'workload', 'manage', 0, '/cluster/workload',  11, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(7,  'cluster:network',   '服务与路由', 'Service/Ingress/NetworkPolicy',            'cluster',  'network',  'manage', 0, '/cluster/network',   12, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(8,  'cluster:config',    '配置管理',   'ConfigMap/Secret管理',                   'cluster',  'config',   'manage', 0, '/cluster/config',    13, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(9,  'cluster:storage',   '存储管理',   'PV/PVC/StorageClass管理',               'cluster',  'storage',  'manage', 0, '/cluster/storage',   14, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(10, 'cluster:node',      '节点管理',   '节点查看/隔离/驱逐/标签管理',               'cluster',  'node',     'manage', 0, '/cluster/node',      15, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(11, 'cluster:monitor',   '监控与日志', '监控总览/日志探索/告警查看/Web终端',       'cluster',  'monitor',  'manage', 0, '/cluster/monitor',   16, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- 🚀 发布域
+(12, 'cicd:pipeline',     '流水线管理', '创建/编辑/触发/停止流水线，审批管理',     'cicd',     'pipeline', 'manage', 0, '/cicd/pipeline',     20, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(13, 'cicd:artifact',     '制品与镜像', '制品库/镜像仓库/代码扫描/发布记录',       'cicd',     'artifact', 'manage', 0, '/cicd/artifact',     21, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- =====================================================
--- 初始化角色权限关联 (超级管理员拥有所有权限)
+-- 初始化角色权限关联 (v2: 基于三域 scope，模块级权限作为补充细控)
+-- 超级管理员: 全部权限
 -- =====================================================
 INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
 SELECT 1, id, UNIX_TIMESTAMP() FROM `sys_permission`;
 
--- 集群管理员权限
+-- 平台管理员: 平台域全部 + 集群域只读 + CI/CD只读
 INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
-SELECT 2, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE id BETWEEN 1 AND 24;
+SELECT 2, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `scope` = 'platform';
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 2, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `scope` IN ('cluster', 'cicd') AND `action` = 'view';
 
--- 开发者权限
+-- 运维工程师: 集群域全部 + CI/CD全部 + 平台域只读
 INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
-SELECT 3, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `action` IN ('view', 'create', 'update', 'exec') AND id NOT IN (25, 26);
+SELECT 3, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `scope` IN ('cluster', 'cicd');
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 3, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `scope` = 'platform' AND `action` = 'view';
 
--- 只读用户权限
+-- 开发工程师: 集群域(工作负载/网络/配置/监控) + CI/CD全部
 INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
-SELECT 4, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `action` = 'view';
+SELECT 4, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `name` IN ('cluster:workload','cluster:network','cluster:config','cluster:monitor','cicd:pipeline','cicd:artifact');
+
+-- 测试工程师: 集群域只读(工作负载/监控) + CI/CD流水线
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 5, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `name` IN ('cluster:workload','cluster:monitor','cicd:pipeline');
+
+-- 观察者: 所有域的 view 类权限
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 6, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `action` = 'view';
+
+-- =====================================================
+-- 【兼容存量集群】RBAC v2 存量数据回填
+-- 说明: 全新库 INSERT IGNORE 已覆盖; 存量库仅当 scope 全为 none 时才回填
+-- =====================================================
+
+-- 旧角色 scope 回填（仅当三域均为默认 none 时才触发，不会覆盖已配置的值）
+UPDATE `sys_role` SET `scope_platform`='admin', `scope_cluster`='admin', `scope_cicd`='admin'
+WHERE `role_type`='super_admin' AND `scope_platform`='none' AND `scope_cluster`='none' AND `scope_cicd`='none';
+
+UPDATE `sys_role` SET `scope_platform`='admin', `scope_cluster`='read', `scope_cicd`='read'
+WHERE `role_type`='platform_admin' AND `scope_platform`='none' AND `scope_cluster`='none' AND `scope_cicd`='none';
+
+UPDATE `sys_role` SET `role_type`='devops', `scope_platform`='read', `scope_cluster`='admin', `scope_cicd`='admin'
+WHERE `role_type`='cluster_admin' AND `scope_platform`='none' AND `scope_cluster`='none' AND `scope_cicd`='none';
+
+UPDATE `sys_role` SET `scope_platform`='none', `scope_cluster`='write', `scope_cicd`='write'
+WHERE `role_type`='developer' AND `scope_platform`='none' AND `scope_cluster`='none' AND `scope_cicd`='none';
+
+UPDATE `sys_role` SET `scope_platform`='read', `scope_cluster`='read', `scope_cicd`='read'
+WHERE `role_type`='viewer' AND `scope_platform`='none' AND `scope_cluster`='none' AND `scope_cicd`='none';
+
+-- sys_user_cluster.access_level 回填（从旧 bool 字段推导）
+UPDATE `sys_user_cluster` SET `access_level`='admin'  WHERE `access_level`='read' AND `can_delete`=1;
+UPDATE `sys_user_cluster` SET `access_level`='write'  WHERE `access_level`='read' AND `can_delete`=0 AND (`can_create`=1 OR `can_update`=1 OR `can_exec`=1);
+UPDATE `sys_user_cluster` SET `access_level`='none'   WHERE `access_level`='read' AND `can_view`=0 AND `can_create`=0 AND `can_update`=0 AND `can_delete`=0 AND `can_exec`=0;
+
+-- sys_permission.scope 回填（旧权限的 scope 全是默认值 cluster，按 resource_type 修正）
+UPDATE `sys_permission` SET `scope`='platform' WHERE `scope`='cluster' AND `resource_type` IN ('user','role','settings','audit','permission');
+UPDATE `sys_permission` SET `scope`='cicd' WHERE `scope`='cluster' AND `resource_type` IN ('pipeline','artifact','release','approval','build','image');
 
 -- =====================================================
 -- 初始化管理员账户 (admin/admin123)

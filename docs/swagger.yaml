@@ -14,6 +14,13 @@ definitions:
       vue_version:
         type: string
     type: object
+  models.ActionSummary:
+    properties:
+      action:
+        type: string
+      count:
+        type: integer
+    type: object
   models.AlertSettings:
     properties:
       alert_silence:
@@ -122,6 +129,137 @@ definitions:
         type: string
     required:
     - id
+    type: object
+  models.AuditLog:
+    properties:
+      action:
+        description: create/update/delete/login/logout/exec/approve
+        type: string
+      action_display:
+        description: 操作显示名称
+        type: string
+      cluster_id:
+        type: integer
+      cluster_name:
+        type: string
+      created_at:
+        type: integer
+      detail:
+        description: 操作详情JSON
+        type: string
+      duration_ms:
+        type: integer
+      error_message:
+        type: string
+      extra:
+        description: 额外信息JSON
+        type: string
+      id:
+        type: integer
+      module:
+        description: cluster/workload/cicd/rbac/platform/auth/ai
+        type: string
+      namespace:
+        type: string
+      pipeline_id:
+        type: integer
+      pipeline_name:
+        type: string
+      project_id:
+        type: integer
+      project_name:
+        type: string
+      request_body:
+        type: string
+      request_method:
+        type: string
+      request_uri:
+        type: string
+      response_code:
+        type: integer
+      response_message:
+        type: string
+      status:
+        description: success/failed
+        type: string
+      target_id:
+        description: 目标ID
+        type: string
+      target_name:
+        description: 目标名称
+        type: string
+      target_type:
+        description: deployment/pod/pipeline/user/role...
+        type: string
+      user_agent:
+        type: string
+      user_id:
+        type: integer
+      user_ip:
+        type: string
+      username:
+        type: string
+    type: object
+  models.AuditLogListResponse:
+    properties:
+      list:
+        items:
+          $ref: '#/definitions/models.AuditLog'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      statistics:
+        $ref: '#/definitions/models.AuditStatistics'
+      total:
+        type: integer
+    type: object
+  models.AuditRetentionPolicy:
+    properties:
+      is_permanent:
+        description: 是否永久保留
+        type: boolean
+      retention_days:
+        description: 保留天数，0 = 永久保留
+        type: integer
+    type: object
+  models.AuditRetentionUpdateReq:
+    properties:
+      is_permanent:
+        type: boolean
+      retention_days:
+        description: 0 = 永久
+        maximum: 3650
+        minimum: 0
+        type: integer
+    type: object
+  models.AuditStatistics:
+    properties:
+      action_summary:
+        items:
+          $ref: '#/definitions/models.ActionSummary'
+        type: array
+      hourly_counts:
+        items:
+          $ref: '#/definitions/models.HourlyCount'
+        type: array
+      success_rate:
+        type: number
+      top_modules:
+        items:
+          $ref: '#/definitions/models.TopModuleStat'
+        type: array
+      top_users:
+        items:
+          $ref: '#/definitions/models.TopUserStat'
+        type: array
+      total_all:
+        type: integer
+      total_today:
+        type: integer
+      total_week:
+        type: integer
     type: object
   models.BasicSettings:
     properties:
@@ -239,6 +377,13 @@ definitions:
       min_replicas:
         type: integer
     type: object
+  models.HourlyCount:
+    properties:
+      count:
+        type: integer
+      hour:
+        type: integer
+    type: object
   models.NotificationSettings:
     properties:
       dingtalk_webhook:
@@ -342,6 +487,20 @@ definitions:
       session_timeout:
         type: integer
     type: object
+  models.TopModuleStat:
+    properties:
+      count:
+        type: integer
+      module:
+        type: string
+    type: object
+  models.TopUserStat:
+    properties:
+      count:
+        type: integer
+      username:
+        type: string
+    type: object
   requests.ApprovalActionRequest:
     properties:
       action:
@@ -424,15 +583,23 @@ definitions:
     type: object
   requests.BatchClusterPermissionRequest:
     properties:
+      access_level:
+        description: none/read/write/admin
+        type: string
       can_create:
+        description: deprecated
         type: boolean
       can_delete:
+        description: deprecated
         type: boolean
       can_exec:
+        description: deprecated
         type: boolean
       can_update:
+        description: deprecated
         type: boolean
       can_view:
+        description: deprecated
         type: boolean
       cluster_ids:
         items:
@@ -544,15 +711,23 @@ definitions:
     type: object
   requests.ClusterPermissionCreateRequest:
     properties:
+      access_level:
+        description: none/read/write/admin
+        type: string
       can_create:
+        description: deprecated
         type: boolean
       can_delete:
+        description: deprecated
         type: boolean
       can_exec:
+        description: deprecated
         type: boolean
       can_update:
+        description: deprecated
         type: boolean
       can_view:
+        description: deprecated
         type: boolean
       cluster_id:
         type: integer
@@ -571,15 +746,23 @@ definitions:
     type: object
   requests.ClusterPermissionUpdateRequest:
     properties:
+      access_level:
+        description: none/read/write/admin
+        type: string
       can_create:
+        description: deprecated
         type: boolean
       can_delete:
+        description: deprecated
         type: boolean
       can_exec:
+        description: deprecated
         type: boolean
       can_update:
+        description: deprecated
         type: boolean
       can_view:
+        description: deprecated
         type: boolean
       expire_at:
         type: integer
@@ -1976,6 +2159,15 @@ definitions:
         type: string
       role_type:
         type: string
+      scope_cicd:
+        description: none/read/write/admin
+        type: string
+      scope_cluster:
+        description: none/read/write/admin
+        type: string
+      scope_platform:
+        description: none/read/write/admin
+        type: string
     type: object
   requests.RolePermissionsUpdateRequest:
     properties:
@@ -1998,6 +2190,13 @@ definitions:
         type: string
       id:
         type: integer
+      scope_cicd:
+        type: string
+      scope_cluster:
+        type: string
+      scope_platform:
+        description: none/read/write/admin
+        type: string
       sort_order:
         type: integer
     type: object
@@ -12704,6 +12903,178 @@ paths:
       summary: 更新应用
       tags:
       - 应用商城
+  /api/v1/platform/audit/cleanup:
+    post:
+      description: 根据当前保留策略清理过期数据
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 手动清理过期审计日志
+      tags:
+      - 审计日志
+  /api/v1/platform/audit/export:
+    get:
+      description: 按筛选条件导出审计日志（最多10000条）
+      parameters:
+      - description: 用户名
+        in: query
+        name: username
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 模块
+        in: query
+        name: module
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: integer
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.AuditLog'
+            type: array
+      summary: 导出审计日志
+      tags:
+      - 审计日志
+  /api/v1/platform/audit/logs:
+    get:
+      description: 支持多维度筛选、分页、排序
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页条数
+        in: query
+        name: page_size
+        type: integer
+      - description: 用户名
+        in: query
+        name: username
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 模块
+        in: query
+        name: module
+        type: string
+      - description: '状态: success/failed'
+        in: query
+        name: status
+        type: string
+      - description: 开始时间(unix)
+        in: query
+        name: start_time
+        type: integer
+      - description: 结束时间(unix)
+        in: query
+        name: end_time
+        type: integer
+      - description: 关键词搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditLogListResponse'
+      summary: 获取审计日志列表
+      tags:
+      - 审计日志
+  /api/v1/platform/audit/logs/{id}:
+    get:
+      description: 根据ID获取单条审计日志完整信息
+      parameters:
+      - description: 日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditLog'
+      summary: 获取审计日志详情
+      tags:
+      - 审计日志
+  /api/v1/platform/audit/retention:
+    get:
+      description: 返回当前保留天数和是否永久保留
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditRetentionPolicy'
+      summary: 获取审计日志保留策略
+      tags:
+      - 审计日志
+    put:
+      consumes:
+      - application/json
+      description: 设置保留天数(0=永久)或切换永久保留
+      parameters:
+      - description: 保留策略
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.AuditRetentionUpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: 更新审计日志保留策略
+      tags:
+      - 审计日志
+  /api/v1/platform/audit/statistics:
+    get:
+      description: 返回今日/本周操作量、成功率、用户排行、模块排行等
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditStatistics'
+      summary: 获取审计统计数据
+      tags:
+      - 审计日志
   /api/v1/platform/health:
     get:
       consumes:
