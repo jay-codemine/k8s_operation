@@ -9,19 +9,22 @@ import (
 // ==================== 角色管理 ====================
 
 // RoleCreate 创建角色
-func (d *Dao) RoleCreate(name, displayName, description, roleType, color, icon string) (*models.SysRole, error) {
+func (d *Dao) RoleCreate(name, displayName, description, roleType, scopePlatform, scopeCluster, scopeCICD, color, icon string) (*models.SysRole, error) {
 	now := uint64(time.Now().Unix())
 	role := &models.SysRole{
-		Name:        name,
-		DisplayName: displayName,
-		Description: description,
-		RoleType:    roleType,
-		Color:       color,
-		Icon:        icon,
-		IsSystem:    false,
-		SortOrder:   0,
-		CreatedAt:   now,
-		ModifiedAt:  now,
+		Name:          name,
+		DisplayName:   displayName,
+		Description:   description,
+		RoleType:      roleType,
+		ScopePlatform: scopePlatform,
+		ScopeCluster:  scopeCluster,
+		ScopeCICD:     scopeCICD,
+		Color:         color,
+		Icon:          icon,
+		IsSystem:      false,
+		SortOrder:     0,
+		CreatedAt:     now,
+		ModifiedAt:    now,
 	}
 	if err := d.db.Create(role).Error; err != nil {
 		return nil, err
@@ -217,7 +220,7 @@ func (d *Dao) UserRoleListWithCount(page, limit int) ([]*models.RoleWithPermissi
 // ==================== 集群权限管理 ====================
 
 // ClusterPermissionCreate 创建集群权限
-func (d *Dao) ClusterPermissionCreate(userID, clusterID int64, roleType string, namespaces []string,
+func (d *Dao) ClusterPermissionCreate(userID, clusterID int64, roleType, accessLevel string, namespaces []string,
 	canView, canCreate, canUpdate, canDelete, canExec bool, expireAt uint64, createdBy int64) (*models.SysUserCluster, error) {
 	now := uint64(time.Now().Unix())
 
@@ -235,15 +238,16 @@ func (d *Dao) ClusterPermissionCreate(userID, clusterID int64, roleType string, 
 	if err == nil {
 		// 已存在，更新
 		updates := map[string]interface{}{
-			"role_type":   roleType,
-			"namespaces":  nsJSON,
-			"can_view":    canView,
-			"can_create":  canCreate,
-			"can_update":  canUpdate,
-			"can_delete":  canDelete,
-			"can_exec":    canExec,
-			"expire_at":   expireAt,
-			"modified_at": now,
+			"role_type":    roleType,
+			"access_level": accessLevel,
+			"namespaces":   nsJSON,
+			"can_view":     canView,
+			"can_create":   canCreate,
+			"can_update":   canUpdate,
+			"can_delete":   canDelete,
+			"can_exec":     canExec,
+			"expire_at":    expireAt,
+			"modified_at":  now,
 		}
 		if err := d.db.Model(&existing).Updates(updates).Error; err != nil {
 			return nil, err
@@ -253,19 +257,20 @@ func (d *Dao) ClusterPermissionCreate(userID, clusterID int64, roleType string, 
 
 	// 不存在，创建新记录
 	perm := &models.SysUserCluster{
-		UserID:     userID,
-		ClusterID:  clusterID,
-		RoleType:   roleType,
-		Namespaces: nsJSON,
-		CanView:    canView,
-		CanCreate:  canCreate,
-		CanUpdate:  canUpdate,
-		CanDelete:  canDelete,
-		CanExec:    canExec,
-		ExpireAt:   expireAt,
-		CreatedAt:  now,
-		ModifiedAt: now,
-		CreatedBy:  createdBy,
+		UserID:      userID,
+		ClusterID:   clusterID,
+		RoleType:    roleType,
+		AccessLevel: accessLevel,
+		Namespaces:  nsJSON,
+		CanView:     canView,
+		CanCreate:   canCreate,
+		CanUpdate:   canUpdate,
+		CanDelete:   canDelete,
+		CanExec:     canExec,
+		ExpireAt:    expireAt,
+		CreatedAt:   now,
+		ModifiedAt:  now,
+		CreatedBy:   createdBy,
 	}
 	if err := d.db.Create(perm).Error; err != nil {
 		return nil, err
@@ -394,7 +399,7 @@ func (d *Dao) IsSuperAdmin(userID int64) bool {
 // ==================== 批量操作 ====================
 
 // BatchClusterPermissionCreate 批量创建集群权限
-func (d *Dao) BatchClusterPermissionCreate(userID int64, clusterIDs []int64, roleType string,
+func (d *Dao) BatchClusterPermissionCreate(userID int64, clusterIDs []int64, roleType, accessLevel string,
 	canView, canCreate, canUpdate, canDelete, canExec bool, createdBy int64) error {
 	now := uint64(time.Now().Unix())
 
@@ -406,17 +411,18 @@ func (d *Dao) BatchClusterPermissionCreate(userID int64, clusterIDs []int64, rol
 	// 批量创建新权限
 	for _, cid := range clusterIDs {
 		perm := &models.SysUserCluster{
-			UserID:     userID,
-			ClusterID:  cid,
-			RoleType:   roleType,
-			CanView:    canView,
-			CanCreate:  canCreate,
-			CanUpdate:  canUpdate,
-			CanDelete:  canDelete,
-			CanExec:    canExec,
-			CreatedAt:  now,
-			ModifiedAt: now,
-			CreatedBy:  createdBy,
+			UserID:      userID,
+			ClusterID:   cid,
+			RoleType:    roleType,
+			AccessLevel: accessLevel,
+			CanView:     canView,
+			CanCreate:   canCreate,
+			CanUpdate:   canUpdate,
+			CanDelete:   canDelete,
+			CanExec:     canExec,
+			CreatedAt:   now,
+			ModifiedAt:  now,
+			CreatedBy:   createdBy,
 		}
 		if err := d.db.Create(perm).Error; err != nil {
 			return err
@@ -436,11 +442,23 @@ func (d *Dao) GetUserAccessibleClusters(userID int64) ([]*models.K8sCluster, err
 		return clusters, nil
 	}
 
-	// 否则只返回有权限的集群
+	// 检查用户角色的 scope_cluster >= read，则可访问所有集群
+	roles, _ := d.UserRoleList(userID)
+	for _, role := range roles {
+		if models.AccessLevelGte(role.ScopeCluster, models.AccessLevelRead) {
+			var clusters []*models.K8sCluster
+			if err := d.db.Where("is_del = 0").Find(&clusters).Error; err != nil {
+				return nil, err
+			}
+			return clusters, nil
+		}
+	}
+
+	// 否则只返回有权限的集群（兼容旧 can_view + 新 access_level）
 	var clusters []*models.K8sCluster
 	err := d.db.Table("kube_cluster").
 		Joins("JOIN sys_user_cluster ON kube_cluster.id = sys_user_cluster.cluster_id").
-		Where("sys_user_cluster.user_id = ? AND sys_user_cluster.can_view = 1 AND kube_cluster.is_del = 0", userID).
+		Where("sys_user_cluster.user_id = ? AND (sys_user_cluster.access_level IN ('read','write','admin') OR sys_user_cluster.can_view = 1) AND kube_cluster.is_del = 0", userID).
 		Find(&clusters).Error
 	return clusters, err
 }

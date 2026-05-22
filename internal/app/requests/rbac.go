@@ -10,18 +10,24 @@ import (
 
 // RoleCreateRequest 创建角色请求
 type RoleCreateRequest struct {
-	Name        string `json:"name" form:"name" valid:"name"`
-	DisplayName string `json:"display_name" form:"display_name" valid:"display_name"`
-	Description string `json:"description" form:"description" valid:"description"`
-	RoleType    string `json:"role_type" form:"role_type" valid:"role_type"`
-	Color       string `json:"color" form:"color" valid:"color"`
-	Icon        string `json:"icon" form:"icon" valid:"icon"`
+	Name          string `json:"name" form:"name" valid:"name"`
+	DisplayName   string `json:"display_name" form:"display_name" valid:"display_name"`
+	Description   string `json:"description" form:"description" valid:"description"`
+	RoleType      string `json:"role_type" form:"role_type" valid:"role_type"`
+	ScopePlatform string `json:"scope_platform" form:"scope_platform"` // none/read/write/admin
+	ScopeCluster  string `json:"scope_cluster" form:"scope_cluster"`   // none/read/write/admin
+	ScopeCICD     string `json:"scope_cicd" form:"scope_cicd"`         // none/read/write/admin
+	Color         string `json:"color" form:"color" valid:"color"`
+	Icon          string `json:"icon" form:"icon" valid:"icon"`
 }
 
 func NewRoleCreateRequest() *RoleCreateRequest {
 	return &RoleCreateRequest{
-		Color: "#1890ff",
-		Icon:  "user",
+		Color:         "#1890ff",
+		Icon:          "user",
+		ScopePlatform: "none",
+		ScopeCluster:  "none",
+		ScopeCICD:     "none",
 	}
 }
 
@@ -29,7 +35,7 @@ func ValidRoleCreateRequest(data interface{}, ctx *gin.Context) map[string][]str
 	rules := govalidator.MapData{
 		"name":         []string{"required", "min:2", "max:50"},
 		"display_name": []string{"required", "min:2", "max:50"},
-		"role_type":    []string{"required", "in:super_admin,cluster_admin,developer,viewer,custom"},
+		"role_type":    []string{"required", "in:super_admin,platform_admin,devops,developer,tester,viewer,custom"},
 	}
 	messages := govalidator.MapData{
 		"name":         []string{"required:角色标识为必填项", "min:角色标识至少2个字符", "max:角色标识最多50个字符"},
@@ -41,12 +47,15 @@ func ValidRoleCreateRequest(data interface{}, ctx *gin.Context) map[string][]str
 
 // RoleUpdateRequest 更新角色请求
 type RoleUpdateRequest struct {
-	ID          int64  `json:"id" form:"id" valid:"id"`
-	DisplayName string `json:"display_name" form:"display_name" valid:"display_name"`
-	Description string `json:"description" form:"description" valid:"description"`
-	Color       string `json:"color" form:"color" valid:"color"`
-	Icon        string `json:"icon" form:"icon" valid:"icon"`
-	SortOrder   int    `json:"sort_order" form:"sort_order" valid:"sort_order"`
+	ID            int64  `json:"id" form:"id" valid:"id"`
+	DisplayName   string `json:"display_name" form:"display_name" valid:"display_name"`
+	Description   string `json:"description" form:"description" valid:"description"`
+	ScopePlatform string `json:"scope_platform" form:"scope_platform"` // none/read/write/admin
+	ScopeCluster  string `json:"scope_cluster" form:"scope_cluster"`
+	ScopeCICD     string `json:"scope_cicd" form:"scope_cicd"`
+	Color         string `json:"color" form:"color" valid:"color"`
+	Icon          string `json:"icon" form:"icon" valid:"icon"`
+	SortOrder     int    `json:"sort_order" form:"sort_order" valid:"sort_order"`
 }
 
 func NewRoleUpdateRequest() *RoleUpdateRequest {
@@ -158,21 +167,23 @@ func ValidUserRoleListRequest(data interface{}, ctx *gin.Context) map[string][]s
 
 // ClusterPermissionCreateRequest 创建集群权限请求
 type ClusterPermissionCreateRequest struct {
-	UserID     int64    `json:"user_id" form:"user_id" valid:"user_id"`
-	ClusterID  int64    `json:"cluster_id" form:"cluster_id" valid:"cluster_id"`
-	RoleType   string   `json:"role_type" form:"role_type" valid:"role_type"`
-	Namespaces []string `json:"namespaces" form:"namespaces"` // 可访问的命名空间（空=全部）
-	CanView    bool     `json:"can_view" form:"can_view"`
-	CanCreate  bool     `json:"can_create" form:"can_create"`
-	CanUpdate  bool     `json:"can_update" form:"can_update"`
-	CanDelete  bool     `json:"can_delete" form:"can_delete"`
-	CanExec    bool     `json:"can_exec" form:"can_exec"`
-	ExpireAt   uint64   `json:"expire_at" form:"expire_at"` // 过期时间，0=永不过期
+	UserID      int64    `json:"user_id" form:"user_id" valid:"user_id"`
+	ClusterID   int64    `json:"cluster_id" form:"cluster_id" valid:"cluster_id"`
+	RoleType    string   `json:"role_type" form:"role_type" valid:"role_type"`
+	AccessLevel string   `json:"access_level" form:"access_level"` // none/read/write/admin
+	Namespaces  []string `json:"namespaces" form:"namespaces"`     // 可访问的命名空间（空=全部）
+	CanView     bool     `json:"can_view" form:"can_view"`         // deprecated
+	CanCreate   bool     `json:"can_create" form:"can_create"`     // deprecated
+	CanUpdate   bool     `json:"can_update" form:"can_update"`     // deprecated
+	CanDelete   bool     `json:"can_delete" form:"can_delete"`     // deprecated
+	CanExec     bool     `json:"can_exec" form:"can_exec"`         // deprecated
+	ExpireAt    uint64   `json:"expire_at" form:"expire_at"`       // 过期时间，0=永不过期
 }
 
 func NewClusterPermissionCreateRequest() *ClusterPermissionCreateRequest {
 	return &ClusterPermissionCreateRequest{
-		CanView: true,
+		CanView:     true,
+		AccessLevel: "read",
 	}
 }
 
@@ -180,7 +191,7 @@ func ValidClusterPermissionCreateRequest(data interface{}, ctx *gin.Context) map
 	rules := govalidator.MapData{
 		"user_id":    []string{"required"},
 		"cluster_id": []string{"required"},
-		"role_type":  []string{"required", "in:cluster_admin,developer,viewer,custom,cicd_admin"},
+		"role_type":  []string{"required", "in:super_admin,platform_admin,devops,developer,tester,viewer,custom"},
 	}
 	messages := govalidator.MapData{
 		"user_id":    []string{"required:用户ID为必填项"},
@@ -192,15 +203,16 @@ func ValidClusterPermissionCreateRequest(data interface{}, ctx *gin.Context) map
 
 // ClusterPermissionUpdateRequest 更新集群权限请求
 type ClusterPermissionUpdateRequest struct {
-	ID         int64    `json:"id" form:"id" valid:"id"`
-	RoleType   string   `json:"role_type" form:"role_type" valid:"role_type"`
-	Namespaces []string `json:"namespaces" form:"namespaces"`
-	CanView    bool     `json:"can_view" form:"can_view"`
-	CanCreate  bool     `json:"can_create" form:"can_create"`
-	CanUpdate  bool     `json:"can_update" form:"can_update"`
-	CanDelete  bool     `json:"can_delete" form:"can_delete"`
-	CanExec    bool     `json:"can_exec" form:"can_exec"`
-	ExpireAt   uint64   `json:"expire_at" form:"expire_at"`
+	ID          int64    `json:"id" form:"id" valid:"id"`
+	RoleType    string   `json:"role_type" form:"role_type" valid:"role_type"`
+	AccessLevel string   `json:"access_level" form:"access_level"` // none/read/write/admin
+	Namespaces  []string `json:"namespaces" form:"namespaces"`
+	CanView     bool     `json:"can_view" form:"can_view"`     // deprecated
+	CanCreate   bool     `json:"can_create" form:"can_create"` // deprecated
+	CanUpdate   bool     `json:"can_update" form:"can_update"` // deprecated
+	CanDelete   bool     `json:"can_delete" form:"can_delete"` // deprecated
+	CanExec     bool     `json:"can_exec" form:"can_exec"`     // deprecated
+	ExpireAt    uint64   `json:"expire_at" form:"expire_at"`
 }
 
 func NewClusterPermissionUpdateRequest() *ClusterPermissionUpdateRequest {
@@ -210,7 +222,7 @@ func NewClusterPermissionUpdateRequest() *ClusterPermissionUpdateRequest {
 func ValidClusterPermissionUpdateRequest(data interface{}, ctx *gin.Context) map[string][]string {
 	rules := govalidator.MapData{
 		"id":        []string{"required"},
-		"role_type": []string{"required", "in:cluster_admin,developer,viewer,custom,cicd_admin"},
+		"role_type": []string{"required", "in:super_admin,platform_admin,devops,developer,tester,viewer,custom"},
 	}
 	messages := govalidator.MapData{
 		"id":        []string{"required:权限ID为必填项"},
@@ -282,24 +294,25 @@ func ValidUserDetailRequest(data interface{}, ctx *gin.Context) map[string][]str
 
 // BatchClusterPermissionRequest 批量分配集群权限请求
 type BatchClusterPermissionRequest struct {
-	UserID     int64   `json:"user_id" form:"user_id" valid:"user_id"`
-	ClusterIDs []int64 `json:"cluster_ids" form:"cluster_ids"`
-	RoleType   string  `json:"role_type" form:"role_type" valid:"role_type"`
-	CanView    bool    `json:"can_view" form:"can_view"`
-	CanCreate  bool    `json:"can_create" form:"can_create"`
-	CanUpdate  bool    `json:"can_update" form:"can_update"`
-	CanDelete  bool    `json:"can_delete" form:"can_delete"`
-	CanExec    bool    `json:"can_exec" form:"can_exec"`
+	UserID      int64   `json:"user_id" form:"user_id" valid:"user_id"`
+	ClusterIDs  []int64 `json:"cluster_ids" form:"cluster_ids"`
+	RoleType    string  `json:"role_type" form:"role_type" valid:"role_type"`
+	AccessLevel string  `json:"access_level" form:"access_level"` // none/read/write/admin
+	CanView     bool    `json:"can_view" form:"can_view"`         // deprecated
+	CanCreate   bool    `json:"can_create" form:"can_create"`     // deprecated
+	CanUpdate   bool    `json:"can_update" form:"can_update"`     // deprecated
+	CanDelete   bool    `json:"can_delete" form:"can_delete"`     // deprecated
+	CanExec     bool    `json:"can_exec" form:"can_exec"`         // deprecated
 }
 
 func NewBatchClusterPermissionRequest() *BatchClusterPermissionRequest {
-	return &BatchClusterPermissionRequest{CanView: true}
+	return &BatchClusterPermissionRequest{CanView: true, AccessLevel: "read"}
 }
 
 func ValidBatchClusterPermissionRequest(data interface{}, ctx *gin.Context) map[string][]string {
 	rules := govalidator.MapData{
 		"user_id":   []string{"required"},
-		"role_type": []string{"required", "in:cluster_admin,developer,viewer,custom,cicd_admin"},
+		"role_type": []string{"required", "in:super_admin,platform_admin,devops,developer,tester,viewer,custom"},
 	}
 	messages := govalidator.MapData{
 		"user_id":   []string{"required:用户ID为必填项"},

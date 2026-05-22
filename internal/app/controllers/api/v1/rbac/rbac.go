@@ -660,13 +660,14 @@ func (c *RBACController) UserPermissions(ctx *gin.Context) {
 		return
 	}
 
-	// 返回扁平结构（前端期望格式）
+	// 返回扁平结构（前端期望格式，含 v2 三域 scopes）
 	resp.Success(gin.H{
 		"user_id":             userInfo.UserID,
 		"username":            userInfo.Username,
 		"is_super_admin":      userInfo.IsSuperAdmin,
 		"roles":               userInfo.Roles,
 		"cluster_permissions": userInfo.ClusterPermissions,
+		"scopes":              userInfo.Scopes,
 	})
 }
 

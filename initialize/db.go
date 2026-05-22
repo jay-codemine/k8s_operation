@@ -82,6 +82,16 @@ func autoMigrateTables() error {
 		return fmt.Errorf("migrate base tables: %w", err)
 	}
 
+	// RBAC 表（v2 三域六角色：自动补齐 scope_platform/scope_cluster/scope_cicd/access_level 等新字段）
+	if err := global.DB.AutoMigrate(
+		&models.SysRole{},
+		&models.SysPermission{},
+		&models.SysUserCluster{},
+	); err != nil {
+		log.Printf("[AutoMigrate] RBAC 表迁移失败: %v", err)
+		// 不 return，允许降级运行
+	}
+
 	// cicd_pipeline 表字段补全（不用 AutoMigrate 避免 GORM 与已有 UNIQUE KEY 冲突）
 	if err := ensurePipelineColumns(); err != nil {
 		log.Printf("[AutoMigrate] cicd_pipeline 字段补全失败: %v", err)
@@ -125,6 +135,12 @@ func autoMigrateTables() error {
 		}
 	}
 
+	// 审计日志表
+	if err := global.DB.AutoMigrate(&models.AuditLog{}); err != nil {
+		log.Printf("[AutoMigrate] 创建表 audit_log 失败: %v", err)
+		// 不返回错误，允许降级运行
+	}
+
 	// 汇总一行（只记总数，有错才刷详情）
 	log.Printf("[AutoMigrate] OK (ai: %d, monitor: %d)", len(aiModels), len(monitorModels))
 	return nil
@@ -139,6 +155,9 @@ func initDefaultData() error {
 	if err := d.PlatformSettingsInitDefaults(ctx); err != nil {
 		return fmt.Errorf("init platform settings failed: %w", err)
 	}
+
+	// RBAC v2: 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发）
+	backfillRBACScopes()
 
 	// 初始化应用商城种子数据
 	svc := services.NewServices()
@@ -157,6 +176,7 @@ func initDefaultData() error {
 // ensurePipelineColumns 检查并补全 cicd_pipeline 表缺失的列
 // 不使用 AutoMigrate 是因为 GORM 会尝试将 varchar 改为 longtext，与 UNIQUE KEY 冲突
 func ensurePipelineColumns() error {
+
 	// 检查 cicd_pipeline 表是否存在
 	var count int64
 	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline'").Scan(&count)
@@ -190,4 +210,49 @@ func ensurePipelineColumns() error {
 		}
 	}
 	return nil
+}
+
+// backfillRBACScopes 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发，不会覆盖已配置的值）
+func backfillRBACScopes() {
+	db := global.DB
+
+	// 检查 sys_role 表是否存在且有 scope_platform 列
+	var colCount int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_role' AND column_name = 'scope_platform'").Scan(&colCount)
+	if colCount == 0 {
+		return // 列不存在，跳过
+	}
+
+	// scope 回填规则（WHERE 条件保证只对未配置的角色生效）
+	scoped := "scope_platform = 'none' AND scope_cluster = 'none' AND scope_cicd = 'none'"
+	updates := []struct {
+		roleType string
+		set      string
+	}{
+		{"super_admin", "scope_platform='admin', scope_cluster='admin', scope_cicd='admin'"},
+		{"platform_admin", "scope_platform='admin', scope_cluster='read', scope_cicd='read'"},
+		{"devops", "scope_platform='read', scope_cluster='admin', scope_cicd='admin'"},
+		{"developer", "scope_platform='none', scope_cluster='write', scope_cicd='write'"},
+		{"tester", "scope_platform='none', scope_cluster='read', scope_cicd='write'"},
+		{"viewer", "scope_platform='read', scope_cluster='read', scope_cicd='read'"},
+	}
+
+	total := int64(0)
+	for _, u := range updates {
+		result := db.Exec(
+			fmt.Sprintf("UPDATE sys_role SET %s WHERE role_type = ? AND %s", u.set, scoped),
+			u.roleType,
+		)
+		total += result.RowsAffected
+	}
+
+	// cluster_admin → devops 映射（存量旧角色类型）
+	result := db.Exec(
+		fmt.Sprintf("UPDATE sys_role SET role_type='devops', scope_platform='read', scope_cluster='admin', scope_cicd='admin' WHERE role_type = 'cluster_admin' AND %s", scoped),
+	)
+	total += result.RowsAffected
+
+	if total > 0 {
+		log.Printf("[InitData] RBAC scope 回填完成，影响 %d 个角色", total)
+	}
 }

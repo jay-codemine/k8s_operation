@@ -15081,6 +15081,267 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/platform/audit/cleanup": {
+            "post": {
+                "description": "根据当前保留策略清理过期数据",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "手动清理过期审计日志",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/audit/export": {
+            "get": {
+                "description": "按筛选条件导出审计日志（最多10000条）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "导出审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户名",
+                        "name": "username",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "操作类型",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模块",
+                        "name": "module",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间",
+                        "name": "end_time",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.AuditLog"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/audit/logs": {
+            "get": {
+                "description": "支持多维度筛选、分页、排序",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取审计日志列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页条数",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户名",
+                        "name": "username",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "操作类型",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模块",
+                        "name": "module",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态: success/failed",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间(unix)",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间(unix)",
+                        "name": "end_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键词搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditLogListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/audit/logs/{id}": {
+            "get": {
+                "description": "根据ID获取单条审计日志完整信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取审计日志详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "日志ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditLog"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/audit/retention": {
+            "get": {
+                "description": "返回当前保留天数和是否永久保留",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取审计日志保留策略",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditRetentionPolicy"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "设置保留天数(0=永久)或切换永久保留",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "更新审计日志保留策略",
+                "parameters": [
+                    {
+                        "description": "保留策略",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditRetentionUpdateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/audit/statistics": {
+            "get": {
+                "description": "返回今日/本周操作量、成功率、用户排行、模块排行等",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取审计统计数据",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditStatistics"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/platform/health": {
             "get": {
                 "description": "获取平台、集群、告警、任务队列和组件的完整健康状态",
@@ -16358,6 +16619,17 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ActionSummary": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.AlertSettings": {
             "type": "object",
             "properties": {
@@ -16517,6 +16789,198 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "models.AuditLog": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "create/update/delete/login/logout/exec/approve",
+                    "type": "string"
+                },
+                "action_display": {
+                    "description": "操作显示名称",
+                    "type": "string"
+                },
+                "cluster_id": {
+                    "type": "integer"
+                },
+                "cluster_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "integer"
+                },
+                "detail": {
+                    "description": "操作详情JSON",
+                    "type": "string"
+                },
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "额外信息JSON",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "module": {
+                    "description": "cluster/workload/cicd/rbac/platform/auth/ai",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "pipeline_id": {
+                    "type": "integer"
+                },
+                "pipeline_name": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "integer"
+                },
+                "project_name": {
+                    "type": "string"
+                },
+                "request_body": {
+                    "type": "string"
+                },
+                "request_method": {
+                    "type": "string"
+                },
+                "request_uri": {
+                    "type": "string"
+                },
+                "response_code": {
+                    "type": "integer"
+                },
+                "response_message": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "success/failed",
+                    "type": "string"
+                },
+                "target_id": {
+                    "description": "目标ID",
+                    "type": "string"
+                },
+                "target_name": {
+                    "description": "目标名称",
+                    "type": "string"
+                },
+                "target_type": {
+                    "description": "deployment/pod/pipeline/user/role...",
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "user_ip": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AuditLogListResponse": {
+            "type": "object",
+            "properties": {
+                "list": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.AuditLog"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "statistics": {
+                    "$ref": "#/definitions/models.AuditStatistics"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AuditRetentionPolicy": {
+            "type": "object",
+            "properties": {
+                "is_permanent": {
+                    "description": "是否永久保留",
+                    "type": "boolean"
+                },
+                "retention_days": {
+                    "description": "保留天数，0 = 永久保留",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AuditRetentionUpdateReq": {
+            "type": "object",
+            "properties": {
+                "is_permanent": {
+                    "type": "boolean"
+                },
+                "retention_days": {
+                    "description": "0 = 永久",
+                    "type": "integer",
+                    "maximum": 3650,
+                    "minimum": 0
+                }
+            }
+        },
+        "models.AuditStatistics": {
+            "type": "object",
+            "properties": {
+                "action_summary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ActionSummary"
+                    }
+                },
+                "hourly_counts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.HourlyCount"
+                    }
+                },
+                "success_rate": {
+                    "type": "number"
+                },
+                "top_modules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TopModuleStat"
+                    }
+                },
+                "top_users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TopUserStat"
+                    }
+                },
+                "total_all": {
+                    "type": "integer"
+                },
+                "total_today": {
+                    "type": "integer"
+                },
+                "total_week": {
+                    "type": "integer"
                 }
             }
         },
@@ -16690,6 +17154,17 @@ const docTemplate = `{
                 }
             }
         },
+        "models.HourlyCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "hour": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.NotificationSettings": {
             "type": "object",
             "properties": {
@@ -16845,6 +17320,28 @@ const docTemplate = `{
                 }
             }
         },
+        "models.TopModuleStat": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "module": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TopUserStat": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "requests.ApprovalActionRequest": {
             "type": "object",
             "properties": {
@@ -16969,19 +17466,28 @@ const docTemplate = `{
         "requests.BatchClusterPermissionRequest": {
             "type": "object",
             "properties": {
+                "access_level": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
+                },
                 "can_create": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_delete": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_exec": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_update": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_view": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "cluster_ids": {
@@ -17149,19 +17655,28 @@ const docTemplate = `{
         "requests.ClusterPermissionCreateRequest": {
             "type": "object",
             "properties": {
+                "access_level": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
+                },
                 "can_create": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_delete": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_exec": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_update": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_view": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "cluster_id": {
@@ -17189,19 +17704,28 @@ const docTemplate = `{
         "requests.ClusterPermissionUpdateRequest": {
             "type": "object",
             "properties": {
+                "access_level": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
+                },
                 "can_create": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_delete": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_exec": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_update": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "can_view": {
+                    "description": "deprecated",
                     "type": "boolean"
                 },
                 "expire_at": {
@@ -19239,6 +19763,18 @@ const docTemplate = `{
                 },
                 "role_type": {
                     "type": "string"
+                },
+                "scope_cicd": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
+                },
+                "scope_cluster": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
+                },
+                "scope_platform": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
                 }
             }
         },
@@ -19273,6 +19809,16 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "scope_cicd": {
+                    "type": "string"
+                },
+                "scope_cluster": {
+                    "type": "string"
+                },
+                "scope_platform": {
+                    "description": "none/read/write/admin",
+                    "type": "string"
                 },
                 "sort_order": {
                     "type": "integer"
