@@ -140,7 +140,7 @@ func CreateSecretFromYaml(ctx context.Context, Kube kubernetes.Interface, yamlCo
 	
 	for i, doc := range docs {
 		doc = strings.TrimSpace(doc)
-		if doc == "" || strings.HasPrefix(doc, "#") {
+		if doc == "" || isCommentOnly(doc) {
 			continue
 		}
 		
@@ -200,4 +200,15 @@ func CreateSecretFromYaml(ctx context.Context, Kube kubernetes.Interface, yamlCo
 	
 	global.Logger.Infof("共创建 %d 个 Secret", createdCount)
 	return lastSecret, nil
+}
+
+// isCommentOnly 检查 YAML 文档是否只包含注释和空行
+func isCommentOnly(doc string) bool {
+	for _, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			return false
+		}
+	}
+	return true
 }

@@ -198,8 +198,12 @@
       <div class="hint-content">
         <span class="hint-icon">⚠️</span>
         <div class="hint-text">
-          <b>{{ currentDs.type === 'loki' ? 'Loki' : 'Prometheus' }} 未连接</b>
-          <p>请前往「数据源管理」配置数据源地址，或检查网络连通性</p>
+          <b v-if="noDedicatedPrometheus">「{{ currentVistaClusterName }}」暂无专属 Prometheus 数据源</b>
+          <b v-else>{{ currentDs.type === 'loki' ? 'Loki' : 'Prometheus' }} 未连接</b>
+          <p v-if="noDedicatedPrometheus">
+            请前往「数据源管理」为该集群添加并绑定 Prometheus 数据源，确保集群监控数据隔离。
+          </p>
+          <p v-else>请前往「数据源管理」配置数据源地址，或检查网络连通性</p>
         </div>
         <router-link to="/monitoring/datasources" class="hint-btn">前往配置 →</router-link>
       </div>
@@ -265,7 +269,7 @@
 
     <!-- 趋势图表区域 -->
     <div class="charts-grid">
-      <div class="chart-card">
+      <div class="chart-card" :class="{ 'is-loading': chartsLoading }">
         <div class="chart-header">
           <h3>CPU 使用率趋势</h3>
           <select v-model="trendDuration" @change="loadTrends" class="duration-select">
@@ -276,24 +280,28 @@
           </select>
         </div>
         <div ref="cpuChartRef" class="chart-body"></div>
+        <div class="chart-loading-mask" v-if="chartsLoading"><span class="chart-spinner"></span></div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card" :class="{ 'is-loading': chartsLoading }">
         <div class="chart-header">
           <h3>内存使用率趋势</h3>
         </div>
         <div ref="memChartRef" class="chart-body"></div>
+        <div class="chart-loading-mask" v-if="chartsLoading"><span class="chart-spinner"></span></div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card" :class="{ 'is-loading': chartsLoading }">
         <div class="chart-header">
           <h3>磁盘使用率趋势</h3>
         </div>
         <div ref="diskChartRef" class="chart-body"></div>
+        <div class="chart-loading-mask" v-if="chartsLoading"><span class="chart-spinner"></span></div>
       </div>
-      <div class="chart-card">
+      <div class="chart-card" :class="{ 'is-loading': chartsLoading }">
         <div class="chart-header">
           <h3>网络流量趋势</h3>
         </div>
         <div ref="networkChartRef" class="chart-body"></div>
+        <div class="chart-loading-mask" v-if="chartsLoading"><span class="chart-spinner"></span></div>
       </div>
     </div>
 
@@ -426,10 +434,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, onActivated, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
 import LokiView from './LokiView.vue'
 import NodeDetailDrawer from './NodeDetailDrawer.vue'
+
+// 组件名，配合 MonitorLayout 的 keep-alive include
+defineOptions({ name: 'MonitoringOverview' })
 import {
   getClusterOverview,
   getNodeMetrics,
@@ -456,6 +467,7 @@ function openNodeDetail(node) {
 
 // ===== 状态 =====
 const loading = ref(false)
+const chartsLoading = ref(false)
 const healthy = ref(false)
 const datasourceInfo = ref('')
 
@@ -499,21 +511,25 @@ const currentVistaClusterName = computed(() => {
 })
 
 // 根据当前视野过滤出的数据源列表
+// 规则：选中集群后优先展示该集群专属数据源；仅当集群无专属时才 fallback 全局共享(cluster_id=0)
 const scopedDsList = computed(() => {
   if (vistaClusterId.value === 0) return dsList.value
-  // 选中某个集群时：展示该集群专属 + 全局共享（cluster_id=0）
-  return dsList.value.filter(d => Number(d.cluster_id || 0) === vistaClusterId.value || Number(d.cluster_id || 0) === 0)
+  const cid = vistaClusterId.value
+  const dedicated = dsList.value.filter(d => Number(d.cluster_id || 0) === cid)
+  // 有专属数据源时只展示专属的，避免跨集群混用
+  if (dedicated.length > 0) return dedicated
+  // 完全没有专属时，fallback 全局共享
+  return dsList.value.filter(d => Number(d.cluster_id || 0) === 0)
 })
 const scopedConnectedCount = computed(() => scopedDsList.value.filter(d => d.status === 'connected').length)
 const scopedDisconnectedCount = computed(() => scopedDsList.value.filter(d => d.status === 'disconnected').length)
 const globalDsCount = computed(() => dsList.value.length)
 
 function clusterDsCount(cid) {
-  // 与 scopedDsList 保持一致：该集群专属 + 全局共享(cluster_id=0) 都算入「该集群可用」
-  return dsList.value.filter(d => {
-    const c = Number(d.cluster_id || 0)
-    return c === cid || c === 0
-  }).length
+  // 与 scopedDsList 保持一致：有专属显示专属数量，无专属显示全局共享数量
+  const dedicated = dsList.value.filter(d => Number(d.cluster_id || 0) === cid)
+  if (dedicated.length > 0) return dedicated.length
+  return dsList.value.filter(d => Number(d.cluster_id || 0) === 0).length
 }
 function clusterDsHealth(cid) {
   const items = dsList.value.filter(d => Number(d.cluster_id || 0) === cid && d.enabled)
@@ -527,12 +543,23 @@ function switchVistaCluster(cid) {
   vistaClusterId.value = cid
   localStorage.setItem(VISTA_LS_KEY, String(cid))
   clusterSelOpen.value = false
-  // 自动按优先级选中一个数据源：该集群下已连接的 prometheus > prometheus > 任意已连接 > 任意
+  // 自动按优先级选中数据源：集群专属 > 全局共享(cluster_id=0)
   const candidates = scopedDsList.value
+  const isDedicated = (d) => cid > 0 && Number(d.cluster_id || 0) === cid
   const pickList = [
+    // P0: 集群专属 + prometheus + connected
+    candidates.find(d => isDedicated(d) && d.type === 'prometheus' && d.status === 'connected' && d.enabled),
+    // P1: 集群专属 + prometheus
+    candidates.find(d => isDedicated(d) && d.type === 'prometheus' && d.enabled),
+    // P2: 集群专属 + 任何 connected
+    candidates.find(d => isDedicated(d) && d.status === 'connected' && d.enabled),
+    // P3: fallback 全局共享 prometheus + connected
     candidates.find(d => d.type === 'prometheus' && d.status === 'connected' && d.enabled),
+    // P4: fallback 全局共享 prometheus
     candidates.find(d => d.type === 'prometheus' && d.enabled),
+    // P5: 任何 connected
     candidates.find(d => d.status === 'connected' && d.enabled),
+    // P6: 任何 enabled
     candidates.find(d => d.enabled),
     candidates[0],
   ]
@@ -676,6 +703,16 @@ const isAllZero = computed(() => {
   return overview.cpu_usage === 0 && overview.memory_usage === 0 &&
     overview.disk_usage === 0 && overview.node_count === 0 &&
     overview.pod_count === 0 && overview.network_in === 0 && overview.network_out === 0
+})
+
+// 当前集群是否缺少专属 Prometheus 数据源（用于精确提示）
+const noDedicatedPrometheus = computed(() => {
+  if (vistaClusterId.value === 0) return false
+  return dsList.value.filter(
+    d => Number(d.cluster_id || 0) === vistaClusterId.value &&
+         ['prometheus', 'victoriametrics', 'thanos'].includes(d.type) &&
+         d.enabled
+  ).length === 0
 })
 
 // 数据源外部页面地址（根据类型生成不同的链接）
@@ -831,22 +868,36 @@ async function loadTopPodsData() {
 
 async function loadTrends() {
   const resources = ['cpu', 'memory', 'disk', 'network']
-  const charts = [cpuChart, memChart, diskChart, networkChart]
   const isPercent = [true, true, true, false]
 
-  for (let i = 0; i < resources.length; i++) {
-    try {
-      const res = await getResourceTrend(resources[i], trendDuration.value, dsQuery.value)
-      if (res.code === 0 && res.data && charts[i]) {
-        const series = res.data.map(td => ({
+  // 确保 chart 实例存在（首次进入时容器可能尚未有尺寸，延迟重试 init）
+  if (!cpuChart && cpuChartRef.value) cpuChart = echarts.init(cpuChartRef.value)
+  if (!memChart && memChartRef.value) memChart = echarts.init(memChartRef.value)
+  if (!diskChart && diskChartRef.value) diskChart = echarts.init(diskChartRef.value)
+  if (!networkChart && networkChartRef.value) networkChart = echarts.init(networkChartRef.value)
+
+  const charts = [cpuChart, memChart, diskChart, networkChart]
+
+  chartsLoading.value = true
+  try {
+    // 并行加载所有趋势数据，提升加载速度
+    const results = await Promise.allSettled(
+      resources.map(r => getResourceTrend(r, trendDuration.value, dsQuery.value))
+    )
+
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled' && result.value?.code === 0 && result.value.data && charts[i]) {
+        const series = result.value.data.map(td => ({
           label: td.label,
           data: td.points.map(p => [p.timestamp, p.value]),
         }))
         charts[i].setOption(buildLineOption(resources[i], series, isPercent[i]))
+      } else if (result.status === 'rejected') {
+        console.warn(`加载 ${resources[i]} 趋势失败`, result.reason)
       }
-    } catch (e) {
-      console.warn(`加载 ${resources[i]} 趋势失败`, e)
-    }
+    })
+  } finally {
+    chartsLoading.value = false
   }
 }
 
@@ -926,6 +977,9 @@ async function refreshAll() {
         loadAbnormalPods(),
         loadNamespaceMetrics(),
       ])
+      // 数据加载完成后强制 resize，修复首次进入时容器尺寸为 0 的问题
+      await nextTick()
+      handleResize()
     }
   } finally {
     loading.value = false
@@ -958,6 +1012,7 @@ function initCharts() {
 
 // 节点热力图渲染
 function renderHeatmap() {
+  if (!heatmapChart && heatmapRef.value) heatmapChart = echarts.init(heatmapRef.value)
   if (!heatmapChart) return
   const cells = heatmapData.value || []
   if (!cells.length) { heatmapChart.clear(); return }
@@ -981,6 +1036,7 @@ function renderHeatmap() {
 
 // Pod 状态饼图渲染
 function renderPodDonut() {
+  if (!podDonutChart && podDonutRef.value) podDonutChart = echarts.init(podDonutRef.value)
   if (!podDonutChart) return
   const items = podStatusData.value || []
   const colorMap = { Running: '#10b981', Pending: '#f59e0b', Succeeded: '#0ea5e9', Failed: '#ef4444', Unknown: '#9ca3af' }
@@ -1007,24 +1063,39 @@ function handleResize() {
   podDonutChart?.resize()
 }
 
+// 防抖版 resize，避免窗口拖动时高频触发
+let resizeTimer = null
+function debouncedResize() {
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(handleResize, 150)
+}
+
 let autoRefreshTimer = null
 
 onMounted(async () => {
   await nextTick()
   initCharts()
-  await loadVistaClusters()
-  await loadDatasources()
+  // 并行加载集群列表和数据源（二者互不依赖）
+  await Promise.all([loadVistaClusters(), loadDatasources()])
   await refreshAll()
+  // 延迟二次 resize，确保父布局完全渲染后图表尺寸正确
+  setTimeout(handleResize, 300)
   // 自动刷新（30秒）
   autoRefreshTimer = setInterval(refreshAll, 30000)
-  window.addEventListener('resize', handleResize)
+  window.addEventListener('resize', debouncedResize)
   document.addEventListener('click', handleClickOutside)
+})
+
+// keep-alive 激活时重新 resize 图表（从其他 Tab 返回时）
+onActivated(() => {
+  nextTick(() => handleResize())
 })
 
 onUnmounted(() => {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer)
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('resize', debouncedResize)
   document.removeEventListener('click', handleClickOutside)
+  if (resizeTimer) clearTimeout(resizeTimer)
   cpuChart?.dispose()
   memChart?.dispose()
   diskChart?.dispose()
@@ -1520,6 +1591,34 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
+  transition: opacity 0.3s;
+}
+.chart-card.is-loading {
+  opacity: 0.7;
+}
+.chart-loading-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(1px);
+  z-index: 2;
+  pointer-events: none;
+}
+.chart-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: chart-spin 0.8s linear infinite;
+}
+@keyframes chart-spin {
+  to { transform: rotate(360deg); }
 }
 .chart-header {
   display: flex;

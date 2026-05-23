@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
+	"k8soperation/pkg/k8s/common"
 	"k8soperation/pkg/k8s/job"
 	"sigs.k8s.io/yaml"
 )
@@ -81,6 +82,9 @@ func (s *Services) KubeJobUpdateImage(ctx context.Context, cli *K8sClients, para
 
 // KubeJobCreateFromYaml 从 YAML 创建 Job
 func (s *Services) KubeJobCreateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*batchv1.Job, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 1. 解析 YAML 到 Job 对象
 	jobObj := &batchv1.Job{}
 	if err := yaml.Unmarshal([]byte(yamlContent), jobObj); err != nil {
@@ -135,6 +139,9 @@ func (s *Services) KubeJobGetYaml(ctx context.Context, cli *K8sClients, namespac
 
 // KubeJobApplyYaml 应用 YAML 更新 Job
 func (s *Services) KubeJobApplyYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*batchv1.Job, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 1. 解析 YAML 到 Job 对象
 	jobObj := &batchv1.Job{}
 	if err := yaml.Unmarshal([]byte(yamlContent), jobObj); err != nil {

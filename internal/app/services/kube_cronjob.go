@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
+	"k8soperation/pkg/k8s/common"
 	"k8soperation/pkg/k8s/cronjob"
 	"sigs.k8s.io/yaml"
 )
@@ -59,6 +60,9 @@ func (s *Services) KubeCronJobSuspend(ctx context.Context, cli *K8sClients, para
 
 // KubeCronJobCreateFromYaml 从 YAML 创建 CronJob
 func (s *Services) KubeCronJobCreateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*batchv1.CronJob, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 1. 解析 YAML 到 CronJob 对象
 	cronJobObj := &batchv1.CronJob{}
 	if err := yaml.Unmarshal([]byte(yamlContent), cronJobObj); err != nil {
@@ -94,6 +98,9 @@ func (s *Services) KubeCronJobCreateFromYaml(ctx context.Context, cli *K8sClient
 
 // KubeCronJobUpdateFromYaml 从 YAML 更新 CronJob
 func (s *Services) KubeCronJobUpdateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*batchv1.CronJob, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 1. 解析 YAML 到 CronJob 对象
 	cronJobObj := &batchv1.CronJob{}
 	if err := yaml.Unmarshal([]byte(yamlContent), cronJobObj); err != nil {

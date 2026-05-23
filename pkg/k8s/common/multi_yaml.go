@@ -61,6 +61,11 @@ func (p *MultiYAMLParser) Parse() error {
 		if doc == "" || doc == "---" {
 			continue
 		}
+
+		// 跳过纯注释文档（所有非空行都以 # 开头）
+		if IsCommentOnly(doc) {
+			continue
+		}
 		
 		// 解析为 Unstructured 对象
 		obj := &unstructured.Unstructured{}
@@ -251,4 +256,34 @@ func createService(ctx context.Context, cli *kubernetes.Clientset, res *ParsedRe
 	
 	_, err := cli.CoreV1().Services(res.Namespace).Create(ctx, svc, metav1.CreateOptions{})
 	return err
+}
+
+// IsCommentOnly 检查 YAML 文档是否只包含注释和空行
+func IsCommentOnly(doc string) bool {
+	for _, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			return false
+		}
+	}
+	return true
+}
+
+// ExtractFirstValidDocument 从多文档 YAML 中提取第一个有效文档（跳过纯注释文档）
+// 用于单资源解析场景（CronJob、Job 等）
+func ExtractFirstValidDocument(yamlContent string) string {
+	// 如果不含文档分隔符，直接返回（yaml.Unmarshal 自动忽略注释）
+	if !strings.Contains(yamlContent, "---") {
+		return yamlContent
+	}
+
+	docs := strings.Split(yamlContent, "---")
+	for _, doc := range docs {
+		trimmed := strings.TrimSpace(doc)
+		if trimmed == "" || IsCommentOnly(trimmed) {
+			continue
+		}
+		return trimmed
+	}
+	return yamlContent
 }

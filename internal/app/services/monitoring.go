@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	prom "k8soperation/pkg/prometheus"
@@ -339,14 +340,37 @@ func (s *MonitoringService) GetNodeMetrics(ctx context.Context) ([]NodeMetric, e
 	}
 
 	// 节点 Pod 数（按 node label 聚合）
+	// kube_pod_info 的 node label 是 K8s 节点名（如 k8s-master01），
+	// 而 node_exporter 的 instance 是 IP:9100（如 192.168.124.10:9100），
+	// 两者直接对比基本永远不相等，因此需要借助 kube_node_info 建立 node↔internal_ip 映射。
+	nodeIPMap := make(map[string]string) // node_name -> internal_ip
+	if r, _ := client.QueryInstant(ctx, `kube_node_info`); r != nil {
+		for _, v := range mustVector(r) {
+			if name := v.Metric["node"]; name != "" {
+				if ip := v.Metric["internal_ip"]; ip != "" {
+					nodeIPMap[name] = ip
+				}
+			}
+		}
+	}
 	podResult, _ := client.QueryInstant(ctx, `count by(node)(kube_pod_info)`)
 	if podResult != nil {
 		for _, v := range mustVector(podResult) {
 			nodeName := v.Metric["node"]
-			// node_exporter instance 可能是 IP:9100，需要按短名/IP 兼容
+			if nodeName == "" {
+				continue
+			}
+			count := int(s.parseValue(v.Value[1]))
+			ip := nodeIPMap[nodeName]
+			// 三段兜底匹配：1) 完全等于  2) instance 去掉端口==nodeName  3) instance 去掉端口==internal_ip
 			for inst, node := range nodeMap {
-				if inst == nodeName || node.Name == nodeName {
-					node.PodCount = int(s.parseValue(v.Value[1]))
+				host := inst
+				if i := strings.IndexByte(inst, ':'); i > 0 {
+					host = inst[:i]
+				}
+				if inst == nodeName || host == nodeName || node.Name == nodeName || (ip != "" && host == ip) {
+					node.PodCount = count
+					break
 				}
 			}
 		}
