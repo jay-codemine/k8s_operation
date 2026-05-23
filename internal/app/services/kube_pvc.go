@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
+	"k8soperation/pkg/k8s/common"
 	"k8soperation/pkg/k8s/pvc"
 	"sigs.k8s.io/yaml"
 )
@@ -259,6 +260,9 @@ func (s *Services) KubePVCResize(ctx context.Context, cli *K8sClients, req *requ
 
 // KubePVCCreateFromYaml 从 YAML 创建 PVC
 func (s *Services) KubePVCCreateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*corev1.PersistentVolumeClaim, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 1. 解析 YAML 到 Unstructured
 	unstructuredObj := &unstructured.Unstructured{}
 	if err := yaml.Unmarshal([]byte(yamlContent), &unstructuredObj.Object); err != nil {

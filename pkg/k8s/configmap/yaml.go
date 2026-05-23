@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"k8soperation/global"
+	"k8soperation/pkg/k8s/common"
 )
 
 // GetConfigMapYaml 获取 ConfigMap 的 YAML 表示
@@ -39,6 +40,9 @@ func GetConfigMapYaml(ctx context.Context, Kube kubernetes.Interface, namespace,
 
 // ApplyConfigMapYaml 从 YAML 字符串创建或更新 ConfigMap
 func ApplyConfigMapYaml(ctx context.Context, Kube kubernetes.Interface, yamlContent string) (*corev1.ConfigMap, error) {
+	// 预处理：提取第一个有效 YAML 文档（跳过纯注释文档）
+	yamlContent = common.ExtractFirstValidDocument(yamlContent)
+
 	// 解析 YAML
 	var cm corev1.ConfigMap
 	if err := yaml.Unmarshal([]byte(yamlContent), &cm); err != nil {

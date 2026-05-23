@@ -14,9 +14,13 @@
         <span v-if="tab.badge" class="tab-badge">{{ tab.badge }}</span>
       </router-link>
     </div>
-    <!-- 子页面内容 -->
+    <!-- 子页面内容（keep-alive 缓存监控总览，避免 Tab 切换时重建图表） -->
     <div class="monitor-content">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive :include="['MonitoringOverview']">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </div>
   </div>
 </template>
