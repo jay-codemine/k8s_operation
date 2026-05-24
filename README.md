@@ -327,11 +327,34 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   <img src="docs/images/26.png" width="900"/>
 </p>
 <p align="center">
-  <img src="docs/images/26.png" width="900"/>
+  <img src="docs/images/27.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/28.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/29.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/30.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/31.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/32.png" width="900"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/33.png" width="900"/>
 </p>
 
 </details>
-
 
 
 ## ✨ 核心特性
