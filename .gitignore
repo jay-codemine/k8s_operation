@@ -1,0 +1,23 @@
+# frontend deps
+node_modules/
+
+# build outputs
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.stackdump
+
+# logs
+*.log
+
+# local configs (only ignore sensitive config files, keep templates)
+configs/config.yaml
+configs/k8s.yaml
+storage/logs/*
+storage/artifacts/*
+!storage/artifacts/.gitkeep*.exe~
+*.exe
