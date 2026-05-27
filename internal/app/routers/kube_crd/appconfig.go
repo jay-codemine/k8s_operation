@@ -2,7 +2,7 @@ package kube_crd
 
 import (
 	"github.com/gin-gonic/gin"
-	v1 "k8soperation/internal/app/controllers/api/v1/crd"
+	appconfig "k8soperation/internal/app/controllers/api/v1/crd"
 )
 
 // KubeAppConfigRouter 封装 AppConfig 路由注册
@@ -15,7 +15,7 @@ func NewKubeAppConfigRouter() *KubeAppConfigRouter {
 
 // Inject 注册 AppConfig 相关路由
 func (r *KubeAppConfigRouter) Inject(router *gin.RouterGroup) {
-	ac := v1.NewKubeAppConfigController()
+	ac := appconfig.NewKubeAppConfigController()
 
 	// 基础 CRUD
 	router.POST("/create", ac.Create)   // 创建 AppConfig

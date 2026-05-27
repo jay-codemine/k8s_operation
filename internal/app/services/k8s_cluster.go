@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go.uber.org/zap"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -118,6 +119,12 @@ func (s *Services) buildClients(cfg *rest.Config) (*K8sClients, error) {
 		return nil, fmt.Errorf("API Server connectivity check failed: %w", err)
 	}
 
+	// DynamicClient: 支持任意 CRD/CR 资源操作
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create dynamic client: %w", err)
+	}
+
 	// metrics 非硬依赖：失败只告警
 	var mc *metricsclient.Clientset
 	if m, mErr := metricsclient.NewForConfig(cfg); mErr != nil {
@@ -135,6 +142,7 @@ func (s *Services) buildClients(cfg *rest.Config) (*K8sClients, error) {
 	return &K8sClients{
 		Config:       cfg,
 		Kube:         kube,
+		Dynamic:      dynClient,
 		Metrics:      mc,
 		SupportsEvV1: supports,
 	}, nil
@@ -178,6 +186,12 @@ func BuildClientsFromKubeconfig(kubeConfigPlain string) (*K8sClients, error) {
 		return nil, fmt.Errorf("API Server connectivity check failed: %w", err)
 	}
 
+	// DynamicClient
+	dynClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create dynamic client: %w", err)
+	}
+
 	// metrics 非硬依赖
 	var mc *metricsclient.Clientset
 	if m, mErr := metricsclient.NewForConfig(cfg); mErr != nil {
@@ -195,6 +209,7 @@ func BuildClientsFromKubeconfig(kubeConfigPlain string) (*K8sClients, error) {
 	return &K8sClients{
 		Config:       cfg,
 		Kube:         kube,
+		Dynamic:      dynClient,
 		Metrics:      mc,
 		SupportsEvV1: supports,
 	}, nil

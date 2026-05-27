@@ -125,6 +125,16 @@
             @click="go('networking/ingresses')"
           >🚪 Ingress</a>
         </template>
+
+        <template v-if="canViewGroup('extensions')">
+          <div class="menu-title">扩展资源</div>
+          <a
+            v-if="canView('crd')"
+            class="menu-item"
+            :class="{ active: isActive(`/c/${clusterId}/extensions/crd`) }"
+            @click="go('extensions/crd')"
+          >🧩 CRD 管理</a>
+        </template>
       </aside>
 
       <!-- 资源页内容 -->
@@ -160,23 +170,23 @@ const ROLE_RESOURCE_MAP = {
   cluster_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
-    'configmaps', 'secrets', 'namespaces', 'nodes'
+    'configmaps', 'secrets', 'namespaces', 'nodes', 'crd'
   ],
   // 开发者 - 常用资源（劅除节点、存储类等集群级资源）
   developer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
-    'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces'
+    'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces', 'crd'
   ],
   // 只读 - 可查看所有资源（与 cluster_admin 相同，但无操作权限）
   viewer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
-    'configmaps', 'secrets', 'namespaces', 'nodes'
+    'configmaps', 'secrets', 'namespaces', 'nodes', 'crd'
   ],
   // CI/CD管理员 - 部署相关
   cicd_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
-    'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces'
+    'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces', 'crd'
   ]
 }
 
@@ -185,7 +195,8 @@ const resourceGroups = {
   workloads: ['pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs'],
   config: ['configmaps', 'secrets'],
   storage: ['storageclasses', 'pv', 'pvc'],
-  networking: ['services', 'ingress']
+  networking: ['services', 'ingress'],
+  extensions: ['crd']
 }
 
 /**

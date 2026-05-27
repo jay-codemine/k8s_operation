@@ -267,6 +267,9 @@ const menuPermissions = {
   '/images/browse': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'viewer'],
   '/images/cleanup': ['super_admin', 'platform_admin'],
   
+  // ==================== CRD 扩展 ====================
+  '/extensions/crd': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
+  
 }
 
 /**
@@ -384,6 +387,17 @@ const menuGroupsConfig = reactive([
       { path: '/monitoring/datasources', label: '数据源管理' },
       { path: '/monitoring/alert-rules', label: '告警规则' },
       { path: '/monitoring/alert-events', label: '告警事件' },
+    ],
+  },
+  // CRD 扩展
+  {
+    name: 'CRD 扩展',
+    icon: '🧩',
+    count: 1,
+    collapsed: true,
+    match: ['/extensions'],
+    items: [
+      { path: '/extensions/crd', label: 'CRD 资源管理' },
     ],
   },
 ])

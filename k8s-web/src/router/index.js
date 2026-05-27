@@ -93,6 +93,9 @@ const router = createRouter({
             { path: 'storage/storageclasses', component: () => import('@/views/storage/StorageClasses.vue') },
             { path: 'storage/persistentvolumes', component: () => import('@/views/storage/Persistentvolumes.vue') },
             { path: 'storage/persistentvolumeclaims', component: () => import('@/views/storage/Persistentvolumeclaims.vue') },
+
+            // 扩展资源（CRD/CR 管理）
+            { path: 'extensions/crd', component: () => import('@/views/extensions/Customresourcedefinitions.vue') },
           ],
         },
 
@@ -141,6 +144,9 @@ const router = createRouter({
             { path: 'silence-rules', component: () => import('@/views/monitoring/SilenceRules.vue') },
           ],
         },
+
+        // CRD 扩展资源管理
+        { path: 'extensions/crd', component: () => import('@/views/extensions/Customresourcedefinitions.vue') },
 
         // // ✅ 旧路径：统一引导去 clusters（让用户先选集群）
         // {path: 'workloads/pods', redirect: '/clusters'},

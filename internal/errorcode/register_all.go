@@ -32,5 +32,7 @@ func Register() {
 	registerAppStore()
 	// AI 助手
 	registerAIAssistant()
+	// CRD/CR 动态资源
+	registerCRD()
 	// 后续可以继续扩展
 }

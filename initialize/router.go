@@ -356,6 +356,10 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 		r.Inject(appconfig)
 	}
 
+	// CRD/CR 动态资源管理（DynamicClient）
+	// /api/v1/k8s/crd/... 和 /api/v1/k8s/cr/...
+	kube_crd.NewKubeDynamicCRDRouter().Inject(k8sTarget)
+
 	// K8s RBAC (ServiceAccount, Role, RoleBinding)
 	for _, r := range []injector{
 		k8srbac.NewK8sRBACRouter(),
