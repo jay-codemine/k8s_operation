@@ -96,6 +96,8 @@ const router = createRouter({
 
             // 扩展资源（CRD/CR 管理）
             { path: 'extensions/crd', component: () => import('@/views/extensions/Customresourcedefinitions.vue') },
+            { path: 'extensions/cr-instances', component: () => import('@/views/extensions/CrInstances.vue') },
+            { path: 'extensions/yaml-workbench', component: () => import('@/views/extensions/YamlWorkbench.vue') },
           ],
         },
 
@@ -145,8 +147,32 @@ const router = createRouter({
           ],
         },
 
-        // CRD 扩展资源管理
-        { path: 'extensions/crd', component: () => import('@/views/extensions/Customresourcedefinitions.vue') },
+        // CRD 扩展资源管理（需要通过集群上下文 /c/:clusterId/extensions/ 访问）
+        // 保留顶层路由作为跳转入口 → 使用 localStorage 中缓存的集群 ID
+        { 
+          path: 'extensions/crd', 
+          redirect: () => {
+            const raw = localStorage.getItem('currentCluster')
+            const cid = raw ? JSON.parse(raw)?.id : null
+            return cid ? `/c/${cid}/extensions/crd` : '/clusters'
+          }
+        },
+        { 
+          path: 'extensions/cr-instances', 
+          redirect: () => {
+            const raw = localStorage.getItem('currentCluster')
+            const cid = raw ? JSON.parse(raw)?.id : null
+            return cid ? `/c/${cid}/extensions/cr-instances` : '/clusters'
+          }
+        },
+        { 
+          path: 'extensions/yaml-workbench', 
+          redirect: () => {
+            const raw = localStorage.getItem('currentCluster')
+            const cid = raw ? JSON.parse(raw)?.id : null
+            return cid ? `/c/${cid}/extensions/yaml-workbench` : '/clusters'
+          }
+        },
 
         // // ✅ 旧路径：统一引导去 clusters（让用户先选集群）
         // {path: 'workloads/pods', redirect: '/clusters'},

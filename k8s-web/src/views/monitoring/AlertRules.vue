@@ -6,9 +6,19 @@
         <h3>告警规则</h3>
         <span class="header-desc">配置基于 PromQL 的告警规则，支持多级别通知</span>
       </div>
-      <button class="btn-primary" @click="openDialog()">
-        <span>+</span> 新增规则
-      </button>
+      <div class="header-actions">
+        <button class="btn-action btn-yaml-import" @click="yamlImportVisible = true" title="YAML 批量导入">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          导入
+        </button>
+        <button class="btn-action btn-yaml-export" @click="handleExportYAML" title="导出为 YAML">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          导出
+        </button>
+        <button class="btn-primary" @click="openDialog()">
+          <span>+</span> 新增规则
+        </button>
+      </div>
     </div>
 
     <!-- 筛选栏 -->
@@ -342,6 +352,119 @@
         </div>
       </div>
     </div>
+
+    <!-- YAML 批量导入弹窗 -->
+    <div class="modal-overlay" v-if="yamlImportVisible" @click.self="yamlImportVisible = false">
+      <div class="modal-dialog modal-xl yaml-modal">
+        <div class="yaml-modal-header">
+          <div class="yaml-header-left">
+            <div class="yaml-icon-wrap import">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div>
+              <h3>YAML 批量导入告警规则</h3>
+              <p class="yaml-header-desc">支持 PrometheusRule 格式，一次导入多条规则</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" @click="yamlImportVisible = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="yaml-modal-body">
+          <div class="yaml-toolbar">
+            <div class="yaml-toolbar-left">
+              <label class="yaml-overwrite-chk">
+                <input type="checkbox" v-model="yamlImportOverwrite" />
+                <span>同名规则覆盖更新</span>
+              </label>
+            </div>
+            <div class="yaml-toolbar-right">
+              <button class="yaml-tpl-btn" @click="fillImportTemplate">填入示例模板</button>
+            </div>
+          </div>
+          <div class="yaml-editor-wrap">
+            <div class="yaml-editor-topbar">
+              <div class="code-win-dots"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span></div>
+              <span class="code-lang-badge">YAML</span>
+              <span class="yaml-editor-hint">粘贴 PrometheusRule spec 格式</span>
+            </div>
+            <textarea class="yaml-textarea" v-model="yamlImportContent" rows="18" placeholder="groups:
+  - name: infrastructure
+    rules:
+      - alert: NodeCPUHigh
+        expr: 100 - (avg by(instance)(rate(node_cpu_seconds_total{mode=&quot;idle&quot;}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 节点CPU使用率过高"></textarea>
+          </div>
+          <div class="yaml-import-result" v-if="yamlImportResult">
+            <div class="import-result-header">
+              <span class="import-result-icon">📊</span>
+              <span class="import-result-title">导入结果</span>
+            </div>
+            <div class="import-result-stats">
+              <span class="stat-item success">新建 {{ yamlImportResult.created }}</span>
+              <span class="stat-item update">更新 {{ yamlImportResult.updated }}</span>
+              <span class="stat-item skip">跳过 {{ yamlImportResult.skipped }}</span>
+              <span class="stat-item fail" v-if="yamlImportResult.failed">失败 {{ yamlImportResult.failed }}</span>
+            </div>
+            <div class="import-result-errors" v-if="yamlImportResult.errors?.length">
+              <div v-for="(err, i) in yamlImportResult.errors" :key="i" class="error-line">{{ err }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="yaml-modal-footer">
+          <button class="btn-outline" @click="yamlImportVisible = false">关闭</button>
+          <button class="btn-primary" @click="handleImportYAML" :disabled="yamlImporting || !yamlImportContent.trim()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            {{ yamlImporting ? '导入中...' : '执行导入' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- YAML 导出/预览弹窗 -->
+    <div class="modal-overlay" v-if="yamlExportVisible" @click.self="yamlExportVisible = false">
+      <div class="modal-dialog modal-xl yaml-modal">
+        <div class="yaml-modal-header">
+          <div class="yaml-header-left">
+            <div class="yaml-icon-wrap export">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div>
+              <h3>导出告警规则 YAML</h3>
+              <p class="yaml-header-desc">PrometheusRule 兼容格式，可直接用于 K8s 集群或重新导入</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" @click="yamlExportVisible = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="yaml-modal-body">
+          <div class="yaml-editor-wrap export-view">
+            <div class="yaml-editor-topbar">
+              <div class="code-win-dots"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span></div>
+              <span class="code-lang-badge">YAML</span>
+              <span class="yaml-editor-hint">可编辑后重新导入</span>
+            </div>
+            <textarea class="yaml-textarea" v-model="yamlExportContent" rows="22" readonly></textarea>
+          </div>
+        </div>
+        <div class="yaml-modal-footer">
+          <button class="btn-outline" @click="yamlExportVisible = false">关闭</button>
+          <button class="btn-action btn-yaml-copy" @click="handleCopyYAML">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            复制
+          </button>
+          <button class="btn-primary" @click="handleDownloadYAML">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 YAML
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -352,6 +475,7 @@ import { Message } from '@arco-design/web-vue'
 import {
   listAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
   toggleAlertRule, getAlertRuleGroups, listNotifyChannels, createNotifyChannel,
+  importAlertRulesYAML, exportAlertRulesYAML,
 } from '@/api/monitoring'
 
 const router = useRouter()
@@ -480,6 +604,135 @@ async function doDelete() {
 }
 
 onMounted(loadList)
+
+// ==================== YAML 批量导入/导出 ====================
+const yamlImportVisible = ref(false)
+const yamlExportVisible = ref(false)
+const yamlImportContent = ref('')
+const yamlExportContent = ref('')
+const yamlImportOverwrite = ref(false)
+const yamlImporting = ref(false)
+const yamlImportResult = ref(null)
+
+const IMPORT_TEMPLATE = `groups:
+  - name: infrastructure
+    rules:
+      - alert: NodeCPUHigh
+        expr: 100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          monitor_type: node
+        annotations:
+          summary: "节点 {{ $labels.instance }} CPU使用率过高"
+          description: "当前值: {{ $value }}%"
+
+      - alert: NodeMemoryHigh
+        expr: (1 - node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          monitor_type: node
+        annotations:
+          summary: "节点内存使用率过高"
+
+      - alert: NodeDiskFull
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/"}/node_filesystem_size_bytes{mountpoint="/"}) * 100 > 90
+        for: 10m
+        labels:
+          severity: critical
+          monitor_type: node
+        annotations:
+          summary: "磁盘使用率超过90%"
+
+  - name: kubernetes
+    rules:
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 3
+        for: 1m
+        labels:
+          severity: warning
+          monitor_type: pod
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} 频繁重启"
+
+      - alert: DeploymentReplicasMismatch
+        expr: kube_deployment_status_replicas_unavailable > 0
+        for: 5m
+        labels:
+          severity: critical
+          monitor_type: deployment
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.deployment }} 副本不足"
+`
+
+function fillImportTemplate() {
+  yamlImportContent.value = IMPORT_TEMPLATE
+  yamlImportResult.value = null
+}
+
+async function handleImportYAML() {
+  if (!yamlImportContent.value.trim()) return
+  yamlImporting.value = true
+  yamlImportResult.value = null
+  try {
+    const res = await importAlertRulesYAML({
+      yaml: yamlImportContent.value,
+      datasource_id: 1,
+      overwrite: yamlImportOverwrite.value,
+    })
+    if (res?.code === 0) {
+      yamlImportResult.value = res.data
+      loadList()
+      if (res.data.failed === 0) {
+        Message.success(res.msg || '导入成功')
+      } else {
+        Message.warning(res.msg || '部分导入失败')
+      }
+    } else {
+      Message.error(res?.msg || '导入失败')
+    }
+  } catch (e) {
+    Message.error('导入异常: ' + (e?.msg || e?.message || ''))
+  } finally {
+    yamlImporting.value = false
+  }
+}
+
+async function handleExportYAML() {
+  try {
+    const params = {}
+    if (filters.group) params.group = filters.group
+    const res = await exportAlertRulesYAML(params)
+    if (res?.code === 0 && res.data?.yaml) {
+      yamlExportContent.value = res.data.yaml
+      yamlExportVisible.value = true
+    } else {
+      Message.warning(res?.msg || '没有可导出的规则')
+    }
+  } catch (e) {
+    Message.error('导出失败: ' + (e?.msg || e?.message || ''))
+  }
+}
+
+function handleCopyYAML() {
+  navigator.clipboard.writeText(yamlExportContent.value).then(() => {
+    Message.success('已复制到剪贴板')
+  }).catch(() => {
+    Message.warning('复制失败，请手动选择复制')
+  })
+}
+
+function handleDownloadYAML() {
+  const blob = new Blob([yamlExportContent.value], { type: 'application/x-yaml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `alert-rules-${new Date().toISOString().slice(0,10)}.yaml`
+  a.click()
+  URL.revokeObjectURL(url)
+  Message.success('下载已开始')
+}
 
 function channelValue(ch) {
   return `${ch.type}:${ch.id}`
@@ -1161,5 +1414,96 @@ function goNotifyChannels() {
   transform: translateY(-1px);
 }
 .btn-ft-save:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* ===== Header Actions ===== */
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.btn-action {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1.5px solid #e2e8f0;
+  border-radius: 8px; background: #fff; color: #4b5563;
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.btn-action:hover { border-color: #4f46e5; color: #4f46e5; background: #f5f3ff; }
+.btn-yaml-import:hover { border-color: #059669; color: #059669; background: #ecfdf5; }
+.btn-yaml-export:hover { border-color: #d97706; color: #d97706; background: #fffbeb; }
+
+/* ===== YAML Modal ===== */
+.yaml-modal { max-width: 780px; }
+.yaml-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px; border-bottom: 1px solid #f1f5f9;
+}
+.yaml-header-left { display: flex; align-items: center; gap: 14px; }
+.yaml-header-left h3 { margin: 0; font-size: 16px; font-weight: 600; color: #1e293b; }
+.yaml-header-desc { margin: 2px 0 0; font-size: 12px; color: #94a3b8; }
+.yaml-icon-wrap {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.yaml-icon-wrap.import { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; }
+.yaml-icon-wrap.export { background: linear-gradient(135deg, #fffbeb, #fef3c7); color: #d97706; }
+.yaml-modal-body { padding: 20px 24px; overflow-y: auto; max-height: 65vh; }
+.yaml-modal-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 14px 24px; border-top: 1px solid #f1f5f9; background: #fafbfd;
+  border-radius: 0 0 16px 16px;
+}
+.yaml-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.yaml-overwrite-chk {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #4b5563; cursor: pointer;
+}
+.yaml-overwrite-chk input { accent-color: #4f46e5; }
+.yaml-tpl-btn {
+  border: 1.5px solid #e2e8f0; background: #fff;
+  color: #4f46e5; padding: 5px 12px; font-size: 12px;
+  border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.15s;
+}
+.yaml-tpl-btn:hover { background: #f5f3ff; border-color: #4f46e5; }
+
+.yaml-editor-wrap {
+  border: 1.5px solid #e2e8f0; border-radius: 12px;
+  overflow: hidden; background: #1e1e2e;
+}
+.yaml-editor-wrap.export-view { background: #0f172a; }
+.yaml-editor-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; background: #2d2d3f; border-bottom: 1px solid #3d3d5c;
+}
+.yaml-editor-hint { font-size: 11px; color: #a5b4fc; margin-left: auto; }
+.yaml-textarea {
+  width: 100%; border: none; outline: none; resize: vertical;
+  padding: 16px; font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px; line-height: 1.6; color: #e2e8f0;
+  background: transparent; min-height: 260px;
+}
+.yaml-textarea::placeholder { color: #64748b; }
+.yaml-textarea:focus { box-shadow: inset 0 0 0 1px #4f46e5; }
+
+/* YAML 导入结果 */
+.yaml-import-result {
+  margin-top: 16px; padding: 16px;
+  border: 1.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
+}
+.import-result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.import-result-icon { font-size: 16px; }
+.import-result-title { font-size: 14px; font-weight: 600; color: #1e293b; }
+.import-result-stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat-item {
+  padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+}
+.stat-item.success { background: #d1fae5; color: #065f46; }
+.stat-item.update { background: #dbeafe; color: #1e40af; }
+.stat-item.skip { background: #f1f5f9; color: #64748b; }
+.stat-item.fail { background: #fee2e2; color: #991b1b; }
+.import-result-errors { margin-top: 10px; padding: 10px; background: #fef2f2; border-radius: 6px; }
+.error-line { font-size: 12px; color: #991b1b; padding: 2px 0; font-family: monospace; }
+
+/* Copy button */
+.btn-yaml-copy { border-color: #4f46e5; color: #4f46e5; }
+.btn-yaml-copy:hover { background: #ede9fe; }
 
 </style>

@@ -99,8 +99,10 @@ func (s *Services) KubeCRCreate(ctx context.Context, cli *K8sClients, group, ver
 		return nil, nil, err
 	}
 
-	// 确保 namespace
-	if namespace != "" && obj.GetNamespace() == "" {
+	// 确保 namespace：请求参数 → YAML metadata.namespace 互补
+	if namespace == "" && obj.GetNamespace() != "" {
+		namespace = obj.GetNamespace()
+	} else if namespace != "" && obj.GetNamespace() == "" {
 		obj.SetNamespace(namespace)
 	}
 
@@ -136,7 +138,9 @@ func (s *Services) KubeCRUpdate(ctx context.Context, cli *K8sClients, group, ver
 	}
 	obj.SetResourceVersion(existing.GetResourceVersion())
 
-	if namespace != "" && obj.GetNamespace() == "" {
+	if namespace == "" && obj.GetNamespace() != "" {
+		namespace = obj.GetNamespace()
+	} else if namespace != "" && obj.GetNamespace() == "" {
 		obj.SetNamespace(namespace)
 	}
 

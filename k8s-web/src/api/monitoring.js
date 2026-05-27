@@ -98,6 +98,13 @@ export const deleteAlertRule = (id) =>
 export const toggleAlertRule = (id, enabled) =>
   http.put(`/api/v1/monitoring/alert-rule/${id}/toggle`, { enabled })
 
+// YAML 批量导入/导出
+export const importAlertRulesYAML = (data) =>
+  http.post('/api/v1/monitoring/alert-rule/import-yaml', data)
+
+export const exportAlertRulesYAML = (params = {}) =>
+  http.get('/api/v1/monitoring/alert-rule/export-yaml', { params })
+
 // ==================== 告警事件 ====================
 
 export const listAlertEvents = (params = {}) =>

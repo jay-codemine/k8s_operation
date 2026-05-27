@@ -194,7 +194,7 @@ func SendNotification(ch *models.MonitorNotifyChannel, alert *AlertNotification)
 	}
 }
 
-// sendDingTalk 发送钉钉通知（企业级告警卡片）
+// sendDingTalk 发送钉钉通知（企业级告警卡片 — 全中文大厂风格）
 func sendDingTalk(ch *models.MonitorNotifyChannel, alert *AlertNotification) error {
 	// 自定义模板优先
 	if ch.MsgTemplate != "" {
@@ -202,7 +202,10 @@ func sendDingTalk(ch *models.MonitorNotifyChannel, alert *AlertNotification) err
 		if err != nil {
 			return err
 		}
-		title := fmt.Sprintf("[%s] %s", strings.ToUpper(alert.Status), alert.RuleName)
+		title := "🚨 [告警触发] " + alert.RuleName
+		if alert.Status == "resolved" {
+			title = "✅ [已恢复] " + alert.RuleName
+		}
 		text := ensureDingTalkKeyword(rendered, ch.SecurityKeyword)
 		body := map[string]interface{}{
 			"msgtype":  "markdown",
@@ -213,91 +216,134 @@ func sendDingTalk(ch *models.MonitorNotifyChannel, alert *AlertNotification) err
 	}
 
 	isFiring := alert.Status != "resolved"
-	statusIcon := "🚨"
-	statusBadge := "🔴 FIRING"
-	headerColor := "#FF4D4F"
-	if !isFiring {
-		statusIcon = "✅"
-		statusBadge = "🟢 RESOLVED"
-		headerColor = "#52C41A"
-	}
-
-	severityBadgeMap := map[string]string{
-		"critical": "🔴 P0-Critical",
-		"warning":  "🟡 P1-Warning",
-		"info":     "🔵 P2-Info",
-	}
-	severityBadge, ok := severityBadgeMap[alert.Severity]
-	if !ok {
-		severityBadge = alert.Severity
-	}
-
-	// title 仅用于钉钉会话列表预览，不注入安全关键字（避免换行破坏格式）
-	title := fmt.Sprintf("%s [%s] %s", statusIcon, strings.ToUpper(alert.Status), alert.RuleName)
 	firedTime := formatUnixTime(alert.FiredAt)
 
 	var md strings.Builder
 
-	// ── 顶部：规则名 + 状态/级别/时间一览行 ─────────────────────
-	md.WriteString(fmt.Sprintf("## %s %s\n\n", statusIcon, alert.RuleName))
-	md.WriteString(fmt.Sprintf(
-		"> <font color=%s>**%s**</font>　　**%s**　　%s\n\n",
-		headerColor, statusBadge, severityBadge, firedTime,
-	))
+	if isFiring {
+		// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+		// 🔥 告警触发通知（红色主题 · 全中文）
+		// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+		severityIcon := map[string]string{"critical": "🔴", "warning": "🟡", "info": "🔵"}
+		sIcon := severityIcon[alert.Severity]
+		if sIcon == "" {
+			sIcon = "⚪"
+		}
+		severityTag := map[string]string{"critical": "P0 · 紧急", "warning": "P1 · 警告", "info": "P2 · 提示"}
+		sTag := severityTag[alert.Severity]
+		if sTag == "" {
+			sTag = alert.Severity
+		}
 
-	// ── 告警内容 ─────────────────────────────────────────────────
-	md.WriteString("---\n\n")
-	if alert.Summary != "" {
-		md.WriteString(fmt.Sprintf("**📋 摘要**\n\n> %s\n\n", alert.Summary))
-	}
-	if alert.Description != "" {
-		md.WriteString(fmt.Sprintf("**📝 详情**\n\n> %s\n\n", alert.Description))
-	}
+		md.WriteString("## 🚨 告警触发\n\n")
+		md.WriteString(fmt.Sprintf("### %s\n\n", alert.RuleName))
+		md.WriteString(fmt.Sprintf("> <font color=#FF4D4F>**状态**</font> 🔴 触发中　　<font color=#FF4D4F>**级别**</font> %s %s\n\n", sIcon, sTag))
 
-	// ── 监控指标 & 环境标签 ──────────────────────────────────────
-	if alert.Value != "" || len(alert.Labels) > 0 {
 		md.WriteString("---\n\n")
-		md.WriteString("**📊 监控指标**\n\n")
+
+		// 告警摘要区
+		if alert.Summary != "" {
+			md.WriteString(fmt.Sprintf("**📋 告警摘要**\n\n%s\n\n", alert.Summary))
+		}
+		if alert.Description != "" {
+			md.WriteString(fmt.Sprintf("**📝 详细描述**\n\n> %s\n\n", alert.Description))
+		}
+
+		// 指标数据区
+		md.WriteString("---\n\n")
+		md.WriteString("**📊 监控数据**\n\n")
 		if alert.Value != "" {
-			md.WriteString(fmt.Sprintf("- **当前值** `%s`\n", alert.Value))
+			md.WriteString(fmt.Sprintf("- **触发值**　`%s`\n", alert.Value))
 		}
-		keyOrder := []string{"cluster", "namespace", "env", "environment", "job", "instance", "node", "pod", "service"}
-		shown := map[string]bool{}
-		for _, k := range keyOrder {
-			if v, exist := alert.Labels[k]; exist {
-				md.WriteString(fmt.Sprintf("- **%s** `%s`\n", labelAlias(k), v))
-				shown[k] = true
-			}
-		}
-		for k, v := range alert.Labels {
-			if !shown[k] {
-				md.WriteString(fmt.Sprintf("- **%s** `%s`\n", k, v))
-			}
-		}
-		md.WriteString("\n")
-	}
+		md.WriteString(fmt.Sprintf("- **触发时间**　%s\n", firedTime))
 
-	// ── 恢复信息（仅 resolved）────────────────────────────────────
-	if !isFiring && alert.ResolvedAt > 0 {
-		resolvedTime := formatUnixTime(alert.ResolvedAt)
-		dur := time.Unix(alert.ResolvedAt, 0).Sub(time.Unix(alert.FiredAt, 0))
+		// 环境标签区
+		if len(alert.Labels) > 0 {
+			md.WriteString("\n---\n\n")
+			md.WriteString("**🏷️ 环境信息**\n\n")
+			keyOrder := []string{"cluster", "namespace", "env", "environment", "node", "instance", "pod", "container", "service", "daemonset", "deployment", "statefulset", "job", "alertname", "prometheus", "endpoint"}
+			shown := map[string]bool{}
+			for _, k := range keyOrder {
+				if v, exist := alert.Labels[k]; exist {
+					displayVal := v
+					if k == "alertname" {
+						displayVal = alertNameAlias(v)
+					}
+					md.WriteString(fmt.Sprintf("- **%s**　`%s`\n", labelAlias(k), displayVal))
+					shown[k] = true
+				}
+			}
+			for k, v := range alert.Labels {
+				if !shown[k] {
+					md.WriteString(fmt.Sprintf("- **%s**　`%s`\n", labelAlias(k), v))
+				}
+			}
+		}
+
+		// 底部
+		md.WriteString("\n---\n\n")
+		md.WriteString("<font color=#8C8C8C>🛡️ K8s Operation · 智能监控平台</font>\n")
+
+	} else {
+		// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+		// ✅ 告警恢复通知（绿色主题 · 全中文）
+		// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+		md.WriteString("## ✅ 告警恢复\n\n")
+		md.WriteString(fmt.Sprintf("### %s\n\n", alert.RuleName))
+		md.WriteString("> <font color=#52C41A>**状态**</font> 🟢 已恢复　　告警已自动恢复正常\n\n")
+
 		md.WriteString("---\n\n")
-		md.WriteString(fmt.Sprintf(
-			"⏱ **持续时长** %s　　✅ **恢复时间** %s\n\n",
-			dur.Round(time.Second), resolvedTime,
-		))
+
+		if alert.Summary != "" {
+			md.WriteString(fmt.Sprintf("**📋 原始摘要**\n\n%s\n\n", alert.Summary))
+		}
+
+		// 恢复时间线
+		md.WriteString("---\n\n")
+		md.WriteString("**⏱️ 恢复时间线**\n\n")
+		md.WriteString(fmt.Sprintf("- **触发时间**　%s\n", firedTime))
+		if alert.ResolvedAt > 0 {
+			resolvedTime := formatUnixTime(alert.ResolvedAt)
+			dur := time.Unix(alert.ResolvedAt, 0).Sub(time.Unix(alert.FiredAt, 0))
+			md.WriteString(fmt.Sprintf("- **恢复时间**　%s\n", resolvedTime))
+			md.WriteString(fmt.Sprintf("- **持续时长**　%s\n", dur.Round(time.Second)))
+		}
+
+		// 环境标签
+		if len(alert.Labels) > 0 {
+			md.WriteString("\n---\n\n")
+			md.WriteString("**🏷️ 环境信息**\n\n")
+			keyOrder := []string{"cluster", "namespace", "env", "environment", "node", "instance", "pod", "container", "service", "alertname", "prometheus"}
+			shown := map[string]bool{}
+			for _, k := range keyOrder {
+				if v, exist := alert.Labels[k]; exist {
+					displayVal := v
+					if k == "alertname" {
+						displayVal = alertNameAlias(v)
+					}
+					md.WriteString(fmt.Sprintf("- **%s**　`%s`\n", labelAlias(k), displayVal))
+					shown[k] = true
+				}
+			}
+			for k, v := range alert.Labels {
+				if !shown[k] {
+					md.WriteString(fmt.Sprintf("- **%s**　`%s`\n", labelAlias(k), v))
+				}
+			}
+		}
+
+		// 底部
+		md.WriteString("\n---\n\n")
+		md.WriteString("<font color=#8C8C8C>🛡️ K8s Operation · 智能监控平台</font>\n")
 	}
 
-	// ── 底部平台签名 ──────────────────────────────────────────────
-	md.WriteString("---\n\n")
-	md.WriteString(fmt.Sprintf(
-		"<font color=#8C8C8C>🛡 K8s Operation 监控平台　·　⏰ %s</font>\n",
-		firedTime,
-	))
+	// 构建最终 title（会话列表预览 · 全中文）
+	title := "🚨 [告警触发] " + alert.RuleName
+	if !isFiring {
+		title = "✅ [已恢复] " + alert.RuleName
+	}
 
-	// 正文注入安全关键字（title 不动）
 	text := ensureDingTalkKeyword(md.String(), ch.SecurityKeyword)
-
 	body := map[string]interface{}{
 		"msgtype": "markdown",
 		"markdown": map[string]string{
@@ -332,9 +378,9 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 	}
 
 	severityBadgeMap := map[string]string{
-		"critical": "P0-Critical",
-		"warning":  "P1-Warning",
-		"info":     "P2-Info",
+		"critical": "P0-紧急",
+		"warning":  "P1-警告",
+		"info":     "P2-提示",
 	}
 	badge, ok := severityBadgeMap[alert.Severity]
 	if !ok {
@@ -362,17 +408,21 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 	}
 	if len(alert.Labels) > 0 {
 		lines = append(lines, sep)
-		keyOrder := []string{"cluster", "namespace", "env", "environment", "job", "instance", "node", "pod", "service"}
+		keyOrder := []string{"cluster", "namespace", "env", "environment", "node", "instance", "pod", "container", "service", "daemonset", "deployment", "job", "alertname", "prometheus"}
 		shown := map[string]bool{}
 		for _, k := range keyOrder {
 			if v, exist := alert.Labels[k]; exist {
-				lines = append(lines, newLine(fmt.Sprintf("  %s：%s", labelAlias(k), v)))
+				displayVal := v
+				if k == "alertname" {
+					displayVal = alertNameAlias(v)
+				}
+				lines = append(lines, newLine(fmt.Sprintf("  %s：%s", labelAlias(k), displayVal)))
 				shown[k] = true
 			}
 		}
 		for k, v := range alert.Labels {
 			if !shown[k] {
-				lines = append(lines, newLine(fmt.Sprintf("  %s：%s", k, v)))
+				lines = append(lines, newLine(fmt.Sprintf("  %s：%s", labelAlias(k), v)))
 			}
 		}
 	}
@@ -383,9 +433,9 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 		lines = append(lines, newLine(fmt.Sprintf("⏱ 持续时长：%s  ✅ 恢复时间：%s", dur.Round(time.Second), resolvedTime)))
 	}
 	lines = append(lines, sep)
-	lines = append(lines, newLine(fmt.Sprintf("🛡 K8s Operation 监控平台  ·  ⏰ %s", firedTime)))
+	lines = append(lines, newLine(fmt.Sprintf("🛡 K8s Operation 智能监控平台  ·  ⏰ %s", firedTime)))
 
-	title := fmt.Sprintf("%s [%s] %s", statusIcon, strings.ToUpper(alert.Status), alert.RuleName)
+	title := fmt.Sprintf("%s [%s] %s", statusIcon, statusText, alert.RuleName)
 	body := map[string]interface{}{
 		"msg_type": "post",
 		"content": map[string]interface{}{
@@ -400,7 +450,7 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 	return postJSON(ch.WebhookURL, ch.Secret, body)
 }
 
-// sendWechat 发送企业微信通知（企业级 Markdown 卡片）
+// sendWechat 发送企业微信通知（大厂风格 Markdown 卡片）
 func sendWechat(ch *models.MonitorNotifyChannel, alert *AlertNotification) error {
 	if ch.MsgTemplate != "" {
 		content, err := renderNotifyTemplate(ch.MsgTemplate, alert)
@@ -415,77 +465,83 @@ func sendWechat(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 	}
 
 	isFiring := alert.Status != "resolved"
-	statusEmoji := "🚨"
-	statusText := "告警触发"
-	statusColor := "warning"
-	if !isFiring {
-		statusEmoji = "✅"
-		statusText = "告警恢复"
-		statusColor = "info"
-	}
-
-	severityMap := map[string]string{
-		"critical": "<font color=\"warning\">🔴 P0-Critical</font>",
-		"warning":  "<font color=\"warning\">🟡 P1-Warning</font>",
-		"info":     "<font color=\"comment\">🔵 P2-Info</font>",
-	}
-	badge, ok := severityMap[alert.Severity]
-	if !ok {
-		badge = alert.Severity
-	}
 	firedTime := formatUnixTime(alert.FiredAt)
 
 	var md strings.Builder
-	// ── 标题行 ─────────────────────────────────────────────────
-	md.WriteString(fmt.Sprintf("## %s %s\n", statusEmoji, alert.RuleName))
-	md.WriteString(fmt.Sprintf("> <font color=\"%s\">**%s**</font>　　%s　　%s\n\n",
-		statusColor, statusText, badge, firedTime))
 
-	// ── 告警内容 ───────────────────────────────────────────────
-	md.WriteString("---\n")
-	if alert.Summary != "" {
-		md.WriteString(fmt.Sprintf("> **📋 摘要**: %s\n", alert.Summary))
-	}
-	if alert.Description != "" {
-		md.WriteString(fmt.Sprintf("> **📝 详情**: %s\n", alert.Description))
-	}
-	if alert.Value != "" {
-		md.WriteString(fmt.Sprintf("> **📊 当前值**: `%s`\n", alert.Value))
-	}
-	md.WriteString("\n")
-
-	// ── 环境标签 ───────────────────────────────────────────────
-	if len(alert.Labels) > 0 {
-		md.WriteString("---\n")
-		md.WriteString("**🏷 标签**\n")
-		keyOrder := []string{"cluster", "namespace", "env", "environment", "job", "instance", "node", "pod", "service"}
-		shown := map[string]bool{}
-		for _, k := range keyOrder {
-			if v, exist := alert.Labels[k]; exist {
-				md.WriteString(fmt.Sprintf("> **%s**: `%s`\n", labelAlias(k), v))
-				shown[k] = true
-			}
+	if isFiring {
+		// 告警触发 · 全中文
+		severityMap := map[string]string{
+			"critical": "<font color=\"warning\">🔴 P0 · 紧急</font>",
+			"warning":  "<font color=\"warning\">🟡 P1 · 警告</font>",
+			"info":     "<font color=\"comment\">🔵 P2 · 提示</font>",
 		}
-		for k, v := range alert.Labels {
-			if !shown[k] {
-				md.WriteString(fmt.Sprintf("> **%s**: `%s`\n", k, v))
+		badge, ok := severityMap[alert.Severity]
+		if !ok {
+			badge = alert.Severity
+		}
+
+		md.WriteString(fmt.Sprintf("## 🚨 告警触发\n"))
+		md.WriteString(fmt.Sprintf("### %s\n", alert.RuleName))
+		md.WriteString(fmt.Sprintf("> <font color=\"warning\">**触发中**</font>　%s　%s\n\n", badge, firedTime))
+		md.WriteString("---\n")
+		if alert.Summary != "" {
+			md.WriteString(fmt.Sprintf("> **📋 摘要**: %s\n", alert.Summary))
+		}
+		if alert.Description != "" {
+			md.WriteString(fmt.Sprintf("> **📝 详情**: %s\n", alert.Description))
+		}
+		if alert.Value != "" {
+			md.WriteString(fmt.Sprintf("> **📊 触发值**: `%s`\n", alert.Value))
+		}
+		md.WriteString("\n")
+
+		if len(alert.Labels) > 0 {
+			md.WriteString("---\n")
+			md.WriteString("**🏷️ 环境信息**\n")
+			keyOrder := []string{"cluster", "namespace", "env", "environment", "node", "instance", "pod", "container", "service", "daemonset", "deployment", "statefulset", "job", "alertname", "prometheus", "endpoint"}
+			shown := map[string]bool{}
+			for _, k := range keyOrder {
+				if v, exist := alert.Labels[k]; exist {
+					displayVal := v
+					if k == "alertname" {
+						displayVal = alertNameAlias(v)
+					}
+					md.WriteString(fmt.Sprintf("> **%s**: `%s`\n", labelAlias(k), displayVal))
+					shown[k] = true
+				}
 			}
+			for k, v := range alert.Labels {
+				if !shown[k] {
+					md.WriteString(fmt.Sprintf("> **%s**: `%s`\n", labelAlias(k), v))
+				}
+			}
+			md.WriteString("\n")
+		}
+	} else {
+		// 告警恢复 · 全中文
+		md.WriteString(fmt.Sprintf("## ✅ 告警恢复\n"))
+		md.WriteString(fmt.Sprintf("### %s\n", alert.RuleName))
+		md.WriteString(fmt.Sprintf("> <font color=\"info\">**已恢复**</font>　告警已自动恢复正常\n\n"))
+		md.WriteString("---\n")
+		if alert.Summary != "" {
+			md.WriteString(fmt.Sprintf("> **📋 原始摘要**: %s\n", alert.Summary))
+		}
+		md.WriteString("\n---\n")
+		md.WriteString("**⏱️ 恢复时间线**\n")
+		md.WriteString(fmt.Sprintf("> **触发时间**: %s\n", firedTime))
+		if alert.ResolvedAt > 0 {
+			resolvedTime := formatUnixTime(alert.ResolvedAt)
+			dur := time.Unix(alert.ResolvedAt, 0).Sub(time.Unix(alert.FiredAt, 0))
+			md.WriteString(fmt.Sprintf("> **恢复时间**: %s\n", resolvedTime))
+			md.WriteString(fmt.Sprintf("> **持续时长**: %s\n", dur.Round(time.Second)))
 		}
 		md.WriteString("\n")
 	}
 
-	// ── 恢复信息 ───────────────────────────────────────────────
-	if !isFiring && alert.ResolvedAt > 0 {
-		resolvedTime := formatUnixTime(alert.ResolvedAt)
-		dur := time.Unix(alert.ResolvedAt, 0).Sub(time.Unix(alert.FiredAt, 0))
-		md.WriteString("---\n")
-		md.WriteString(fmt.Sprintf("> **⏱ 持续时长**: %s\n> **✅ 恢复时间**: %s\n\n",
-			dur.Round(time.Second), resolvedTime))
-	}
-
-	// ── 底部签名 ───────────────────────────────────────────────
+	// 底部签名
 	md.WriteString("---\n")
-	md.WriteString(fmt.Sprintf("⚡ K8s Operation 监控平台　·　⏰ %s", firedTime))
+	md.WriteString("🛡️ K8s Operation · 智能监控平台")
 
 	body := map[string]interface{}{
 		"msgtype": "markdown",
@@ -524,9 +580,15 @@ func sendEmail(ch *models.MonitorNotifyChannel, alert *AlertNotification) error 
 		return fmt.Errorf("邮件收件人为空")
 	}
 
-	subject := fmt.Sprintf("[%s] %s", strings.ToUpper(alert.Severity), alert.RuleName)
+	// 邮件主题 · 全中文
+	severityCN := map[string]string{"critical": "紧急", "warning": "警告", "info": "提示"}
+	sLabel := severityCN[alert.Severity]
+	if sLabel == "" {
+		sLabel = alert.Severity
+	}
+	subject := fmt.Sprintf("[%s] %s", sLabel, alert.RuleName)
 	if alert.Status == "resolved" {
-		subject = fmt.Sprintf("[RESOLVED][%s] %s", strings.ToUpper(alert.Severity), alert.RuleName)
+		subject = fmt.Sprintf("[已恢复][%s] %s", sLabel, alert.RuleName)
 	}
 
 	firedTime := time.Unix(alert.FiredAt, 0).Format("2006-01-02 15:04:05")
@@ -538,29 +600,42 @@ func sendEmail(ch *models.MonitorNotifyChannel, alert *AlertNotification) error 
 		}
 		body.WriteString(rendered)
 	} else {
-		body.WriteString(fmt.Sprintf("规则名称: %s\n", alert.RuleName))
-		body.WriteString(fmt.Sprintf("状态: %s\n", alert.Status))
-		body.WriteString(fmt.Sprintf("级别: %s\n", alert.Severity))
+		// 全中文邮件正文
+		statusCN := "🔴 触发中"
+		if alert.Status == "resolved" {
+			statusCN = "🟢 已恢复"
+		}
+		body.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		body.WriteString(fmt.Sprintf("  规则名称: %s\n", alert.RuleName))
+		body.WriteString(fmt.Sprintf("  当前状态: %s\n", statusCN))
+		body.WriteString(fmt.Sprintf("  告警级别: %s\n", severityText(alert.Severity)))
+		body.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 		if alert.Summary != "" {
-			body.WriteString(fmt.Sprintf("摘要: %s\n", alert.Summary))
+			body.WriteString(fmt.Sprintf("📋 告警摘要: %s\n", alert.Summary))
 		}
 		if alert.Description != "" {
-			body.WriteString(fmt.Sprintf("描述: %s\n", alert.Description))
+			body.WriteString(fmt.Sprintf("📝 详细描述: %s\n", alert.Description))
 		}
 		if alert.Value != "" {
-			body.WriteString(fmt.Sprintf("触发值: %s\n", alert.Value))
+			body.WriteString(fmt.Sprintf("📊 触发值: %s\n", alert.Value))
 		}
-		body.WriteString(fmt.Sprintf("触发时间: %s\n", firedTime))
+		body.WriteString(fmt.Sprintf("\n⏰ 触发时间: %s\n", firedTime))
 		if alert.Status == "resolved" && alert.ResolvedAt > 0 {
-			body.WriteString(fmt.Sprintf("恢复时间: %s\n", time.Unix(alert.ResolvedAt, 0).Format("2006-01-02 15:04:05")))
+			body.WriteString(fmt.Sprintf("✅ 恢复时间: %s\n", time.Unix(alert.ResolvedAt, 0).Format("2006-01-02 15:04:05")))
+			dur := time.Unix(alert.ResolvedAt, 0).Sub(time.Unix(alert.FiredAt, 0))
+			body.WriteString(fmt.Sprintf("⏱️ 持续时长: %s\n", dur.Round(time.Second)))
 		}
 		if len(alert.Labels) > 0 {
-			body.WriteString("\n标签:\n")
+			body.WriteString("\n环境标签:\n")
 			for k, v := range alert.Labels {
-				body.WriteString(fmt.Sprintf("- %s = %s\n", k, v))
+				displayVal := v
+				if k == "alertname" {
+					displayVal = alertNameAlias(v)
+				}
+				body.WriteString(fmt.Sprintf("- %s = %s\n", labelAlias(k), displayVal))
 			}
 		}
-		body.WriteString("\n--\nK8s Operation 监控平台\n")
+		body.WriteString("\n--\nK8s Operation 智能监控平台\n")
 	}
 
 	addr := fmt.Sprintf("%s:%d", ch.SMTPHost, port)
@@ -657,11 +732,11 @@ func ensureDingTalkKeyword(content, keywords string) string {
 func severityText(severity string) string {
 	switch severity {
 	case "critical":
-		return "P0-Critical"
+		return "P0-紧急"
 	case "warning":
-		return "P1-Warning"
+		return "P1-警告"
 	case "info":
-		return "P2-Info"
+		return "P2-提示"
 	default:
 		return severity
 	}
@@ -743,22 +818,118 @@ func splitAndTrim(value string) []string {
 // labelAlias 将常见 Prometheus 标签 key 映射为中文别名
 func labelAlias(k string) string {
 	aliases := map[string]string{
+		// 基础环境
 		"cluster":     "集群",
 		"namespace":   "命名空间",
 		"env":         "环境",
 		"environment": "环境",
-		"job":         "Job",
-		"instance":    "实例",
-		"node":        "节点",
-		"pod":         "Pod",
-		"service":     "服务",
-		"container":   "容器",
-		"alertname":   "规则名",
+		"region":      "地域",
+		"zone":        "可用区",
+		"dc":          "数据中心",
+		// 采集相关
+		"job":      "采集任务",
+		"instance": "实例",
+		"endpoint": "端点",
+		// 节点
+		"node":     "节点",
+		"nodename": "节点名",
+		// 工作负载
+		"pod":                       "Pod",
+		"container":                 "容器",
+		"service":                   "服务",
+		"deployment":                "部署",
+		"daemonset":                 "守护进程集",
+		"statefulset":               "有状态副本集",
+		"replicaset":                "副本集",
+		"cronjob":                   "定时任务",
+		"job_name":                  "任务名",
+		"horizontalpodautoscaler":   "弹性伸缩",
+		"persistentvolumeclaim":     "持久卷声明",
+		"persistentvolume":          "持久卷",
+		"ingress":                   "入口网关",
+		"configmap":                 "配置字典",
+		"secret":                    "密钥对象",
+		// 告警元数据
+		"alertname":  "告警规则",
+		"severity":   "级别",
+		"prometheus": "数据源",
+		"replica":    "副本",
+		// 应用层
+		"handler":    "接口路径",
+		"method":     "请求方法",
+		"code":       "状态码",
+		"status":     "状态",
+		"path":       "路径",
+		"host":       "主机",
+		"url":        "地址",
+		"protocol":   "协议",
+		"port":       "端口",
+		"device":     "磁盘设备",
+		"mountpoint": "挂载点",
+		"fstype":     "文件系统",
+		"interface":  "网卡",
+		"mode":       "模式",
+		"type":       "类型",
+		"reason":     "原因",
+		"phase":      "阶段",
+		"condition":  "条件",
+		"resource":   "资源",
+		"unit":       "单元",
+		"le":         "分位桶",
+		"quantile":   "分位数",
 	}
 	if alias, ok := aliases[k]; ok {
 		return alias
 	}
 	return k
+}
+
+// alertNameAlias 将常见 Prometheus/kube-prometheus-stack 告警名翻译为中文
+// 用于通知展示时让标签更可读
+func alertNameAlias(name string) string {
+	aliases := map[string]string{
+		"KubeDaemonSetRolloutStuck":        "DaemonSet滚动更新卡住",
+		"KubeDeploymentReplicasMismatch":   "Deployment副本数不匹配",
+		"KubeStatefulSetReplicasMismatch":  "StatefulSet副本数不匹配",
+		"KubePodNotReady":                  "Pod未就绪",
+		"KubePodCrashLooping":              "Pod频繁重启",
+		"KubeJobFailed":                    "Job执行失败",
+		"KubeJobNotCompleted":              "Job未完成",
+		"KubeHpaReplicasMismatch":          "HPA副本数不匹配",
+		"KubeHpaMaxedOut":                  "HPA已达最大副本数",
+		"KubeCPUOvercommit":                "CPU资源超分配",
+		"KubeMemoryOvercommit":             "内存资源超分配",
+		"KubeQuotaAlmostFull":              "资源配额即将用尽",
+		"KubeQuotaFullyUsed":               "资源配额已用尽",
+		"KubeQuotaExceeded":                "资源配额超限",
+		"KubePersistentVolumeFillingUp":    "持久卷即将满载",
+		"KubePersistentVolumeInodesFillingUp": "持久卷Inode即将用尽",
+		"KubeContainerWaiting":             "容器等待中",
+		"KubeNodeNotReady":                 "节点未就绪",
+		"KubeNodeUnreachable":              "节点不可达",
+		"KubeNodeReadinessFlapping":        "节点就绪状态抖动",
+		"KubeClientErrors":                 "K8s客户端错误",
+		"KubeAPILatencyHigh":               "K8s API延迟过高",
+		"KubeletTooManyPods":               "Kubelet Pod数过多",
+		"NodeFilesystemAlmostOutOfSpace":   "节点磁盘空间不足",
+		"NodeFilesystemSpaceFillingUp":     "节点磁盘空间即将用尽",
+		"NodeRAIDDegraded":                 "节点RAID降级",
+		"NodeClockSkewDetected":            "节点时钟偏移",
+		"NodeNetworkInterfaceFlapping":     "网卡状态抖动",
+		"NodeHighNumberConntrackEntriesUsed": "连接跟踪表即将满",
+		"TargetDown":                       "监控目标离线",
+		"Watchdog":                         "监控看门狗",
+		"PrometheusJobMissing":             "Prometheus采集任务丢失",
+		"AlertmanagerFailedReload":         "Alertmanager重载失败",
+		"AlertmanagerMembersInconsistent":  "Alertmanager集群不一致",
+		"PrometheusTargetLimitHit":         "Prometheus目标数达上限",
+		"PrometheusTSDBCompactionsFailing": "Prometheus压缩失败",
+		"PrometheusRuleFailures":           "Prometheus规则执行失败",
+	}
+	if alias, ok := aliases[name]; ok {
+		return alias
+	}
+	return name
 }
 
 // buildAtConfig 构建钉钉 @人员配置
@@ -853,4 +1024,125 @@ func dingTalkErrHint(code int) string {
 	default:
 		return ""
 	}
+}
+
+// ============================================================
+// 通知路由策略 CRUD
+// 大厂级设计：多策略优先级路由，自动将告警分发到不同群
+// ============================================================
+
+// RoutePolicyListReq 路由策略列表请求
+type RoutePolicyListReq struct {
+	Page    int    `form:"page" json:"page"`
+	Size    int    `form:"size" json:"size"`
+	Keyword string `form:"keyword" json:"keyword"`
+}
+
+// RoutePolicyListResp 路由策略列表响应
+type RoutePolicyListResp struct {
+	Total int64                              `json:"total"`
+	Items []models.MonitorNotifyRoutePolicy `json:"items"`
+}
+
+// ListRoutePolicies 列表查询
+func (s *MonitorCRUDService) ListRoutePolicies(ctx context.Context, req RoutePolicyListReq) (*RoutePolicyListResp, error) {
+	db := global.DB.WithContext(ctx).Where("is_del = 0")
+
+	if req.Keyword != "" {
+		db = db.Where("name LIKE ? OR description LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
+	}
+
+	var total int64
+	db.Model(&models.MonitorNotifyRoutePolicy{}).Count(&total)
+
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Size <= 0 || req.Size > 100 {
+		req.Size = 20
+	}
+
+	var items []models.MonitorNotifyRoutePolicy
+	err := db.Order("priority ASC, id ASC").
+		Offset((req.Page - 1) * req.Size).Limit(req.Size).
+		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &RoutePolicyListResp{Total: total, Items: items}, nil
+}
+
+// GetRoutePolicy 详情
+func (s *MonitorCRUDService) GetRoutePolicy(ctx context.Context, id int64) (*models.MonitorNotifyRoutePolicy, error) {
+	var policy models.MonitorNotifyRoutePolicy
+	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&policy).Error
+	if err != nil {
+		return nil, err
+	}
+	return &policy, nil
+}
+
+// CreateRoutePolicy 创建路由策略
+func (s *MonitorCRUDService) CreateRoutePolicy(ctx context.Context, policy *models.MonitorNotifyRoutePolicy) error {
+	// 如果设为默认策略，取消其他默认
+	if policy.IsDefault {
+		global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+			Where("is_default = 1 AND is_del = 0").
+			Update("is_default", false)
+	}
+	return global.DB.WithContext(ctx).Create(policy).Error
+}
+
+// UpdateRoutePolicy 更新路由策略
+func (s *MonitorCRUDService) UpdateRoutePolicy(ctx context.Context, policy *models.MonitorNotifyRoutePolicy) error {
+	// 如果设为默认策略，取消其他默认
+	if policy.IsDefault {
+		global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+			Where("is_default = 1 AND is_del = 0 AND id != ?", policy.ID).
+			Update("is_default", false)
+	}
+	return global.DB.WithContext(ctx).Model(policy).
+		Where("id = ? AND is_del = 0", policy.ID).
+		Updates(map[string]interface{}{
+			"name":        policy.Name,
+			"description": policy.Description,
+			"priority":    policy.Priority,
+			"channel_ids": policy.ChannelIDs,
+			"match_mode":  policy.MatchMode,
+			"severities":  policy.Severities,
+			"groups":      policy.Groups,
+			"label_match": policy.LabelMatch,
+			"is_default":  policy.IsDefault,
+			"enabled":     policy.Enabled,
+		}).Error
+}
+
+// DeleteRoutePolicy 删除路由策略
+func (s *MonitorCRUDService) DeleteRoutePolicy(ctx context.Context, id int64) error {
+	return global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+		Where("id = ? AND is_del = 0", id).
+		Update("is_del", 1).Error
+}
+
+// ResolveRoutePolicyChannels 根据路由策略解析告警规则应发送到的渠道
+// 用于 Worker 评估时：当 rule.NotifyChannels 为空时，通过路由策略自动匹配
+func (s *MonitorCRUDService) ResolveRoutePolicyChannels(ctx context.Context, rule *models.MonitorAlertRule) string {
+	var policies []models.MonitorNotifyRoutePolicy
+	global.DB.WithContext(ctx).
+		Where("enabled = 1 AND is_del = 0").
+		Order("priority ASC, id ASC").
+		Find(&policies)
+
+	if len(policies) == 0 {
+		return ""
+	}
+
+	// 解析规则标签
+	labels := make(map[string]string)
+	if rule.Labels != "" {
+		_ = json.Unmarshal([]byte(rule.Labels), &labels)
+	}
+
+	return s.matchRoutePolicy(policies, rule.Severity, rule.Group, labels)
 }

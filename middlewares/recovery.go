@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"k8soperation/global"
+	"k8soperation/pkg/metrics"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -20,6 +21,8 @@ func Recovery() gin.HandlerFunc {
 			// 使用 recover() 捕获可能的 panic
 			// 这是一个错误处理机制，用于防止程序因未处理的异常而崩溃
 			if err := recover(); err != nil {
+					// Prometheus 计数：panic 恢复
+					metrics.PanicsTotal.Inc()
 
 				// 获取用户的请求信息，用于日志记录
 				httpRequest, _ := httputil.DumpRequest(c.Request, true)

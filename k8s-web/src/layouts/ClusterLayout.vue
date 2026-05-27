@@ -133,7 +133,19 @@
             class="menu-item"
             :class="{ active: isActive(`/c/${clusterId}/extensions/crd`) }"
             @click="go('extensions/crd')"
-          >🧩 CRD 管理</a>
+          >🧩 CRD 资源管理</a>
+          <a
+            v-if="canView('crd')"
+            class="menu-item"
+            :class="{ active: isActive(`/c/${clusterId}/extensions/cr-instances`) }"
+            @click="go('extensions/cr-instances')"
+          >📋 CR 实例管理</a>
+          <a
+            v-if="canView('crd')"
+            class="menu-item"
+            :class="{ active: isActive(`/c/${clusterId}/extensions/yaml-workbench`) }"
+            @click="go('extensions/yaml-workbench')"
+          >📝 YAML 工作台</a>
         </template>
       </aside>
 

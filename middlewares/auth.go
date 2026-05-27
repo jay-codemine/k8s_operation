@@ -5,6 +5,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
+	"k8soperation/pkg/metrics"
 	jwt2 "k8soperation/pkg/jwt"
 )
 
@@ -31,6 +32,7 @@ func AuthJWT() gin.HandlerFunc {
 		tokenStr, err := jwt2.GetTokenFromHeader(ctx)
 		if err != nil {
 			// 头部缺失 / 格式不对
+			metrics.AuthTokenValidationTotal.WithLabelValues("invalid").Inc()
 			rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 			ctx.Abort()
 			return
@@ -43,13 +45,18 @@ func AuthJWT() gin.HandlerFunc {
 			// 区分错误（可选：用 UnauthorizedTokenTimeout 等更细错误码）
 			switch err {
 			case errorcode.ErrTokenExpired:
+				metrics.AuthTokenValidationTotal.WithLabelValues("expired").Inc()
 				rsp.ToErrorResponse(errorcode.UnauthorizedTokenError) // 或 UnauthorizedTokenTimeout
 			default:
+				metrics.AuthTokenValidationTotal.WithLabelValues("invalid").Inc()
 				rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 			}
 			ctx.Abort()
 			return
 		}
+
+		// Token 校验成功
+		metrics.AuthTokenValidationTotal.WithLabelValues("success").Inc()
 
 		// 3) 按用户ID查库，确保用户存在/可用
 		u := models.NewUser().GetUserByID(claims.UserID)

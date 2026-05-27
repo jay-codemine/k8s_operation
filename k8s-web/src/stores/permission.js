@@ -109,11 +109,9 @@ export const ROUTE_SCOPES = {
   '/images/browse': { scope: 'cicd', minLevel: 'read' },
   '/images/cleanup': { scope: 'cicd', minLevel: 'admin' },
 
-  // 监控（属于集群域）
+  // 监控（属于集群域 — 进入监控模块需 cluster:read，数据源管理需 platform:admin）
   '/monitoring': { scope: 'cluster', minLevel: 'read' },
-  '/monitoring/datasources': { scope: 'platform', minLevel: 'admin' },
-  '/monitoring/alert-rules': { scope: 'cluster', minLevel: 'write' },
-  '/monitoring/alert-events': { scope: 'cluster', minLevel: 'read' }
+  '/monitoring/datasources': { scope: 'platform', minLevel: 'admin' }
 }
 
 // ==================== 权限状态 ====================

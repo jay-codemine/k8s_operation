@@ -2,14 +2,397 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 )
+
+// ============================================================
+// YAML 批量导入/导出 告警规则
+// ============================================================
+
+// AlertRuleYAMLSpec YAML 格式的告警规则（兼容 PrometheusRule 风格）
+type AlertRuleYAMLSpec struct {
+	Groups []AlertRuleGroup `yaml:"groups" json:"groups"`
+}
+
+// AlertRuleGroup 规则组（对应 PrometheusRule.spec.groups）
+type AlertRuleGroup struct {
+	Name  string          `yaml:"name" json:"name"`
+	Rules []AlertRuleItem `yaml:"rules" json:"rules"`
+}
+
+// AlertRuleItem 单条规则项
+type AlertRuleItem struct {
+	Alert       string            `yaml:"alert" json:"alert"`
+	Expr        string            `yaml:"expr" json:"expr"`
+	For         string            `yaml:"for,omitempty" json:"for,omitempty"`
+	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
+}
+
+// AlertRuleImportReq 批量导入请求
+type AlertRuleImportReq struct {
+	YAML                  string `json:"yaml" binding:"required"`           // YAML 内容
+	DatasourceID          int64  `json:"datasource_id" binding:"required"`  // 绑定数据源
+	Overwrite             bool   `json:"overwrite"`                         // 同名规则是否覆盖
+	DefaultNotifyChannels string `json:"default_notify_channels"`           // 默认通知渠道ID(逗号分隔),导入时自动绑定
+	AutoRoute             bool   `json:"auto_route"`                        // 是否启用路由策略自动匹配(优先级: default > auto_route)
+}
+
+// AlertRuleImportResult 导入结果
+type AlertRuleImportResult struct {
+	Total    int      `json:"total"`     // 总规则数
+	Created  int      `json:"created"`   // 新建数
+	Updated  int      `json:"updated"`   // 更新数（覆盖模式）
+	Skipped  int      `json:"skipped"`   // 跳过数（已存在且不覆盖）
+	Failed   int      `json:"failed"`    // 失败数
+	Errors   []string `json:"errors"`    // 失败详情
+}
+
+// ImportAlertRulesFromYAML 从 YAML 批量导入告警规则
+func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req AlertRuleImportReq) (*AlertRuleImportResult, error) {
+	var spec AlertRuleYAMLSpec
+	if err := yaml.Unmarshal([]byte(req.YAML), &spec); err != nil {
+		return nil, fmt.Errorf("YAML 解析失败: %w", err)
+	}
+
+	// 预加载路由策略（auto_route 模式下用于自动匹配渠道）
+	var routePolicies []models.MonitorNotifyRoutePolicy
+	if req.AutoRoute && req.DefaultNotifyChannels == "" {
+		global.DB.WithContext(ctx).
+			Where("enabled = 1 AND is_del = 0").
+			Order("priority ASC, id ASC").
+			Find(&routePolicies)
+	}
+
+	result := &AlertRuleImportResult{}
+
+	for _, group := range spec.Groups {
+		for _, item := range group.Rules {
+			result.Total++
+
+			if item.Alert == "" || item.Expr == "" {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("[%s] alert 或 expr 为空", item.Alert))
+				continue
+			}
+
+			// 提取 severity
+			severity := "warning"
+			if s, ok := item.Labels["severity"]; ok {
+				severity = s
+			}
+
+			// 构建标签 JSON（排除 severity）
+			labelsMap := make(map[string]string)
+			for k, v := range item.Labels {
+				if k != "severity" {
+					labelsMap[k] = v
+				}
+			}
+			labelsJSON, _ := json.Marshal(labelsMap)
+
+			// 构建 annotations JSON
+			annotationsJSON, _ := json.Marshal(item.Annotations)
+
+			// 提取 summary / description
+			summary := item.Annotations["summary"]
+			description := item.Annotations["description"]
+
+			// 决定通知渠道：显式指定 > 路由策略匹配 > 空
+			notifyChannels := req.DefaultNotifyChannels
+			if notifyChannels == "" && req.AutoRoute && len(routePolicies) > 0 {
+				notifyChannels = s.matchRoutePolicy(routePolicies, severity, group.Name, labelsMap)
+			}
+
+			// 检查是否已存在同名规则
+			var existing models.MonitorAlertRule
+			err := global.DB.WithContext(ctx).
+				Where("name = ? AND is_del = 0", item.Alert).
+				First(&existing).Error
+
+			if err == nil {
+				// 已存在
+				if !req.Overwrite {
+					result.Skipped++
+					continue
+				}
+				// 覆盖更新
+				existing.Group = group.Name
+				existing.Severity = severity
+				existing.Expr = item.Expr
+				existing.Duration = item.For
+				existing.Summary = summary
+				existing.Description = description
+				existing.Labels = string(labelsJSON)
+				existing.Annotations = string(annotationsJSON)
+				existing.DatasourceID = req.DatasourceID
+				// 覆盖模式下也更新通知渠道（如果指定了）
+				if notifyChannels != "" {
+					existing.NotifyChannels = notifyChannels
+				}
+				if err := s.UpdateAlertRule(ctx, &existing); err != nil {
+					result.Failed++
+					result.Errors = append(result.Errors, fmt.Sprintf("[%s] 更新失败: %v", item.Alert, err))
+				} else {
+					result.Updated++
+				}
+			} else {
+				// 新建
+				duration := item.For
+				if duration == "" {
+					duration = "5m"
+				}
+				rule := &models.MonitorAlertRule{
+					DatasourceID:   req.DatasourceID,
+					Name:           item.Alert,
+					Group:          group.Name,
+					Severity:       severity,
+					Expr:           item.Expr,
+					Duration:       duration,
+					Summary:        summary,
+					Description:    description,
+					Labels:         string(labelsJSON),
+					Annotations:    string(annotationsJSON),
+					Enabled:        true,
+					EvalInterval:   60,
+					NotifyChannels: notifyChannels,
+				}
+				if err := s.CreateAlertRule(ctx, rule); err != nil {
+					result.Failed++
+					result.Errors = append(result.Errors, fmt.Sprintf("[%s] 创建失败: %v", item.Alert, err))
+				} else {
+					result.Created++
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// matchRoutePolicy 根据路由策略匹配通知渠道（优先级从高到低）
+func (s *MonitorCRUDService) matchRoutePolicy(policies []models.MonitorNotifyRoutePolicy, severity, group string, labels map[string]string) string {
+	for _, policy := range policies {
+		if policy.IsDefault {
+			// 兜底策略最后匹配
+			continue
+		}
+		if s.policyMatches(&policy, severity, group, labels) {
+			return policy.ChannelIDs
+		}
+	}
+	// 回退到兜底默认策略
+	for _, policy := range policies {
+		if policy.IsDefault {
+			return policy.ChannelIDs
+		}
+	}
+	return ""
+}
+
+// policyMatches 检查告警是否匹配路由策略
+func (s *MonitorCRUDService) policyMatches(policy *models.MonitorNotifyRoutePolicy, severity, group string, labels map[string]string) bool {
+	matchAll := policy.MatchMode == "all"
+	hasCondition := false
+	matchCount := 0
+
+	// 检查 severity 匹配
+	if policy.Severities != "" {
+		hasCondition = true
+		severities := strings.Split(policy.Severities, ",")
+		for _, s := range severities {
+			if strings.TrimSpace(s) == severity {
+				matchCount++
+				break
+			}
+		}
+		if matchAll && matchCount == 0 {
+			return false
+		}
+	}
+
+	// 检查 group 匹配
+	if policy.Groups != "" {
+		hasCondition = true
+		groups := strings.Split(policy.Groups, ",")
+		matched := false
+		for _, g := range groups {
+			if strings.TrimSpace(g) == group {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			matchCount++
+		}
+		if matchAll && !matched {
+			return false
+		}
+	}
+
+	// 检查标签匹配
+	if policy.LabelMatch != "" {
+		hasCondition = true
+		var matchers []struct {
+			Key   string `json:"key"`
+			Op    string `json:"op"`
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal([]byte(policy.LabelMatch), &matchers); err == nil && len(matchers) > 0 {
+			labelMatched := true
+			for _, m := range matchers {
+				v, exists := labels[m.Key]
+				switch m.Op {
+				case "=", "==":
+					if v != m.Value {
+						labelMatched = false
+					}
+				case "!=":
+					if v == m.Value {
+						labelMatched = false
+					}
+				case "=~":
+					if !strings.Contains(v, m.Value) {
+						labelMatched = false
+					}
+				case "exists":
+					if !exists {
+						labelMatched = false
+					}
+				}
+				if !labelMatched {
+					break
+				}
+			}
+			if labelMatched {
+				matchCount++
+			}
+			if matchAll && !labelMatched {
+				return false
+			}
+		}
+	}
+
+	if !hasCondition {
+		return false
+	}
+
+	if matchAll {
+		return true
+	}
+	// any 模式：至少一个条件匹配
+	return matchCount > 0
+}
+
+// ExportAlertRulesToYAML 导出告警规则为 PrometheusRule 兼容 YAML
+func (s *MonitorCRUDService) ExportAlertRulesToYAML(ctx context.Context, group string, ids []int64) (string, error) {
+	db := global.DB.WithContext(ctx).Where("is_del = 0 AND enabled = 1")
+
+	if group != "" {
+		db = db.Where("`group` = ?", group)
+	}
+	if len(ids) > 0 {
+		db = db.Where("id IN ?", ids)
+	}
+
+	var rules []models.MonitorAlertRule
+	if err := db.Order("`group` ASC, id ASC").Find(&rules).Error; err != nil {
+		return "", err
+	}
+
+	if len(rules) == 0 {
+		return "", fmt.Errorf("没有可导出的告警规则")
+	}
+
+	// 按 group 分组
+	groupMap := make(map[string][]AlertRuleItem)
+	groupOrder := make([]string, 0)
+	for _, rule := range rules {
+		grp := rule.Group
+		if grp == "" {
+			grp = "default"
+		}
+		if _, exists := groupMap[grp]; !exists {
+			groupOrder = append(groupOrder, grp)
+		}
+
+		item := AlertRuleItem{
+			Alert: rule.Name,
+			Expr:  rule.Expr,
+			For:   rule.Duration,
+		}
+
+		// 构建 labels
+		item.Labels = make(map[string]string)
+		item.Labels["severity"] = rule.Severity
+		if rule.Labels != "" {
+			var extraLabels map[string]string
+			if json.Unmarshal([]byte(rule.Labels), &extraLabels) == nil {
+				for k, v := range extraLabels {
+					item.Labels[k] = v
+				}
+			}
+		}
+
+		// 构建 annotations
+		item.Annotations = make(map[string]string)
+		if rule.Summary != "" {
+			item.Annotations["summary"] = rule.Summary
+		}
+		if rule.Description != "" {
+			item.Annotations["description"] = rule.Description
+		}
+		if rule.Annotations != "" {
+			var extraAnnotations map[string]string
+			if json.Unmarshal([]byte(rule.Annotations), &extraAnnotations) == nil {
+				for k, v := range extraAnnotations {
+					if k != "summary" && k != "description" {
+						item.Annotations[k] = v
+					}
+				}
+			}
+		}
+
+		groupMap[grp] = append(groupMap[grp], item)
+	}
+
+	// 构建 YAML 结构
+	spec := AlertRuleYAMLSpec{}
+	for _, grp := range groupOrder {
+		spec.Groups = append(spec.Groups, AlertRuleGroup{
+			Name:  grp,
+			Rules: groupMap[grp],
+		})
+	}
+
+	yamlData, err := yaml.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("YAML 序列化失败: %w", err)
+	}
+
+	// 添加 PrometheusRule 头部信息
+	var sb strings.Builder
+	sb.WriteString("# =========================================================\n")
+	sb.WriteString("# K8s Operation 监控平台 - 告警规则导出\n")
+	sb.WriteString(fmt.Sprintf("# 导出时间: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("# 规则总数: %d\n", len(rules)))
+	sb.WriteString("# =========================================================\n")
+	sb.WriteString("# 可直接作为 PrometheusRule CR 的 spec 部分使用\n")
+	sb.WriteString("# 也可通过平台「批量导入」功能重新导入\n")
+	sb.WriteString("# =========================================================\n\n")
+	sb.Write(yamlData)
+
+	return sb.String(), nil
+}
 
 // MonitorCRUDService 监控 CRUD 服务
 type MonitorCRUDService struct{}
@@ -310,6 +693,135 @@ func (s *MonitorCRUDService) ToggleAlertRule(ctx context.Context, id int64, enab
 	return global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("enabled", enabled).Error
+}
+
+// ============================================================
+// 批量操作
+// ============================================================
+
+// BatchBindChannelsReq 批量绑定通知渠道请求
+type BatchBindChannelsReq struct {
+	RuleIDs        []int64 `json:"rule_ids" binding:"required"`          // 要绑定的规则 ID 列表
+	NotifyChannels string  `json:"notify_channels" binding:"required"`   // 通知渠道 ID(逗号分隔)
+	Mode           string  `json:"mode"`                                 // 绑定模式: replace(替换)/append(追加)/remove(移除)
+}
+
+// BatchBindChannelsResult 批量绑定结果
+type BatchBindChannelsResult struct {
+	Total   int `json:"total"`   // 处理总数
+	Success int `json:"success"` // 成功数
+	Failed  int `json:"failed"`  // 失败数
+}
+
+// BatchBindChannels 批量绑定/追加/移除通知渠道
+func (s *MonitorCRUDService) BatchBindChannels(ctx context.Context, req BatchBindChannelsReq) (*BatchBindChannelsResult, error) {
+	if len(req.RuleIDs) == 0 {
+		return nil, fmt.Errorf("规则 ID 列表不能为空")
+	}
+	if len(req.RuleIDs) > 500 {
+		return nil, fmt.Errorf("单次最多操作 500 条规则")
+	}
+
+	mode := req.Mode
+	if mode == "" {
+		mode = "replace"
+	}
+
+	result := &BatchBindChannelsResult{Total: len(req.RuleIDs)}
+
+	switch mode {
+	case "replace":
+		// 直接批量更新
+		tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+			Where("id IN ? AND is_del = 0", req.RuleIDs).
+			Update("notify_channels", req.NotifyChannels)
+		if tx.Error != nil {
+			return nil, tx.Error
+		}
+		result.Success = int(tx.RowsAffected)
+		result.Failed = result.Total - result.Success
+
+	case "append":
+		// 逐条追加（去重）
+		for _, ruleID := range req.RuleIDs {
+			var rule models.MonitorAlertRule
+			if err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
+				result.Failed++
+				continue
+			}
+			merged := mergeChannelIDs(rule.NotifyChannels, req.NotifyChannels)
+			if err := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+				Where("id = ?", ruleID).Update("notify_channels", merged).Error; err != nil {
+				result.Failed++
+			} else {
+				result.Success++
+			}
+		}
+
+	case "remove":
+		// 逐条移除
+		for _, ruleID := range req.RuleIDs {
+			var rule models.MonitorAlertRule
+			if err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
+				result.Failed++
+				continue
+			}
+			cleaned := removeChannelIDs(rule.NotifyChannels, req.NotifyChannels)
+			if err := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+				Where("id = ?", ruleID).Update("notify_channels", cleaned).Error; err != nil {
+				result.Failed++
+			} else {
+				result.Success++
+			}
+		}
+
+	default:
+		return nil, fmt.Errorf("不支持的绑定模式: %s (可选: replace/append/remove)", mode)
+	}
+
+	return result, nil
+}
+
+// mergeChannelIDs 合并通知渠道 ID（去重）
+func mergeChannelIDs(existing, incoming string) string {
+	idSet := make(map[string]bool)
+	var result []string
+
+	for _, id := range strings.Split(existing, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" && !idSet[id] {
+			idSet[id] = true
+			result = append(result, id)
+		}
+	}
+	for _, id := range strings.Split(incoming, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" && !idSet[id] {
+			idSet[id] = true
+			result = append(result, id)
+		}
+	}
+	return strings.Join(result, ",")
+}
+
+// removeChannelIDs 从现有渠道中移除指定 ID
+func removeChannelIDs(existing, toRemove string) string {
+	removeSet := make(map[string]bool)
+	for _, id := range strings.Split(toRemove, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			removeSet[id] = true
+		}
+	}
+
+	var result []string
+	for _, id := range strings.Split(existing, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" && !removeSet[id] {
+			result = append(result, id)
+		}
+	}
+	return strings.Join(result, ",")
 }
 
 // ============================================================

@@ -37,8 +37,13 @@ require (
 )
 
 require (
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
+	github.com/prometheus/client_golang v1.23.2 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/common v0.67.4 // indirect
+	github.com/prometheus/procfs v0.19.2 // indirect
 )
 
 require (

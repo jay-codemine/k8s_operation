@@ -4,11 +4,15 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8soperation/global"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/health"
 	"k8soperation/middlewares"
 	"time"
+
+	// 引入 metrics 包，触发 promauto 注册
+	_ "k8soperation/pkg/metrics"
 )
 
 type Engine struct {
@@ -74,6 +78,7 @@ func (s *Engine) injectMiddlewares() {
 	}
 
 	// 注册中间件
+	s.Use(middlewares.PrometheusMiddleware()) // Prometheus 指标采集（必须在 Logger 之前）
 	s.Use(middlewares.Logger())
 	s.Use(middlewares.Recovery())
 	s.Use(middlewares.K8sError())
@@ -89,6 +94,9 @@ func (s *Engine) injectRouters() {
 
 	// 先注册健康检查（不走 /api 前缀）
 	health.Register(r, health.Checks{DB: global.SQLDB})
+
+	// 注册 Prometheus /metrics 端点（不走 JWT，公开暴露供 Prometheus 抓取）
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 2. 创建一个根分组
 	//apiRouter 挂的路由，路径就是从根开始，比如 /login、/user。

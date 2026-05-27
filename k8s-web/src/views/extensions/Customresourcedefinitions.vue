@@ -308,34 +308,126 @@
     <Teleport to="body">
       <transition name="modal">
         <div v-if="showEditorModal" class="modal-overlay" @click="showEditorModal = false">
-          <div class="editor-modal" @click.stop>
-            <div class="editor-header">
-              <h3>{{ editorTitle }}</h3>
-              <div class="editor-header-actions">
-                <button class="btn-outline small" @click="doDryRun" :disabled="dryRunning">
-                  {{ dryRunning ? '校验中...' : '🧪 DryRun 校验' }}
+          <div class="editor-modal-pro" @click.stop>
+            <!-- 顶部状态栏 -->
+            <div class="editor-topbar">
+              <div class="editor-topbar-left">
+                <span class="editor-badge">
+                  <span class="editor-badge-icon">{{ editorMode === 'create' ? '＋' : '✎' }}</span>
+                  {{ editorMode === 'create' ? 'CREATE' : 'EDIT' }}
+                </span>
+                <h3 class="editor-title-pro">{{ editorTitle }}</h3>
+              </div>
+              <div class="editor-topbar-right">
+                <button class="editor-topbar-btn" @click="showEditorModal = false" title="关闭">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
-                <button class="editor-close" @click="showEditorModal = false">✕</button>
               </div>
             </div>
-            <!-- DryRun 结果 -->
-            <div v-if="dryRunResult" class="dryrun-result" :class="dryRunResult.success ? 'success' : 'error'">
-              <span class="dryrun-icon">{{ dryRunResult.success ? '✅' : '❌' }}</span>
-              <span>{{ dryRunResult.message }}</span>
+
+            <!-- 资源信息条 -->
+            <div class="editor-info-bar">
+              <div class="editor-info-tags">
+                <span class="info-tag" v-if="activeCRD && activeView === 'cr-list'">
+                  <span class="info-tag-label">Kind</span>
+                  <span class="info-tag-value">{{ activeCRD.kind }}</span>
+                </span>
+                <span class="info-tag" v-if="activeCRD && activeView === 'cr-list'">
+                  <span class="info-tag-label">Group</span>
+                  <span class="info-tag-value">{{ activeCRD.group }}</span>
+                </span>
+                <span class="info-tag" v-if="activeCRD && activeView === 'cr-list'">
+                  <span class="info-tag-label">Version</span>
+                  <span class="info-tag-value">{{ activeCRD.version }}</span>
+                </span>
+                <span class="info-tag" v-if="activeView === 'crd-list'">
+                  <span class="info-tag-label">Resource</span>
+                  <span class="info-tag-value">CustomResourceDefinition</span>
+                </span>
+              </div>
             </div>
-            <div class="editor-body">
+
+            <!-- 工具栏 -->
+            <div class="editor-toolbar">
+              <div class="editor-toolbar-left">
+                <select v-model="selectedTemplate" @change="applyTemplate" class="template-select">
+                  <option value="">-- 选择模板 --</option>
+                  <option v-for="tpl in availableTemplates" :key="tpl.name" :value="tpl.name">{{ tpl.label }}</option>
+                </select>
+                <button class="toolbar-action-btn" @click="formatYaml" title="格式化 YAML">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+                  格式化
+                </button>
+                <button class="toolbar-action-btn" @click="copyYaml" title="复制">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  复制
+                </button>
+                <button class="toolbar-action-btn danger" @click="clearEditor" title="清空内容">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  清空
+                </button>
+              </div>
+              <div class="editor-toolbar-right">
+                <button
+                  class="toolbar-dryrun-btn"
+                  @click="doDryRun"
+                  :disabled="dryRunning"
+                  :class="{ running: dryRunning }"
+                >
+                  <svg v-if="!dryRunning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2v-4M9 21H5a2 2 0 01-2-2v-4"/></svg>
+                  <span v-if="dryRunning" class="dryrun-spinner"></span>
+                  {{ dryRunning ? '校验中...' : 'DryRun 预校验' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- DryRun 结果通知 -->
+            <transition name="slide-down">
+              <div v-if="dryRunResult" class="dryrun-banner" :class="dryRunResult.success ? 'success' : 'error'">
+                <div class="dryrun-banner-icon">
+                  <svg v-if="dryRunResult.success" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                </div>
+                <span class="dryrun-banner-text">{{ dryRunResult.message }}</span>
+                <button class="dryrun-banner-close" @click="dryRunResult = null">✕</button>
+              </div>
+            </transition>
+
+            <!-- 编辑区域（带行号） -->
+            <div class="editor-workspace">
+              <div class="editor-gutter">
+                <div class="gutter-line" v-for="n in editorLineCount" :key="n">{{ n }}</div>
+              </div>
               <textarea
+                ref="editorTextarea"
                 v-model="editorYaml"
-                class="yaml-editor"
+                class="yaml-editor-pro"
                 spellcheck="false"
                 placeholder="# 在此输入 YAML 内容..."
+                @scroll="syncScroll"
+                @keydown="handleEditorKeydown"
               ></textarea>
             </div>
-            <div class="editor-footer">
-              <button class="btn-cancel" @click="showEditorModal = false">取消</button>
-              <button class="btn-primary" @click="submitEditor" :disabled="submitting">
-                {{ submitting ? '提交中...' : editorMode === 'create' ? '创建' : '更新' }}
-              </button>
+
+            <!-- 底部操作栏 -->
+            <div class="editor-footer-pro">
+              <div class="editor-footer-left">
+                <span class="footer-stat">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  {{ editorLineCount }} 行
+                </span>
+                <span class="footer-stat">{{ editorYaml.length }} 字符</span>
+                <span class="footer-stat mode-tag">YAML</span>
+              </div>
+              <div class="editor-footer-right">
+                <button class="btn-editor-cancel" @click="showEditorModal = false">
+                  取消
+                </button>
+                <button class="btn-editor-submit" @click="submitEditor" :disabled="submitting">
+                  <span v-if="submitting" class="submit-spinner"></span>
+                  {{ submitting ? '提交中...' : editorMode === 'create' ? '确认创建' : '确认更新' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -374,7 +466,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import crdApi from '@/api/cluster/extensions/crd'
 import YamlHighlight from '@/components/YamlHighlight.vue'
@@ -416,6 +508,151 @@ const editingCR = ref(null)
 const submitting = ref(false)
 const dryRunning = ref(false)
 const dryRunResult = ref(null)
+const selectedTemplate = ref('')
+const editorTextarea = ref(null)
+
+// 行号计算
+const editorLineCount = computed(() => {
+  return Math.max((editorYaml.value || '').split('\n').length, 1)
+})
+
+// Gutter 滚动同步
+const syncScroll = (e) => {
+  const gutter = e.target?.parentElement?.querySelector('.editor-gutter')
+  if (gutter) gutter.scrollTop = e.target.scrollTop
+}
+
+// 编辑器快捷键
+const handleEditorKeydown = (e) => {
+  // Tab 插入 2 空格
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    const ta = e.target
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    editorYaml.value = editorYaml.value.substring(0, start) + '  ' + editorYaml.value.substring(end)
+    nextTick(() => { ta.selectionStart = ta.selectionEnd = start + 2 })
+  }
+}
+
+// YAML 模板列表
+const crdTemplates = [
+  { name: 'basic-crd', label: 'CRD 基础模板', yaml: `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: examples.mygroup.example.com
+spec:
+  group: mygroup.example.com
+  names:
+    kind: Example
+    listKind: ExampleList
+    plural: examples
+    singular: example
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+` },
+]
+
+const crTemplates = [
+  { name: 'prometheus-rule', label: 'PrometheusRule 告警规则', yaml: `apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: my-alert-rule
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: custom.rules
+      rules:
+        - alert: HighMemoryUsage
+          expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "节点内存使用率过高"
+            description: "节点 {{ $labels.instance }} 内存可用率低于 10%"
+` },
+  { name: 'service-monitor', label: 'ServiceMonitor 服务监控', yaml: `apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-service-monitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: my-service
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+` },
+  { name: 'generic-cr', label: '通用 CR 模板', yaml: '' },
+]
+
+const availableTemplates = computed(() => {
+  return activeView.value === 'crd-list' ? crdTemplates : crTemplates
+})
+
+const applyTemplate = () => {
+  if (!selectedTemplate.value) return
+  const templates = activeView.value === 'crd-list' ? crdTemplates : crTemplates
+  const tpl = templates.find(t => t.name === selectedTemplate.value)
+  if (tpl && tpl.yaml) {
+    editorYaml.value = tpl.yaml
+  } else if (tpl && !tpl.yaml && activeCRD.value) {
+    // 通用模板：根据当前 CRD 生成
+    const plural = activeCRD.value.resource
+    editorYaml.value = `apiVersion: ${activeCRD.value.group}/${activeCRD.value.version}
+kind: ${activeCRD.value.kind}
+metadata:
+  name: my-${plural.slice(0, -1) || 'resource'}-01
+  namespace: default
+spec:
+  # 在此定义资源规格
+`
+  }
+  selectedTemplate.value = ''
+}
+
+// 格式化 YAML（简单缩进规整）
+const formatYaml = () => {
+  // 基本处理：移除尾部空白
+  editorYaml.value = editorYaml.value.split('\n').map(l => l.trimEnd()).join('\n').trim() + '\n'
+}
+
+// 复制 YAML
+const copyYaml = async () => {
+  try {
+    await navigator.clipboard.writeText(editorYaml.value)
+    dryRunResult.value = { success: true, message: '已复制到剪贴板' }
+    setTimeout(() => { if (dryRunResult.value?.message === '已复制到剪贴板') dryRunResult.value = null }, 2000)
+  } catch {
+    dryRunResult.value = { success: false, message: '复制失败，请手动选择复制' }
+  }
+}
+
+// 清空编辑器
+const clearEditor = () => {
+  editorYaml.value = ''
+  dryRunResult.value = null
+}
 
 // ========== 删除 ==========
 const showDeleteConfirm = ref(false)
@@ -728,7 +965,8 @@ const submitEditor = async () => {
       }
     }
   } catch (err) {
-    dryRunResult.value = { success: false, message: err?.response?.data?.msg || err?.msg || err?.message || '操作失败' }
+    const details = Array.isArray(err?.details) ? err.details[0] : null
+    dryRunResult.value = { success: false, message: details || err?.msg || err?.response?.data?.msg || err?.message || '操作失败' }
   } finally {
     submitting.value = false
   }
@@ -761,12 +999,20 @@ const doDryRun = async () => {
       })
     }
     if (res && res.code === 0) {
-      dryRunResult.value = { success: true, message: '✓ 校验通过，YAML 格式和内容均有效' }
+      // 后端返回 code:0 但 data.valid 可能为 false（DryRun 校验不通过）
+      const dr = res.data
+      if (dr?.valid) {
+        dryRunResult.value = { success: true, message: dr.message || '✓ 校验通过，YAML 格式和内容均有效' }
+      } else {
+        const errMsg = (dr?.errors && dr.errors.length > 0) ? dr.errors.join('; ') : (dr?.message || '校验失败')
+        dryRunResult.value = { success: false, message: errMsg }
+      }
     } else {
       dryRunResult.value = { success: false, message: res?.msg || '校验失败' }
     }
   } catch (err) {
-    dryRunResult.value = { success: false, message: err?.response?.data?.msg || err?.msg || err?.message || '校验请求失败' }
+    const details = Array.isArray(err?.details) ? err.details[0] : null
+    dryRunResult.value = { success: false, message: details || err?.msg || err?.response?.data?.msg || err?.message || '校验请求失败' }
   } finally {
     dryRunning.value = false
   }
@@ -839,25 +1085,28 @@ onMounted(() => {
 <style scoped>
 /* ========== 全局变量 ========== */
 .crd-management {
-  --primary: #4e8ff7;
-  --primary-hover: #3b7be0;
-  --danger: #ff4d4f;
-  --success: #52c41a;
-  --warning: #faad14;
-  --bg-page: #f7f8fc;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-bg: rgba(99,102,241,0.06);
+  --primary-border: rgba(99,102,241,0.2);
+  --danger: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --bg-page: #f8fafc;
   --bg-card: #ffffff;
-  --bg-hover: #f5f7fa;
-  --border: #e8ecf0;
-  --text-primary: #1a2138;
-  --text-secondary: #5e6c84;
-  --text-muted: #97a0af;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
-  --radius: 10px;
-  --radius-sm: 6px;
+  --bg-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.06), 0 4px 6px -4px rgba(0,0,0,0.04);
+  --radius: 12px;
+  --radius-sm: 8px;
 
-  padding: 28px 32px;
+  padding: 24px 28px;
   min-height: 100%;
   background: var(--bg-page);
 }
@@ -940,7 +1189,7 @@ onMounted(() => {
   letter-spacing: 0.5px;
 }
 .stat-card.accent .stat-value { color: var(--primary); }
-.stat-card.purple .stat-value { color: #7c3aed; }
+.stat-card.purple .stat-value { color: #8b5cf6; }
 
 /* ========== 工具栏 ========== */
 .toolbar {
@@ -1013,7 +1262,7 @@ onMounted(() => {
 }
 .chip:hover { border-color: var(--primary); color: var(--primary); }
 .chip.active {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), #8b5cf6);
   color: white;
   border-color: var(--primary);
 }
@@ -1034,7 +1283,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), #8b5cf6);
   color: white;
   border: none;
   border-radius: var(--radius-sm);
@@ -1042,8 +1291,9 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.25);
 }
-.btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(78,143,247,0.3); }
+.btn-primary:hover { background: linear-gradient(135deg, var(--primary-hover), #7c3aed); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.35); }
 .btn-primary:disabled { opacity: 0.6; pointer-events: none; }
 
 .btn-outline {
@@ -1469,82 +1719,308 @@ onMounted(() => {
   box-shadow: none;
 }
 
-/* ========== 编辑器模态框 ========== */
-.editor-modal {
-  width: 70%;
-  max-width: 900px;
-  min-width: 500px;
-  max-height: 90vh;
-  background: var(--bg-card);
-  border-radius: var(--radius);
+/* ========== 编辑器模态框 Pro ========== */
+.editor-modal-pro {
+  width: 80%;
+  max-width: 1000px;
+  min-width: 580px;
+  height: 88vh;
+  max-height: 88vh;
+  background: #1b1d2e;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
   overflow: hidden;
 }
 
-.editor-header {
+/* 顶部栏 */
+.editor-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  background: #252840;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.editor-header h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
-.editor-header-actions { display: flex; gap: 10px; align-items: center; }
-.editor-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--text-muted);
-  padding: 4px 8px;
+.editor-topbar-left { display: flex; align-items: center; gap: 12px; }
+.editor-topbar-right { display: flex; align-items: center; gap: 8px; }
+.editor-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
   border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
 }
-.editor-close:hover { background: #f0f2f5; color: var(--text-primary); }
-
-.dryrun-result {
-  padding: 10px 24px;
-  font-size: 13px;
+.editor-badge-icon { font-size: 12px; }
+.editor-title-pro {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8eaf6;
+}
+.editor-topbar-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  color: #8b95b0;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.dryrun-result.success { background: #f6ffed; color: #389e0d; border-bottom: 1px solid #b7eb8f; }
-.dryrun-result.error { background: #fff2f0; color: #cf1322; border-bottom: 1px solid #ffccc7; }
-.dryrun-icon { font-size: 15px; }
+.editor-topbar-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
-.editor-body {
+/* 资源信息条 */
+.editor-info-bar {
+  padding: 10px 20px;
+  background: #1e2035;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.editor-info-tags { display: flex; gap: 12px; flex-wrap: wrap; }
+.info-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.info-tag-label { color: #6b7394; font-weight: 500; }
+.info-tag-value {
+  color: #a5b4fc;
+  background: rgba(165, 180, 252, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+/* 工具栏 */
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: #22253a;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.editor-toolbar-left { display: flex; align-items: center; gap: 8px; }
+.editor-toolbar-right { display: flex; align-items: center; gap: 8px; }
+
+.template-select {
+  padding: 6px 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  background: #2a2d44;
+  color: #c8cce0;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+.template-select:focus { border-color: #4e8ff7; }
+.template-select option { background: #2a2d44; color: #c8cce0; }
+
+.toolbar-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  background: transparent;
+  color: #8b95b0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.toolbar-action-btn:hover { background: rgba(255,255,255,0.06); color: #e0e6f0; border-color: rgba(255,255,255,0.2); }
+.toolbar-action-btn.danger { color: #fca5a5; border-color: rgba(239,68,68,0.3); }
+.toolbar-action-btn.danger:hover { background: rgba(239,68,68,0.12); color: #fca5a5; border-color: rgba(239,68,68,0.5); }
+
+.toolbar-dryrun-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.toolbar-dryrun-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+.toolbar-dryrun-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.toolbar-dryrun-btn.running { background: #374151; }
+
+.dryrun-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* DryRun 结果 Banner */
+.dryrun-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 13px;
+  animation: slideIn 0.3s ease;
+}
+.dryrun-banner.success { background: rgba(16, 185, 129, 0.12); color: #6ee7b7; border-bottom: 1px solid rgba(16, 185, 129, 0.2); }
+.dryrun-banner.error { background: rgba(239, 68, 68, 0.12); color: #fca5a5; border-bottom: 1px solid rgba(239, 68, 68, 0.2); }
+.dryrun-banner-icon { display: flex; align-items: center; }
+.dryrun-banner-text { flex: 1; }
+.dryrun-banner-close {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+.dryrun-banner-close:hover { opacity: 1; }
+
+/* 编辑区域 */
+.editor-workspace {
   flex: 1;
-  overflow: auto;
-  padding: 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
 }
 
-.yaml-editor {
+.editor-gutter {
+  width: 48px;
+  min-width: 48px;
+  padding: 16px 0;
+  background: #181a2a;
+  border-right: 1px solid rgba(255,255,255,0.04);
+  overflow: hidden;
+  text-align: right;
+  user-select: none;
+}
+.gutter-line {
+  height: 22.1px;
+  line-height: 22.1px;
+  padding-right: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  color: #4a5073;
+}
+
+.yaml-editor-pro {
+  flex: 1;
   width: 100%;
-  min-height: 400px;
-  height: 100%;
   padding: 16px 20px;
   border: none;
   resize: none;
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   font-size: 13px;
-  line-height: 1.7;
-  background: #1e1e2e;
+  line-height: 22.1px;
+  background: #1e2030;
   color: #cdd6f4;
   outline: none;
   tab-size: 2;
+  white-space: pre;
+  overflow: auto;
 }
-.yaml-editor::placeholder { color: #6c7086; }
+.yaml-editor-pro::placeholder { color: #4a5073; }
+.yaml-editor-pro::-webkit-scrollbar { width: 8px; height: 8px; }
+.yaml-editor-pro::-webkit-scrollbar-track { background: transparent; }
+.yaml-editor-pro::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+.yaml-editor-pro::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-.editor-footer {
+/* 底部操作栏 */
+.editor-footer-pro {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 24px;
-  border-top: 1px solid var(--border);
-  background: #f8f9fb;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #252840;
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
+.editor-footer-left { display: flex; align-items: center; gap: 16px; }
+.editor-footer-right { display: flex; align-items: center; gap: 10px; }
+.footer-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #6b7394;
+}
+.footer-stat svg { opacity: 0.7; }
+.mode-tag {
+  padding: 2px 8px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.btn-editor-cancel {
+  padding: 8px 18px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  background: transparent;
+  color: #8b95b0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-editor-cancel:hover { background: rgba(255,255,255,0.06); color: #c8cce0; }
+
+.btn-editor-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 22px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-editor-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35); }
+.btn-editor-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.submit-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Slide-down animation */
+.slide-down-enter-active { transition: all 0.3s ease; }
+.slide-down-leave-active { transition: all 0.2s ease; }
+.slide-down-enter-from { opacity: 0; transform: translateY(-8px); }
+.slide-down-leave-to { opacity: 0; transform: translateY(-8px); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ========== 删除确认 ========== */
 .delete-dialog {
@@ -1588,17 +2064,17 @@ onMounted(() => {
 .modal-enter-active { transition: all 0.25s ease; }
 .modal-leave-active { transition: all 0.2s ease; }
 .modal-enter-from { opacity: 0; }
-.modal-enter-from .editor-modal,
+.modal-enter-from .editor-modal-pro,
 .modal-enter-from .delete-dialog { transform: scale(0.95); opacity: 0; }
 .modal-leave-to { opacity: 0; }
-.modal-leave-to .editor-modal,
+.modal-leave-to .editor-modal-pro,
 .modal-leave-to .delete-dialog { transform: scale(0.95); opacity: 0; }
 
 /* ========== 响应式 ========== */
 @media (max-width: 1200px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .drawer-panel { width: 70%; }
-  .editor-modal { width: 85%; }
+  .editor-modal-pro { width: 92%; }
 }
 
 @media (max-width: 768px) {
@@ -1607,5 +2083,8 @@ onMounted(() => {
   .toolbar { flex-direction: column; align-items: stretch; }
   .toolbar-left { flex-direction: column; }
   .search-input { width: 100%; }
+  .editor-modal-pro { width: 98%; height: 95vh; max-height: 95vh; }
+  .editor-toolbar { flex-direction: column; gap: 8px; }
+  .editor-toolbar-left { flex-wrap: wrap; }
 }
 </style>

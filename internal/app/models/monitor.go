@@ -224,3 +224,30 @@ type MonitorNotifyTemplate struct {
 }
 
 func (MonitorNotifyTemplate) TableName() string { return "monitor_notify_template" }
+
+// =========================================================================
+// 通知路由策略 (monitor_notify_route_policy)
+// 大厂级告警分发设计：按 severity/group/labels 自动路由到不同渠道
+// 支持多策略优先级匹配，解决 YAML 批量导入后需逐条绑定渠道的痛点
+// =========================================================================
+
+// MonitorNotifyRoutePolicy 通知路由策略
+type MonitorNotifyRoutePolicy struct {
+	ID          int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string `gorm:"type:varchar(200);not null;uniqueIndex" json:"name"`    // 策略名称
+	Description string `gorm:"type:varchar(500)" json:"description"`                  // 描述
+	Priority    int    `gorm:"type:int;default:100;index" json:"priority"`            // 优先级(越小越优先,0为最高)
+	ChannelIDs  string `gorm:"type:varchar(500);not null" json:"channel_ids"`         // 目标通知渠道ID(逗号分隔)
+	MatchMode   string `gorm:"type:varchar(20);default:'any'" json:"match_mode"`      // 匹配模式: all(全部满足)/any(任一满足)
+	Severities  string `gorm:"type:varchar(100)" json:"severities"`                   // 匹配级别(逗号分隔): critical,warning,info
+	Groups      string `gorm:"type:varchar(500)" json:"groups"`                       // 匹配规则分组(逗号分隔)
+	LabelMatch  string `gorm:"type:text" json:"label_match"`                          // 标签匹配条件 JSON [{key,op,value}]
+	IsDefault   bool   `gorm:"type:tinyint(1);default:0" json:"is_default"`           // 是否为兜底默认策略
+	Enabled     bool   `gorm:"type:tinyint(1);default:1" json:"enabled"`              // 是否启用
+	CreatedBy   int64  `gorm:"type:bigint" json:"created_by"`
+	CreatedAt   int64  `gorm:"type:bigint;autoCreateTime" json:"created_at"`
+	ModifiedAt  int64  `gorm:"type:bigint;autoUpdateTime" json:"modified_at"`
+	IsDel       int    `gorm:"type:tinyint(1);default:0" json:"-"`
+}
+
+func (MonitorNotifyRoutePolicy) TableName() string { return "monitor_notify_route_policy" }

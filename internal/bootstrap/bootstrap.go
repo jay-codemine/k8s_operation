@@ -23,6 +23,8 @@ var (
 	pollWorker *worker.PipelinePollWorker
 	// auditCleanupWorker 审计日志清理 Worker
 	auditCleanupWorker *worker.AuditCleanupWorker
+	// alertEvalWorker 告警规则评估 Worker
+	alertEvalWorker *worker.AlertEvalWorker
 )
 
 func InitAll() error {
@@ -93,6 +95,10 @@ func InitAll() error {
 	auditCleanupWorker = worker.NewAuditCleanupWorker()
 	auditCleanupWorker.Start()
 
+	// 启动告警规则评估 Worker（定期查询 Prometheus 评估规则，产生告警事件）
+	alertEvalWorker = worker.NewAlertEvalWorker()
+	alertEvalWorker.Start()
+
 	return nil
 }
 
@@ -147,6 +153,9 @@ func StopCicdWorker() {
 	}
 	if auditCleanupWorker != nil {
 		auditCleanupWorker.Stop()
+	}
+	if alertEvalWorker != nil {
+		alertEvalWorker.Stop()
 	}
 }
 

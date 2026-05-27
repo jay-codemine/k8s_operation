@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -332,4 +333,83 @@ func (r *MonitorCRUDRouter) SetDefaultTemplate(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设置成功"})
+}
+
+// ==================== 批量绑定渠道 ====================
+
+func (r *MonitorCRUDRouter) BatchBindChannels(c *gin.Context) {
+	var req services.BatchBindChannelsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchBindChannels(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("批量操作完成: 成功%d 失败%d", result.Success, result.Failed)})
+}
+
+// ==================== 通知路由策略 ====================
+
+func (r *MonitorCRUDRouter) ListRoutePolicies(c *gin.Context) {
+	var req services.RoutePolicyListReq
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+	result, err := r.svc.ListRoutePolicies(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result})
+}
+
+func (r *MonitorCRUDRouter) GetRoutePolicy(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	policy, err := r.svc.GetRoutePolicy(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "路由策略不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": policy})
+}
+
+func (r *MonitorCRUDRouter) CreateRoutePolicy(c *gin.Context) {
+	var policy models.MonitorNotifyRoutePolicy
+	if err := c.ShouldBindJSON(&policy); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	if err := r.svc.CreateRoutePolicy(c.Request.Context(), &policy); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": policy, "msg": "创建成功"})
+}
+
+func (r *MonitorCRUDRouter) UpdateRoutePolicy(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var policy models.MonitorNotifyRoutePolicy
+	if err := c.ShouldBindJSON(&policy); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+	policy.ID = id
+	if err := r.svc.UpdateRoutePolicy(c.Request.Context(), &policy); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "更新成功"})
+}
+
+func (r *MonitorCRUDRouter) DeleteRoutePolicy(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := r.svc.DeleteRoutePolicy(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
 }

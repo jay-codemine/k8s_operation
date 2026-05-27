@@ -2,9 +2,11 @@ package middlewares
 
 import (
 	"errors"
+	"fmt"
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	"k8soperation/pkg/metrics"
 	"net/http"
 	"strconv"
 	"strings"
@@ -72,6 +74,12 @@ func ClusterMiddleware(factory *services.ClusterClientFactory) gin.HandlerFunc {
 				zap.String("action", action),
 				zap.String("path", c.FullPath()),
 			)
+			// Prometheus 埋点：RBAC 拒绝
+			metrics.RBACDeniedTotal.WithLabelValues(
+				fmt.Sprintf("%d", userID),
+				fmt.Sprintf("cluster:%d", clusterID),
+				action,
+			).Inc()
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": 403,
 				"msg":  "cluster forbidden",

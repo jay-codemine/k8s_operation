@@ -269,6 +269,8 @@ const menuPermissions = {
   
   // ==================== CRD 扩展 ====================
   '/extensions/crd': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
+  '/extensions/cr-instances': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
+  '/extensions/yaml-workbench': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
   
 }
 
@@ -393,11 +395,13 @@ const menuGroupsConfig = reactive([
   {
     name: 'CRD 扩展',
     icon: '🧩',
-    count: 1,
+    count: 3,
     collapsed: true,
     match: ['/extensions'],
     items: [
       { path: '/extensions/crd', label: 'CRD 资源管理' },
+      { path: '/extensions/cr-instances', label: 'CR 实例管理' },
+      { path: '/extensions/yaml-workbench', label: 'YAML 工作台' },
     ],
   },
 ])
