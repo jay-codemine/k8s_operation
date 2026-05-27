@@ -4,6 +4,7 @@ import (
 	"errors"
 	"go.uber.org/zap"
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,11 +53,31 @@ func ClusterMiddleware(factory *services.ClusterClientFactory) gin.HandlerFunc {
 		}
 		clusterID := uint32(id64)
 
-		// 3) 权限校验（强烈建议）
-		// 你 JWT middleware 一般会把 user_id 放进 ctx
-		// userID := c.GetUint("user_id")
-		// if !factory.CanAccess(userID, clusterID) { ... }
-		// 这里我先留 TODO，不阻断逻辑
+		// 3) 权限校验：前端菜单隐藏不能替代服务端拦截。
+		userID := currentUserID(c)
+		if userID <= 0 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": 401,
+				"msg":  "unauthorized",
+			})
+			return
+		}
+
+		action := inferClusterAction(c)
+		svc := services.NewServices()
+		if !svc.CheckClusterPermission(userID, int64(clusterID), action) {
+			global.Logger.Warn("cluster request forbidden",
+				zap.Int64("user_id", userID),
+				zap.Uint32("cluster_id", clusterID),
+				zap.String("action", action),
+				zap.String("path", c.FullPath()),
+			)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code": 403,
+				"msg":  "cluster forbidden",
+			})
+			return
+		}
 
 		// 4) 获取 client
 		clients, err := factory.Get(c.Request.Context(), clusterID)
@@ -98,6 +119,7 @@ func ClusterMiddleware(factory *services.ClusterClientFactory) gin.HandlerFunc {
 		// 6) 注入 context
 		c.Set(CtxClusterID, clusterID)
 		c.Set(CtxK8sClients, clients)
+		c.Set("cluster_action", action)
 
 		// 可选：如果你经常用到 clients.Kube / clients.Dynamic，可以拆开 set
 		// c.Set("kube", clients.Kube)
@@ -112,5 +134,71 @@ func ClusterMiddleware(factory *services.ClusterClientFactory) gin.HandlerFunc {
 		)
 
 		c.Next()
+	}
+}
+
+func currentUserID(c *gin.Context) int64 {
+	if v, ok := c.Get("user_id"); ok {
+		switch id := v.(type) {
+		case int64:
+			return id
+		case int:
+			return int64(id)
+		case int32:
+			return int64(id)
+		case uint:
+			return int64(id)
+		case uint32:
+			return int64(id)
+		case uint64:
+			if id <= uint64(^uint(0)>>1) {
+				return int64(id)
+			}
+		case string:
+			parsed, err := strconv.ParseInt(id, 10, 64)
+			if err == nil {
+				return parsed
+			}
+		}
+	}
+	return 0
+}
+
+func inferClusterAction(c *gin.Context) string {
+	path := strings.ToLower(c.FullPath())
+	if path == "" {
+		path = strings.ToLower(c.Request.URL.Path)
+	}
+
+	switch {
+	case strings.Contains(path, "terminal") || strings.Contains(path, "exec"):
+		return models.PermissionActionExec
+	case strings.Contains(path, "delete") || strings.Contains(path, "drain") || strings.Contains(path, "evict"):
+		return models.PermissionActionDelete
+	case strings.Contains(path, "create"):
+		return models.PermissionActionCreate
+	case strings.Contains(path, "update") ||
+		strings.Contains(path, "patch") ||
+		strings.Contains(path, "apply") ||
+		strings.Contains(path, "scale") ||
+		strings.Contains(path, "restart") ||
+		strings.Contains(path, "rollback") ||
+		strings.Contains(path, "cordon") ||
+		strings.Contains(path, "uncordon") ||
+		strings.Contains(path, "suspend"):
+		return models.PermissionActionUpdate
+	}
+
+	switch c.Request.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return models.PermissionActionView
+	case http.MethodPost:
+		return models.PermissionActionCreate
+	case http.MethodPut, http.MethodPatch:
+		return models.PermissionActionUpdate
+	case http.MethodDelete:
+		return models.PermissionActionDelete
+	default:
+		return models.PermissionActionView
 	}
 }

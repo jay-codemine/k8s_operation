@@ -95,7 +95,7 @@
         <div 
           v-if="canView('deployments')"
           class="workload-card" 
-          @click="handleNavigate('/c/default/workloads/deployments')"
+          @click="handleClusterNavigate('workloads/deployments')"
         >
           <div class="workload-icon deployment">🚀</div>
           <div class="workload-info">
@@ -107,7 +107,7 @@
         <div 
           v-if="canView('statefulsets')"
           class="workload-card" 
-          @click="handleNavigate('/c/default/workloads/statefulsets')"
+          @click="handleClusterNavigate('workloads/statefulsets')"
         >
           <div class="workload-icon statefulset">📊</div>
           <div class="workload-info">
@@ -119,7 +119,7 @@
         <div 
           v-if="canView('daemonsets')"
           class="workload-card" 
-          @click="handleNavigate('/c/default/workloads/daemonsets')"
+          @click="handleClusterNavigate('workloads/daemonsets')"
         >
           <div class="workload-icon daemonset">🔄</div>
           <div class="workload-info">
@@ -131,7 +131,7 @@
         <div 
           v-if="canView('jobs')"
           class="workload-card" 
-          @click="handleNavigate('/c/default/workloads/jobs')"
+          @click="handleClusterNavigate('workloads/jobs')"
         >
           <div class="workload-icon job">⚙️</div>
           <div class="workload-info">
@@ -143,7 +143,7 @@
         <div 
           v-if="canView('cronjobs')"
           class="workload-card" 
-          @click="handleNavigate('/c/default/workloads/cronjobs')"
+          @click="handleClusterNavigate('workloads/cronjobs')"
         >
           <div class="workload-icon cronjob">⏰</div>
           <div class="workload-info">
@@ -165,7 +165,7 @@
             <div 
               v-if="canView('services')"
               class="resource-item" 
-              @click="handleNavigate('/c/default/networking/services')"
+              @click="handleClusterNavigate('networking/services')"
             >
               <div class="resource-icon">🔌</div>
               <div class="resource-info">
@@ -178,7 +178,7 @@
             <div 
               v-if="canView('ingress')"
               class="resource-item" 
-              @click="handleNavigate('/c/default/networking/ingresses')"
+              @click="handleClusterNavigate('networking/ingresses')"
             >
               <div class="resource-icon">🌍</div>
               <div class="resource-info">
@@ -198,7 +198,7 @@
             <div 
               v-if="canView('pv')"
               class="resource-item" 
-              @click="handleNavigate('/c/default/storage/persistentvolumes')"
+              @click="handleClusterNavigate('storage/persistentvolumes')"
             >
               <div class="resource-icon">💿</div>
               <div class="resource-info">
@@ -211,7 +211,7 @@
             <div 
               v-if="canView('pvc')"
               class="resource-item" 
-              @click="handleNavigate('/c/default/storage/persistentvolumeclaims')"
+              @click="handleClusterNavigate('storage/persistentvolumeclaims')"
             >
               <div class="resource-icon">📝</div>
               <div class="resource-info">
@@ -224,7 +224,7 @@
             <div 
               v-if="canView('storageclasses')"
               class="resource-item" 
-              @click="handleNavigate('/c/default/storage/storageclasses')"
+              @click="handleClusterNavigate('storage/storageclasses')"
             >
               <div class="resource-icon">📦</div>
               <div class="resource-info">
@@ -247,7 +247,7 @@
         <div 
           v-if="canView('configmaps')"
           class="config-card" 
-          @click="handleNavigate('/c/default/config/configmaps')"
+          @click="handleClusterNavigate('config/configmaps')"
         >
           <div class="config-icon">🗂️</div>
           <div class="config-info">
@@ -259,7 +259,7 @@
         <div 
           v-if="canView('secrets')"
           class="config-card" 
-          @click="handleNavigate('/c/default/config/secrets')"
+          @click="handleClusterNavigate('config/secrets')"
         >
           <div class="config-icon">🔐</div>
           <div class="config-info">
@@ -287,7 +287,7 @@
         <a 
           v-if="canView('nodes')"
           class="quick-link" 
-          @click="handleNavigate('/c/default/nodes')"
+          @click="handleClusterNavigate('nodes')"
         >
           <div class="link-icon">💻</div>
           <div class="link-text">节点管理</div>
@@ -295,7 +295,7 @@
         <a 
           v-if="canView('namespaces')"
           class="quick-link" 
-          @click="handleNavigate('/c/default/namespaces')"
+          @click="handleClusterNavigate('namespaces')"
         >
           <div class="link-icon">📁</div>
           <div class="link-text">命名空间</div>

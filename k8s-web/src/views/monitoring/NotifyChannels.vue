@@ -51,6 +51,12 @@
               <span class="meta-icon">📱</span>
               @{{ ch.at_mobiles.split(',').length }}人
             </span>
+            <span class="meta-item" v-if="ch.type === 'dingtalk' && ch.security_keyword">
+              <span class="meta-icon">🔑</span>
+              {{ ch.security_keyword.split(',').filter(k => k.trim()).length > 1
+                ? `关键字 ×${ch.security_keyword.split(',').filter(k => k.trim()).length}`
+                : `关键字: ${ch.security_keyword.trim()}` }}
+            </span>
             <span class="meta-item" v-if="ch.rate_limit">
               <span class="meta-icon">⚡</span>
               限流{{ ch.rate_limit }}条/分
@@ -128,6 +134,14 @@
               <input v-model="form.secret" type="password" placeholder="SEC..." />
               <span class="form-hint">钉钉机器人安全设置中的加签密钥</span>
             </div>
+            <div class="form-row" v-if="form.type === 'dingtalk'">
+              <label>安全关键字</label>
+              <input v-model="form.security_keyword" placeholder="如: prom（多个用英文逗号分隔，如: prom,K8s告警）" />
+              <span class="form-hint">
+                对应钉钉机器人「自定义关键词」安全设置，可填最多10个（逗号分隔）。
+                发送时只要消息包含其中任意一个关键字即可通过校验；若消息中均未出现，系统会自动将第一个注入到消息头部。
+              </span>
+            </div>
             <div class="form-row-group" v-if="form.type === 'dingtalk'">
               <div class="form-row half">
                 <label>@手机号 (逗号分隔)</label>
@@ -189,9 +203,16 @@
               </div>
             </div>
             <div class="form-row">
-              <label>消息模板 (可选)</label>
-              <textarea v-model="form.msg_template" rows="3"
-                :placeholder="'支持变量: ' + '{' + '{.RuleName}' + '} {' + '{.Severity}' + '} {' + '{.Summary}' + '} {' + '{.Value}' + '} {' + '{.Labels}' + '}'"></textarea>
+              <div class="template-label-row">
+                <label>Prometheus 告警消息模板</label>
+                <button class="btn-sm" type="button" @click="useDefaultMsgTemplate">使用推荐模板</button>
+              </div>
+              <textarea v-model="form.msg_template" rows="8" class="msg-template-editor"
+                :placeholder="'留空使用系统默认文案。支持变量: ' + '{' + '{.RuleName}' + '} {' + '{.SeverityText}' + '} {' + '{.StatusText}' + '} {' + '{.Summary}' + '} {' + '{.Description}' + '} {' + '{.Value}' + '} {' + '{.FiredAt}' + '} {' + '{.LabelsText}' + '}'"></textarea>
+              <div class="template-vars">
+                <span v-for="v in templateVars" :key="v" @click="insertTemplateVar(v)">{{ v }}</span>
+              </div>
+              <span class="form-hint">可按团队习惯调整标题、字段顺序、标签展示；钉钉关键字会在发送时自动补进消息，避免被机器人安全策略拦截。</span>
             </div>
           </div>
         </div>
@@ -415,6 +436,42 @@ const channelTypes = [
   { value: 'email', label: '邮件', icon: '📧' },
 ]
 
+const templateVars = [
+  '{{.RuleName}}',
+  '{{.StatusText}}',
+  '{{.SeverityText}}',
+  '{{.Summary}}',
+  '{{.Description}}',
+  '{{.Value}}',
+  '{{.FiredAt}}',
+  '{{.ResolvedAt}}',
+  '{{.LabelsText}}',
+]
+
+const defaultMsgTemplate = `## 🔔 {{.StatusText}} | {{.RuleName}}
+
+> **{{.SeverityText}}**　·　{{.FiredAt}}
+
+---
+
+**📋 摘要**
+> {{.Summary}}
+
+{{if .Description}}**📝 详情**
+> {{.Description}}
+
+{{end}}{{if .Value}}**📊 监控指标**
+- **当前值** \`{{.Value}}\`
+
+{{end}}{{if .LabelsText}}---
+
+{{.LabelsText}}
+{{end}}{{if .ResolvedAt}}---
+⏱ 触发: {{.FiredAt}}　✅ 恢复: {{.ResolvedAt}}
+
+{{end}}---
+🛡 {{.Platform}} 监控平台　·　⏰ {{.FiredAt}}`
+
 const typeCounts = computed(() => {
   const counts = {}
   list.value.forEach(ch => { counts[ch.type] = (counts[ch.type] || 0) + 1 })
@@ -422,7 +479,7 @@ const typeCounts = computed(() => {
 })
 
 const defaultForm = () => ({
-  name: '', type: '', description: '', webhook_url: '', secret: '',
+  name: '', type: '', description: '', webhook_url: '', secret: '', security_keyword: '',
   at_mobiles: '', at_all: false, smtp_host: '', smtp_port: 465,
   smtp_user: '', smtp_pass: '', smtp_to: '', msg_template: '',
   enabled: true, send_resolved: true, rate_limit: 10,
@@ -441,6 +498,15 @@ function truncateURL(url) {
 }
 
 function onTypeChange() { /* 切换类型时可清空不相关字段 */ }
+
+function useDefaultMsgTemplate() {
+  form.msg_template = defaultMsgTemplate
+}
+
+function insertTemplateVar(value) {
+  const current = form.msg_template || ''
+  form.msg_template = current ? `${current}${value}` : value
+}
 
 function openDialog(ch = null) {
   Object.assign(form, defaultForm())
@@ -469,23 +535,33 @@ async function loadList() {
 }
 
 async function submitForm() {
-  if (!form.name || !form.type) {
-    Message.warning('请填写渠道名称和类型')
+  if (!form.name || !form.name.trim()) {
+    Message.warning('请填写渠道名称')
+    return
+  }
+  if (!form.type) {
+    Message.warning('请选择渠道类型')
     return
   }
   submitting.value = true
   try {
+    let res
     if (editingId.value) {
-      await updateNotifyChannel(editingId.value, form)
-      Message.success('更新成功')
+      res = await updateNotifyChannel(editingId.value, form)
     } else {
-      await createNotifyChannel(form)
-      Message.success('创建成功')
+      res = await createNotifyChannel(form)
     }
+    // 检查业务响应码（code 非 0 表示后端返回了错误）
+    if (res && res.code !== 0) {
+      Message.error(res.msg || (editingId.value ? '更新失败' : '创建失败'))
+      return
+    }
+    Message.success(editingId.value ? '更新成功' : '创建成功')
     dialogVisible.value = false
     loadList()
   } catch (e) {
-    Message.error(e?.msg || '操作失败')
+    // e?.msg: 后端 JSON 错误体；e?.message: axios/网络错误
+    Message.error(e?.msg || e?.message || '操作失败，请检查网络或联系管理员')
   } finally {
     submitting.value = false
   }
@@ -505,12 +581,18 @@ async function doTest(ch) {
   try {
     const res = await testNotifyChannel(ch.id)
     if (res?.data?.success) {
-      Message.success('测试消息发送成功')
+      Message.success(res.data.message || '测试消息发送成功')
     } else {
-      Message.error(res?.data?.message || '发送失败')
+      const errMsg = res?.data?.message || '发送失败'
+      // 如果是关键字相关错误，给出更明确的提示
+      if (errMsg.includes('310000') || errMsg.includes('安全验证') || errMsg.includes('关键字')) {
+        Message.error(`钉钉安全校验失败：请确认渠道配置的「安全关键字」与机器人安全设置一致。${errMsg}`)
+      } else {
+        Message.error(errMsg)
+      }
     }
   } catch (e) {
-    Message.error('测试失败')
+    Message.error('测试请求失败，请检查网络或后端服务')
   } finally {
     testing.value = null
   }
@@ -749,6 +831,12 @@ async function previewTemplate(tpl) {
 .required { color: #ef4444; }
 .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4b5563; cursor: pointer; }
 .checkbox-label input { width: auto; }
+.template-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.template-label-row label { margin-bottom: 0; }
+.msg-template-editor { min-height: 180px; line-height: 1.65; font-size: 12.5px; }
+.template-vars { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.template-vars span { padding: 3px 8px; border: 1px solid #dbe2ea; border-radius: 6px; background: #f8fafc; color: #475569; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; cursor: pointer; }
+.template-vars span:hover { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; }
 
 /* 通知模板管理区 */
 .template-section { margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 28px; }

@@ -154,7 +154,7 @@
 </template>
 
 <script setup>
-import {computed, ref, reactive, watch, onMounted} from 'vue'
+import {computed, ref, reactive, watch, onMounted, onUnmounted} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {logout} from '@/api/auth'
 import permissionStore from '@/stores/permission'
@@ -163,7 +163,8 @@ import AiAssistant from '@/components/AiAssistant.vue'
 const router = useRouter()
 const route = useRoute()
 
-const sidebarCollapsed = ref(false)
+const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches
+const sidebarCollapsed = ref(isMobileViewport())
 const showHelp = ref(false)
 
 // 用户名
@@ -430,7 +431,18 @@ onMounted(async () => {
   } catch (e) {
     console.error('加载权限失败', e)
   }
+  window.addEventListener('resize', handleResize)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+const handleResize = () => {
+  if (isMobileViewport()) {
+    sidebarCollapsed.value = true
+  }
+}
 
 syncMenuWithRoute()
 
@@ -461,6 +473,42 @@ watch(
 
 .sidebar.collapsed {
   width: 4rem;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .group-name,
+.sidebar.collapsed .nav-text,
+.sidebar.collapsed .footer-text,
+.sidebar.collapsed .footer-badge,
+.sidebar.collapsed .user-details,
+.sidebar.collapsed .logout-icon {
+  display: none;
+}
+
+.sidebar.collapsed .group-header,
+.sidebar.collapsed .nav-item,
+.sidebar.collapsed .footer-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar.collapsed .group-header:hover,
+.sidebar.collapsed .nav-item:hover {
+  padding-left: 0;
+}
+
+.sidebar.collapsed .group-content {
+  padding-left: 0;
+}
+
+.sidebar.collapsed .nav-item {
+  padding: 0.625rem 0;
+}
+
+.sidebar.collapsed .user-card {
+  justify-content: center;
+  padding: 0.5rem;
 }
 
 .sidebar-header {

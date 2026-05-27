@@ -108,6 +108,8 @@ func (e *Error) StatusCode() int {
 		UnauthorizedTokenTimeout.Code(),
 		UserNotLogin.Code():
 		return http.StatusUnauthorized // 401 鉴权失败/未认证/未登录
+	case 309001, 800010:
+		return http.StatusForbidden // RBAC/AI 审批权限不足
 	case TooManyRequests.Code():
 		return http.StatusTooManyRequests // 429 请求过多
 	default:

@@ -71,9 +71,9 @@
 
     <!-- 抑制规则列表 -->
     <div class="rules-list" v-if="activeTab === 'inhibit'">
-      <div class="rule-card" v-for="rule in inhibitList" :key="rule.id">
+      <div class="rule-card" v-for="rule in inhibitList" :key="rule.id" :class="{ disabled: !rule.enabled }">
         <div class="rule-card-header">
-          <div class="rule-status-indicator active"></div>
+          <div class="rule-status-indicator" :class="rule.enabled ? 'active' : 'disabled'"></div>
           <div class="rule-title-area">
             <h4>{{ rule.name }}</h4>
             <span class="rule-status-text">{{ rule.enabled ? '生效中' : '已停用' }}</span>
@@ -119,9 +119,9 @@
 
     <!-- 聚合规则列表 -->
     <div class="rules-list" v-if="activeTab === 'aggregate'">
-      <div class="rule-card" v-for="rule in aggregateList" :key="rule.id">
+      <div class="rule-card" v-for="rule in aggregateList" :key="rule.id" :class="{ disabled: !rule.enabled }">
         <div class="rule-card-header">
-          <div class="rule-status-indicator active"></div>
+          <div class="rule-status-indicator" :class="rule.enabled ? 'active' : 'disabled'"></div>
           <div class="rule-title-area">
             <h4>{{ rule.name }}</h4>
             <span class="rule-status-text">{{ rule.enabled ? '生效中' : '已停用' }}</span>

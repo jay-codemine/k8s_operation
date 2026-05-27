@@ -385,7 +385,10 @@ const handleSubmit = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+  overflow-y: auto;
   background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, .25), transparent 42%),
   radial-gradient(circle at 80% 80%, rgba(139, 92, 246, .18), transparent 46%),
   linear-gradient(135deg, #0f0a1e 0%, #1e1b4b 40%, #0f0a1e 100%);
@@ -635,5 +638,26 @@ const handleSubmit = async () => {
   display: flex;
   gap: 12px;
   margin-top: 6px;
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .login-box {
+    padding: 28px 20px;
+    border-radius: 16px;
+  }
+
+  .login-header h2 {
+    font-size: 22px;
+  }
+
+  .button-group,
+  .modal-actions {
+    flex-direction: column;
+  }
 }
 </style>

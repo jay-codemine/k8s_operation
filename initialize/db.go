@@ -23,7 +23,7 @@ SetupDB 函数用于初始化和配置数据库连接
 */
 func SetupDB() error {
 	// 拼接 DSN，加上超时参数（防止连不通时卡很久）
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=%t&loc=Local&timeout=1s&readTimeout=2s&writeTimeout=2s",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&collation=utf8mb4_general_ci&parseTime=%t&loc=Local&timeout=1s&readTimeout=2s&writeTimeout=2s",
 		global.DatabaseSetting.Username,
 		global.DatabaseSetting.Password,
 		global.DatabaseSetting.Host,
@@ -95,6 +95,11 @@ func autoMigrateTables() error {
 	// cicd_pipeline 表字段补全（不用 AutoMigrate 避免 GORM 与已有 UNIQUE KEY 冲突）
 	if err := ensurePipelineColumns(); err != nil {
 		log.Printf("[AutoMigrate] cicd_pipeline 字段补全失败: %v", err)
+	}
+
+	// monitor_notify_channel 表字段补全（兼容旧版本初始化脚本缺少该列的情况）
+	if err := ensureNotifyChannelColumns(); err != nil {
+		log.Printf("[AutoMigrate] monitor_notify_channel 字段补全失败: %v", err)
 	}
 
 	// AI 助手模块（逐表迁移，确保每张表都成功）
@@ -207,6 +212,40 @@ func ensurePipelineColumns() error {
 				return fmt.Errorf("add column %s: %w", col.name, err)
 			}
 			log.Printf("[AutoMigrate] cicd_pipeline 补全列: %s", col.name)
+		}
+	}
+	return nil
+}
+
+// ensureNotifyChannelColumns 检查并补全 monitor_notify_channel 表缺失的列
+// 兼容旧版本初始化脚本中未包含 security_keyword 列的情况
+func ensureNotifyChannelColumns() error {
+	// 检查表是否存在
+	var count int64
+	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'monitor_notify_channel'").Scan(&count)
+	if count == 0 {
+		return nil // 表不存在，跳过（全新安装由 SQL 初始化脚本负责）
+	}
+
+	type colDef struct {
+		name string
+		sql  string
+	}
+	columns := []colDef{
+		{
+			"security_keyword",
+			"ALTER TABLE `monitor_notify_channel` ADD COLUMN `security_keyword` varchar(100) NOT NULL DEFAULT '' COMMENT '钉钉安全关键字（多个用逗号分隔）' AFTER `secret`",
+		},
+	}
+
+	for _, col := range columns {
+		var exists int64
+		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'monitor_notify_channel' AND column_name = ?", col.name).Scan(&exists)
+		if exists == 0 {
+			if err := global.DB.Exec(col.sql).Error; err != nil {
+				return fmt.Errorf("add column %s: %w", col.name, err)
+			}
+			log.Printf("[AutoMigrate] monitor_notify_channel 补全列: %s", col.name)
 		}
 	}
 	return nil

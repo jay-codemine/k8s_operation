@@ -1658,6 +1658,7 @@ CREATE TABLE IF NOT EXISTS `monitor_notify_channel` (
   `description` varchar(500) DEFAULT '',
   `webhook_url` varchar(500) DEFAULT '',
   `secret` varchar(500) DEFAULT '' COMMENT '签名密钥',
+  `security_keyword` varchar(100) DEFAULT '' COMMENT '钉钉安全关键字（多个用逗号分隔）',
   `at_mobiles` varchar(500) DEFAULT '' COMMENT '@手机号列表',
   `at_all` tinyint(1) DEFAULT 0,
   `smtp_host` varchar(200) DEFAULT '',

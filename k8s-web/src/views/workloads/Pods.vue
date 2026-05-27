@@ -213,7 +213,10 @@
 
           <td>
             <div class="action-icons">
-              <!-- 只保留两个按钮 -->
+              <!-- 详情按钮（直接显示） -->
+              <button class="action-btn primary" title="查看详情" @click="openDetail(pod)">
+                📋 详情
+              </button>
               <button class="icon-btn" title="查看日志" @click="openLogs(pod)">
                 📄 日志
               </button>
@@ -229,10 +232,6 @@
 
                 <!-- 更多菜单 -->
                 <div v-if="showMoreOptions && selectedPod === pod" class="more-menu" :style="menuStyle">
-                  <button class="menu-item" title="查看详情" @click="openDetail(pod)">
-                    <span class="menu-icon">📋</span>
-                    <span>查看详情</span>
-                  </button>
                   <button class="menu-item" title="查看事件" @click="openEvents(pod)">
                     <span class="menu-icon">📡</span>
                     <span>查看事件</span>
@@ -478,23 +477,166 @@
       </div>
     </div>
 
-    <!-- 详情弹窗 -->
-    <div v-if="showDetailModal" class="modal-overlay" @click.self="closeDetail">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>📋 Pod 详情</h3>
-          <button class="close-btn" @click="closeDetail">×</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="loadingDetail" style="text-align: center; padding: 40px;">
-            <div class="loading-spinner">加载中...</div>
+    <!-- ========== DDP Describe 抽屉 ========== -->
+    <Teleport to="body">
+      <div v-if="showDetailModal" class="ddp-overlay" @click="closeDetail">
+        <Transition name="ddp-slide">
+          <div v-if="showDetailModal" class="ddp-panel" @click.stop>
+            <!-- Header -->
+            <div class="ddp-hd">
+              <div class="ddp-hd-top">
+                <span class="ddp-hd-icon">📦</span>
+                <h2 class="ddp-hd-title">{{ detailData?.metadata?.name || selectedPod?.name }}</h2>
+                <span class="ddp-hd-ns">{{ detailData?.metadata?.namespace || selectedPod?.namespace }}</span>
+                <span v-if="detailData" class="ddp-hd-status" :class="ddpStatusClass(detailData)">
+                  <i class="ddp-led"></i>{{ ddpStatusText(detailData) }}
+                </span>
+              </div>
+              <button class="ddp-close" @click="closeDetail">&times;</button>
+            </div>
+            <!-- Body -->
+            <div class="ddp-body">
+              <div v-if="loadingDetail" class="ddp-loading">
+                <div class="loading-spinner"></div><span>加载中…</span>
+              </div>
+              <template v-else-if="detailData">
+                <!-- 基本信息 -->
+                <section class="ddp-sec">
+                  <h3 class="ddp-sec-title">基本信息</h3>
+                  <div class="ddp-kv-grid">
+                    <div class="ddp-kv"><span class="ddp-k">名称</span><span class="ddp-v">{{ detailData.metadata?.name }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">命名空间</span><span class="ddp-v">{{ detailData.metadata?.namespace }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">UID</span><span class="ddp-v mono">{{ detailData.metadata?.uid || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">创建时间</span><span class="ddp-v">{{ detailData.metadata?.creationTimestamp || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Node</span><span class="ddp-v">{{ detailData.spec?.nodeName || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Pod IP</span><span class="ddp-v mono">{{ detailData.status?.podIP || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Host IP</span><span class="ddp-v mono">{{ detailData.status?.hostIP || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Phase</span><span class="ddp-v">{{ detailData.status?.phase || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">QoS Class</span><span class="ddp-v">{{ detailData.status?.qosClass || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Restart Policy</span><span class="ddp-v">{{ detailData.spec?.restartPolicy || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Service Account</span><span class="ddp-v">{{ detailData.spec?.serviceAccountName || '-' }}</span></div>
+                    <div class="ddp-kv" v-if="detailData.spec?.priorityClassName"><span class="ddp-k">Priority Class</span><span class="ddp-v">{{ detailData.spec.priorityClassName }}</span></div>
+                  </div>
+                </section>
+
+                <!-- Conditions -->
+                <section class="ddp-sec" v-if="detailData.status?.conditions?.length">
+                  <h3 class="ddp-sec-title">Conditions</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" :class="cond.status === 'True' ? '' : 'anno'" v-for="cond in detailData.status.conditions" :key="cond.type" :title="cond.message || ''">
+                      {{ cond.type }}: {{ cond.status }}
+                    </span>
+                  </div>
+                </section>
+
+                <!-- Containers -->
+                <section class="ddp-sec" v-if="detailData.spec?.containers?.length">
+                  <h3 class="ddp-sec-title">Containers ({{ detailData.spec.containers.length }})</h3>
+                  <div v-for="c in detailData.spec.containers" :key="c.name" class="ddp-container-card">
+                    <div class="ddp-container-name">
+                      📦 {{ c.name }}
+                      <span v-if="ddpContainerStatus(detailData, c.name)" class="ddp-cstatus" :class="ddpContainerStatus(detailData, c.name).ready ? 'ready' : 'not-ready'">
+                        {{ ddpContainerStatus(detailData, c.name).ready ? '✔ Ready' : '✘ Not Ready' }}
+                      </span>
+                    </div>
+                    <div class="ddp-kv-grid">
+                      <div class="ddp-kv"><span class="ddp-k">镜像</span><span class="ddp-v mono">{{ c.image }}</span></div>
+                      <div class="ddp-kv" v-if="c.command"><span class="ddp-k">Command</span><span class="ddp-v mono">{{ c.command.join(' ') }}</span></div>
+                      <div class="ddp-kv" v-if="c.args"><span class="ddp-k">Args</span><span class="ddp-v mono">{{ c.args.join(' ') }}</span></div>
+                      <div class="ddp-kv" v-if="c.ports?.length"><span class="ddp-k">Ports</span><span class="ddp-v">{{ c.ports.map(p => p.containerPort + '/' + (p.protocol || 'TCP')).join(', ') }}</span></div>
+                      <div class="ddp-kv" v-if="c.resources?.requests"><span class="ddp-k">Requests</span><span class="ddp-v">CPU: {{ c.resources.requests.cpu || '-' }} / Mem: {{ c.resources.requests.memory || '-' }}</span></div>
+                      <div class="ddp-kv" v-if="c.resources?.limits"><span class="ddp-k">Limits</span><span class="ddp-v">CPU: {{ c.resources.limits.cpu || '-' }} / Mem: {{ c.resources.limits.memory || '-' }}</span></div>
+                      <div class="ddp-kv" v-if="ddpContainerStatus(detailData, c.name)?.restartCount != null"><span class="ddp-k">Restarts</span><span class="ddp-v">{{ ddpContainerStatus(detailData, c.name).restartCount }}</span></div>
+                    </div>
+                    <!-- Env -->
+                    <div v-if="c.env?.length" style="margin-top:8px;">
+                      <div class="ddp-k" style="margin-bottom:4px">环境变量 ({{ c.env.length }})</div>
+                      <div class="ddp-chip-list">
+                        <span class="ddp-chip" v-for="e in c.env.slice(0, 10)" :key="e.name" :title="e.value || (e.valueFrom ? 'from ref' : '')">{{ e.name }}={{ e.value || '(ref)' }}</span>
+                        <span v-if="c.env.length > 10" class="ddp-chip anno">+{{ c.env.length - 10 }} more</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Init Containers -->
+                <section class="ddp-sec" v-if="detailData.spec?.initContainers?.length">
+                  <h3 class="ddp-sec-title">Init Containers ({{ detailData.spec.initContainers.length }})</h3>
+                  <div v-for="c in detailData.spec.initContainers" :key="c.name" class="ddp-container-card">
+                    <div class="ddp-container-name">⚙️ {{ c.name }}</div>
+                    <div class="ddp-kv-grid">
+                      <div class="ddp-kv"><span class="ddp-k">镜像</span><span class="ddp-v mono">{{ c.image }}</span></div>
+                      <div class="ddp-kv" v-if="c.command"><span class="ddp-k">Command</span><span class="ddp-v mono">{{ c.command.join(' ') }}</span></div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Node Selectors -->
+                <section class="ddp-sec" v-if="detailData.spec?.nodeSelector && Object.keys(detailData.spec.nodeSelector).length">
+                  <h3 class="ddp-sec-title">Node Selector</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="(v, k) in detailData.spec.nodeSelector" :key="k">{{ k }}={{ v }}</span>
+                  </div>
+                </section>
+
+                <!-- Tolerations -->
+                <section class="ddp-sec" v-if="detailData.spec?.tolerations?.length">
+                  <h3 class="ddp-sec-title">Tolerations ({{ detailData.spec.tolerations.length }})</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="(t, idx) in detailData.spec.tolerations" :key="idx">{{ t.key || '*' }}{{ t.operator === 'Exists' ? ' (Exists)' : '=' + (t.value || '') }} : {{ t.effect || 'All' }}</span>
+                  </div>
+                </section>
+
+                <!-- Labels -->
+                <section class="ddp-sec" v-if="detailData.metadata?.labels && Object.keys(detailData.metadata.labels).length">
+                  <h3 class="ddp-sec-title">Labels</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="(v, k) in detailData.metadata.labels" :key="k">{{ k }}={{ v }}</span>
+                  </div>
+                </section>
+
+                <!-- Annotations -->
+                <section class="ddp-sec" v-if="detailData.metadata?.annotations && Object.keys(detailData.metadata.annotations).length">
+                  <h3 class="ddp-sec-title ddp-fold-title" @click="ddpShowAnno = !ddpShowAnno">
+                    Annotations ({{ Object.keys(detailData.metadata.annotations).length }})
+                    <span class="ddp-fold-icon">{{ ddpShowAnno ? '▾' : '▸' }}</span>
+                  </h3>
+                  <div v-if="ddpShowAnno" class="ddp-chip-list">
+                    <span class="ddp-chip anno" v-for="(v, k) in detailData.metadata.annotations" :key="k" :title="v">{{ k }}={{ v?.substring?.(0, 60) }}</span>
+                  </div>
+                </section>
+
+                <!-- Volumes -->
+                <section class="ddp-sec" v-if="detailData.spec?.volumes?.length">
+                  <h3 class="ddp-sec-title ddp-fold-title" @click="ddpShowVols = !ddpShowVols">
+                    Volumes ({{ detailData.spec.volumes.length }})
+                    <span class="ddp-fold-icon">{{ ddpShowVols ? '▾' : '▸' }}</span>
+                  </h3>
+                  <div v-if="ddpShowVols" class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="vol in detailData.spec.volumes" :key="vol.name" :title="JSON.stringify(vol)">{{ vol.name }}</span>
+                  </div>
+                </section>
+
+                <!-- Events -->
+                <section class="ddp-sec">
+                  <h3 class="ddp-sec-title">Events</h3>
+                  <div v-if="ddpEventsLoading" class="ddp-loading"><span>加载事件...</span></div>
+                  <div v-else-if="ddpEventsData.length === 0" class="ddp-empty">暂无事件</div>
+                  <div v-else class="ddp-events-list">
+                    <div v-for="(ev, idx) in ddpEventsData" :key="idx" class="ddp-event-row" :class="ev.type === 'Warning' ? 'warn' : ''">
+                      <span class="ddp-ev-type" :class="ev.type === 'Warning' ? 'warn' : 'normal'">{{ ev.type }}</span>
+                      <span class="ddp-ev-reason">{{ ev.reason }}</span>
+                      <span class="ddp-ev-msg">{{ ev.message }}</span>
+                      <span class="ddp-ev-age">{{ ddpEvAge(ev.lastTimestamp || ev.event_time || ev.eventTime) }}</span>
+                    </div>
+                  </div>
+                </section>
+              </template>
+            </div>
           </div>
-          <div v-else-if="detailData">
-            <pre class="detail-json">{{ JSON.stringify(detailData, null, 2) }}</pre>
-          </div>
-        </div>
+        </Transition>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 事件弹窗 -->
     <div v-if="showEventsModal" class="modal-overlay" @click.self="closeEvents">
@@ -1782,29 +1924,72 @@ const confirmDelete = async () => {
 // 查看详情
 const detailData = ref(null);
 const loadingDetail = ref(false);
+const ddpEventsData = ref([]);
+const ddpEventsLoading = ref(false);
+const ddpShowAnno = ref(false);
+const ddpShowVols = ref(false);
 const openDetail = async (pod) => {
   showMoreOptions.value = false;
   selectedPod.value = pod;
   showDetailModal.value = true;
   loadingDetail.value = true;
+  detailData.value = null;
+  ddpEventsData.value = [];
+  ddpShowAnno.value = false;
+  ddpShowVols.value = false;
+  ddpEventsLoading.value = true;
   try {
-    const res = await podsApi.detail({
-      namespace: pod.namespace,
-      name: pod.name,
-    });
-    detailData.value = res?.data || pod.raw;
+    const [detailRes, eventsRes] = await Promise.all([
+      podsApi.detail({ namespace: pod.namespace, name: pod.name }),
+      podsApi.events({ namespace: pod.namespace, name: pod.name, limit: 50 })
+    ]);
+    detailData.value = detailRes?.data || pod.raw;
+    ddpEventsData.value = eventsRes?.data?.events || eventsRes?.data?.items || [];
   } catch (e) {
     console.error(e);
-    alert(e?.msg || e?.message || '获取详情失败');
     detailData.value = pod.raw;
+    ddpEventsData.value = [];
   } finally {
     loadingDetail.value = false;
+    ddpEventsLoading.value = false;
   }
 };
 
 const closeDetail = () => {
   showDetailModal.value = false;
   detailData.value = null;
+};
+
+// DDP helpers for Pod
+const ddpStatusText = (d) => {
+  if (!d?.status) return 'UNKNOWN';
+  const phase = d.status.phase;
+  // 严格按容器就绪状态判定
+  const containers = d.status.containerStatuses || [];
+  if (containers.length > 0 && containers.every(c => c.ready)) return 'RUNNING';
+  if (phase === 'Succeeded') return 'SUCCEEDED';
+  if (phase === 'Failed') return 'FAILED';
+  if (phase === 'Pending') return 'PENDING';
+  return phase?.toUpperCase() || 'UNKNOWN';
+};
+const ddpStatusClass = (d) => {
+  const s = ddpStatusText(d);
+  if (s === 'RUNNING' || s === 'SUCCEEDED') return 'status-ok';
+  if (s === 'PENDING') return 'status-warn';
+  if (s === 'FAILED') return 'status-err';
+  return 'status-warn';
+};
+const ddpContainerStatus = (d, name) => {
+  const statuses = d?.status?.containerStatuses || [];
+  return statuses.find(s => s.name === name);
+};
+const ddpEvAge = (ts) => {
+  if (!ts) return '';
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
 };
 
 // 查看事件
@@ -4417,5 +4602,58 @@ onUnmounted(() => {
   padding: 6px 12px;
   font-size: 12px;
 }
+
+/* ===== DDP Describe 抽屉 ===== */
+.ddp-overlay{position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.45);backdrop-filter:blur(2px)}
+.ddp-panel{position:absolute;right:0;top:0;height:100%;width:880px;max-width:92vw;display:flex;flex-direction:column;background:#f8fafc;box-shadow:-4px 0 24px rgba(0,0,0,.18)}
+.ddp-hd{padding:18px 28px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);display:flex;align-items:center;justify-content:space-between}
+.ddp-hd-top{display:flex;align-items:center;gap:10px;min-width:0}
+.ddp-hd-icon{font-size:22px}
+.ddp-hd-title{color:#fff;font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddp-hd-ns{background:rgba(255,255,255,.12);color:#93c5fd;padding:2px 10px;border-radius:20px;font-size:12px;white-space:nowrap}
+.ddp-hd-status{display:flex;align-items:center;gap:5px;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;color:#fff}
+.ddp-hd-status.status-ok{background:rgba(34,197,94,.2);color:#4ade80}
+.ddp-hd-status.status-warn{background:rgba(234,179,8,.2);color:#facc15}
+.ddp-hd-status.status-err{background:rgba(239,68,68,.2);color:#f87171}
+.ddp-led{width:7px;height:7px;border-radius:50%;margin-right:4px;display:inline-block}
+.status-ok .ddp-led{background:#4ade80;box-shadow:0 0 6px #4ade80}
+.status-warn .ddp-led{background:#facc15;box-shadow:0 0 6px #facc15}
+.status-err .ddp-led{background:#f87171;box-shadow:0 0 6px #f87171}
+.ddp-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:28px;cursor:pointer;line-height:1;padding:0 4px}
+.ddp-close:hover{color:#fff}
+.ddp-body{flex:1;overflow-y:auto;padding:24px 28px}
+.ddp-loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:40px 0;color:#64748b}
+.ddp-empty{color:#94a3b8;text-align:center;padding:18px 0;font-size:13px}
+.ddp-sec{margin-bottom:22px}
+.ddp-sec-title{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}
+.ddp-fold-title{cursor:pointer;user-select:none}
+.ddp-fold-icon{float:right;font-size:12px;color:#94a3b8}
+.ddp-kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
+.ddp-kv{display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed #f1f5f9}
+.ddp-k{color:#64748b;min-width:100px;flex-shrink:0}
+.ddp-v{color:#1e293b;word-break:break-all}
+.ddp-v.mono{font-family:monospace;font-size:12px}
+.ddp-chip-list{display:flex;flex-wrap:wrap;gap:6px}
+.ddp-chip{background:#e0e7ff;color:#3730a3;padding:2px 10px;border-radius:12px;font-size:12px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddp-chip.anno{background:#fef3c7;color:#92400e}
+.ddp-container-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:10px}
+.ddp-container-name{font-weight:600;font-size:13px;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.ddp-cstatus{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+.ddp-cstatus.ready{background:rgba(34,197,94,.1);color:#16a34a}
+.ddp-cstatus.not-ready{background:rgba(239,68,68,.1);color:#dc2626}
+.ddp-events-list{max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:#fff}
+.ddp-event-row{display:grid;grid-template-columns:60px 100px 1fr 70px;align-items:center;gap:8px;padding:7px 12px;font-size:12px;border-bottom:1px solid #f1f5f9}
+.ddp-event-row.warn{background:#fefce8}
+.ddp-ev-type{padding:1px 6px;border-radius:4px;font-weight:600;text-align:center}
+.ddp-ev-type.normal{background:rgba(34,197,94,.1);color:#16a34a}
+.ddp-ev-type.warn{background:rgba(234,179,8,.12);color:#a16207}
+.ddp-ev-reason{font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddp-ev-msg{color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddp-ev-age{color:#94a3b8;text-align:right;white-space:nowrap}
+.ddp-slide-enter-active{transition:transform .32s cubic-bezier(.4,0,.2,1)}
+.ddp-slide-leave-active{transition:transform .22s cubic-bezier(.4,0,1,1)}
+.ddp-slide-enter-from,.ddp-slide-leave-to{transform:translateX(100%)}
+.action-btn.primary{background:rgba(59,130,246,.08);color:#2563eb;border:1px solid rgba(59,130,246,.2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
+.action-btn.primary:hover{background:rgba(59,130,246,.15)}
 
 </style>

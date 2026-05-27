@@ -138,6 +138,10 @@
             <td style="white-space: nowrap;">{{ sts.createdAt }}</td>
             <td>
               <div class="action-icons">
+                <!-- 详情按钮 -->
+                <button class="action-btn" @click="viewStatefulset(sts)" title="StatefulSet 详情 (describe)">
+                  📋 详情
+                </button>
                 <!-- 终端按钮 -->
                 <button class="action-btn terminal" @click="openTerminalForStatefulSet(sts)" title="打开容器终端">
                   >_ 终端
@@ -171,10 +175,6 @@
                       <span>更新镜像</span>
                     </button>
                     <div class="menu-divider"></div>
-                    <button class="menu-item" @click="viewStatefulset(sts)">
-                      <span class="menu-icon">📋</span>
-                      <span>查看详情</span>
-                    </button>
                     <button class="menu-item" @click="openEvents(sts)">
                       <span class="menu-icon">📡</span>
                       <span>查看事件</span>
@@ -691,31 +691,204 @@
       </div>
     </div>
 
-    <!-- 详情模态框 -->
-    <div v-if="showViewModal" class="modal-overlay" @click.self="showViewModal = false">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>有状态集详情</h2>
-          <button class="close-btn" @click="showViewModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="loadingDetail" class="loading-state">加载中...</div>
-          <div v-else-if="detailData">
-            <div class="detail-group"><label>名称:</label><span>{{ detailData.name }}</span></div>
-            <div class="detail-group"><label>命名空间:</label><span>{{ detailData.namespace }}</span></div>
-            <div class="detail-group"><label>状态:</label><span>{{ detailData.status }}</span></div>
-            <div class="detail-group"><label>副本数:</label><span>{{ detailData.ready_replicas || 0 }}/{{ detailData.replicas || 0 }}</span></div>
-            <div class="detail-group"><label>镜像:</label><span>{{ detailData.image || '-' }}</span></div>
-            <div class="detail-group"><label>更新策略:</label><span>{{ detailData.update_strategy }}</span></div>
-            <div class="detail-group"><label>服务名称:</label><span>{{ detailData.service_name || '-' }}</span></div>
-            <div class="detail-group"><label>创建时间:</label><span>{{ detailData.created_at }}</span></div>
+    <!-- Describe 抽屉 (DDP Style) -->
+    <transition name="ddp-slide">
+      <div v-if="showViewModal" class="ddp-overlay" @click.self="showViewModal = false">
+        <div class="ddp-panel">
+          <!-- Header -->
+          <div class="ddp-hd">
+            <div class="ddp-hd-body">
+              <div class="ddp-hd-row1">
+                <span class="ddp-status-pill" :class="ddpStatusClass(detailData)">
+                  <span class="ddp-status-led"></span>
+                  {{ ddpStatusText(detailData) }}
+                </span>
+                <span class="ddp-ns-pill">{{ detailData?.metadata?.namespace || '-' }}</span>
+              </div>
+              <h2 class="ddp-name">{{ detailData?.metadata?.name || '-' }}</h2>
+              <div class="ddp-hd-meta" v-if="detailData?.spec">
+                <span>副本 {{ detailData.status?.readyReplicas || 0 }}/{{ detailData.spec?.replicas || 0 }}</span>
+                <span class="ddp-dot">·</span>
+                <span>策略 {{ detailData.spec?.updateStrategy?.type || '-' }}</span>
+                <span class="ddp-dot">·</span>
+                <span>{{ fmtTime(detailData.metadata?.creationTimestamp) }}</span>
+              </div>
+            </div>
+            <button class="ddp-close-btn" @click="showViewModal = false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-primary" @click="showViewModal = false">关闭</button>
-        </div>
-      </div>
-    </div>
+
+          <!-- Loading -->
+          <div v-if="loadingDetail" class="ddp-loading">
+            <div class="ddp-spin"></div>
+            <span>正在获取 StatefulSet 详情...</span>
+          </div>
+
+          <!-- Body -->
+          <div v-else-if="detailData" class="ddp-body">
+            <!-- 1. Basic Info -->
+            <div class="ddp-sec">
+              <div class="ddp-sec-title"><span class="ddp-si ddp-si-blue">⚡</span>基本信息</div>
+              <div class="ddp-kv-grid">
+                <div class="ddp-kv"><span class="ddp-k">名称</span><span class="ddp-v mono">{{ detailData.metadata?.name }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">命名空间</span><span class="ddp-v">{{ detailData.metadata?.namespace }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">创建时间</span><span class="ddp-v">{{ fmtTime(detailData.metadata?.creationTimestamp) }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">UID</span><span class="ddp-v mono" style="font-size:11px">{{ detailData.metadata?.uid || '-' }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">Generation</span><span class="ddp-v">{{ detailData.metadata?.generation || '-' }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">ResourceVersion</span><span class="ddp-v mono">{{ detailData.metadata?.resourceVersion || '-' }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">副本</span><span class="ddp-v">期望 {{ detailData.spec?.replicas }} | 就绪 {{ detailData.status?.readyReplicas || 0 }} | 当前 {{ detailData.status?.currentReplicas || 0 }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">更新策略</span><span class="ddp-v">{{ detailData.spec?.updateStrategy?.type || '-' }}<span v-if="detailData.spec?.updateStrategy?.rollingUpdate"> (partition: {{ detailData.spec.updateStrategy.rollingUpdate.partition || 0 }})</span></span></div>
+                <div class="ddp-kv"><span class="ddp-k">服务名称</span><span class="ddp-v mono">{{ detailData.spec?.serviceName || '-' }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">Pod管理策略</span><span class="ddp-v">{{ detailData.spec?.podManagementPolicy || 'OrderedReady' }}</span></div>
+                <div class="ddp-kv"><span class="ddp-k">历史版本数</span><span class="ddp-v">{{ detailData.spec?.revisionHistoryLimit ?? 10 }}</span></div>
+              </div>
+            </div>
+
+            <!-- 2. Conditions -->
+            <div class="ddp-sec" v-if="(detailData.status?.conditions || []).length">
+              <div class="ddp-sec-title"><span class="ddp-si ddp-si-green">✅</span>状态条件 Conditions</div>
+              <div class="ddp-conds">
+                <div v-for="c in detailData.status.conditions" :key="c.type"
+                     class="ddp-cond-chip" :class="c.status === 'True' ? 'cond-ok' : 'cond-fail'">
+                  <span class="cond-led"></span>
+                  <span class="cond-name">{{ c.type }}</span>
+                  <span class="cond-reason" v-if="c.reason">{{ c.reason }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Selector -->
+            <div class="ddp-sec" v-if="detailData.spec?.selector?.matchLabels">
+              <div class="ddp-sec-title"><span class="ddp-si ddp-si-purple">🎯</span>选择器 Selector</div>
+              <div class="ddp-tags ddp-tags-pad">
+                <span v-for="(v, k) in detailData.spec.selector.matchLabels" :key="k" class="ddp-label-tag">
+                  <b>{{ k }}</b>=<span>{{ v }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- 4. Labels -->
+            <div class="ddp-sec" v-if="Object.keys(detailData.metadata?.labels || {}).length">
+              <div class="ddp-sec-title"><span class="ddp-si ddp-si-teal">🏷</span>标签 Labels</div>
+              <div class="ddp-tags ddp-tags-pad">
+                <span v-for="(v, k) in detailData.metadata.labels" :key="k" class="ddp-label-tag">
+                  <b>{{ k }}</b>=<span>{{ v }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- 5. Annotations (foldable) -->
+            <div class="ddp-sec" v-if="Object.keys(detailData.metadata?.annotations || {}).length">
+              <div class="ddp-sec-title ddp-sec-title-clickable" @click="ddpShowAnno = !ddpShowAnno">
+                <span class="ddp-si ddp-si-orange">📝</span>注解 Annotations
+                <span class="ddp-cnt-badge">{{ Object.keys(detailData.metadata.annotations).length }}</span>
+                <span class="ddp-fold-arrow">{{ ddpShowAnno ? '▲' : '▼' }}</span>
+              </div>
+              <div v-if="ddpShowAnno" class="ddp-anno-list">
+                <div v-for="(v, k) in detailData.metadata.annotations" :key="k" class="ddp-anno-row">
+                  <span class="ddp-anno-k">{{ k }}</span>
+                  <span class="ddp-anno-v">{{ v }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. VolumeClaimTemplates -->
+            <div class="ddp-sec" v-if="(detailData.spec?.volumeClaimTemplates || []).length">
+              <div class="ddp-sec-title"><span class="ddp-si ddp-si-purple">💾</span>存储卷声明模板 VolumeClaimTemplates
+                <span class="ddp-cnt-badge">{{ detailData.spec.volumeClaimTemplates.length }}</span>
+              </div>
+              <div class="ddp-ctr-list">
+                <div v-for="vct in detailData.spec.volumeClaimTemplates" :key="vct.metadata?.name" class="ddp-ctr-card">
+                  <div class="ddp-ctr-hd"><span class="ddp-ctr-name">{{ vct.metadata?.name }}</span></div>
+                  <div class="ddp-ctr-detail">
+                    <div class="ddp-ctr-row"><span class="ddp-rk">访问模式</span><span>{{ (vct.spec?.accessModes || []).join(', ') }}</span></div>
+                    <div class="ddp-ctr-row"><span class="ddp-rk">存储大小</span><span>{{ vct.spec?.resources?.requests?.storage || '-' }}</span></div>
+                    <div class="ddp-ctr-row" v-if="vct.spec?.storageClassName"><span class="ddp-rk">存储类</span><span class="mono">{{ vct.spec.storageClassName }}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 7. Pod Template Containers -->
+            <div class="ddp-sec" v-if="(detailData.spec?.template?.spec?.containers || []).length">
+              <div class="ddp-sec-title">
+                <span class="ddp-si ddp-si-blue">📦</span>Pod 模板容器
+                <span class="ddp-cnt-badge">{{ detailData.spec.template.spec.containers.length }}</span>
+              </div>
+              <div class="ddp-ctr-list">
+                <div v-for="c in detailData.spec.template.spec.containers" :key="c.name" class="ddp-ctr-card">
+                  <div class="ddp-ctr-hd"><span class="ddp-ctr-name">{{ c.name }}</span></div>
+                  <div class="ddp-ctr-img">{{ c.image }}</div>
+                  <div class="ddp-ctr-detail">
+                    <div class="ddp-ctr-row" v-if="(c.command||[]).length||(c.args||[]).length">
+                      <span class="ddp-rk">命令</span>
+                      <div class="pdp-cmd-blk">
+                        <div v-if="(c.command||[]).length" class="pdp-cmd-line"><span class="pdp-cmd-label">command</span>{{ c.command.join(' ') }}</div>
+                        <div v-if="(c.args||[]).length" class="pdp-cmd-line"><span class="pdp-cmd-label">args</span>{{ c.args.join(' ') }}</div>
+                      </div>
+                    </div>
+                    <div class="ddp-ctr-row" v-if="(c.ports||[]).length">
+                      <span class="ddp-rk">端口</span>
+                      <span v-for="p in c.ports" :key="p.containerPort" class="ddp-port-chip">{{ p.containerPort }}/{{ p.protocol||'TCP' }}</span>
+                    </div>
+                    <div class="ddp-ctr-row" v-if="c.resources?.requests||c.resources?.limits">
+                      <span class="ddp-rk">资源</span>
+                      <div class="pdp-res-lines">
+                        <div v-if="c.resources?.requests" class="pdp-res-line"><span class="pdp-res-lbl req">requests</span><span v-for="(v,k) in c.resources.requests" :key="k" class="pdp-res-tag">{{ k }}:{{ v }}</span></div>
+                        <div v-if="c.resources?.limits" class="pdp-res-line"><span class="pdp-res-lbl lim">limits</span><span v-for="(v,k) in c.resources.limits" :key="k" class="pdp-res-tag">{{ k }}:{{ v }}</span></div>
+                      </div>
+                    </div>
+                    <div class="ddp-ctr-row" v-if="(c.volumeMounts||[]).length">
+                      <span class="ddp-rk">挂载<span class="pdp-sub-cnt">({{ c.volumeMounts.length }})</span></span>
+                      <div class="pdp-mnt-tbl">
+                        <div v-for="m in c.volumeMounts" :key="m.name" class="pdp-mnt-row"><span class="pdp-mn">{{ m.name }}</span><span class="pdp-mp">{{ m.mountPath }}</span><span v-if="m.readOnly" class="pdp-mro">ro</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 8. Events -->
+            <div class="ddp-sec ddp-sec-events">
+              <div class="ddp-sec-title">
+                <span class="ddp-si ddp-si-orange">⚡</span>事件 Events
+                <span v-if="ddpEventsData.length" class="ddp-cnt-badge">{{ ddpEventsData.length }}</span>
+                <button class="pdp-ev-refresh-btn" @click="ddpRefreshEvents" :disabled="ddpEventsLoading" title="刷新事件">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                </button>
+              </div>
+              <div v-if="ddpEventsLoading" class="pdp-ev-empty">
+                <div class="pdp-ev-spin"></div>加载事件中...
+              </div>
+              <div v-else-if="!ddpEventsData.length" class="pdp-ev-empty">暂无事件记录</div>
+              <div v-else class="pdp-ev-list">
+                <div v-for="(ev, i) in ddpEventsData" :key="i"
+                     class="pdp-ev-item" :class="ev.type === 'Warning' ? 'ev-warn' : 'ev-norm'">
+                  <div class="pdp-ev-hd">
+                    <span class="pdp-ev-type-dot" :class="ev.type === 'Warning' ? 'ev-dot-warn' : 'ev-dot-norm'"></span>
+                    <span class="pdp-ev-reason">{{ ev.reason }}</span>
+                    <span class="pdp-ev-count" v-if="ev.count > 1">×{{ ev.count }}</span>
+                    <span class="pdp-ev-age">{{ ddpFmtEvTime(ev.lastTimestamp || ev.last_timestamp || ev.event_time || ev.eventTime) }}</span>
+                  </div>
+                  <div class="pdp-ev-msg">{{ ev.message }}</div>
+                  <div class="pdp-ev-src" v-if="ev.source?.component || ev.reporting_component">来源: {{ ev.source?.component || ev.reporting_component }}</div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /ddp-body -->
+
+          <!-- No data -->
+          <div v-else class="ddp-empty">
+            <div style="font-size:48px;margin-bottom:12px">📭</div>
+            <p>暂无 StatefulSet 数据</p>
+          </div>
+
+        </div><!-- /ddp-panel -->
+      </div><!-- /ddp-overlay -->
+    </transition>
 
     <!-- 事件模态框 -->
     <div v-if="showEventsModal" class="modal-overlay" @click.self="showEventsModal = false">
@@ -1614,6 +1787,9 @@ const savingYaml = ref(false)
 
 // Data
 const detailData = ref(null)
+const ddpEventsData = ref([])
+const ddpEventsLoading = ref(false)
+const ddpShowAnno = ref(false)
 const eventsData = ref([])
 const historyList = ref([])
 const historyStatefulset = ref(null)
@@ -2131,12 +2307,60 @@ const executeBatchDelete = async () => {
 const viewStatefulset = async (sts) => {
   showMoreOptions.value = false
   loadingDetail.value = true
+  detailData.value = null
+  ddpEventsData.value = []
+  ddpShowAnno.value = false
   showViewModal.value = true
+  ddpEventsLoading.value = true
   try {
-    const res = await statefulsetsApi.detail({ namespace: sts.namespace, name: sts.name })
-    detailData.value = res.code === 0 ? res.data : sts
-  } catch (e) { detailData.value = sts }
-  finally { loadingDetail.value = false }
+    const [detailRes, eventsRes] = await Promise.all([
+      statefulsetsApi.detail({ namespace: sts.namespace, name: sts.name }),
+      statefulsetsApi.events({ namespace: sts.namespace, name: sts.name })
+    ])
+    detailData.value = detailRes.code === 0 ? (detailRes.data?.data || detailRes.data) : sts
+    ddpEventsData.value = eventsRes.code === 0 ? (eventsRes.data?.events || eventsRes.data?.items || eventsRes.data || []) : []
+  } catch (e) {
+    detailData.value = sts
+    ddpEventsData.value = []
+  } finally {
+    loadingDetail.value = false
+    ddpEventsLoading.value = false
+  }
+}
+
+// DDP helpers
+const ddpStatusText = (d) => {
+  if (!d?.status) return 'UNKNOWN'
+  const ready = d.status?.readyReplicas || 0
+  const desired = d.spec?.replicas || 0
+  if (ready >= desired && desired > 0) return 'READY'
+  if (ready > 0) return 'PROGRESSING'
+  return 'NOT READY'
+}
+const ddpStatusClass = (d) => {
+  const t = ddpStatusText(d)
+  if (t === 'READY') return 'ddp-st-ok'
+  if (t === 'PROGRESSING') return 'ddp-st-prog'
+  return 'ddp-st-err'
+}
+const ddpRefreshEvents = async () => {
+  if (!detailData.value?.metadata) return
+  ddpEventsLoading.value = true
+  try {
+    const res = await statefulsetsApi.events({ namespace: detailData.value.metadata.namespace, name: detailData.value.metadata.name })
+    ddpEventsData.value = res.code === 0 ? (res.data?.events || res.data?.items || res.data || []) : []
+  } catch { ddpEventsData.value = [] }
+  finally { ddpEventsLoading.value = false }
+}
+const ddpFmtEvTime = (ts) => {
+  if (!ts) return '-'
+  const d = new Date(ts)
+  const now = Date.now()
+  const diff = Math.floor((now - d.getTime()) / 1000)
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
 }
 
 // 事件
@@ -3773,4 +3997,103 @@ const createStatefulSetFromYaml = async () => {
   line-height: 1.5;
 }
 .current-image-text { opacity: 0.85; }
+
+/* ===== DDP Describe Drawer ===== */
+.ddp-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(15,23,42,.45); backdrop-filter: blur(2px); }
+.ddp-panel { position: absolute; right: 0; top: 0; height: 100%; width: 880px; max-width: 92vw; display: flex; flex-direction: column; background: #fff; box-shadow: -8px 0 40px rgba(0,0,0,.18); }
+.ddp-hd { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 28px 18px; background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); color: #fff; flex-shrink: 0; }
+.ddp-hd-body { flex: 1; min-width: 0; }
+.ddp-hd-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ddp-status-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: .3px; }
+.ddp-st-ok { background: rgba(16,185,129,.2); color: #6ee7b7; }
+.ddp-st-prog { background: rgba(250,204,21,.2); color: #fde68a; }
+.ddp-st-err { background: rgba(239,68,68,.2); color: #fca5a5; }
+.ddp-status-led { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ddp-ns-pill { background: rgba(255,255,255,.12); padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.ddp-name { font-size: 20px; font-weight: 800; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ddp-hd-meta { margin-top: 6px; font-size: 12px; color: rgba(255,255,255,.7); display: flex; gap: 6px; align-items: center; }
+.ddp-dot { color: rgba(255,255,255,.35); }
+.ddp-close-btn { background: rgba(255,255,255,.1); border: none; color: #fff; cursor: pointer; border-radius: 8px; padding: 8px; transition: background .2s; }
+.ddp-close-btn:hover { background: rgba(255,255,255,.2); }
+.ddp-loading { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; color: #64748b; font-size: 14px; }
+.ddp-spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #e2e8f0; border-top-color: #6366f1; animation: ddp-spin .7s linear infinite; }
+@keyframes ddp-spin { to { transform: rotate(360deg); } }
+.ddp-body { flex: 1; overflow-y: auto; }
+.ddp-sec { border-bottom: 1px solid #f1f5f9; }
+.ddp-sec-title { display: flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 13px; font-weight: 700; color: #1e293b; border-bottom: 1px solid #f8fafc; }
+.ddp-sec-title-clickable { cursor: pointer; user-select: none; }
+.ddp-sec-title-clickable:hover { background: rgba(99,102,241,.04); }
+.ddp-si { font-size: 14px; }
+.ddp-si-blue { color: #3b82f6; } .ddp-si-green { color: #10b981; } .ddp-si-purple { color: #8b5cf6; } .ddp-si-orange { color: #f59e0b; } .ddp-si-teal { color: #06b6d4; }
+.ddp-cnt-badge { font-size: 11px; background: #e0e7ff; color: #4338ca; border-radius: 8px; padding: 1px 7px; font-weight: 700; }
+.ddp-fold-arrow { margin-left: auto; color: #94a3b8; font-size: 11px; padding-right: 4px; }
+.ddp-kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 4px 0; }
+.ddp-kv { display: flex; align-items: baseline; gap: 8px; padding: 6px 20px; border-bottom: 1px solid #fafafa; }
+.ddp-k { font-size: 12px; color: #64748b; min-width: 85px; flex-shrink: 0; }
+.ddp-v { font-size: 12px; color: #1e293b; word-break: break-all; }
+.ddp-v.mono { font-family: monospace; }
+.ddp-conds { padding: 8px 20px 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ddp-cond-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.ddp-cond-chip.cond-ok { background: #ecfdf5; color: #065f46; }
+.ddp-cond-chip.cond-fail { background: #fef2f2; color: #991b1b; }
+.ddp-cond-chip .cond-led { width: 6px; height: 6px; border-radius: 50%; }
+.ddp-cond-chip.cond-ok .cond-led { background: #10b981; }
+.ddp-cond-chip.cond-fail .cond-led { background: #ef4444; }
+.ddp-cond-chip .cond-name { font-weight: 700; }
+.ddp-cond-chip .cond-reason { font-weight: 400; color: #64748b; font-size: 11px; }
+.ddp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ddp-tags-pad { padding: 8px 20px 12px; }
+.ddp-label-tag { display: inline-flex; align-items: center; gap: 2px; background: #f1f5f9; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-family: monospace; color: #334155; }
+.ddp-label-tag b { color: #4338ca; margin-right: 1px; }
+.ddp-anno-list { padding: 0 20px 12px; display: flex; flex-direction: column; }
+.ddp-anno-row { display: grid; grid-template-columns: 260px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f8fafc; font-size: 12px; align-items: start; }
+.ddp-anno-k { font-family: monospace; color: #4338ca; font-weight: 600; word-break: break-all; }
+.ddp-anno-v { font-family: monospace; color: #475569; word-break: break-all; white-space: pre-wrap; max-height: 80px; overflow-y: auto; }
+.ddp-ctr-list { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ddp-ctr-card { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; border-left: 3px solid #6366f1; }
+.ddp-ctr-hd { padding: 10px 14px 4px; display: flex; align-items: center; gap: 8px; }
+.ddp-ctr-name { font-size: 13px; font-weight: 700; color: #1e293b; }
+.ddp-ctr-img { padding: 0 14px 8px; font-size: 12px; font-family: monospace; color: #6366f1; }
+.ddp-ctr-detail { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px; }
+.ddp-ctr-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; font-size: 12px; }
+.ddp-rk { flex-shrink: 0; font-weight: 600; color: #475569; min-width: 60px; }
+.ddp-port-chip { background: #ede9fe; color: #5b21b6; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+.ddp-sec-events { border-bottom: none; }
+.ddp-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; font-size: 14px; }
+.ddp-slide-enter-active { transition: transform 0.32s cubic-bezier(0.4,0,0.2,1); }
+.ddp-slide-leave-active { transition: transform 0.22s cubic-bezier(0.4,0,1,1); }
+.ddp-slide-enter-from, .ddp-slide-leave-to { transform: translateX(100%); }
+/* Events styles */
+.pdp-ev-refresh-btn { margin-left: auto; background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; cursor: pointer; color: #64748b; display: flex; align-items: center; }
+.pdp-ev-refresh-btn:hover { background: #f1f5f9; color: #4338ca; }
+.pdp-ev-empty { padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pdp-ev-spin { width: 16px; height: 16px; border: 2px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: ddp-spin .7s linear infinite; }
+.pdp-ev-list { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.pdp-ev-item { padding: 8px 12px; border-radius: 8px; border-left: 3px solid #10b981; background: #f8fafc; }
+.pdp-ev-item.ev-warn { border-left-color: #f59e0b; background: #fffbeb; }
+.pdp-ev-hd { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.pdp-ev-type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.pdp-ev-type-dot.ev-dot-norm { background: #10b981; }
+.pdp-ev-type-dot.ev-dot-warn { background: #f59e0b; }
+.pdp-ev-reason { font-weight: 700; color: #1e293b; }
+.pdp-ev-count { font-size: 11px; color: #64748b; }
+.pdp-ev-age { margin-left: auto; font-size: 11px; color: #94a3b8; }
+.pdp-ev-msg { font-size: 12px; color: #475569; margin-top: 4px; line-height: 1.4; }
+.pdp-ev-src { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+/* Container detail styles */
+.pdp-cmd-blk { background: #1e293b; border-radius: 6px; padding: 6px 10px; font-family: monospace; font-size: 11px; color: #e2e8f0; flex: 1; min-width: 0; }
+.pdp-cmd-line { white-space: pre-wrap; word-break: break-all; }
+.pdp-cmd-label { color: #94a3b8; margin-right: 8px; }
+.pdp-res-lines { display: flex; flex-direction: column; gap: 3px; }
+.pdp-res-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pdp-res-lbl { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+.pdp-res-lbl.req { background: #dbeafe; color: #1d4ed8; }
+.pdp-res-lbl.lim { background: #fef3c7; color: #92400e; }
+.pdp-res-tag { font-size: 11px; color: #334155; font-family: monospace; }
+.pdp-sub-cnt { font-size: 10px; color: #94a3b8; margin-left: 3px; }
+.pdp-mnt-tbl { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.pdp-mnt-row { display: flex; gap: 8px; font-size: 11px; font-family: monospace; }
+.pdp-mn { color: #4338ca; font-weight: 600; }
+.pdp-mp { color: #475569; }
+.pdp-mro { color: #dc2626; font-size: 10px; font-weight: 700; }
 </style>

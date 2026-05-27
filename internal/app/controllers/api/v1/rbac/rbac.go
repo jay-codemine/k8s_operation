@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
@@ -17,6 +18,28 @@ type RBACController struct{}
 
 func NewRBACController() *RBACController {
 	return &RBACController{}
+}
+
+func currentUserID(ctx *gin.Context) int64 {
+	if uid, exists := ctx.Get("user_id"); exists {
+		if id, ok := uid.(int64); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+func requirePlatformAdmin(ctx *gin.Context, resp *response.Response, svc *services.Services) (int64, bool) {
+	userID := currentUserID(ctx)
+	if userID <= 0 {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
+		return 0, false
+	}
+	if !svc.CheckScopePermission(userID, models.ScopePlatform, models.AccessLevelAdmin) {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
+		return userID, false
+	}
+	return userID, true
 }
 
 // ==================== 角色管理 ====================
@@ -123,6 +146,9 @@ func (c *RBACController) RoleCreate(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	role, err := svc.RoleCreate(param)
 	if err != nil {
 		global.Logger.Error("创建角色失败", zap.Error(err))
@@ -152,6 +178,9 @@ func (c *RBACController) RoleUpdate(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	if err := svc.RoleUpdate(param); err != nil {
 		global.Logger.Error("更新角色失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorRoleUpdateFail)
@@ -181,6 +210,9 @@ func (c *RBACController) RoleDelete(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	if err := svc.RoleDelete(id); err != nil {
 		global.Logger.Error("删除角色失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorRoleDeleteFail)
@@ -239,6 +271,9 @@ func (c *RBACController) RolePermissionsUpdate(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	if err := svc.RolePermissionUpdate(param.RoleID, param.PermissionIDs); err != nil {
 		global.Logger.Error("更新角色权限失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorRoleUpdateFail)
@@ -268,6 +303,9 @@ func (c *RBACController) RoleUsers(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	users, err := svc.RoleUserList(roleID)
 	if err != nil {
 		global.Logger.Error("获取角色用户失败", zap.Error(err))
@@ -323,12 +361,11 @@ func (c *RBACController) UserRoleAssign(ctx *gin.Context) {
 	}
 
 	// 获取当前操作者ID（从JWT中获取）
-	operatorID := int64(0)
-	if uid, exists := ctx.Get("user_id"); exists {
-		operatorID = uid.(int64)
-	}
-
 	svc := services.NewServices()
+	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	if !ok {
+		return
+	}
 	if err := svc.UserRoleAssign(param, operatorID); err != nil {
 		global.Logger.Error("分配用户角色失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorUserRoleAssignFail)
@@ -358,6 +395,12 @@ func (c *RBACController) UserRoleList(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	currentID := currentUserID(ctx)
+	if userID != currentID {
+		if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+			return
+		}
+	}
 	roles, err := svc.UserRoleList(userID)
 	if err != nil {
 		global.Logger.Error("获取用户角色失败", zap.Error(err))
@@ -388,12 +431,11 @@ func (c *RBACController) ClusterPermissionCreate(ctx *gin.Context) {
 		return
 	}
 
-	operatorID := int64(0)
-	if uid, exists := ctx.Get("user_id"); exists {
-		operatorID = uid.(int64)
-	}
-
 	svc := services.NewServices()
+	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	if !ok {
+		return
+	}
 	perm, err := svc.ClusterPermissionCreate(param, operatorID)
 	if err != nil {
 		global.Logger.Error("创建集群权限失败", zap.Error(err))
@@ -423,6 +465,9 @@ func (c *RBACController) ClusterPermissionUpdate(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	if err := svc.ClusterPermissionUpdate(param); err != nil {
 		global.Logger.Error("更新集群权限失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorClusterPermissionUpdateFail)
@@ -452,6 +497,9 @@ func (c *RBACController) ClusterPermissionDelete(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	if err := svc.ClusterPermissionDelete(id); err != nil {
 		global.Logger.Error("删除集群权限失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorClusterPermissionDeleteFail)
@@ -482,6 +530,9 @@ func (c *RBACController) ClusterPermissionList(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		return
+	}
 	permissions, total, err := svc.ClusterPermissionList(param)
 	if err != nil {
 		global.Logger.Error("获取集群权限列表失败", zap.Error(err))
@@ -510,12 +561,11 @@ func (c *RBACController) BatchClusterPermissionCreate(ctx *gin.Context) {
 		return
 	}
 
-	operatorID := int64(0)
-	if uid, exists := ctx.Get("user_id"); exists {
-		operatorID = uid.(int64)
-	}
-
 	svc := services.NewServices()
+	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	if !ok {
+		return
+	}
 	if err := svc.BatchClusterPermissionCreate(param, operatorID); err != nil {
 		global.Logger.Error("批量分配集群权限失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorClusterPermissionCreateFail)
@@ -547,6 +597,12 @@ func (c *RBACController) UserRBACInfo(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
+	currentID := currentUserID(ctx)
+	if userID != currentID {
+		if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+			return
+		}
+	}
 	info, err := svc.GetUserWithRBACInfo(userID)
 	if err != nil {
 		global.Logger.Error("获取用户RBAC信息失败", zap.Error(err))

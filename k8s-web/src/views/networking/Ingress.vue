@@ -94,6 +94,7 @@
             <td>{{ getAge(ing.created_at) }}</td>
             <td>
               <div class="action-icons">
+                <button class="action-btn primary" title="查看详情" @click="viewIngressDetail(ing)">📋 详情</button>
                 <button class="icon-btn" title="查看 YAML" @click="viewYaml(ing)">📄</button>
                 <button v-if="canOperate" class="icon-btn danger" title="删除" @click="confirmDelete(ing)">🗑️</button>
               </div>
@@ -450,6 +451,105 @@
         </div>
       </div>
     </div>
+
+    <!-- ========== DDP Describe 抽屉 ========== -->
+    <Teleport to="body">
+      <div v-if="showDdpDrawer" class="ddp-overlay" @click="showDdpDrawer = false">
+        <Transition name="ddp-slide">
+          <div v-if="showDdpDrawer" class="ddp-panel" @click.stop>
+            <!-- Header -->
+            <div class="ddp-hd">
+              <div class="ddp-hd-top">
+                <span class="ddp-hd-icon">🌐</span>
+                <h2 class="ddp-hd-title">{{ ddpDetail?.metadata?.name || ddpIngress?.name }}</h2>
+                <span class="ddp-hd-ns">{{ ddpDetail?.metadata?.namespace || ddpIngress?.namespace }}</span>
+                <span v-if="ddpDetail" class="ddp-hd-status status-ok">
+                  <i class="ddp-led"></i>{{ ddpDetail?.spec?.ingressClassName || ddpIngress?.ingress_class || 'Ingress' }}
+                </span>
+              </div>
+              <button class="ddp-close" @click="showDdpDrawer = false">&times;</button>
+            </div>
+            <!-- Body -->
+            <div class="ddp-body">
+              <div v-if="ddpLoading" class="ddp-loading">
+                <div class="loading-spinner"></div><span>加载中…</span>
+              </div>
+              <template v-else-if="ddpDetail">
+                <!-- 基本信息 -->
+                <section class="ddp-sec">
+                  <h3 class="ddp-sec-title">基本信息</h3>
+                  <div class="ddp-kv-grid">
+                    <div class="ddp-kv"><span class="ddp-k">名称</span><span class="ddp-v">{{ ddpDetail.metadata?.name }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">命名空间</span><span class="ddp-v">{{ ddpDetail.metadata?.namespace }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">UID</span><span class="ddp-v mono">{{ ddpDetail.metadata?.uid || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">创建时间</span><span class="ddp-v">{{ ddpDetail.metadata?.creationTimestamp || '-' }}</span></div>
+                    <div class="ddp-kv"><span class="ddp-k">Ingress Class</span><span class="ddp-v">{{ ddpDetail.spec?.ingressClassName || '-' }}</span></div>
+                    <div class="ddp-kv" v-if="ddpDetail.spec?.defaultBackend"><span class="ddp-k">Default Backend</span><span class="ddp-v mono">{{ ddpDetail.spec.defaultBackend?.service?.name }}:{{ ddpDetail.spec.defaultBackend?.service?.port?.number || ddpDetail.spec.defaultBackend?.service?.port?.name }}</span></div>
+                  </div>
+                </section>
+
+                <!-- Rules -->
+                <section class="ddp-sec" v-if="ddpDetail.spec?.rules?.length">
+                  <h3 class="ddp-sec-title">Rules ({{ ddpDetail.spec.rules.length }})</h3>
+                  <div v-for="(rule, ri) in ddpDetail.spec.rules" :key="ri" class="ddp-container-card">
+                    <div class="ddp-container-name">🌍 {{ rule.host || '*' }}</div>
+                    <div class="ddp-events-list" v-if="rule.http?.paths?.length">
+                      <div class="ddp-event-row" style="font-weight:600;background:#f8fafc;">
+                        <span>Path</span><span>PathType</span><span>Service</span><span>Port</span>
+                      </div>
+                      <div v-for="(p, pi) in rule.http.paths" :key="pi" class="ddp-event-row">
+                        <span>{{ p.path || '/' }}</span>
+                        <span>{{ p.pathType || 'ImplementationSpecific' }}</span>
+                        <span>{{ p.backend?.service?.name || '-' }}</span>
+                        <span>{{ p.backend?.service?.port?.number || p.backend?.service?.port?.name || '-' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- TLS -->
+                <section class="ddp-sec" v-if="ddpDetail.spec?.tls?.length">
+                  <h3 class="ddp-sec-title">TLS ({{ ddpDetail.spec.tls.length }})</h3>
+                  <div v-for="(t, ti) in ddpDetail.spec.tls" :key="ti" class="ddp-container-card">
+                    <div class="ddp-kv-grid">
+                      <div class="ddp-kv"><span class="ddp-k">Secret</span><span class="ddp-v mono">{{ t.secretName || '-' }}</span></div>
+                      <div class="ddp-kv"><span class="ddp-k">Hosts</span><span class="ddp-v">{{ t.hosts?.join(', ') || '*' }}</span></div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Labels -->
+                <section class="ddp-sec" v-if="ddpDetail.metadata?.labels && Object.keys(ddpDetail.metadata.labels).length">
+                  <h3 class="ddp-sec-title">Labels</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="(v, k) in ddpDetail.metadata.labels" :key="k">{{ k }}={{ v }}</span>
+                  </div>
+                </section>
+
+                <!-- Annotations -->
+                <section class="ddp-sec" v-if="ddpDetail.metadata?.annotations && Object.keys(ddpDetail.metadata.annotations).length">
+                  <h3 class="ddp-sec-title ddp-fold-title" @click="ddpShowAnno = !ddpShowAnno">
+                    Annotations ({{ Object.keys(ddpDetail.metadata.annotations).length }})
+                    <span class="ddp-fold-icon">{{ ddpShowAnno ? '▾' : '▸' }}</span>
+                  </h3>
+                  <div v-if="ddpShowAnno" class="ddp-chip-list">
+                    <span class="ddp-chip anno" v-for="(v, k) in ddpDetail.metadata.annotations" :key="k" :title="v">{{ k }}={{ v?.substring?.(0, 80) }}</span>
+                  </div>
+                </section>
+
+                <!-- LoadBalancer Status -->
+                <section class="ddp-sec" v-if="ddpDetail.status?.loadBalancer?.ingress?.length">
+                  <h3 class="ddp-sec-title">LoadBalancer Status</h3>
+                  <div class="ddp-chip-list">
+                    <span class="ddp-chip" v-for="(ing, idx) in ddpDetail.status.loadBalancer.ingress" :key="idx">{{ ing.ip || ing.hostname }}</span>
+                  </div>
+                </section>
+              </template>
+            </div>
+          </div>
+        </Transition>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -492,6 +592,13 @@ const showCreateModal = ref(false)
 const showYamlModal = ref(false)
 const showDeleteModal = ref(false)
 const showBatchDeleteModal = ref(false)
+
+// DDP Describe 抽屉
+const showDdpDrawer = ref(false)
+const ddpDetail = ref(null)
+const ddpIngress = ref(null)
+const ddpLoading = ref(false)
+const ddpShowAnno = ref(false)
 
 // 创建相关
 const createMode = ref('form')
@@ -1077,6 +1184,25 @@ const createFromYaml = async () => {
     createYamlError.value = error.message || '创建失败'
   } finally {
     creating.value = false
+  }
+}
+
+// 查看详情 (DDP Drawer)
+const viewIngressDetail = async (ing) => {
+  ddpIngress.value = ing
+  ddpDetail.value = null
+  ddpShowAnno.value = false
+  ddpLoading.value = true
+  showDdpDrawer.value = true
+
+  try {
+    const res = await ingressApi.detail({ namespace: ing.namespace, name: ing.name })
+    ddpDetail.value = res.code === 0 ? (res.data?.data || res.data) : null
+  } catch (e) {
+    console.error('获取Ingress详情失败:', e)
+    ddpDetail.value = null
+  } finally {
+    ddpLoading.value = false
   }
 }
 
@@ -2099,4 +2225,41 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 13px;
 }
+
+/* ===== DDP Describe 抽屉 ===== */
+.ddp-overlay{position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.45);backdrop-filter:blur(2px)}
+.ddp-panel{position:absolute;right:0;top:0;height:100%;width:880px;max-width:92vw;display:flex;flex-direction:column;background:#f8fafc;box-shadow:-4px 0 24px rgba(0,0,0,.18)}
+.ddp-hd{padding:18px 28px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);display:flex;align-items:center;justify-content:space-between}
+.ddp-hd-top{display:flex;align-items:center;gap:10px;min-width:0}
+.ddp-hd-icon{font-size:22px}
+.ddp-hd-title{color:#fff;font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddp-hd-ns{background:rgba(255,255,255,.12);color:#93c5fd;padding:2px 10px;border-radius:20px;font-size:12px;white-space:nowrap}
+.ddp-hd-status{display:flex;align-items:center;gap:5px;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.ddp-hd-status.status-ok{background:rgba(34,197,94,.2);color:#4ade80}
+.ddp-led{width:7px;height:7px;border-radius:50%;margin-right:4px;display:inline-block;background:#4ade80;box-shadow:0 0 6px #4ade80}
+.ddp-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:28px;cursor:pointer;line-height:1;padding:0 4px}
+.ddp-close:hover{color:#fff}
+.ddp-body{flex:1;overflow-y:auto;padding:24px 28px}
+.ddp-loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:40px 0;color:#64748b}
+.ddp-sec{margin-bottom:22px}
+.ddp-sec-title{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}
+.ddp-fold-title{cursor:pointer;user-select:none}
+.ddp-fold-icon{float:right;font-size:12px;color:#94a3b8}
+.ddp-kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
+.ddp-kv{display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed #f1f5f9}
+.ddp-k{color:#64748b;min-width:100px;flex-shrink:0}
+.ddp-v{color:#1e293b;word-break:break-all}
+.ddp-v.mono{font-family:monospace;font-size:12px}
+.ddp-chip-list{display:flex;flex-wrap:wrap;gap:6px}
+.ddp-chip{background:#e0e7ff;color:#3730a3;padding:2px 10px;border-radius:12px;font-size:12px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddp-chip.anno{background:#fef3c7;color:#92400e}
+.ddp-container-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:10px}
+.ddp-container-name{font-weight:600;font-size:13px;color:#0f172a;margin-bottom:8px}
+.ddp-events-list{border:1px solid #e2e8f0;border-radius:8px;background:#fff;overflow:hidden}
+.ddp-event-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;align-items:center;gap:8px;padding:7px 12px;font-size:12px;border-bottom:1px solid #f1f5f9}
+.ddp-slide-enter-active{transition:transform .32s cubic-bezier(.4,0,.2,1)}
+.ddp-slide-leave-active{transition:transform .22s cubic-bezier(.4,0,1,1)}
+.ddp-slide-enter-from,.ddp-slide-leave-to{transform:translateX(100%)}
+.action-btn.primary{background:rgba(59,130,246,.08);color:#2563eb;border:1px solid rgba(59,130,246,.2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
+.action-btn.primary:hover{background:rgba(59,130,246,.15)}
 </style>
