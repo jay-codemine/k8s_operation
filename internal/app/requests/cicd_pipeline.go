@@ -31,6 +31,11 @@ type PipelineCreateRequest struct {
 	RequireApproval    bool   `json:"require_approval"`     // 是否需要审批
 	EnableSonar        bool   `json:"enable_sonar"`         // 是否启用 SonarQube
 	EnableArtifactUpload bool `json:"enable_artifact_upload"` // 是否启用制品上传
+
+	// 发布联动告警静默
+	EnableDeploySilence  bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则
+	SilenceBufferMinutes int    `json:"silence_buffer_minutes"`  // 静默缓冲时间(分钟)
+	SilenceSeverities    string `json:"silence_severities"`      // 静默的告警级别
 }
 
 func NewPipelineCreateRequest() *PipelineCreateRequest {
@@ -84,6 +89,11 @@ type PipelineBatchItem struct {
 	RequireApproval    bool   `json:"require_approval"`
 	EnableSonar        bool   `json:"enable_sonar"`
 	EnableArtifactUpload bool `json:"enable_artifact_upload"`
+
+	// 发布联动告警静默
+	EnableDeploySilence  bool   `json:"enable_deploy_silence"`
+	SilenceBufferMinutes int    `json:"silence_buffer_minutes"`
+	SilenceSeverities    string `json:"silence_severities"`
 }
 
 func ValidPipelineBatchCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -122,6 +132,11 @@ type PipelineUpdateRequest struct {
 	RequireApproval    *bool   `json:"require_approval"`     // 是否需要审批
 	EnableSonar        *bool   `json:"enable_sonar"`         // 是否启用 SonarQube
 	EnableArtifactUpload *bool `json:"enable_artifact_upload"` // 是否启用制品上传
+
+	// 发布联动告警静默
+	EnableDeploySilence  *bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则
+	SilenceBufferMinutes *int    `json:"silence_buffer_minutes"`  // 静默缓冲时间(分钟)
+	SilenceSeverities    *string `json:"silence_severities"`      // 静默的告警级别
 }
 
 func NewPipelineUpdateRequest() *PipelineUpdateRequest {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,12 @@ import (
 	"gorm.io/gorm"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
+)
+
+// 用于检测并渲染告警摘要中未渲染的 Prometheus 模板变量
+var (
+	crudLabelsVarRegex = regexp.MustCompile(`\{\{\s*\$labels\.(\w+)\s*\}\}`)
+	crudValueVarRegex  = regexp.MustCompile(`\{\{\s*\$value\s*\}\}`)
 )
 
 // ============================================================
@@ -40,11 +47,13 @@ type AlertRuleItem struct {
 
 // AlertRuleImportReq 批量导入请求
 type AlertRuleImportReq struct {
-	YAML                  string `json:"yaml" binding:"required"`           // YAML 内容
-	DatasourceID          int64  `json:"datasource_id" binding:"required"`  // 绑定数据源
-	Overwrite             bool   `json:"overwrite"`                         // 同名规则是否覆盖
-	DefaultNotifyChannels string `json:"default_notify_channels"`           // 默认通知渠道ID(逗号分隔),导入时自动绑定
-	AutoRoute             bool   `json:"auto_route"`                        // 是否启用路由策略自动匹配(优先级: default > auto_route)
+	YAML                  string            `json:"yaml" binding:"required"`           // YAML 内容
+	DatasourceID          int64             `json:"datasource_id" binding:"required"`  // 绑定数据源
+	Overwrite             bool              `json:"overwrite"`                         // 同名规则是否覆盖
+	DefaultNotifyChannels string            `json:"default_notify_channels"`           // 默认通知渠道ID(逗号分隔),导入时自动绑定
+	GroupChannels         map[string]string `json:"group_channels"`                    // 按组指定通知渠道 {"infra":"1,2", "app":"3"}
+	AutoRoute             bool              `json:"auto_route"`                        // 是否启用路由策略自动匹配
+	// 渠道优先级: 规则annotations.notify_channels > group_channels[组名] > default_notify_channels > auto_route
 }
 
 // AlertRuleImportResult 导入结果
@@ -66,7 +75,7 @@ func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req A
 
 	// 预加载路由策略（auto_route 模式下用于自动匹配渠道）
 	var routePolicies []models.MonitorNotifyRoutePolicy
-	if req.AutoRoute && req.DefaultNotifyChannels == "" {
+	if req.AutoRoute {
 		global.DB.WithContext(ctx).
 			Where("enabled = 1 AND is_del = 0").
 			Order("priority ASC, id ASC").
@@ -107,8 +116,24 @@ func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req A
 			summary := item.Annotations["summary"]
 			description := item.Annotations["description"]
 
-			// 决定通知渠道：显式指定 > 路由策略匹配 > 空
-			notifyChannels := req.DefaultNotifyChannels
+			// 决定通知渠道（优先级：规则 annotation > 组级映射 > 全局默认 > 路由策略）
+			notifyChannels := ""
+			
+			// 1. 最高优先级：规则自身 annotations 中指定 notify_channels
+			if ch, ok := item.Annotations["notify_channels"]; ok && ch != "" {
+				notifyChannels = ch
+			}
+			// 2. 按组指定渠道
+			if notifyChannels == "" && len(req.GroupChannels) > 0 {
+				if ch, ok := req.GroupChannels[group.Name]; ok && ch != "" {
+					notifyChannels = ch
+				}
+			}
+			// 3. 全局默认渠道
+			if notifyChannels == "" && req.DefaultNotifyChannels != "" {
+				notifyChannels = req.DefaultNotifyChannels
+			}
+			// 4. 路由策略自动匹配
 			if notifyChannels == "" && req.AutoRoute && len(routePolicies) > 0 {
 				notifyChannels = s.matchRoutePolicy(routePolicies, severity, group.Name, labelsMap)
 			}
@@ -180,11 +205,11 @@ func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req A
 }
 
 // matchRoutePolicy 根据路由策略匹配通知渠道（优先级从高到低）
+// 优先匹配有明确条件的策略；若均不匹配，回退到 IsDefault=true 的兜底策略
 func (s *MonitorCRUDService) matchRoutePolicy(policies []models.MonitorNotifyRoutePolicy, severity, group string, labels map[string]string) string {
 	for _, policy := range policies {
 		if policy.IsDefault {
-			// 兜底策略最后匹配
-			continue
+			continue // 兜底策略最后匹配
 		}
 		if s.policyMatches(&policy, severity, group, labels) {
 			return policy.ChannelIDs
@@ -700,28 +725,108 @@ func (s *MonitorCRUDService) ToggleAlertRule(ctx context.Context, id int64, enab
 // ============================================================
 
 // BatchBindChannelsReq 批量绑定通知渠道请求
+// 支持两种方式：
+//  1. 指定 rule_ids → 精确绑定
+//  2. 使用筛选条件(group/severity/keyword/datasource_id) → 按条件匹配后绑定
 type BatchBindChannelsReq struct {
-	RuleIDs        []int64 `json:"rule_ids" binding:"required"`          // 要绑定的规则 ID 列表
+	RuleIDs        []int64 `json:"rule_ids"`                             // 精确指定规则 ID 列表（优先使用）
 	NotifyChannels string  `json:"notify_channels" binding:"required"`   // 通知渠道 ID(逗号分隔)
 	Mode           string  `json:"mode"`                                 // 绑定模式: replace(替换)/append(追加)/remove(移除)
+
+	// ========= 条件匹配（当 rule_ids 为空时生效） =========
+	Group        string `json:"group"`         // 按分组匹配（精确匹配）
+	Severity     string `json:"severity"`      // 按级别匹配: critical/warning/info
+	Keyword      string `json:"keyword"`       // 按规则名称模糊匹配
+	DatasourceID int64  `json:"datasource_id"` // 按数据源匹配
+	MatchAll     bool   `json:"match_all"`     // 是否匹配所有启用的规则（慎用）
 }
 
 // BatchBindChannelsResult 批量绑定结果
 type BatchBindChannelsResult struct {
-	Total   int `json:"total"`   // 处理总数
-	Success int `json:"success"` // 成功数
-	Failed  int `json:"failed"`  // 失败数
+	Total   int    `json:"total"`   // 处理总数
+	Success int    `json:"success"` // 成功数
+	Failed  int    `json:"failed"`  // 失败数
+	Matched int    `json:"matched"` // 条件匹配到的规则数（仅条件模式返回）
+	Filter  string `json:"filter"`  // 使用的筛选条件描述
 }
 
 // BatchBindChannels 批量绑定/追加/移除通知渠道
+// 支持按 rule_ids 精确绑定或按 group/severity/keyword 条件匹配后绑定
 func (s *MonitorCRUDService) BatchBindChannels(ctx context.Context, req BatchBindChannelsReq) (*BatchBindChannelsResult, error) {
+	// 如果没有指定 rule_ids，通过条件匹配查找规则
 	if len(req.RuleIDs) == 0 {
-		return nil, fmt.Errorf("规则 ID 列表不能为空")
+		matchedIDs, filterDesc, err := s.resolveRuleIDsByFilter(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if len(matchedIDs) == 0 {
+			return &BatchBindChannelsResult{Filter: filterDesc}, fmt.Errorf("未匹配到任何告警规则，请检查筛选条件")
+		}
+		req.RuleIDs = matchedIDs
+
+		// 执行绑定并返回带匹配信息的结果
+		result, err := s.executeBatchBind(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		result.Matched = len(matchedIDs)
+		result.Filter = filterDesc
+		return result, nil
 	}
+
 	if len(req.RuleIDs) > 500 {
 		return nil, fmt.Errorf("单次最多操作 500 条规则")
 	}
 
+	return s.executeBatchBind(ctx, req)
+}
+
+// resolveRuleIDsByFilter 按条件匹配告警规则 ID
+func (s *MonitorCRUDService) resolveRuleIDsByFilter(ctx context.Context, req BatchBindChannelsReq) ([]int64, string, error) {
+	if !req.MatchAll && req.Group == "" && req.Severity == "" && req.Keyword == "" && req.DatasourceID == 0 {
+		return nil, "", fmt.Errorf("请指定 rule_ids 或至少一个筛选条件(group/severity/keyword/datasource_id/match_all)")
+	}
+
+	db := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).Where("is_del = 0 AND enabled = 1")
+
+	var conditions []string
+
+	if req.Group != "" {
+		db = db.Where("`group` = ?", req.Group)
+		conditions = append(conditions, fmt.Sprintf("group=%s", req.Group))
+	}
+	if req.Severity != "" {
+		db = db.Where("severity = ?", req.Severity)
+		conditions = append(conditions, fmt.Sprintf("severity=%s", req.Severity))
+	}
+	if req.Keyword != "" {
+		db = db.Where("name LIKE ?", "%"+req.Keyword+"%")
+		conditions = append(conditions, fmt.Sprintf("keyword=%s", req.Keyword))
+	}
+	if req.DatasourceID > 0 {
+		db = db.Where("datasource_id = ?", req.DatasourceID)
+		conditions = append(conditions, fmt.Sprintf("datasource_id=%d", req.DatasourceID))
+	}
+	if req.MatchAll {
+		conditions = append(conditions, "match_all=true")
+	}
+
+	var ruleIDs []int64
+	if err := db.Pluck("id", &ruleIDs).Error; err != nil {
+		return nil, "", err
+	}
+
+	// 安全限制：匹配数量上限
+	if len(ruleIDs) > 500 {
+		return nil, "", fmt.Errorf("匹配到 %d 条规则，超过单次上限 500，请缩小筛选范围", len(ruleIDs))
+	}
+
+	filterDesc := strings.Join(conditions, " AND ")
+	return ruleIDs, filterDesc, nil
+}
+
+// executeBatchBind 执行实际的批量绑定操作
+func (s *MonitorCRUDService) executeBatchBind(ctx context.Context, req BatchBindChannelsReq) (*BatchBindChannelsResult, error) {
 	mode := req.Mode
 	if mode == "" {
 		mode = "replace"
@@ -891,6 +996,12 @@ func (s *MonitorCRUDService) ListAlertEvents(ctx context.Context, req AlertEvent
 		return nil, err
 	}
 
+	// 后处理：对含未渲染模板变量的旧事件补充渲染
+	for i := range items {
+		items[i].Summary = renderEventTemplate(items[i].Summary, items[i].Labels, items[i].Value)
+		items[i].Description = renderEventTemplate(items[i].Description, items[i].Labels, items[i].Value)
+	}
+
 	return &AlertEventListResp{Total: total, Items: items}, nil
 }
 
@@ -901,7 +1012,46 @@ func (s *MonitorCRUDService) GetAlertEvent(ctx context.Context, id int64) (*mode
 	if err != nil {
 		return nil, err
 	}
+	// 补渲染未解析的模板变量
+	event.Summary = renderEventTemplate(event.Summary, event.Labels, event.Value)
+	event.Description = renderEventTemplate(event.Description, event.Labels, event.Value)
 	return &event, nil
+}
+
+// renderEventTemplate 对告警事件的 summary/description 做模板变量后处理渲染
+// 用于历史旧事件中含有 {{ $labels.xxx }} / {{ $value }} 未被渲染的情况
+func renderEventTemplate(tpl string, labelsJSON string, value string) string {
+	if tpl == "" {
+		return tpl
+	}
+	// 快速检查是否包含未渲染的模板变量
+	if !strings.Contains(tpl, "{{") {
+		return tpl
+	}
+
+	// 解析事件存储的 labels JSON
+	labels := make(map[string]string)
+	if labelsJSON != "" {
+		_ = json.Unmarshal([]byte(labelsJSON), &labels)
+	}
+
+	// 替换 {{ $value }}
+	result := crudValueVarRegex.ReplaceAllString(tpl, value)
+
+	// 替换 {{ $labels.xxx }}
+	result = crudLabelsVarRegex.ReplaceAllStringFunc(result, func(match string) string {
+		submatch := crudLabelsVarRegex.FindStringSubmatch(match)
+		if len(submatch) < 2 {
+			return match
+		}
+		labelName := submatch[1]
+		if v, ok := labels[labelName]; ok {
+			return v
+		}
+		return "<" + labelName + ":未知>"
+	})
+
+	return result
 }
 
 // AckAlertEvent 确认告警

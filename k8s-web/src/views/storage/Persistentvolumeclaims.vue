@@ -2157,48 +2157,76 @@ onUnmounted(() => {
 .load-template-btn,
 .copy-yaml-btn,
 .reset-yaml-btn {
-  padding: 6px 12px;
-  font-size: 12px;
-  background: #e2e8f0;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s;
+  color: #fff;
 }
 
-.load-template-btn:hover,
-.copy-yaml-btn:hover,
+.load-template-btn {
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+}
+
+.copy-yaml-btn {
+  background: linear-gradient(135deg, #059669, #047857);
+}
+
+.reset-yaml-btn {
+  background: linear-gradient(135deg, #64748b, #475569);
+}
+
+.load-template-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+.copy-yaml-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+}
+
 .reset-yaml-btn:hover {
-  background: #cbd5e0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
 
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  padding: 16px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
-  line-height: 1.5;
-  border: 1px solid #cbd5e0;
-  border-radius: 8px;
-  background-color: #f7fafc;
-  color: #2d3748;
+  line-height: 1.6;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
   resize: vertical;
+  tab-size: 2;
+  transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.yaml-editor::placeholder {
+  color: #94a3b8;
 }
 
 .yaml-error {
   margin-top: 12px;
-  padding: 12px;
-  background: #fff5f5;
-  border: 1px solid #feb2b2;
-  border-radius: 6px;
-  color: #c53030;
+  padding: 12px 16px;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  color: #dc2626;
   font-size: 13px;
   display: flex;
   align-items: center;
@@ -2210,21 +2238,22 @@ onUnmounted(() => {
 }
 
 .yaml-editor-footer {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .yaml-tips {
-  padding: 12px;
-  background: #ebf8ff;
-  border-left: 4px solid #4299e1;
-  border-radius: 6px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   font-size: 13px;
-  color: #2c5282;
+  color: #475569;
 }
 
 .yaml-tips strong {
   display: block;
   margin-bottom: 8px;
+  color: #1f2937;
 }
 
 .yaml-tips ul {
@@ -2234,6 +2263,7 @@ onUnmounted(() => {
 
 .yaml-tips li {
   margin-bottom: 4px;
+  line-height: 1.6;
 }
 
 /* ==========================

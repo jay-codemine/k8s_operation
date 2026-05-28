@@ -25,6 +25,8 @@ var (
 	auditCleanupWorker *worker.AuditCleanupWorker
 	// alertEvalWorker 告警规则评估 Worker
 	alertEvalWorker *worker.AlertEvalWorker
+	// aiopsInspectionWorker AIOps 智能巡检 Worker
+	aiopsInspectionWorker *worker.AIOpsInspectionWorker
 )
 
 func InitAll() error {
@@ -99,6 +101,17 @@ func InitAll() error {
 	alertEvalWorker = worker.NewAlertEvalWorker()
 	alertEvalWorker.Start()
 
+	// AIOps: 自动建表（如果不存在）
+	if global.DB != nil {
+		global.DB.AutoMigrate(&models.AIOpsAnalysisRecord{}, &models.AIOpsInspectionReport{})
+	}
+
+	// 启动 AIOps 智能巡检 Worker（每 6 小时自动巡检 + AI 分析）
+	if global.AISetting != nil && global.AISetting.Enabled {
+		aiopsInspectionWorker = worker.NewAIOpsInspectionWorker()
+		aiopsInspectionWorker.Start()
+	}
+
 	return nil
 }
 
@@ -156,6 +169,9 @@ func StopCicdWorker() {
 	}
 	if alertEvalWorker != nil {
 		alertEvalWorker.Stop()
+	}
+	if aiopsInspectionWorker != nil {
+		aiopsInspectionWorker.Stop()
 	}
 }
 

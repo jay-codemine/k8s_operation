@@ -409,3 +409,35 @@ func ValidKubeDeploymentRolloutStatusRequest(data interface{}, ctx *gin.Context)
 	}
 	return valid.ValidateOptions(data, rules, messages)
 }
+
+// ---------------------- Deployment 资源快速修改 ----------------------
+
+func NewKubeDeploymentUpdateResourcesRequest() *KubeDeploymentUpdateResourcesRequest {
+	return &KubeDeploymentUpdateResourcesRequest{}
+}
+
+// KubeDeploymentUpdateResourcesRequest 快速修改容器资源限制
+type KubeDeploymentUpdateResourcesRequest struct {
+	KubeCommonRequest
+	Container     string `json:"container" valid:"container"`           // 容器名称
+	CPURequest    string `json:"cpu_request" valid:"cpu_request"`       // CPU Request (如 100m)
+	CPULimit      string `json:"cpu_limit" valid:"cpu_limit"`           // CPU Limit (如 500m)
+	MemoryRequest string `json:"memory_request" valid:"memory_request"` // Memory Request (如 128Mi)
+	MemoryLimit   string `json:"memory_limit" valid:"memory_limit"`     // Memory Limit (如 512Mi)
+}
+
+func ValidKubeDeploymentUpdateResourcesRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"namespace":      []string{"required"},
+		"name":           []string{"required"},
+		"container":      []string{"required"},
+		"memory_limit":   []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"namespace":      []string{"required: namespace 不能为空"},
+		"name":           []string{"required: name 不能为空"},
+		"container":      []string{"required: container 不能为空"},
+		"memory_limit":   []string{"required: memory_limit 不能为空，防 OOM 必须设置内存上限"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}

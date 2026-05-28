@@ -429,46 +429,23 @@
           </div>
           
           <!-- YAML 模式 -->
-          <div v-if="createMode === 'yaml'" class="yaml-create-section">
-            <div class="yaml-toolbar">
-              <button type="button" class="btn btn-sm btn-secondary" @click="loadSecretYamlTemplate">
-                📋 加载模板
-              </button>
-              <button type="button" class="btn btn-sm btn-secondary" @click="clearYamlContent">
-                🗑️ 清空
-              </button>
-              <button type="button" class="btn btn-sm btn-secondary" @click="formatYaml">
-                ✨ 格式化
-              </button>
+          <div v-if="createMode === 'yaml'" class="yaml-editor-section">
+            <div class="yaml-editor-header">
+              <h3>📄 YAML 配置</h3>
+              <p class="yaml-hint">✨ 支持多资源 YAML 创建（用 <code>---</code> 分隔），可同时创建 ConfigMap、Secret 等组合资源</p>
+              <div class="yaml-header-buttons">
+                <button type="button" class="load-template-btn" @click="loadSecretYamlTemplate">📑 加载模板（Secret）</button>
+                <button type="button" class="copy-yaml-btn" @click="copyCreateYaml" v-if="createYamlContent">📋 复制</button>
+                <button type="button" class="clear-yaml-btn" @click="clearYamlContent">🗑️ 清除</button>
+              </div>
             </div>
             
-            <div class="yaml-editor-container">
-              <div class="yaml-editor-wrapper">
-                <div class="editor-label">YAML 内容</div>
-                <textarea 
-                  v-model="createYamlContent" 
-                  class="yaml-editor create-yaml-editor"
-                  spellcheck="false"
-                  placeholder="apiVersion: v1
-kind: Secret
-metadata:
-  name: my-secret
-  namespace: default
-type: Opaque
-stringData:
-  username: admin
-  password: secret123"
-                ></textarea>
-              </div>
-              
-              <div class="yaml-preview-wrapper">
-                <div class="editor-label">预览</div>
-                <div class="yaml-preview">
-                  <pre v-if="yamlPreviewContent">{{ yamlPreviewContent }}</pre>
-                  <div v-else class="preview-placeholder">在左侧输入 YAML 内容后显示预览</div>
-                </div>
-              </div>
-            </div>
+            <textarea 
+              v-model="createYamlContent" 
+              class="yaml-editor-dark"
+              spellcheck="false"
+              placeholder="输入或粘贴 YAML 内容..."
+            ></textarea>
             
             <div v-if="createYamlError" class="yaml-error">
               <span class="error-icon">⚠️</span>
@@ -1211,6 +1188,13 @@ const clearYamlContent = () => {
   createYamlContent.value = ''
   yamlPreviewContent.value = ''
   createYamlError.value = ''
+}
+
+const copyCreateYaml = () => {
+  if (createYamlContent.value) {
+    navigator.clipboard.writeText(createYamlContent.value)
+    alert('已复制到剪贴板')
+  }
 }
 
 // 格式化 YAML
@@ -2780,69 +2764,110 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.yaml-editor-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  flex: 1;
-  min-height: 400px;
-}
-
-.yaml-editor-wrapper,
-.yaml-preview-wrapper {
+/* ========== 统一 YAML 编辑器样式（大厂风格）========== */
+.yaml-editor-section {
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  gap: 16px;
 }
 
-.editor-label {
-  padding: 10px 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e8e8e8;
-  font-weight: 500;
-  font-size: 13px;
-  color: #333;
+.yaml-editor-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.create-yaml-editor {
-  flex: 1;
-  width: 100%;
-  min-height: 350px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  border: none;
-  padding: 16px;
-  resize: none;
-  background: #1e1e1e;
-  color: #d4d4d4;
-}
-
-.create-yaml-editor:focus {
-  outline: none;
-}
-
-.yaml-preview {
-  flex: 1;
-  overflow-y: auto;
-  background: #f5f5f5;
-}
-
-.yaml-preview pre {
+.yaml-editor-header h3 {
   margin: 0;
-  padding: 16px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-  word-break: break-all;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
-.preview-placeholder {
-  padding: 40px;
-  text-align: center;
-  color: #999;
+.yaml-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.yaml-hint code {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.yaml-header-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.load-template-btn,
+.copy-yaml-btn,
+.clear-yaml-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #fff;
+}
+
+.load-template-btn {
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+}
+
+.copy-yaml-btn {
+  background: linear-gradient(135deg, #059669, #047857);
+}
+
+.clear-yaml-btn {
+  background: linear-gradient(135deg, #64748b, #475569);
+}
+
+.load-template-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+.copy-yaml-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+}
+
+.clear-yaml-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
+}
+
+.yaml-editor-dark {
+  width: 100%;
+  min-height: 400px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
+  resize: vertical;
+  tab-size: 2;
+  transition: all 0.2s;
+}
+
+.yaml-editor-dark:focus {
+  outline: none;
+  border-color: #326ce5;
+  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.3);
+}
+
+.yaml-editor-dark::placeholder {
+  color: #94a3b8;
 }
 
 .yaml-error {

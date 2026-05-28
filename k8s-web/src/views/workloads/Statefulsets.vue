@@ -637,6 +637,9 @@
                 <button class="load-template-btn" @click="loadStatefulSetYamlTemplate">
                   📑 加载模板（PVC + StatefulSet）
                 </button>
+                <button class="copy-yaml-btn" @click="copyYamlContent" v-if="yamlContent">
+                  📋 复制
+                </button>
                 <button class="clear-yaml-btn" @click="clearYamlContent">
                   🗑️ 清除
                 </button>
@@ -3211,6 +3214,21 @@ const clearYamlContent = () => {
   Message.success({ content: 'YAML 内容已清除' })
 }
 
+// 复制 YAML 内容到剪贴板
+const copyYamlContent = async () => {
+  if (!yamlContent.value.trim()) {
+    Message.warning({ content: '没有内容可复制' })
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(yamlContent.value)
+    Message.success({ content: 'YAML 内容已复制到剪贴板' })
+  } catch (err) {
+    console.error('复制失败:', err)
+    Message.error({ content: '复制失败，请手动复制' })
+  }
+}
+
 const createStatefulSetFromYaml = async () => {
   if (!yamlContent.value.trim()) {
     Message.error({ content: '请输入 YAML 内容' })
@@ -3762,7 +3780,7 @@ const createStatefulSetFromYaml = async () => {
 
 .load-template-btn {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #326ce5 0%, #2554c7 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -3770,18 +3788,37 @@ const createStatefulSetFromYaml = async () => {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(50, 108, 229, 0.3);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .load-template-btn:hover {
-  background: linear-gradient(135deg, #2554c7 0%, #1e429f 100%);
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(50, 108, 229, 0.4);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+.copy-yaml-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.copy-yaml-btn:hover {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
 }
 
 .clear-yaml-btn {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -3793,31 +3830,31 @@ const createStatefulSetFromYaml = async () => {
 }
 
 .clear-yaml-btn:hover {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
 
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  max-height: 500px;
-  padding: 16px;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
   resize: vertical;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  tab-size: 2;
+  transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.3);
-  background: #1e1e1e;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-error {
@@ -3825,8 +3862,8 @@ const createStatefulSetFromYaml = async () => {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
   border-radius: 8px;
   color: #dc2626;
   font-size: 14px;
@@ -3837,7 +3874,8 @@ const createStatefulSetFromYaml = async () => {
 }
 
 .yaml-editor-footer {
-  background: #f7fafc;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   padding: 16px;
   border-radius: 8px;
 }

@@ -804,11 +804,26 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 	logs.WriteString(fmt.Sprintf("容器: %s\n", container))
 	logs.WriteString(fmt.Sprintf("新镜像: %s\n\n", image))
 
+	// ===== 发布联动告警静默 =====
+	var silenceRuleID int64
+	pipeline, _ := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	if pipeline != nil && pipeline.EnableDeploySilence {
+		silenceInfo, silenceErr := s.CreateDeploySilence(ctx, pipeline, namespace, workloadName)
+		if silenceErr != nil {
+			logs.WriteString(fmt.Sprintf("[WARN] 创建发布静默规则失败（不影响部署）: %v\n", silenceErr))
+		} else if silenceInfo != nil {
+			silenceRuleID = silenceInfo.SilenceRuleID
+			logs.WriteString(fmt.Sprintf("[INFO] 发布静默已生效，规则ID: %d，级别: %s\n", silenceRuleID, pipeline.SilenceSeverities))
+		}
+		s.updateStageLogsIfNeeded(ctx, stageID, logs.String())
+	}
+
 	// 初始化 K8s 客户端
 	client, err := s.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: uint32(clusterID)})
 	if err != nil {
 		errMsg := fmt.Sprintf("初始化集群客户端失败: %v", err)
 		logs.WriteString(fmt.Sprintf("[ERROR] %s\n", errMsg))
+		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
 		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, "")
 		return
 	}
@@ -842,8 +857,15 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 	if err != nil {
 		errMsg := fmt.Sprintf("更新镜像失败: %v", err)
 		logs.WriteString(fmt.Sprintf("[ERROR] %s\n", errMsg))
+		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
 		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, oldImage)
 		return
+	}
+
+	// 部署成功，释放静默（延续2分钟后解除）
+	s.ReleaseDeploySilence(ctx, silenceRuleID, true)
+	if silenceRuleID > 0 {
+		logs.WriteString("[INFO] 发布静默将在2分钟后自动解除\n")
 	}
 
 	logs.WriteString(fmt.Sprintf("\n[%s] 部署完成\n", time.Now().Format("2006-01-02 15:04:05")))

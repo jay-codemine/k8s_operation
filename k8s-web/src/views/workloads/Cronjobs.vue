@@ -3643,23 +3643,23 @@ onUnmounted(() => {
 .yaml-editor {
   width: 100%;
   min-height: 500px;
-  padding: 16px;
+  padding: 20px;
   border: 2px solid #334155;
   border-radius: 12px;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
   resize: vertical;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: #1e293b;
+  color: #e2e8f0;
+  tab-size: 2;
   transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  background: #1e1e1e;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.3);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-editor::placeholder {
@@ -3912,63 +3912,82 @@ onUnmounted(() => {
 }
 
 .load-template-btn {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .load-template-btn:hover {
-  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.5);
-  transform: translateY(-1px);
-}
-
-.load-template-btn:active {
-  background: #020617;
-  transform: translateY(0);
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+  transform: translateY(-2px);
 }
 
 .copy-yaml-btn {
-  background: #10b981;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
   color: white;
   border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
 }
 
 .copy-yaml-btn:hover {
-  background: #059669;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+  transform: translateY(-2px);
 }
 
 .reset-yaml-btn {
-  background: #f1f5f9;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
 }
 
 .reset-yaml-btn:hover {
-  background: #e2e8f0;
-  color: #475569;
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
+  transform: translateY(-2px);
 }
 
 .yaml-editor {
   width: 100%;
-  min-height: 350px;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  min-height: 400px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
   background: #1e293b;
   color: #e2e8f0;
-  border: 1px solid #334155;
-  border-radius: 8px;
+  border: 2px solid #334155;
+  border-radius: 12px;
   resize: vertical;
+  tab-size: 2;
+  transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.2);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-error {
@@ -3976,8 +3995,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
   border-radius: 8px;
   color: #dc2626;
   font-size: 13px;
@@ -3989,6 +4008,7 @@ onUnmounted(() => {
 
 .yaml-editor-footer {
   background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 16px;
 }
@@ -4001,7 +4021,7 @@ onUnmounted(() => {
 .yaml-tips strong {
   display: block;
   margin-bottom: 8px;
-  color: #1f2937;
+  color: #2d3748;
 }
 
 .yaml-tips ul {

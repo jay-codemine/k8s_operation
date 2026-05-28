@@ -3279,6 +3279,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/deploy-silence-status": {
+            "get": {
+                "description": "查看当前流水线是否有活跃的发布静默规则",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取流水线发布静默状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "pipeline_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回静默状态",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/detail": {
             "get": {
                 "description": "获取流水线的完整配置信息",
@@ -7951,6 +7981,54 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/requests.KubeDeploymentUpdateImageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/deployment/update-resources": {
+            "post": {
+                "description": "直接修改 Deployment 容器的 CPU/Memory requests/limits，用于快速应对 OOM 等场景",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s Deployment 管理"
+                ],
+                "summary": "快速修改容器资源限制",
+                "parameters": [
+                    {
+                        "description": "资源配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeDeploymentUpdateResourcesRequest"
                         }
                     }
                 ],
@@ -18479,6 +18557,37 @@ const docTemplate = `{
         "requests.KubeDeploymentUpdateRequest": {
             "type": "object"
         },
+        "requests.KubeDeploymentUpdateResourcesRequest": {
+            "type": "object",
+            "properties": {
+                "container": {
+                    "description": "容器名称",
+                    "type": "string"
+                },
+                "cpu_limit": {
+                    "description": "CPU Limit (如 500m)",
+                    "type": "string"
+                },
+                "cpu_request": {
+                    "description": "CPU Request (如 100m)",
+                    "type": "string"
+                },
+                "memory_limit": {
+                    "description": "Memory Limit (如 512Mi)",
+                    "type": "string"
+                },
+                "memory_request": {
+                    "description": "Memory Request (如 128Mi)",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                }
+            }
+        },
         "requests.KubeEventListRequest": {
             "type": "object",
             "properties": {
@@ -19342,6 +19451,10 @@ const docTemplate = `{
                 "enable_artifact_upload": {
                     "type": "boolean"
                 },
+                "enable_deploy_silence": {
+                    "description": "发布联动告警静默",
+                    "type": "boolean"
+                },
                 "enable_sonar": {
                     "type": "boolean"
                 },
@@ -19370,6 +19483,12 @@ const docTemplate = `{
                 },
                 "require_approval": {
                     "type": "boolean"
+                },
+                "silence_buffer_minutes": {
+                    "type": "integer"
+                },
+                "silence_severities": {
+                    "type": "string"
                 },
                 "target_cluster_id": {
                     "type": "integer"
@@ -19479,6 +19598,10 @@ const docTemplate = `{
                     "description": "是否启用制品上传",
                     "type": "boolean"
                 },
+                "enable_deploy_silence": {
+                    "description": "发布联动告警静默",
+                    "type": "boolean"
+                },
                 "enable_sonar": {
                     "description": "是否启用 SonarQube",
                     "type": "boolean"
@@ -19511,6 +19634,14 @@ const docTemplate = `{
                 "require_approval": {
                     "description": "是否需要审批",
                     "type": "boolean"
+                },
+                "silence_buffer_minutes": {
+                    "description": "静默缓冲时间(分钟)",
+                    "type": "integer"
+                },
+                "silence_severities": {
+                    "description": "静默的告警级别",
+                    "type": "string"
                 },
                 "target_cluster_id": {
                     "description": "目标集群ID",
@@ -19623,6 +19754,10 @@ const docTemplate = `{
                     "description": "是否启用制品上传",
                     "type": "boolean"
                 },
+                "enable_deploy_silence": {
+                    "description": "发布联动告警静默",
+                    "type": "boolean"
+                },
                 "enable_sonar": {
                     "description": "是否启用 SonarQube",
                     "type": "boolean"
@@ -19658,6 +19793,14 @@ const docTemplate = `{
                 "require_approval": {
                     "description": "是否需要审批",
                     "type": "boolean"
+                },
+                "silence_buffer_minutes": {
+                    "description": "静默缓冲时间(分钟)",
+                    "type": "integer"
+                },
+                "silence_severities": {
+                    "description": "静默的告警级别",
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"

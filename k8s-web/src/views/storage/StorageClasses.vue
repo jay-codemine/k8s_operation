@@ -272,16 +272,49 @@
           </div>
 
           <!-- YAML 模式 -->
-          <div v-else class="yaml-mode">
-            <textarea v-model="createYamlContent" placeholder="请输入 StorageClass YAML 配置..." class="yaml-editor"></textarea>
-            <div v-if="createYamlError" class="error-message">{{ createYamlError }}</div>
+          <div v-else class="yaml-editor-container">
+            <div class="yaml-editor-header">
+              <h3>📄 YAML 配置</h3>
+              <p class="yaml-hint">✨ 支持多资源 YAML 创建（用 <code>---</code> 分隔），可同时创建 StorageClass 等存储资源</p>
+              <div class="yaml-header-buttons">
+                <button class="load-template-btn" @click="loadYamlTemplate">
+                  📑 加载模板（StorageClass）
+                </button>
+                <button class="copy-yaml-btn" @click="copyYamlContent" v-if="createYamlContent">
+                  📋 复制
+                </button>
+                <button class="clear-yaml-btn" @click="createYamlContent = ''">
+                  🗑️ 清除
+                </button>
+              </div>
+            </div>
+            <textarea 
+              v-model="createYamlContent" 
+              class="yaml-editor"
+              placeholder="输入或粘贴 YAML 内容..."
+              spellcheck="false"
+            ></textarea>
+            <div v-if="createYamlError" class="yaml-error">
+              <span class="error-icon">⚠️</span>
+              {{ createYamlError }}
+            </div>
+            <div class="yaml-editor-footer">
+              <div class="yaml-tips">
+                <strong>💡 提示：</strong>
+                <ul>
+                  <li>支持完整的 Kubernetes StorageClass 配置</li>
+                  <li>可以通过"加载模板"获取示例 YAML</li>
+                  <li>创建前会验证 YAML 格式的正确性</li>
+                  <li>支持设置 provisioner、回收策略、绑定模式等参数</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeCreateModal">取消</button>
-          <button v-if="createMode === 'yaml'" class="btn btn-link" @click="loadYamlTemplate">加载 YAML 模板</button>
           <button class="btn btn-primary" @click="createMode === 'form' ? createFromForm() : createFromYaml()" :disabled="creating">
-            {{ creating ? '创建中...' : '创建' }}
+            {{ creating ? '创建中...' : (createMode === 'yaml' ? '🗄️ 从 YAML 创建' : '创建') }}
           </button>
         </div>
       </div>
@@ -782,6 +815,13 @@ volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 parameters:
   type: pd-standard`
+}
+
+const copyYamlContent = () => {
+  if (createYamlContent.value) {
+    navigator.clipboard.writeText(createYamlContent.value)
+    alert('已复制到剪贴板')
+  }
 }
 
 const createFromYaml = async () => {
@@ -1679,22 +1719,64 @@ onUnmounted(() => {
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  font-family: 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 13px;
-  padding: 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  line-height: 1.6;
+  padding: 20px;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
   resize: vertical;
+  background: #1e293b;
+  color: #e2e8f0;
+  outline: none;
+  tab-size: 2;
 }
+.yaml-editor:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
+.yaml-editor::placeholder { color: #64748b; }
 
-.error-message {
-  margin-top: 12px;
-  padding: 12px;
-  background: #fee2e2;
-  color: #dc2626;
-  border-radius: 6px;
-  font-size: 13px;
+/* YAML 编辑器容器 */
+.yaml-editor-container { padding: 0; }
+.yaml-editor-header { margin-bottom: 16px; }
+.yaml-editor-header h3 { margin: 0 0 6px; font-size: 16px; color: #1e293b; }
+.yaml-hint { margin: 0 0 12px; font-size: 13px; color: #64748b; }
+.yaml-hint code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #4f46e5; }
+.yaml-header-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.load-template-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  transition: all 0.2s;
 }
+.load-template-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
+.copy-yaml-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #059669, #047857);
+  transition: all 0.2s;
+}
+.copy-yaml-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
+.clear-yaml-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #64748b, #475569);
+  transition: all 0.2s;
+}
+.clear-yaml-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(100,116,139,0.3); }
+
+.yaml-error {
+  margin-top: 12px; padding: 12px 16px; background: #fef2f2; color: #dc2626;
+  border-radius: 8px; font-size: 13px; border: 1px solid #fecaca;
+  display: flex; align-items: center; gap: 8px;
+}
+.error-icon { font-size: 16px; }
+
+.yaml-editor-footer { margin-top: 16px; }
+.yaml-tips {
+  padding: 16px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;
+}
+.yaml-tips strong { font-size: 14px; color: #1e293b; }
+.yaml-tips ul { margin: 8px 0 0; padding-left: 20px; }
+.yaml-tips li { font-size: 13px; color: #64748b; margin-bottom: 4px; }
 
 .modal-footer {
   padding: 16px 24px;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -194,11 +195,14 @@ func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAle
 	labelsJSON, _ := json.Marshal(mergedLabels)
 	annotationsJSON := rule.Annotations
 
-	// 生成摘要（替换简单模板变量）
-	summary := rule.Summary
+	// 生成摘要（渲染 Prometheus 风格模板变量：{{ $labels.instance }}, {{ $value }} 等）
+	summary := renderPromTemplate(rule.Summary, mergedLabels, value)
 	if summary == "" {
 		summary = fmt.Sprintf("告警规则 [%s] 触发，当前值: %s", rule.Name, value)
 	}
+
+	// 渲染描述模板
+	description := renderPromTemplate(rule.Description, mergedLabels, value)
 
 	event := &models.MonitorAlertEvent{
 		RuleID:       rule.ID,
@@ -210,7 +214,7 @@ func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAle
 		Labels:       string(labelsJSON),
 		Annotations:  annotationsJSON,
 		Summary:      summary,
-		Description:  rule.Description,
+		Description:  description,
 		FiredAt:      now,
 	}
 
@@ -414,4 +418,43 @@ func parseLabelsJSON(labelsStr string) map[string]string {
 		_ = json.Unmarshal([]byte(labelsStr), &labels)
 	}
 	return labels
+}
+
+// ============================================================
+// Prometheus 风格模板变量解析
+// 支持 {{ $labels.instance }}, {{ $value }} 等变量替换
+// ============================================================
+
+// 匹配 {{ $labels.xxx }} 和 {{ $value }} 模式
+var (
+	labelsVarRegex = regexp.MustCompile(`\{\{\s*\$labels\.(\w+)\s*\}\}`)
+	valueVarRegex  = regexp.MustCompile(`\{\{\s*\$value\s*\}\}`)
+)
+
+// renderPromTemplate 渲染 Prometheus 风格的模板变量
+// 将 {{ $labels.instance }} 替换为实际标签值，{{ $value }} 替换为触发值
+func renderPromTemplate(tpl string, labels map[string]string, value string) string {
+	if tpl == "" {
+		return tpl
+	}
+
+	// 替换 {{ $value }}
+	result := valueVarRegex.ReplaceAllString(tpl, value)
+
+	// 替换 {{ $labels.xxx }}
+	result = labelsVarRegex.ReplaceAllStringFunc(result, func(match string) string {
+		// 提取标签名
+		submatch := labelsVarRegex.FindStringSubmatch(match)
+		if len(submatch) < 2 {
+			return match
+		}
+		labelName := submatch[1]
+		if v, ok := labels[labelName]; ok {
+			return v
+		}
+		// 标签不存在时返回 <unknown>，便于排查
+		return "<" + labelName + ":unknown>"
+	})
+
+	return result
 }

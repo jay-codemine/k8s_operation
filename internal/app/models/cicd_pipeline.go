@@ -177,6 +177,11 @@ type CicdPipeline struct {
 	EnableSonar          bool   `gorm:"column:enable_sonar" json:"enable_sonar"`                        // 是否启用 SonarQube 代码扫描
 	EnableArtifactUpload bool   `gorm:"column:enable_artifact_upload" json:"enable_artifact_upload"`    // 是否启用制品上传
 
+	// 发布联动告警静默
+	EnableDeploySilence  bool   `gorm:"column:enable_deploy_silence" json:"enable_deploy_silence"`      // 部署时自动创建静默规则
+	SilenceBufferMinutes int    `gorm:"column:silence_buffer_minutes;default:10" json:"silence_buffer_minutes"` // 静默缓冲时间(分钟)，部署完成后延长静默
+	SilenceSeverities    string `gorm:"column:silence_severities;size:100;default:'warning,info'" json:"silence_severities"` // 静默的告警级别(逗号分隔)，critical 默认不静默
+
 	// 最新部署信息
 	LastDeployImage   string `gorm:"column:last_deploy_image" json:"last_deploy_image"`     // 最新部署镜像
 	LastDeployDigest  string `gorm:"column:last_deploy_digest" json:"last_deploy_digest"`   // 最新部署镜像摘要

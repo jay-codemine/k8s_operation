@@ -748,3 +748,35 @@ func (c *PipelineController) SonarCallback(ctx *gin.Context) {
 
 	rsp.Success(gin.H{"message": "SonarQube 报告已保存"})
 }
+
+// DeploySilenceStatus godoc
+// @Summary 获取流水线发布静默状态
+// @Description 查看当前流水线是否有活跃的发布静默规则
+// @Tags CICD Pipeline
+// @Produce json
+// @Param pipeline_id query int true "流水线ID"
+// @Success 200 {object} map[string]any "返回静默状态"
+// @Router /api/v1/k8s/cicd/pipeline/deploy-silence-status [get]
+func (c *PipelineController) DeploySilenceStatus(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("pipeline_id")
+	pipelineID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || pipelineID <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的流水线ID"))
+		return
+	}
+
+	svc := services.NewServices()
+	rules, err := svc.GetActiveDeploySilences(ctx.Request.Context(), pipelineID)
+	if err != nil {
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{
+		"active":     len(rules) > 0,
+		"count":      len(rules),
+		"rules":      rules,
+	})
+}

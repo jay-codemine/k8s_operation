@@ -51,6 +51,7 @@ const router = createRouter({
         // 平台级：集群列表（选集群入口）
         {path: 'clusters', component: () => import('@/views/cluster/Clusters.vue')},
         { path: 'platform/health', component: () => import('@/views/platform/health/PlatformHealth.vue') },
+        { path: 'platform/aiops', component: () => import('@/views/platform/AIOps.vue') },
         { path: 'platform/appstore', component: () => import('@/views/platform/appstore/AppStore.vue') },
         { path: 'platform/appstore/records', component: () => import('@/views/platform/appstore/AppInstallRecords.vue') },
         { path: 'platform/appstore/install/:id', component: () => import('@/views/platform/appstore/AppInstallDetail.vue') },

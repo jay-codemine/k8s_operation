@@ -428,59 +428,39 @@
           <!-- YAML 编辑器头部 -->
           <div class="yaml-editor-header">
             <h3>📄 YAML 配置</h3>
+            <p class="yaml-hint">✨ 支持多资源 YAML 创建（用 <code>---</code> 分隔），可同时创建 PV、StorageClass 等存储资源</p>
             <div class="yaml-header-buttons">
               <button class="load-template-btn" @click="loadPVYamlTemplate">
-                📂 加载模板
+                📑 加载模板（PersistentVolume）
+              </button>
+              <button class="copy-yaml-btn" @click="copyCreateYaml" v-if="createYamlContent">
+                📋 复制
               </button>
               <button class="clear-yaml-btn" @click="clearCreateYaml">
                 🗑️ 清除
               </button>
             </div>
           </div>
-          
-          <div class="yaml-editor-wrapper">
-            <textarea 
-              v-model="createYamlContent" 
-              class="yaml-editor"
-              placeholder="请输入 PersistentVolume YAML 配置..."
-              rows="20"
-            ></textarea>
-          </div>
-          
-          <div v-if="createYamlError" class="error-message">
+                  
+          <textarea 
+            v-model="createYamlContent" 
+            class="yaml-editor"
+            placeholder="输入或粘贴 YAML 内容..."
+            spellcheck="false"
+          ></textarea>
+                  
+          <div v-if="createYamlError" class="yaml-error">
+            <span class="error-icon">⚠️</span>
             {{ createYamlError }}
           </div>
-          
-          <!-- YAML 预览区域 -->
-          <div v-if="createYamlContent.trim()" class="yaml-preview-section">
-            <div class="preview-header">
-              <h4>🔍 YAML 预览</h4>
-            </div>
-            <div class="preview-content">
-              <div class="preview-item">
-                <span class="preview-label">📝 内容长度:</span>
-                <span class="preview-value">{{ createYamlContent.length }} 字符</span>
-              </div>
-              <div class="preview-item">
-                <span class="preview-label">📋 行数:</span>
-                <span class="preview-value">{{ createYamlContent.split('\n').length }} 行</span>
-              </div>
-              <div class="preview-item">
-                <span class="preview-label">✅ 基本检查:</span>
-                <span class="preview-value" :class="validateYamlBasic() ? 'valid' : 'invalid'">
-                  {{ validateYamlBasic() ? '包含必要字段' : '缺少必要字段' }}
-                </span>
-              </div>
-            </div>
-          </div>
-          
+                  
           <!-- YAML 提示 -->
           <div class="yaml-editor-footer">
             <div class="yaml-tips">
               <strong>💡 提示：</strong>
               <ul>
                 <li>支持完整的 Kubernetes PersistentVolume 配置</li>
-                <li>可以通过“加载模板”获取示例 YAML</li>
+                <li>可以通过"加载模板"获取示例 YAML</li>
                 <li>创建前会验证 YAML 格式的正确性</li>
                 <li>支持 HostPath、NFS、Ceph RBD 等多种存储类型</li>
               </ul>
@@ -1221,6 +1201,35 @@ const jumpToPage = () => {
   const page = parseInt(jumpPage.value)
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
+  }
+}
+
+// =============== YAML 辅助方法 ===============
+const loadPVYamlTemplate = () => {
+  createYamlContent.value = `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/data`
+}
+
+const clearCreateYaml = () => {
+  createYamlContent.value = ''
+  createYamlError.value = ''
+}
+
+const copyCreateYaml = () => {
+  if (createYamlContent.value) {
+    navigator.clipboard.writeText(createYamlContent.value)
+    alert('已复制到剪贴板')
   }
 }
 
@@ -2330,20 +2339,70 @@ onUnmounted(() => {
 
 .yaml-editor-wrapper,
 .yaml-viewer-wrapper {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
   overflow: hidden;
 }
 
 .yaml-editor {
   width: 100%;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  min-height: 400px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
-  border: none;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
   resize: vertical;
+  background: #1e293b;
+  color: #e2e8f0;
+  outline: none;
+  tab-size: 2;
 }
+.yaml-editor:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
+.yaml-editor::placeholder { color: #64748b; }
+
+/* YAML 编辑器容器 */
+.yaml-editor-container { padding: 0; }
+.yaml-editor-header { margin-bottom: 16px; }
+.yaml-editor-header h3 { margin: 0 0 6px; font-size: 16px; color: #1e293b; }
+.yaml-hint { margin: 0 0 12px; font-size: 13px; color: #64748b; }
+.yaml-hint code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #4f46e5; }
+.yaml-header-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.load-template-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  transition: all 0.2s;
+}
+.load-template-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
+.copy-yaml-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #059669, #047857);
+  transition: all 0.2s;
+}
+.copy-yaml-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
+.clear-yaml-btn {
+  padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: #fff;
+  background: linear-gradient(135deg, #64748b, #475569);
+  transition: all 0.2s;
+}
+.clear-yaml-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(100,116,139,0.3); }
+.yaml-error {
+  margin-top: 12px; padding: 12px 16px; background: #fef2f2; color: #dc2626;
+  border-radius: 8px; font-size: 13px; border: 1px solid #fecaca;
+  display: flex; align-items: center; gap: 8px;
+}
+.error-icon { font-size: 16px; }
+.yaml-editor-footer { margin-top: 16px; }
+.yaml-tips {
+  padding: 16px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;
+}
+.yaml-tips strong { font-size: 14px; color: #1e293b; }
+.yaml-tips ul { margin: 8px 0 0; padding-left: 20px; }
+.yaml-tips li { font-size: 13px; color: #64748b; margin-bottom: 4px; }
 
 .yaml-viewer {
   margin: 0;

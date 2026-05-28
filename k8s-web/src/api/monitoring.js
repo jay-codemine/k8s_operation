@@ -105,6 +105,10 @@ export const importAlertRulesYAML = (data) =>
 export const exportAlertRulesYAML = (params = {}) =>
   http.get('/api/v1/monitoring/alert-rule/export-yaml', { params })
 
+// 批量绑定通知渠道（支持按条件匹配）
+export const batchBindChannels = (data) =>
+  http.post('/api/v1/monitoring/alert-rule/batch-bind-channels', data)
+
 // ==================== 告警事件 ====================
 
 export const listAlertEvents = (params = {}) =>

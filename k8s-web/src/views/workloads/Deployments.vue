@@ -294,6 +294,10 @@
                       <span class="menu-icon">⏪</span>
                       <span>回滚</span>
                     </button>
+                    <button v-if="canOperate" class="menu-item" @click="openResourceModal(deployment)">
+                      <span class="menu-icon">⚡</span>
+                      <span>资源调整</span>
+                    </button>
                     <div class="menu-divider"></div>
                     <button class="menu-item" @click="viewRelatedServices(deployment)">
                       <span class="menu-icon">🔌</span>
@@ -517,6 +521,9 @@
             </button>
             <button class="card-action-btn" @click="openYamlPreview(deployment)" title="查看/编辑 YAML">
               📝 YAML
+            </button>
+            <button class="card-action-btn warning" @click="openResourceModal(deployment)" title="快速调整 CPU/Memory（防 OOM）">
+              ⚡ 资源
             </button>
             <button class="card-action-btn danger" @click="deleteDeployment(deployment)" title="删除">
               🗑️ 删除
@@ -1788,6 +1795,92 @@
           <button class="btn btn-secondary" @click="showUpdateImageModal = false">取消</button>
           <button class="btn btn-primary" @click="submitUpdateImage" :disabled="updatingImage || !updateImageForm.image">
             {{ updatingImage ? '更新中...' : '确认更新' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速资源调整弹窗（防 OOM） -->
+    <div v-if="showResourceModal" class="modal-overlay" @click.self="showResourceModal = false">
+      <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+          <h3>⚡ 快速调整资源配置</h3>
+          <button class="close-btn" @click="showResourceModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="info-box">
+            <div><strong>部署:</strong> {{ resourceForm.name }}</div>
+            <div><strong>命名空间:</strong> {{ resourceForm.namespace }}</div>
+          </div>
+
+          <!-- 容器选择 -->
+          <div class="form-group" v-if="resourceContainerList.length > 1">
+            <label>选择容器</label>
+            <select v-model="resourceForm.container" class="form-select" @change="onResourceContainerChange">
+              <option value="" disabled>请选择容器</option>
+              <option v-for="c in resourceContainerList" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="form-group" v-else-if="resourceContainerList.length === 1">
+            <label>容器</label>
+            <div class="form-static">{{ resourceContainerList[0] }}</div>
+          </div>
+
+          <!-- 当前资源配置展示 -->
+          <div v-if="currentResources" class="resource-current-info">
+            <div class="section-label" style="margin-bottom: 8px;">📊 当前配置</div>
+            <div class="resource-grid-display">
+              <div class="resource-item-display">
+                <span class="resource-key">CPU Request:</span>
+                <span class="resource-val">{{ currentResources.cpu_request || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">CPU Limit:</span>
+                <span class="resource-val">{{ currentResources.cpu_limit || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">Memory Request:</span>
+                <span class="resource-val">{{ currentResources.memory_request || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">Memory Limit:</span>
+                <span class="resource-val" :class="{ 'text-danger': !currentResources.memory_limit }">{{ currentResources.memory_limit || '⚠️ 未设置' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="resource-current-info">
+            <div class="form-hint">⚠️ 当前容器未设置资源配置，建议设置以防 OOM</div>
+          </div>
+
+          <!-- 资源编辑表单 -->
+          <div class="resource-edit-section">
+            <div class="section-label" style="margin-bottom: 8px;">✏️ 新配置</div>
+            <div class="resource-form-grid">
+              <div class="form-group">
+                <label>Memory Limit <span class="required">*</span></label>
+                <input v-model="resourceForm.memory_limit" type="text" class="form-input" placeholder="例: 512Mi, 1Gi, 2Gi" />
+                <div class="form-hint">必填，防止 OOM 必须设置内存上限</div>
+              </div>
+              <div class="form-group">
+                <label>Memory Request</label>
+                <input v-model="resourceForm.memory_request" type="text" class="form-input" placeholder="例: 256Mi, 512Mi" />
+                <div class="form-hint">建议设置为 Limit 的 50%-80%</div>
+              </div>
+              <div class="form-group">
+                <label>CPU Limit</label>
+                <input v-model="resourceForm.cpu_limit" type="text" class="form-input" placeholder="例: 500m, 1000m, 2" />
+              </div>
+              <div class="form-group">
+                <label>CPU Request</label>
+                <input v-model="resourceForm.cpu_request" type="text" class="form-input" placeholder="例: 100m, 250m" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showResourceModal = false">取消</button>
+          <button class="btn btn-primary" @click="submitUpdateResources" :disabled="updatingResources || !resourceForm.memory_limit">
+            {{ updatingResources ? '更新中...' : '确认修改' }}
           </button>
         </div>
       </div>
@@ -3632,6 +3725,7 @@ const showPodsModal = ref(false)
 const showServicesModal = ref(false)        // Service 关联弹窗
 const showDeploymentLogsModal = ref(false)  // Deployment 日志弹窗
 const showHistoryModal = ref(false)          // 版本记录弹窗
+const showResourceModal = ref(false)        // 资源快速调整弹窗
 
 // ========== 可拖拽调整大小的模态框 ==========
 // 创建模态框
@@ -3679,6 +3773,20 @@ const scaling = ref(false)
 const updatingImage = ref(false)
 const rollingBack = ref(false)
 const deleting = ref(false)
+const updatingResources = ref(false)  // 资源调整中
+
+// 资源快速修改表单
+const resourceForm = ref({
+  namespace: '',
+  name: '',
+  container: '',
+  cpu_request: '',
+  cpu_limit: '',
+  memory_request: '',
+  memory_limit: '',
+})
+const resourceContainerList = ref([])  // 资源弹窗的容器列表
+const currentResources = ref(null)     // 当前容器的资源配置
 
 // 滚动更新管理
 const showRolloutModal = ref(false)
@@ -5773,6 +5881,116 @@ const submitUpdateImage = async () => {
     Message.error({ content: '更新镜像失败' })
   } finally {
     updatingImage.value = false
+  }
+}
+
+// =========================
+// 快速修改容器资源（防 OOM）
+// =========================
+const openResourceModal = async (deployment) => {
+  showMoreOptions.value = false
+  resourceContainerList.value = deployment.containers || []
+  const firstContainer = resourceContainerList.value[0] || ''
+  resourceForm.value = {
+    namespace: deployment.namespace,
+    name: deployment.name,
+    container: firstContainer,
+    cpu_request: '',
+    cpu_limit: '',
+    memory_request: '',
+    memory_limit: '',
+  }
+  currentResources.value = null
+
+  // 获取当前容器的资源配置
+  if (firstContainer) {
+    await loadContainerResources(deployment, firstContainer)
+  }
+  showResourceModal.value = true
+}
+
+// 加载指定容器的当前资源配置
+const loadContainerResources = async (deployment, containerName) => {
+  try {
+    const res = await deploymentsApi.detail({
+      namespace: deployment.namespace,
+      name: deployment.name
+    })
+    if (res.code === 0 && res.data?.data) {
+      const dp = res.data.data
+      const containers = dp.spec?.template?.spec?.containers || []
+      const target = containers.find(c => c.name === containerName)
+      if (target && target.resources) {
+        const r = target.resources
+        currentResources.value = {
+          cpu_request: r.requests?.cpu || '',
+          cpu_limit: r.limits?.cpu || '',
+          memory_request: r.requests?.memory || '',
+          memory_limit: r.limits?.memory || '',
+        }
+        // 预填表单（使用当前值）
+        resourceForm.value.cpu_request = currentResources.value.cpu_request
+        resourceForm.value.cpu_limit = currentResources.value.cpu_limit
+        resourceForm.value.memory_request = currentResources.value.memory_request
+        resourceForm.value.memory_limit = currentResources.value.memory_limit
+      } else {
+        currentResources.value = null
+      }
+    }
+  } catch (e) {
+    console.warn('获取容器资源配置失败:', e)
+  }
+}
+
+// 资源弹窗容器切换
+const onResourceContainerChange = async () => {
+  const dep = { namespace: resourceForm.value.namespace, name: resourceForm.value.name }
+  await loadContainerResources(dep, resourceForm.value.container)
+}
+
+const submitUpdateResources = async () => {
+  if (!resourceForm.value.memory_limit) {
+    Message.error({ content: '内存上限（Memory Limit）必须设置，防止 OOM' })
+    return
+  }
+
+  const ok = await confirm({
+    title: '确认修改资源配置',
+    content: '此操作将触发滚动更新，修改容器的 CPU/Memory 配置。',
+    type: 'warning',
+    details: [
+      { label: 'Deployment', value: `${resourceForm.value.namespace}/${resourceForm.value.name}` },
+      { label: '容器', value: resourceForm.value.container },
+      { label: 'Memory Limit', value: resourceForm.value.memory_limit, highlight: true },
+      { label: 'Memory Request', value: resourceForm.value.memory_request || '未设置' },
+      { label: 'CPU Limit', value: resourceForm.value.cpu_limit || '未设置' },
+      { label: 'CPU Request', value: resourceForm.value.cpu_request || '未设置' },
+    ],
+    tip: '资源修改会触发滚动更新，期间服务保持可用',
+    confirmText: '确认修改',
+  })
+  if (!ok) return
+
+  updatingResources.value = true
+  try {
+    const res = await deploymentsApi.updateResources(resourceForm.value)
+    if (res.code === 0) {
+      Message.success({ content: '资源配置更新成功，正在追踪状态...' })
+      showResourceModal.value = false
+
+      // 乐观更新本地状态
+      const dep = deployments.value.find(d => d.name === resourceForm.value.name && d.namespace === resourceForm.value.namespace)
+      if (dep) {
+        dep.status = 'Updating'
+        startStatusTracking(dep, { action: 'update-resources' })
+      }
+    } else {
+      Message.error({ content: res.msg || '资源配置更新失败' })
+    }
+  } catch (e) {
+    Message.error({ content: e?.msg || e?.message || '资源配置更新失败' })
+  } finally {
+    updatingResources.value = false
   }
 }
 
@@ -9279,6 +9497,72 @@ const downloadYaml = () => {
   border-color: #fca5a5;
 }
 
+.card-action-btn.warning {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.card-action-btn.warning:hover {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+/* ==================== */
+/* 资源快速调整弹窗样式 */
+/* ==================== */
+.resource-current-info {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.resource-grid-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.resource-item-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.resource-key {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.resource-val {
+  font-weight: 600;
+  color: #1e293b;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.resource-val.text-danger {
+  color: #dc2626;
+}
+
+.resource-edit-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+}
+
+.resource-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 /* ==================== */
 /* 资源消耗样式 */
 /* ==================== */
@@ -9724,7 +10008,7 @@ const downloadYaml = () => {
 .load-template-btn {
   align-self: flex-start;
   padding: 10px 20px;
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -9732,24 +10016,18 @@ const downloadYaml = () => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .load-template-btn:hover {
-  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.5);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
 }
 
-.load-template-btn:active {
-  background: #020617;
-  transform: translateY(0);
-}
-
-.clear-yaml-btn,
-.copy-yaml-btn,
-.reset-yaml-btn {
+.copy-yaml-btn {
   padding: 10px 20px;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -9757,27 +10035,32 @@ const downloadYaml = () => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-}
-
-.copy-yaml-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
 }
 
 .copy-yaml-btn:hover {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
 }
 
 .clear-yaml-btn,
 .reset-yaml-btn {
-  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
   box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
 }
 
 .clear-yaml-btn:hover,
 .reset-yaml-btn:hover {
-  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
@@ -9785,24 +10068,23 @@ const downloadYaml = () => {
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  max-height: 500px;
-  padding: 16px;
-  border: 2px solid #334155;
-  border-radius: 12px;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
   resize: vertical;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  tab-size: 2;
   transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  background: #1e1e1e;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.3);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-editor::placeholder {
@@ -9827,7 +10109,7 @@ const downloadYaml = () => {
 
 .yaml-editor-footer {
   padding: 16px;
-  background: #f8f9fa;
+  background: #f8fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
 }
@@ -9838,7 +10120,7 @@ const downloadYaml = () => {
 }
 
 .yaml-tips strong {
-  color: #2c3e50;
+  color: #2d3748;
   font-weight: 600;
 }
 

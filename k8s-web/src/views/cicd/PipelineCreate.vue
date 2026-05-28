@@ -1151,6 +1151,51 @@
                   </div>
                 </div>
 
+                <!-- 发布联动告警静默 -->
+                <div class="form-group">
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <label class="form-label">
+                        发布静默告警
+                        <span class="env-tag info">推荐开启</span>
+                      </label>
+                      <p class="toggle-desc">部署期间自动静默 warning/info 级别告警，避免滚动更新触发误报</p>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="pipelineData.enable_deploy_silence" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 发布静默配置详情 -->
+                <div v-if="pipelineData.enable_deploy_silence" class="silence-config-panel">
+                  <div class="form-row">
+                    <div class="form-group flex-1">
+                      <label class="form-label">静默缓冲时间（分钟）</label>
+                      <input
+                        type="number"
+                        v-model.number="pipelineData.silence_buffer_minutes"
+                        class="form-input"
+                        min="1"
+                        max="25"
+                        placeholder="10"
+                      />
+                      <div class="input-hint">部署完成后额外保留静默的时间，让新 Pod 稳定</div>
+                    </div>
+                    <div class="form-group flex-1">
+                      <label class="form-label">静默告警级别</label>
+                      <select v-model="pipelineData.silence_severities" class="form-select">
+                        <option value="warning,info">warning + info（推荐）</option>
+                        <option value="warning">仅 warning</option>
+                        <option value="info">仅 info</option>
+                        <option value="critical,warning,info">全部（含 critical）</option>
+                      </select>
+                      <div class="input-hint">critical 级别默认不静默，避免遗漏严重故障</div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- 目标集群选择 -->
                 <div class="form-group">
                   <label class="form-label">
@@ -1591,7 +1636,11 @@ export default {
       target_workload_name: '',
       target_container: '',
       deploy_env: 'dev',
-      require_approval: true
+      require_approval: true,
+      // 发布联动告警静默
+      enable_deploy_silence: false,
+      silence_buffer_minutes: 10,
+      silence_severities: 'warning,info'
     })
 
     const submitting = ref(false)
@@ -1945,7 +1994,11 @@ export default {
               target_workload_name: data.target_workload_name || '',
               target_container: data.target_container || '',
               deploy_env: data.deploy_env || 'dev',
-              require_approval: data.require_approval || false
+              require_approval: data.require_approval || false,
+              // 发布联动告警静默
+              enable_deploy_silence: data.enable_deploy_silence || false,
+              silence_buffer_minutes: data.silence_buffer_minutes || 10,
+              silence_severities: data.silence_severities || 'warning,info'
             }
             // 如果有自动部署配置，加载相关数据
             if (data.auto_deploy && data.target_cluster_id) {
@@ -4391,6 +4444,34 @@ export default {
   background: linear-gradient(135deg, #fafbff 0%, #f5f7ff 100%);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06);
+}
+
+.silence-config-panel {
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1.5px solid #fde68a;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fffdf7 0%, #fefce8 100%);
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.06);
+}
+
+.silence-config-panel .form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.silence-config-panel .flex-1 {
+  flex: 1;
+}
+
+.env-tag.info {
+  font-size: 10px;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
 }
 
 .sonar-panel-header {

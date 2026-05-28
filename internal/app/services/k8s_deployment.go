@@ -194,6 +194,47 @@ func (s *Services) KubeDeploymentHistory(ctx context.Context, cli *K8sClients, p
 	return deployment.GetDeploymentReplicaSet(ctx, cli.Kube, param.Namespace, param.Name)
 }
 
+// KubeUpdateDeploymentResources 快速修改容器资源限制（防 OOM 紧急调整）
+func (s *Services) KubeUpdateDeploymentResources(ctx context.Context, cli *K8sClients, param *requests.KubeDeploymentUpdateResourcesRequest) (map[string]interface{}, error) {
+	updated, err := deployment.PatchDeploymentResources(
+		ctx, cli.Kube,
+		param.Namespace, param.Name, param.Container,
+		param.CPURequest, param.CPULimit,
+		param.MemoryRequest, param.MemoryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// 提取更新后的容器资源信息返回给前端确认
+	result := map[string]interface{}{
+		"message":   "资源配置更新成功，Deployment 将触发滚动更新",
+		"name":      updated.Name,
+		"namespace": updated.Namespace,
+	}
+	// 找到目标容器，返回实际生效的资源配置
+	for _, c := range updated.Spec.Template.Spec.Containers {
+		if c.Name == param.Container {
+			res := map[string]string{}
+			if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+				res["cpu_request"] = q.String()
+			}
+			if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+				res["memory_request"] = q.String()
+			}
+			if q, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
+				res["cpu_limit"] = q.String()
+			}
+			if q, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
+				res["memory_limit"] = q.String()
+			}
+			result["resources"] = res
+			break
+		}
+	}
+	return result, nil
+}
+
 // KubeDeploymentCreateFromYaml 从 YAML 创建 Deployment（支持多资源：PVC/ConfigMap/Secret/Service+Deployment）
 func (s *Services) KubeDeploymentCreateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*appv1.Deployment, []requests.CreatedResourceInfo, error) {
 	// 1. 使用多资源解析器解析 YAML

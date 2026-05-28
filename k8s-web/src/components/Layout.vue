@@ -324,12 +324,13 @@ const menuGroupsConfig = reactive([
   {
     name: '平台',
     icon: '🏷️',
-    count: 2,
+    count: 3,
     collapsed: true,
     match: ['/dashboard', '/clusters', '/platform'],
     items: [
       { path: '/clusters', label: '集群管理' },
       { path: '/platform/health', label: '平台健康' },
+      { path: '/platform/aiops', label: '智能运维' },
     ],
   },
   // 安全（精简后的5个菜单，大厂风格）

@@ -2798,61 +2798,75 @@ onUnmounted(() => {
 .load-template-btn,
 .copy-yaml-btn,
 .reset-yaml-btn {
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
-  font-size: 13px;
-  border-radius: 6px;
+  padding: 10px 20px;
+  border: none;
+  color: white;
+  font-size: 14px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   font-weight: 500;
 }
 
+.load-template-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
 .load-template-btn:hover {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: white;
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+.copy-yaml-btn {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
 }
 
 .copy-yaml-btn:hover {
-  background: #10b981;
-  border-color: #10b981;
-  color: white;
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+}
+
+.reset-yaml-btn {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
 }
 
 .reset-yaml-btn:hover {
-  background: #f59e0b;
-  border-color: #f59e0b;
-  color: white;
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
 
 /* YAML 编辑器 */
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  max-height: 600px;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
   resize: vertical;
   box-sizing: border-box;
   tab-size: 2;
+  transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-editor::placeholder {
-  color: #6b7280;
+  color: #94a3b8;
 }
 
 /* YAML 错误提示 */
@@ -2861,8 +2875,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
   border-radius: 8px;
   color: #dc2626;
   font-size: 13px;
@@ -2876,20 +2890,20 @@ onUnmounted(() => {
 
 /* YAML 编辑器底部 */
 .yaml-editor-footer {
-  padding: 14px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
 }
 
 .yaml-tips {
   font-size: 13px;
-  color: #6b7280;
+  color: #475569;
   line-height: 1.6;
 }
 
 .yaml-tips strong {
-  color: #374151;
+  color: #2d3748;
   font-weight: 600;
 }
 

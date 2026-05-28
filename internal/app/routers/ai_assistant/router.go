@@ -12,11 +12,12 @@ func NewAIAssistantRouter() *AIAssistantRouter {
 	return &AIAssistantRouter{}
 }
 
-// Inject 注入 AI 助手 & 审批管理路由
+// Inject 注入 AI 助手 & 审批管理 & AIOps 路由
 // 路由前缀: /api/v1/ai/...
 func (r *AIAssistantRouter) Inject(router *gin.RouterGroup) {
 	chatCtrl := ai.NewAIAssistantController()
 	approvalCtrl := ai.NewAIApprovalController()
+	aiopsCtrl := ai.NewAIOpsController()
 
 	g := router.Group("/ai")
 	{
@@ -47,5 +48,20 @@ func (r *AIAssistantRouter) Inject(router *gin.RouterGroup) {
 		g.POST("/approvals/:id/cancel", approvalCtrl.Cancel)          // 取消审批
 		g.PUT("/approvals/:id", approvalCtrl.Update)                   // 更新审批备注
 		g.DELETE("/approvals/:id", approvalCtrl.Delete)                // 删除审批记录
+
+		// ===== AIOps 智能运维 =====
+		ops := g.Group("/ops")
+		{
+			ops.GET("/dashboard", aiopsCtrl.GetDashboard)                     // AIOps 仪表盘
+			ops.GET("/records", aiopsCtrl.GetAnalysisRecords)                 // 分析记录列表
+			ops.GET("/channels", aiopsCtrl.GetNotifyChannels)                 // 可用通知渠道
+			ops.POST("/alert/analyze", aiopsCtrl.AnalyzeAlert)               // AI 告警分析
+			ops.POST("/log/diagnose", aiopsCtrl.DiagnoseLogs)                // AI 日志诊断
+			ops.POST("/inspection/run", aiopsCtrl.RunInspection)             // 手动触发巡检
+			ops.GET("/inspection/list", aiopsCtrl.GetInspectionReports)      // 巡检报告列表
+			ops.GET("/inspection/:id", aiopsCtrl.GetInspectionDetail)        // 巡检报告详情
+			ops.GET("/inspection/:id/export", aiopsCtrl.ExportReport)        // 导出巡检报告
+			ops.POST("/inspection/:id/notify", aiopsCtrl.NotifyReport)       // 发送巡检报告通知
+		}
 	}
 }

@@ -37,3 +37,12 @@ func PatchDeploymentImage(ctx context.Context, Kube kubernetes.Interface, namesp
 	}
 	return PatchDeployment(ctx, Kube, namespace, name, patchImage)
 }
+
+// PatchDeploymentResources 修改容器资源配置（requests/limits）
+func PatchDeploymentResources(ctx context.Context, Kube kubernetes.Interface, namespace, name, containerName, cpuRequest, cpuLimit, memoryRequest, memoryLimit string) (*appv1.Deployment, error) {
+	patchData, err := patchbuilder.BuildResourcesPatch(containerName, cpuRequest, cpuLimit, memoryRequest, memoryLimit)
+	if err != nil {
+		return nil, err
+	}
+	return PatchDeployment(ctx, Kube, namespace, name, patchData)
+}

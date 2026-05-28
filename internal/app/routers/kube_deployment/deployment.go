@@ -40,5 +40,8 @@ func (r *KubeDeploymentRouter) Inject(router *gin.RouterGroup) {
 		router.POST("/pause", deployment.PauseRollout)               // 暂停 Rollout
 		router.POST("/resume", deployment.ResumeRollout)             // 恢复 Rollout
 		router.GET("/rollout-status", deployment.RolloutStatus)      // 获取 Rollout 状态
+
+		// 资源快速调整（防 OOM）
+		router.POST("/update-resources", deployment.UpdateResources) // 快速修改容器资源限制
 	}
 }

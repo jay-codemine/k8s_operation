@@ -4986,7 +4986,7 @@ const createJobFromYaml = async () => {
 
 .load-template-btn {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -4994,24 +4994,38 @@ const createJobFromYaml = async () => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
 .load-template-btn:hover {
-  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.5);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
 }
 
-.load-template-btn:active {
-  background: #020617;
-  transform: translateY(0);
+.copy-yaml-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.copy-yaml-btn:hover {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
 }
 
 .clear-yaml-btn,
-.copy-yaml-btn,
 .reset-yaml-btn {
   padding: 10px 20px;
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -5019,27 +5033,12 @@ const createJobFromYaml = async () => {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.3s ease;
-}
-
-.copy-yaml-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-}
-
-.copy-yaml-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.clear-yaml-btn,
-.reset-yaml-btn {
-  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
   box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
 }
 
 .clear-yaml-btn:hover,
 .reset-yaml-btn:hover {
-  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
@@ -5047,24 +5046,23 @@ const createJobFromYaml = async () => {
 .yaml-editor {
   width: 100%;
   min-height: 400px;
-  max-height: 500px;
-  padding: 16px;
-  border: 2px solid #334155;
-  border-radius: 12px;
-  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #e2e8f0;
   resize: vertical;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  tab-size: 2;
   transition: all 0.2s;
 }
 
 .yaml-editor:focus {
   outline: none;
-  border-color: #326ce5;
-  background: #1e1e1e;
-  box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.3);
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .yaml-editor::placeholder {
@@ -5089,7 +5087,7 @@ const createJobFromYaml = async () => {
 
 .yaml-editor-footer {
   padding: 16px;
-  background: #f8f9fa;
+  background: #f8fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
 }
@@ -5100,7 +5098,7 @@ const createJobFromYaml = async () => {
 }
 
 .yaml-tips strong {
-  color: #2c3e50;
+  color: #2d3748;
   font-weight: 600;
 }
 

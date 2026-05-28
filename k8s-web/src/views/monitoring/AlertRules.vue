@@ -7,6 +7,10 @@
         <span class="header-desc">配置基于 PromQL 的告警规则，支持多级别通知</span>
       </div>
       <div class="header-actions">
+        <button class="btn-action btn-batch-bind" @click="batchBindVisible = true" title="批量绑定通知渠道">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          批量绑定渠道
+        </button>
         <button class="btn-action btn-yaml-import" @click="yamlImportVisible = true" title="YAML 批量导入">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           导入
@@ -465,6 +469,137 @@
         </div>
       </div>
     </div>
+
+    <!-- 批量绑定通知渠道弹窗 -->
+    <div class="modal-overlay" v-if="batchBindVisible" @click.self="batchBindVisible = false">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-hd">
+          <div class="modal-hd-bar"></div>
+          <div class="modal-hd-inner">
+            <div class="modal-hd-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <div>
+              <h3 class="modal-hd-title">批量绑定通知渠道</h3>
+              <p class="modal-hd-sub">按条件匹配告警规则，统一设置通知渠道（无需逐条修改）</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" @click="batchBindVisible = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-bd">
+          <!-- 匹配条件 -->
+          <div class="rule-section">
+            <div class="rule-section-hd">
+              <span class="sec-num">01</span>
+              <span class="sec-title">匹配条件</span>
+              <span class="hint-tag" style="margin-left:8px">留空则不限制该条件</span>
+            </div>
+            <div class="field-grid-2">
+              <div class="field-item">
+                <label class="field-lbl">按分组</label>
+                <select class="field-ctrl" v-model="batchBind.group">
+                  <option value="">不限分组</option>
+                  <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label class="field-lbl">按级别</label>
+                <select class="field-ctrl" v-model="batchBind.severity">
+                  <option value="">不限级别</option>
+                  <option value="critical">Critical</option>
+                  <option value="warning">Warning</option>
+                  <option value="info">Info</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label class="field-lbl">按名称关键字</label>
+                <input class="field-ctrl" v-model="batchBind.keyword" placeholder="模糊匹配规则名称..." />
+              </div>
+              <div class="field-item">
+                <label class="field-lbl">匹配范围</label>
+                <label class="mini-chk-label" style="margin-top:8px">
+                  <input type="checkbox" v-model="batchBind.match_all" />
+                  <span>所有启用的规则（忽略上方条件）</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 选择渠道 -->
+          <div class="rule-section">
+            <div class="rule-section-hd">
+              <span class="sec-num">02</span>
+              <span class="sec-title">选择通知渠道</span>
+            </div>
+            <div class="ch-picker-grid" v-if="notifyChannelList.length">
+              <label v-for="ch in notifyChannelList" :key="ch.id"
+                class="ch-card" :class="{ 'ch-selected': batchBindChannels.includes(String(ch.id)) }">
+                <input type="checkbox" :value="String(ch.id)" v-model="batchBindChannels" style="display:none" />
+                <span class="ch-icon">{{ getChannelIcon(ch.type) }}</span>
+                <span class="ch-meta">
+                  <b>{{ ch.name }}</b>
+                  <small>{{ getChannelLabel(ch.type) }}</small>
+                </span>
+                <span class="ch-check-mark">✓</span>
+              </label>
+            </div>
+            <div class="ch-empty-tip" v-else>暂无已启用的通知渠道，请先创建</div>
+          </div>
+
+          <!-- 绑定模式 -->
+          <div class="rule-section">
+            <div class="rule-section-hd">
+              <span class="sec-num">03</span>
+              <span class="sec-title">绑定模式</span>
+            </div>
+            <div class="bind-mode-cards">
+              <label class="bind-mode-card" :class="{ active: batchBind.mode === 'replace' }">
+                <input type="radio" v-model="batchBind.mode" value="replace" style="display:none" />
+                <strong>替换</strong>
+                <span>清除旧渠道，设为所选渠道</span>
+              </label>
+              <label class="bind-mode-card" :class="{ active: batchBind.mode === 'append' }">
+                <input type="radio" v-model="batchBind.mode" value="append" style="display:none" />
+                <strong>追加</strong>
+                <span>保留旧渠道，追加所选渠道</span>
+              </label>
+              <label class="bind-mode-card" :class="{ active: batchBind.mode === 'remove' }">
+                <input type="radio" v-model="batchBind.mode" value="remove" style="display:none" />
+                <strong>移除</strong>
+                <span>从已绑定中移除所选渠道</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 操作结果 -->
+          <div class="batch-bind-result" v-if="batchBindResult">
+            <div class="import-result-header">
+              <span class="import-result-icon">📊</span>
+              <span class="import-result-title">操作结果</span>
+            </div>
+            <div class="import-result-stats">
+              <span class="stat-item success">匹配 {{ batchBindResult.matched || batchBindResult.total }} 条</span>
+              <span class="stat-item success">成功 {{ batchBindResult.success }}</span>
+              <span class="stat-item fail" v-if="batchBindResult.failed">失败 {{ batchBindResult.failed }}</span>
+            </div>
+            <div class="batch-bind-filter" v-if="batchBindResult.filter">
+              <small>筛选条件: {{ batchBindResult.filter }}</small>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <span class="modal-ft-meta">将为匹配到的规则{{ batchBind.mode === 'replace' ? '替换' : batchBind.mode === 'append' ? '追加' : '移除' }}通知渠道</span>
+          <div class="modal-ft-btns">
+            <button class="btn-ft-cancel" @click="batchBindVisible = false">取消</button>
+            <button class="btn-ft-save" @click="handleBatchBind" :disabled="batchBindLoading || !batchBindChannels.length">
+              {{ batchBindLoading ? '执行中...' : '确认执行' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -475,7 +610,7 @@ import { Message } from '@arco-design/web-vue'
 import {
   listAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
   toggleAlertRule, getAlertRuleGroups, listNotifyChannels, createNotifyChannel,
-  importAlertRulesYAML, exportAlertRulesYAML,
+  importAlertRulesYAML, exportAlertRulesYAML, batchBindChannels as batchBindChannelsApi,
 } from '@/api/monitoring'
 
 const router = useRouter()
@@ -799,6 +934,53 @@ async function createQuickChannel() {
 function goNotifyChannels() {
   dialogVisible.value = false
   router.push('/monitoring/notify-channels')
+}
+
+// ==================== 批量绑定通知渠道 ====================
+const batchBindVisible = ref(false)
+const batchBindLoading = ref(false)
+const batchBindResult = ref(null)
+const batchBindChannels = ref([])
+const batchBind = reactive({
+  group: '',
+  severity: '',
+  keyword: '',
+  match_all: false,
+  mode: 'replace',
+})
+
+async function handleBatchBind() {
+  if (!batchBindChannels.value.length) {
+    Message.warning('请至少选择一个通知渠道')
+    return
+  }
+  if (!batchBind.match_all && !batchBind.group && !batchBind.severity && !batchBind.keyword) {
+    if (!confirm('未设置任何匹配条件，请勾选"所有启用的规则"或指定筛选条件')) return
+  }
+
+  batchBindLoading.value = true
+  batchBindResult.value = null
+  try {
+    const res = await batchBindChannelsApi({
+      notify_channels: batchBindChannels.value.join(','),
+      mode: batchBind.mode,
+      group: batchBind.group || undefined,
+      severity: batchBind.severity || undefined,
+      keyword: batchBind.keyword || undefined,
+      match_all: batchBind.match_all,
+    })
+    if (res?.code === 0) {
+      batchBindResult.value = res.data
+      Message.success(res.msg || '批量绑定完成')
+      loadList()
+    } else {
+      Message.error(res?.msg || '操作失败')
+    }
+  } catch (e) {
+    Message.error(e?.msg || e?.message || '操作异常')
+  } finally {
+    batchBindLoading.value = false
+  }
 }
 </script>
 
@@ -1505,5 +1687,28 @@ function goNotifyChannels() {
 /* Copy button */
 .btn-yaml-copy { border-color: #4f46e5; color: #4f46e5; }
 .btn-yaml-copy:hover { background: #ede9fe; }
+
+/* Batch bind button */
+.btn-batch-bind { border-color: #059669; color: #059669; }
+.btn-batch-bind:hover { background: #ecfdf5; border-color: #059669; }
+
+/* Bind mode cards */
+.bind-mode-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.bind-mode-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  cursor: pointer; text-align: center; transition: all 0.15s;
+}
+.bind-mode-card:hover { border-color: #a5b4fc; background: #faf5ff; }
+.bind-mode-card.active { border-color: #4f46e5; background: #f5f3ff; box-shadow: 0 0 0 3px rgba(79,70,229,0.08); }
+.bind-mode-card strong { font-size: 14px; color: #1e293b; }
+.bind-mode-card span { font-size: 11px; color: #94a3b8; }
+
+/* Batch bind result */
+.batch-bind-result {
+  margin-top: 16px; padding: 16px;
+  border: 1.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
+}
+.batch-bind-filter { margin-top: 8px; color: #64748b; font-size: 12px; }
 
 </style>

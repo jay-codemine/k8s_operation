@@ -77,6 +77,10 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		RequireApproval:    req.RequireApproval,
 		EnableSonar:        req.EnableSonar,
 		EnableArtifactUpload: req.EnableArtifactUpload,
+		// 发布联动告警静默
+		EnableDeploySilence:  req.EnableDeploySilence,
+		SilenceBufferMinutes: req.SilenceBufferMinutes,
+		SilenceSeverities:    req.SilenceSeverities,
 		CreatedUserID:      userID,
 	}
 
@@ -196,6 +200,16 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	}
 	if req.EnableArtifactUpload != nil {
 		updates["enable_artifact_upload"] = *req.EnableArtifactUpload
+	}
+	// 发布联动告警静默
+	if req.EnableDeploySilence != nil {
+		updates["enable_deploy_silence"] = *req.EnableDeploySilence
+	}
+	if req.SilenceBufferMinutes != nil {
+		updates["silence_buffer_minutes"] = *req.SilenceBufferMinutes
+	}
+	if req.SilenceSeverities != nil {
+		updates["silence_severities"] = *req.SilenceSeverities
 	}
 	if req.LanguageType != nil {
 		updates["language_type"] = *req.LanguageType
@@ -346,6 +360,10 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 			RequireApproval:    item.RequireApproval,
 			EnableSonar:        item.EnableSonar,
 			EnableArtifactUpload: item.EnableArtifactUpload,
+			// 发布联动告警静默
+			EnableDeploySilence:  item.EnableDeploySilence,
+			SilenceBufferMinutes: item.SilenceBufferMinutes,
+			SilenceSeverities:    item.SilenceSeverities,
 			CreatedUserID:      userID,
 		}
 
@@ -1613,10 +1631,23 @@ func (s *Services) executeLegacyDeployAsync(ctx context.Context, pipeline *model
 	var logs strings.Builder
 	logs.WriteString(fmt.Sprintf("[旧配置部署] 开始更新 %s/%s\n", namespace, deploymentName))
 
+	// ===== 发布联动告警静默 =====
+	var silenceRuleID int64
+	if pipeline.EnableDeploySilence {
+		silenceInfo, silenceErr := s.CreateDeploySilence(ctx, pipeline, namespace, deploymentName)
+		if silenceErr != nil {
+			global.Logger.Warn("[旧配置部署] 创建发布静默失败（不影响部署）", zap.Error(silenceErr))
+		} else if silenceInfo != nil {
+			silenceRuleID = silenceInfo.SilenceRuleID
+			logs.WriteString(fmt.Sprintf("[INFO] 发布静默已生效，规则ID: %d\n", silenceRuleID))
+		}
+	}
+
 	// 1. 更新镜像
 	_, err := deployment.PatchDeploymentImage(ctx, global.ManagementKubeClient, namespace, deploymentName, containerName, image)
 	if err != nil {
 		global.Logger.Error("[旧配置部署] 更新镜像失败", zap.Error(err))
+		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
 		s.notifyLegacyDeployResult(ctx, pipeline, namespace, deploymentName, image, false, err.Error())
 		return
 	}
@@ -1627,10 +1658,13 @@ func (s *Services) executeLegacyDeployAsync(ctx context.Context, pipeline *model
 	err = s.waitAutoDeployRollout(ctx, global.ManagementKubeClient, namespace, deploymentName, &logs)
 	if err != nil {
 		global.Logger.Error("[旧配置部署] Rollout 失败", zap.Error(err))
+		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
 		s.notifyLegacyDeployResult(ctx, pipeline, namespace, deploymentName, image, false, err.Error())
 		return
 	}
 
+	// 部署成功，释放静默
+	s.ReleaseDeploySilence(ctx, silenceRuleID, true)
 	global.Logger.Info("[旧配置部署] Rollout 完成")
 	s.notifyLegacyDeployResult(ctx, pipeline, namespace, deploymentName, image, true, "")
 }
