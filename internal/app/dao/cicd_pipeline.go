@@ -592,6 +592,15 @@ func (d *Dao) ApprovalGetByStageID(ctx context.Context, stageID int64) (*models.
 	return &approval, err
 }
 
+// ApprovalGetByFeishuToken 根据飞书Token获取审批记录
+func (d *Dao) ApprovalGetByFeishuToken(ctx context.Context, token string) (*models.CicdApproval, error) {
+	var approval models.CicdApproval
+	err := d.db.WithContext(ctx).
+		Where("feishu_token = ?", token).
+		First(&approval).Error
+	return &approval, err
+}
+
 // ==================== Pipeline Stage CRUD ====================
 
 // StageCreate 创建阶段执行记录

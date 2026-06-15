@@ -7,6 +7,14 @@
         <span class="header-desc">配置基于 PromQL 的告警规则，支持多级别通知</span>
       </div>
       <div class="header-actions">
+        <button class="btn-action btn-batch-delete" @click="batchDeleteVisible = true" :disabled="selectedIds.length === 0" title="批量删除选中规则">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          批量删除<span v-if="selectedIds.length">({{ selectedIds.length }})</span>
+        </button>
+        <button class="btn-action btn-batch-update" @click="batchUpdateVisible = true" :disabled="selectedIds.length === 0" title="批量更新选中规则">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          批量更新<span v-if="selectedIds.length">({{ selectedIds.length }})</span>
+        </button>
         <button class="btn-action btn-batch-bind" @click="batchBindVisible = true" title="批量绑定通知渠道">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           批量绑定渠道
@@ -28,35 +36,117 @@
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <input v-model="filters.keyword" placeholder="搜索规则名称..." class="search-input" @input="debouncedLoad" />
-      <select v-model="filters.severity" @change="loadList" class="filter-select">
+      <select v-model="filters.severity" @change="currentPage = 1; loadList()" class="filter-select">
         <option value="">全部级别</option>
         <option value="critical">Critical</option>
         <option value="warning">Warning</option>
         <option value="info">Info</option>
       </select>
-      <select v-model="filters.group" @change="loadList" class="filter-select">
+      <select v-model="filters.group" @change="currentPage = 1; loadList()" class="filter-select">
         <option value="">全部分组</option>
         <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
       </select>
     </div>
+
+    <!-- 统计概览 -->
+    <div class="stats-bar" v-if="totalCount > 0">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-total">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-num">{{ totalCount }}</span>
+          <span class="stat-label">规则总数</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-bound">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-num">{{ boundCount }}</span>
+          <span class="stat-label">已绑定渠道</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-unbound">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-num">{{ unboundCount }}</span>
+          <span class="stat-label">未绑定渠道</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-channels">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-num">{{ notifyChannelList.length }}</span>
+          <span class="stat-label">可用渠道</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批量操作浮动工具栏 -->
+    <transition name="batch-bar">
+      <div class="batch-action-bar" v-if="selectedIds.length > 0">
+        <div class="batch-left">
+          <span class="batch-check-icon">✓</span>
+          <span class="batch-count">已选择 <b>{{ selectedIds.length }}</b> 条规则</span>
+          <button class="batch-clear-btn" @click="selectedIds = []">取消选择</button>
+        </div>
+        <div class="batch-right">
+          <button class="batch-btn batch-btn-enable" @click="handleBatchToggle(true)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            批量启用
+          </button>
+          <button class="batch-btn batch-btn-disable" @click="handleBatchToggle(false)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            批量禁用
+          </button>
+          <button class="batch-btn batch-btn-update" @click="batchUpdateVisible = true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            批量更新
+          </button>
+          <button class="batch-btn batch-btn-delete" @click="batchDeleteVisible = true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            批量删除
+          </button>
+        </div>
+      </div>
+    </transition>
 
     <!-- 规则列表 -->
     <div class="rules-table-wrapper" v-if="list.length">
       <table class="data-table">
         <thead>
           <tr>
+            <th class="th-checkbox">
+              <label class="table-checkbox">
+                <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" />
+                <span class="checkmark"></span>
+              </label>
+            </th>
             <th>规则名称</th>
             <th>分组</th>
             <th>级别</th>
             <th>PromQL 表达式</th>
             <th>持续时间</th>
             <th>评估状态</th>
+            <th>绑定渠道</th>
             <th>启用</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="rule in list" :key="rule.id" :class="{ disabled: !rule.enabled }">
+          <tr v-for="rule in list" :key="rule.id" :class="{ disabled: !rule.enabled, selected: selectedIds.includes(rule.id) }">
+            <td class="td-checkbox">
+              <label class="table-checkbox">
+                <input type="checkbox" :checked="selectedIds.includes(rule.id)" @change="toggleSelect(rule.id)" />
+                <span class="checkmark"></span>
+              </label>
+            </td>
             <td class="rule-name">{{ rule.name }}</td>
             <td><span class="group-tag">{{ rule.group }}</span></td>
             <td><span class="severity-badge" :class="rule.severity">{{ rule.severity }}</span></td>
@@ -66,6 +156,61 @@
               <span class="eval-status" :class="rule.last_eval_result || 'unknown'">
                 {{ evalStatusMap[rule.last_eval_result] || '未评估' }}
               </span>
+            </td>
+            <td class="channel-cell">
+              <div class="channel-bind-wrapper" @click.stop="openChannelPanel(rule)">
+                <div class="channel-badge-group" v-if="getRuleChannelCount(rule) > 0">
+                  <span class="channel-icons-row">
+                    <span v-for="ch in getRuleChannelIcons(rule).slice(0, 3)" :key="ch.id" class="channel-mini-icon" :title="ch.name">{{ ch.icon }}</span>
+                    <span class="channel-more" v-if="getRuleChannelCount(rule) > 3">+{{ getRuleChannelCount(rule) - 3 }}</span>
+                  </span>
+                  <span class="channel-count-badge">{{ getRuleChannelCount(rule) }}</span>
+                </div>
+                <div class="channel-empty-badge" v-else>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <span>绑定</span>
+                </div>
+              </div>
+              <!-- 内联渠道编辑面板 -->
+              <div class="channel-panel-overlay" v-if="channelPanelRuleId === rule.id" @click.stop>
+                <div class="channel-panel">
+                  <div class="channel-panel-header">
+                    <div class="cp-header-left">
+                      <span class="cp-title">管理通知渠道</span>
+                      <span class="cp-rule-name">{{ rule.name }}</span>
+                    </div>
+                    <button class="cp-close" @click.stop="closeChannelPanel">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <div class="channel-panel-body">
+                    <div class="cp-channel-list" v-if="notifyChannelList.length">
+                      <label v-for="ch in notifyChannelList" :key="ch.id"
+                        class="cp-channel-item" :class="{ 'cp-active': panelSelectedChannels.includes(String(ch.id)) }">
+                        <input type="checkbox" :value="String(ch.id)" v-model="panelSelectedChannels" style="display:none" />
+                        <span class="cp-ch-icon">{{ getChannelIcon(ch.type) }}</span>
+                        <span class="cp-ch-info">
+                          <b>{{ ch.name }}</b>
+                          <small>{{ getChannelLabel(ch.type) }}</small>
+                        </span>
+                        <span class="cp-ch-tick">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="cp-empty" v-else>暂无可用渠道</div>
+                  </div>
+                  <div class="channel-panel-footer">
+                    <span class="cp-footer-meta">已选 {{ panelSelectedChannels.length }} 个渠道</span>
+                    <div class="cp-footer-btns">
+                      <button class="cp-btn-cancel" @click.stop="closeChannelPanel">取消</button>
+                      <button class="cp-btn-save" @click.stop="saveChannelBinding" :disabled="channelPanelSaving">
+                        {{ channelPanelSaving ? '保存中...' : '保存' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </td>
             <td>
               <label class="toggle-switch">
@@ -80,6 +225,130 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- 分页 -->
+    <div class="pagination-bar" v-if="totalCount > 0">
+      <div class="pagination-info">
+        共 <b>{{ totalCount }}</b> 条，当前第 <b>{{ currentPage }}</b> / {{ totalPages }} 页
+      </div>
+      <div class="pagination-controls">
+        <button class="page-btn" :disabled="currentPage <= 1" @click="goPage(1)" title="首页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+        </button>
+        <button class="page-btn" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)" title="上一页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <template v-for="p in visiblePages" :key="p">
+          <button v-if="p === '...'" class="page-btn page-ellipsis" disabled>...</button>
+          <button v-else class="page-btn" :class="{ active: p === currentPage }" @click="goPage(p)">{{ p }}</button>
+        </template>
+        <button class="page-btn" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)" title="下一页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="page-btn" :disabled="currentPage >= totalPages" @click="goPage(totalPages)" title="末页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+        </button>
+        <select class="page-size-select" v-model="pageSize" @change="handlePageSizeChange">
+          <option :value="10">10条/页</option>
+          <option :value="20">20条/页</option>
+          <option :value="50">50条/页</option>
+          <option :value="100">100条/页</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 批量删除确认弹窗 -->
+    <div class="modal-overlay" v-if="batchDeleteVisible" @click.self="batchDeleteVisible = false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-hd">
+          <div class="modal-hd-bar" style="background: linear-gradient(180deg, #ef4444 0%, #f87171 100%);"></div>
+          <div class="modal-hd-inner">
+            <div class="modal-hd-icon" style="background: linear-gradient(135deg, #fee2e2, #fecaca);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            </div>
+            <div>
+              <h3 class="modal-hd-title">批量删除确认</h3>
+              <p class="modal-hd-sub">此操作不可逆，请谨慎确认</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" @click="batchDeleteVisible = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-bd" style="padding: 20px 24px;">
+          <p style="margin:0 0 12px; color:#4b5563;">确定删除以下 <b style="color:#dc2626;">{{ selectedIds.length }}</b> 条告警规则？</p>
+          <div class="batch-delete-list">
+            <div class="batch-delete-item" v-for="id in selectedIds.slice(0, 5)" :key="id">
+              <span class="bdi-dot"></span>
+              <span>{{ list.find(r => r.id === id)?.name || `#${id}` }}</span>
+            </div>
+            <div class="batch-delete-item" v-if="selectedIds.length > 5" style="color: #94a3b8;">
+              ... 及其他 {{ selectedIds.length - 5 }} 条
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <span></span>
+          <div class="modal-ft-btns">
+            <button class="btn-ft-cancel" @click="batchDeleteVisible = false">取消</button>
+            <button class="btn-ft-save" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); box-shadow: 0 2px 10px rgba(220,38,38,0.35);" @click="handleBatchDelete" :disabled="batchDeleting">
+              {{ batchDeleting ? '删除中...' : '确认删除' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批量更新弹窗 -->
+    <div class="modal-overlay" v-if="batchUpdateVisible" @click.self="batchUpdateVisible = false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-hd">
+          <div class="modal-hd-bar"></div>
+          <div class="modal-hd-inner">
+            <div class="modal-hd-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </div>
+            <div>
+              <h3 class="modal-hd-title">批量更新规则</h3>
+              <p class="modal-hd-sub">对选中的 {{ selectedIds.length }} 条规则统一修改属性</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" @click="batchUpdateVisible = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-bd" style="padding: 20px 24px;">
+          <div class="field-grid-2">
+            <div class="field-item">
+              <label class="field-lbl">修改级别 <span class="hint-tag">可选</span></label>
+              <select class="field-ctrl" v-model="batchUpdateForm.severity">
+                <option value="">不修改</option>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+            <div class="field-item">
+              <label class="field-lbl">修改分组 <span class="hint-tag">可选</span></label>
+              <input class="field-ctrl" v-model="batchUpdateForm.group" placeholder="留空不修改" />
+            </div>
+            <div class="field-item">
+              <label class="field-lbl">持续时间 <span class="hint-tag">可选</span></label>
+              <input class="field-ctrl" v-model="batchUpdateForm.duration" placeholder="如: 5m（留空不修改）" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <span class="modal-ft-meta">将更新 {{ selectedIds.length }} 条规则</span>
+          <div class="modal-ft-btns">
+            <button class="btn-ft-cancel" @click="batchUpdateVisible = false">取消</button>
+            <button class="btn-ft-save" @click="handleBatchUpdate" :disabled="batchUpdating">
+              {{ batchUpdating ? '更新中...' : '确认更新' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 空状态 -->
@@ -604,13 +873,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import {
   listAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
   toggleAlertRule, getAlertRuleGroups, listNotifyChannels, createNotifyChannel,
   importAlertRulesYAML, exportAlertRulesYAML, batchBindChannels as batchBindChannelsApi,
+  batchDeleteAlertRules, batchUpdateAlertRules,
 } from '@/api/monitoring'
 
 const router = useRouter()
@@ -625,6 +895,23 @@ const deleteTarget = ref(null)
 const filters = reactive({ keyword: '', severity: '', group: '' })
 const quickChannelVisible = ref(false)
 const quickChannelSaving = ref(false)
+
+// 分页
+const currentPage = ref(1)
+const pageSize = ref(10)
+const totalCount = ref(0)
+const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value) || 1)
+
+// 选择
+const selectedIds = ref([])
+const isAllSelected = computed(() => list.value.length > 0 && list.value.every(r => selectedIds.value.includes(r.id)))
+
+// 批量操作
+const batchDeleteVisible = ref(false)
+const batchDeleting = ref(false)
+const batchUpdateVisible = ref(false)
+const batchUpdating = ref(false)
+const batchUpdateForm = reactive({ severity: '', group: '', duration: '' })
 
 const channelTypes = [
   { value: 'dingtalk', label: '钉钉', icon: '🔷' },
@@ -665,18 +952,21 @@ const quickChannel = reactive({
 })
 
 let debounceTimer = null
-const debouncedLoad = () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadList, 300) }
+const debouncedLoad = () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(() => { currentPage.value = 1; loadList() }, 300) }
 
 const truncateExpr = (expr) => expr?.length > 60 ? expr.slice(0, 60) + '...' : expr
 
 async function loadList() {
   try {
     const [res, gRes, chRes] = await Promise.all([
-      listAlertRules({ page: 1, size: 50, ...filters }),
+      listAlertRules({ page: currentPage.value, size: pageSize.value, ...filters }),
       getAlertRuleGroups(),
       listNotifyChannels({ size: 100 }),
     ])
-    if (res?.code === 0) list.value = res.data?.items || []
+    if (res?.code === 0) {
+      list.value = res.data?.items || []
+      totalCount.value = res.data?.total || 0
+    }
     if (gRes?.code === 0) groups.value = gRes.data || []
     if (chRes?.code === 0) notifyChannelList.value = (chRes.data?.items || []).filter(c => c.enabled)
   } catch {}
@@ -738,7 +1028,186 @@ async function doDelete() {
   } catch {}
 }
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  document.addEventListener('click', handleDocClick)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocClick)
+})
+
+// ==================== 统计计算 ====================
+const boundCount = computed(() => list.value.filter(r => r.notify_channels && r.notify_channels.trim()).length)
+const unboundCount = computed(() => list.value.filter(r => !r.notify_channels || !r.notify_channels.trim()).length)
+
+// ==================== 绑定渠道列内联编辑 ====================
+const channelPanelRuleId = ref(null)
+const panelSelectedChannels = ref([])
+const channelPanelSaving = ref(false)
+
+function getRuleChannelCount(rule) {
+  if (!rule.notify_channels || !rule.notify_channels.trim()) return 0
+  return rule.notify_channels.split(',').map(s => s.trim()).filter(Boolean).length
+}
+
+function getRuleChannelIcons(rule) {
+  if (!rule.notify_channels || !rule.notify_channels.trim()) return []
+  const ids = rule.notify_channels.split(',').map(s => s.trim()).filter(Boolean)
+  return ids.map(idStr => {
+    // Support both "type:id" and plain "id" formats
+    const pureId = idStr.includes(':') ? idStr.split(':')[1] : idStr
+    const ch = notifyChannelList.value.find(c => String(c.id) === pureId)
+    if (ch) return { id: ch.id, name: ch.name, icon: getChannelIcon(ch.type) }
+    return { id: pureId, name: `#${pureId}`, icon: '📡' }
+  })
+}
+
+function openChannelPanel(rule) {
+  channelPanelRuleId.value = rule.id
+  // Parse current notify_channels (strip "type:" prefix if present)
+  const current = (rule.notify_channels || '').split(',').map(s => {
+    const trimmed = s.trim()
+    return trimmed.includes(':') ? trimmed.split(':')[1] : trimmed
+  }).filter(Boolean)
+  panelSelectedChannels.value = [...current]
+}
+
+function closeChannelPanel() {
+  channelPanelRuleId.value = null
+  panelSelectedChannels.value = []
+}
+
+function handleDocClick() {
+  if (channelPanelRuleId.value !== null) {
+    closeChannelPanel()
+  }
+}
+
+async function saveChannelBinding() {
+  const ruleId = channelPanelRuleId.value
+  if (!ruleId) return
+  channelPanelSaving.value = true
+  try {
+    const rule = list.value.find(r => r.id === ruleId)
+    if (!rule) return
+    const newChannels = panelSelectedChannels.value.join(',')
+    await updateAlertRule(ruleId, { ...rule, notify_channels: newChannels })
+    Message.success('渠道绑定已更新')
+    closeChannelPanel()
+    loadList()
+  } catch (e) {
+    Message.error('保存失败: ' + (e?.msg || e?.message || ''))
+  } finally {
+    channelPanelSaving.value = false
+  }
+}
+
+// ==================== 分页 ====================
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const curr = currentPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages = []
+  pages.push(1)
+  if (curr > 3) pages.push('...')
+  for (let i = Math.max(2, curr - 1); i <= Math.min(total - 1, curr + 1); i++) pages.push(i)
+  if (curr < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+})
+
+function goPage(p) {
+  if (p < 1 || p > totalPages.value || p === currentPage.value) return
+  currentPage.value = p
+  selectedIds.value = []
+  loadList()
+}
+
+function handlePageSizeChange() {
+  currentPage.value = 1
+  selectedIds.value = []
+  loadList()
+}
+
+// ==================== 选择 ====================
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx >= 0) selectedIds.value.splice(idx, 1)
+  else selectedIds.value.push(id)
+}
+
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = list.value.map(r => r.id)
+  }
+}
+
+// ==================== 批量操作 ====================
+async function handleBatchDelete() {
+  batchDeleting.value = true
+  try {
+    const res = await batchDeleteAlertRules({ ids: selectedIds.value })
+    if (res?.code === 0) {
+      Message.success(res.msg || '批量删除成功')
+      selectedIds.value = []
+      batchDeleteVisible.value = false
+      loadList()
+    } else {
+      Message.error(res?.msg || '批量删除失败')
+    }
+  } catch (e) {
+    Message.error('操作异常: ' + (e?.msg || e?.message || ''))
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+async function handleBatchUpdate() {
+  const payload = { ids: selectedIds.value }
+  if (batchUpdateForm.severity) payload.severity = batchUpdateForm.severity
+  if (batchUpdateForm.group) payload.group = batchUpdateForm.group
+  if (batchUpdateForm.duration) payload.duration = batchUpdateForm.duration
+
+  if (!payload.severity && !payload.group && !payload.duration) {
+    Message.warning('请至少填写一项要修改的内容')
+    return
+  }
+
+  batchUpdating.value = true
+  try {
+    const res = await batchUpdateAlertRules(payload)
+    if (res?.code === 0) {
+      Message.success(res.msg || '批量更新成功')
+      selectedIds.value = []
+      batchUpdateVisible.value = false
+      Object.assign(batchUpdateForm, { severity: '', group: '', duration: '' })
+      loadList()
+    } else {
+      Message.error(res?.msg || '批量更新失败')
+    }
+  } catch (e) {
+    Message.error('操作异常: ' + (e?.msg || e?.message || ''))
+  } finally {
+    batchUpdating.value = false
+  }
+}
+
+async function handleBatchToggle(enabled) {
+  try {
+    const res = await batchUpdateAlertRules({ ids: selectedIds.value, enabled })
+    if (res?.code === 0) {
+      Message.success(`已${enabled ? '启用' : '禁用'} ${res.data?.success || selectedIds.value.length} 条规则`)
+      selectedIds.value = []
+      loadList()
+    } else {
+      Message.error(res?.msg || '操作失败')
+    }
+  } catch (e) {
+    Message.error('操作异常: ' + (e?.msg || e?.message || ''))
+  }
+}
 
 // ==================== YAML 批量导入/导出 ====================
 const yamlImportVisible = ref(false)
@@ -1691,6 +2160,11 @@ async function handleBatchBind() {
 /* Batch bind button */
 .btn-batch-bind { border-color: #059669; color: #059669; }
 .btn-batch-bind:hover { background: #ecfdf5; border-color: #059669; }
+.btn-batch-delete { border-color: #dc2626; color: #dc2626; }
+.btn-batch-delete:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; }
+.btn-batch-delete:disabled, .btn-batch-update:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-batch-update { border-color: #d97706; color: #d97706; }
+.btn-batch-update:hover:not(:disabled) { background: #fffbeb; border-color: #d97706; }
 
 /* Bind mode cards */
 .bind-mode-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -1710,5 +2184,447 @@ async function handleBatchBind() {
   border: 1.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
 }
 .batch-bind-filter { margin-top: 8px; color: #64748b; font-size: 12px; }
+
+/* =====================================================
+   统计概览栏
+   ===================================================== */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid #e8ecf0;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.stat-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.06);
+  transform: translateY(-1px);
+}
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon-total { background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #6d28d9; }
+.stat-icon-bound { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); color: #059669; }
+.stat-icon-unbound { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #dc2626; }
+.stat-icon-channels { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); color: #2563eb; }
+.stat-info { display: flex; flex-direction: column; gap: 2px; }
+.stat-num { font-size: 20px; font-weight: 700; color: #1e293b; line-height: 1.2; }
+.stat-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
+
+/* =====================================================
+   绑定渠道列
+   ===================================================== */
+.channel-cell {
+  position: relative;
+  min-width: 120px;
+}
+.channel-bind-wrapper {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.15s;
+  border: 1.5px solid transparent;
+}
+.channel-bind-wrapper:hover {
+  background: #f5f3ff;
+  border-color: #c7d2fe;
+}
+.channel-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.channel-icons-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.channel-mini-icon {
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+.channel-more {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4f46e5;
+  background: #ede9fe;
+  padding: 2px 5px;
+  border-radius: 4px;
+  margin-left: 2px;
+}
+.channel-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+.channel-empty-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 4px 8px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.channel-bind-wrapper:hover .channel-empty-badge {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  background: #f5f3ff;
+}
+
+/* =====================================================
+   内联渠道编辑面板 (popover)
+   ===================================================== */
+.channel-panel-overlay {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 200;
+  padding-top: 6px;
+}
+.channel-panel {
+  width: 320px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: panelSlideIn 0.2s ease-out;
+}
+@keyframes panelSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.channel-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #fafaff 0%, #f8fafc 100%);
+}
+.cp-header-left { display: flex; flex-direction: column; gap: 2px; }
+.cp-title { font-size: 13px; font-weight: 700; color: #1e293b; }
+.cp-rule-name { font-size: 11px; color: #94a3b8; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-close {
+  width: 28px; height: 28px;
+  border: none; background: #f1f5f9; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: #64748b; cursor: pointer; transition: all 0.15s;
+}
+.cp-close:hover { background: #fee2e2; color: #ef4444; }
+
+.channel-panel-body {
+  padding: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.channel-panel-body::-webkit-scrollbar { width: 4px; }
+.channel-panel-body::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+.cp-channel-list { display: flex; flex-direction: column; gap: 6px; }
+.cp-channel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #e8ecf0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fafbfd;
+}
+.cp-channel-item:hover {
+  border-color: #a5b4fc;
+  background: #f8f7ff;
+}
+.cp-channel-item.cp-active {
+  border-color: #4f46e5;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
+}
+.cp-ch-icon { font-size: 18px; flex-shrink: 0; }
+.cp-ch-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cp-ch-info b { font-size: 12px; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-ch-info small { font-size: 11px; color: #94a3b8; }
+.cp-ch-tick {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: transparent;
+  transition: all 0.15s;
+}
+.cp-channel-item.cp-active .cp-ch-tick {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+.cp-empty {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.channel-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfd;
+}
+.cp-footer-meta { font-size: 11px; color: #94a3b8; font-weight: 500; }
+.cp-footer-btns { display: flex; gap: 8px; }
+.cp-btn-cancel {
+  padding: 6px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cp-btn-cancel:hover { border-color: #4f46e5; color: #4f46e5; }
+.cp-btn-save {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+.cp-btn-save:hover {
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+  transform: translateY(-1px);
+}
+.cp-btn-save:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* =====================================================
+   Checkbox 选择
+   ===================================================== */
+.th-checkbox, .td-checkbox { width: 40px; text-align: center; }
+.table-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.table-checkbox input { opacity: 0; position: absolute; width: 0; height: 0; }
+.table-checkbox .checkmark {
+  width: 18px; height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 5px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+.table-checkbox .checkmark::after {
+  content: '';
+  width: 5px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.15s;
+}
+.table-checkbox input:checked + .checkmark {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border-color: #4f46e5;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+.table-checkbox input:checked + .checkmark::after { transform: rotate(45deg) scale(1); }
+.data-table tr.selected { background: #f5f3ff !important; }
+.data-table tr.selected:hover { background: #ede9fe !important; }
+
+/* =====================================================
+   批量操作浮动工具栏
+   ===================================================== */
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 20px rgba(49, 46, 129, 0.25);
+  animation: batchBarSlideIn 0.25s ease-out;
+}
+@keyframes batchBarSlideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.batch-bar-enter-active { animation: batchBarSlideIn 0.25s ease-out; }
+.batch-bar-leave-active { animation: batchBarSlideIn 0.2s ease-in reverse; }
+.batch-left { display: flex; align-items: center; gap: 12px; }
+.batch-check-icon {
+  width: 24px; height: 24px;
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a5b4fc;
+  font-size: 12px;
+  font-weight: 700;
+}
+.batch-count { font-size: 13px; color: #e0e7ff; font-weight: 500; }
+.batch-count b { color: #fff; font-size: 15px; }
+.batch-clear-btn {
+  border: 1px solid rgba(165, 180, 252, 0.3);
+  background: transparent;
+  color: #a5b4fc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.batch-clear-btn:hover { background: rgba(165, 180, 252, 0.15); color: #fff; }
+.batch-right { display: flex; gap: 8px; }
+.batch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #fff;
+}
+.batch-btn:hover { transform: translateY(-1px); }
+.batch-btn-enable { background: linear-gradient(135deg, #059669 0%, #047857 100%); box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3); }
+.batch-btn-disable { background: linear-gradient(135deg, #64748b 0%, #475569 100%); box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3); }
+.batch-btn-update { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3); }
+.batch-btn-delete { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); }
+
+/* =====================================================
+   分页
+   ===================================================== */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  margin-top: 16px;
+  background: #fff;
+  border: 1px solid #e8ecf0;
+  border-radius: 12px;
+}
+.pagination-info { font-size: 13px; color: #64748b; }
+.pagination-info b { color: #1e293b; font-weight: 600; }
+.pagination-controls { display: flex; align-items: center; gap: 4px; }
+.page-btn {
+  min-width: 32px; height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0 6px;
+}
+.page-btn:hover:not(:disabled):not(.active) { border-color: #4f46e5; color: #4f46e5; background: #f5f3ff; }
+.page-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-color: #4f46e5;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  font-weight: 700;
+}
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-ellipsis { border: none; background: transparent; color: #94a3b8; cursor: default; }
+.page-size-select {
+  margin-left: 12px;
+  padding: 6px 10px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #4b5563;
+  background: #fff;
+  cursor: pointer;
+}
+.page-size-select:focus { border-color: #4f46e5; outline: none; }
+
+/* =====================================================
+   批量删除弹窗
+   ===================================================== */
+.batch-delete-list {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+.batch-delete-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #4b5563;
+}
+.bdi-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #dc2626;
+  flex-shrink: 0;
+}
 
 </style>

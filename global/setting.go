@@ -23,4 +23,5 @@ var (
 	MonitoringSetting *setting.MonitoringSettingS  // 监控配置
 	AISetting         *setting.AIAssistantSettingS // AI 助手配置
 	AIRegistry        *openai.Registry             // AI 多模型注册中心
+	LDAPSetting       *setting.LDAPSettingS        // LDAP 认证配置
 )

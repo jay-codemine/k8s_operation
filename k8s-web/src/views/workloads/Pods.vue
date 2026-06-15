@@ -1133,6 +1133,7 @@
 <script setup>
 import {computed, onMounted, onUnmounted, ref, watch, watchEffect} from 'vue';
 import podsApi from '@/api/cluster/workloads/pods';
+import namespaceApi from '@/api/cluster/config/namespace';
 import {useClusterStore} from '@/stores/cluster';
 import Pagination from '@/components/Pagination.vue';
 import KubeTerminal from '@/components/KubeTerminal.vue'

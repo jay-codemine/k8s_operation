@@ -150,6 +150,9 @@ type JenkinsSettingS struct {
 	MaxBuildTime int    `mapstructure:"MaxBuildTime"` // 最大构建时间(分钟)，超时判定失败，默认30
 	// 通知配置
 	DingTalkWebhook string `mapstructure:"DingTalkWebhook"` // 钉钉机器人 Webhook URL
+	// 飞书审批通知配置
+	FeishuWebhook string `mapstructure:"FeishuWebhook"` // 飞书机器人 Webhook URL（用于审批通知）
+	FeishuSecret  string `mapstructure:"FeishuSecret"`  // 飞书机器人签名密钥
 }
 
 // =============================================================================
@@ -235,6 +238,43 @@ type MonitoringSettingS struct {
 	Enabled       bool   `mapstructure:"Enabled"`       // 是否启用监控
 	PrometheusURL string `mapstructure:"PrometheusURL"` // Prometheus 地址
 	QueryTimeout  int    `mapstructure:"QueryTimeout"`  // 查询超时（秒）
+}
+
+// ==================== LDAP 配置 ====================
+
+// LDAPSettingS LDAP 认证配置
+type LDAPSettingS struct {
+	Enabled       bool   `mapstructure:"Enabled"`       // 是否启用 LDAP 认证
+	Host          string `mapstructure:"Host"`          // LDAP 服务器地址
+	Port          int    `mapstructure:"Port"`          // LDAP 端口（389/636）
+	UseTLS        bool   `mapstructure:"UseTLS"`        // 是否启用 TLS（636端口用 true）
+	SkipVerify    bool   `mapstructure:"SkipVerify"`    // 跳过 TLS 证书验证
+	BindDN        string `mapstructure:"BindDN"`        // 管理员 Bind DN
+	BindPassword  string `mapstructure:"BindPassword"`  // 管理员密码
+	BaseDN        string `mapstructure:"BaseDN"`        // 用户搜索基础 DN
+	UserFilter    string `mapstructure:"UserFilter"`    // 用户搜索过滤器，如 (uid=%s) 或 (sAMAccountName=%s)
+	GroupBaseDN   string `mapstructure:"GroupBaseDN"`   // 组搜索基础 DN
+	GroupFilter   string `mapstructure:"GroupFilter"`   // 组搜索过滤器，如 (memberUid=%s) 或 (member=%s)
+	GroupAttr     string `mapstructure:"GroupAttr"`     // 组名属性（默认 cn）
+	// 属性映射
+	AttrUsername    string `mapstructure:"AttrUsername"`    // 用户名属性（默认 uid / sAMAccountName）
+	AttrEmail       string `mapstructure:"AttrEmail"`       // 邮箱属性（默认 mail）
+	AttrPhone       string `mapstructure:"AttrPhone"`       // 手机属性（默认 mobile）
+	AttrDisplayName string `mapstructure:"AttrDisplayName"` // 显示名属性（默认 cn / displayName）
+	// 同步策略
+	SyncOnLogin   bool `mapstructure:"SyncOnLogin"`   // 登录时同步角色（推荐 true）
+	AutoCreate    bool `mapstructure:"AutoCreate"`    // 首次登录自动创建用户
+	LocalFallback bool `mapstructure:"LocalFallback"` // LDAP 不可用时是否回退到本地认证
+	// 组-角色映射
+	GroupRoleMapping []LDAPGroupRoleMapping `mapstructure:"GroupRoleMapping"`
+}
+
+// LDAPGroupRoleMapping LDAP 组到平台角色的映射
+type LDAPGroupRoleMapping struct {
+	LDAPGroup     string `mapstructure:"LDAPGroup"`     // LDAP 组名（cn 值）
+	PlatformRole  string `mapstructure:"PlatformRole"`  // 平台角色标识
+	ClusterAccess string `mapstructure:"ClusterAccess"` // 集群域权限级别: none/read/write/admin
+	CICDAccess    string `mapstructure:"CICDAccess"`    // 发布域权限级别: none/read/write/admin
 }
 
 // AIAssistantSettingS AI 助手配置（支持多模型提供商）

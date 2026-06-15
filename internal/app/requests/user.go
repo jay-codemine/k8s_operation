@@ -124,6 +124,77 @@ func ValidUserUpdateRequest(data interface{}, ctx *gin.Context) map[string][]str
 	return valid.ValidateOptions(data, rules, messages)
 }
 
+// ==================== 批量导入用户 ====================
+
+// UserBatchImportItem 单条用户导入记录
+type UserBatchImportItem struct {
+	Username string `json:"username"`                        // 用户名（必填）
+	Password string `json:"password,omitempty"`              // 密码（可选，默认123456）
+	Email    string `json:"email,omitempty"`                 // 邮箱
+	Phone    string `json:"phone,omitempty"`                 // 手机号
+	Role     string `json:"role,omitempty"`                  // 角色标识：developer/tester/viewer等
+}
+
+// UserBatchImportRequest 批量导入用户请求
+type UserBatchImportRequest struct {
+	Users          []UserBatchImportItem `json:"users" valid:"users"`                   // 用户列表
+	DefaultRole    string                `json:"default_role,omitempty"`                // 默认角色（未指定时使用）
+	DefaultPassword string               `json:"default_password,omitempty"`            // 默认密码（未指定时使用123456）
+	SkipExisting   bool                  `json:"skip_existing"`                         // 遇到已存在用户是否跳过
+}
+
+func NewUserBatchImportRequest() *UserBatchImportRequest {
+	return &UserBatchImportRequest{
+		DefaultRole:    "developer",
+		DefaultPassword: "123456",
+		SkipExisting:   true,
+	}
+}
+
+func ValidUserBatchImportRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	req := data.(*UserBatchImportRequest)
+	errs := make(map[string][]string)
+
+	if len(req.Users) == 0 {
+		errs["users"] = append(errs["users"], "用户列表不能为空")
+		return errs
+	}
+	if len(req.Users) > 500 {
+		errs["users"] = append(errs["users"], "单次导入不能超过500条")
+		return errs
+	}
+
+	// 校验每条记录的用户名
+	usernameSet := make(map[string]bool)
+	for i, u := range req.Users {
+		if u.Username == "" {
+			errs["users"] = append(errs["users"], fmt.Sprintf("第%d条记录用户名不能为空", i+1))
+		}
+		if usernameSet[u.Username] {
+			errs["users"] = append(errs["users"], fmt.Sprintf("第%d条记录用户名 %s 重复", i+1, u.Username))
+		}
+		usernameSet[u.Username] = true
+	}
+
+	return errs
+}
+
+// UserBatchImportResult 批量导入结果
+type UserBatchImportResult struct {
+	Total    int                      `json:"total"`     // 总数
+	Success  int                      `json:"success"`   // 成功数
+	Skipped  int                      `json:"skipped"`   // 跳过数
+	Failed   int                      `json:"failed"`    // 失败数
+	Details  []UserBatchImportDetail  `json:"details"`   // 详情
+}
+
+type UserBatchImportDetail struct {
+	Username string `json:"username"`
+	Status   string `json:"status"`  // success/skipped/failed
+	Message  string `json:"message,omitempty"`
+	UserID   uint32 `json:"user_id,omitempty"`
+}
+
 type UserListRequest struct {
 	Username string `json:"username,omitempty" form:"username"`
 	Role     string `json:"role,omitempty" form:"role" description:"角色筛选"`

@@ -70,6 +70,18 @@
             :class="{ active: isActive(`/c/${clusterId}/workloads/cronjobs`) }"
             @click="go('workloads/cronjobs')"
           >⏰ CronJobs</a>
+          <a
+            v-if="canView('hpa')"
+            class="menu-item"
+            :class="{ active: isActive(`/c/${clusterId}/workloads/hpa`) }"
+            @click="go('workloads/hpa')"
+          >📈 HPA 弹性扩缩容</a>
+          <a
+            v-if="canView('vpa')"
+            class="menu-item"
+            :class="{ active: isActive(`/c/${clusterId}/workloads/vpa`) }"
+            @click="go('workloads/vpa')"
+          >📊 VPA 垂直扩缩容</a>
         </template>
 
         <template v-if="canViewGroup('config')">
@@ -181,30 +193,34 @@ const ROLE_RESOURCE_MAP = {
   // 集群管理员 - 所有资源
   cluster_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
+    'hpa', 'vpa',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
     'configmaps', 'secrets', 'namespaces', 'nodes', 'crd'
   ],
   // 开发者 - 常用资源（劅除节点、存储类等集群级资源）
   developer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
+    'hpa', 'vpa',
     'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces', 'crd'
   ],
   // 只读 - 可查看所有资源（与 cluster_admin 相同，但无操作权限）
   viewer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
+    'hpa', 'vpa',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
     'configmaps', 'secrets', 'namespaces', 'nodes', 'crd'
   ],
   // CI/CD管理员 - 部署相关
   cicd_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
+    'hpa', 'vpa',
     'services', 'ingress', 'pvc', 'configmaps', 'secrets', 'namespaces', 'crd'
   ]
 }
 
 // 资源分组
 const resourceGroups = {
-  workloads: ['pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs'],
+  workloads: ['pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs', 'hpa', 'vpa'],
   config: ['configmaps', 'secrets'],
   storage: ['storageclasses', 'pv', 'pvc'],
   networking: ['services', 'ingress'],

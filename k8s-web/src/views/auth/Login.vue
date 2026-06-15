@@ -17,6 +17,12 @@
         </div>
         <h2>Kubernetes Admin Dashboard</h2>
         <p>{{ mode === 'login' ? '请登录以继续' : '创建新账号' }}</p>
+        <div v-if="ldapEnabled && mode === 'login'" class="ldap-badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>LDAP 认证已启用</span>
+        </div>
       </div>
 
       <form class="login-form" @submit.prevent="handleSubmit">
@@ -96,6 +102,12 @@
 
         <div class="error-message" v-if="error">{{ error }}</div>
         <div class="success-message" v-if="success">{{ success }}</div>
+        <div class="ldap-info" v-if="authMethod === 'ldap' && success">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          已通过 LDAP 认证
+        </div>
       </form>
     </div>
 
@@ -165,9 +177,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { login, register, forgotPassword } from '@/api/auth'
+import { getLDAPStatus } from '@/api/ldap'
 import { useClusterStore } from '@/stores/cluster'
 
 const router = useRouter()
@@ -186,6 +199,19 @@ const isLoading = ref(false)
 const error = ref('')
 const success = ref('')
 const showPassword = ref(false)
+const ldapEnabled = ref(false)
+const authMethod = ref('') // 'ldap' | 'local'
+
+// 检查 LDAP 状态
+onMounted(async () => {
+  try {
+    const res = await getLDAPStatus()
+    const data = res?.data ?? res
+    ldapEnabled.value = data?.enabled || false
+  } catch (e) {
+    // LDAP 状态接口不可用时静默失败
+  }
+})
 
 // =====================
 // 忘记密码弹窗状态
@@ -318,6 +344,9 @@ const loginRequest = async (username, password) => {
     error.value = res?.msg || '登录失败'
     return null
   }
+
+  // 记录认证方式
+  authMethod.value = data?.auth_method || 'local'
 
   return { token, user }
 }
@@ -659,5 +688,31 @@ const handleSubmit = async () => {
   .modal-actions {
     flex-direction: column;
   }
+}
+
+/* LDAP 标识样式 */
+.ldap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 20px;
+  color: #86efac;
+  font-size: 12px;
+}
+
+.ldap-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: #a5b4fc;
+  font-size: 13px;
 }
 </style>

@@ -353,6 +353,7 @@ CREATE TABLE IF NOT EXISTS `cicd_approval` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `pipeline_id` bigint NOT NULL COMMENT '流水线ID',
   `pipeline_run_id` bigint NOT NULL COMMENT '运行记录ID',
+  `stage_id` bigint NOT NULL DEFAULT 0 COMMENT '关联流水线阶段ID',
   `release_id` bigint NOT NULL DEFAULT 0 COMMENT '发布单ID',
   `env_name` varchar(50) NOT NULL COMMENT '目标环境',
   `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '状态:pending,approved,rejected,expired',
@@ -364,14 +365,66 @@ CREATE TABLE IF NOT EXISTS `cicd_approval` (
   `approve_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '审批意见',
   `approve_time` bigint unsigned NOT NULL DEFAULT 0 COMMENT '审批时间',
   `expire_time` bigint unsigned NOT NULL DEFAULT 0 COMMENT '过期时间',
+  `feishu_token` varchar(64) NOT NULL DEFAULT '' COMMENT '飞书审批回调Token',
   `created_at` bigint unsigned NOT NULL DEFAULT 0,
   `modified_at` bigint unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_pipeline_id` (`pipeline_id`),
   KEY `idx_pipeline_run_id` (`pipeline_run_id`),
+  KEY `idx_stage_id` (`stage_id`),
   KEY `idx_status` (`status`),
-  KEY `idx_request_user_id` (`request_user_id`)
+  KEY `idx_request_user_id` (`request_user_id`),
+  KEY `idx_feishu_token` (`feishu_token`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CI/CD审批记录表';
+
+-- 【兼容存量集群】cicd_approval 幂等补丁：若老库已存在该表但缺 stage_id / feishu_token 字段/索引，自动补上
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND column_name = 'stage_id'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD COLUMN `stage_id` BIGINT NOT NULL DEFAULT 0 COMMENT ''关联流水线阶段ID'' AFTER `pipeline_run_id`',
+    'SELECT ''column stage_id already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND column_name = 'feishu_token'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD COLUMN `feishu_token` VARCHAR(64) NOT NULL DEFAULT '''' COMMENT ''飞书审批回调Token'' AFTER `expire_time`',
+    'SELECT ''column feishu_token already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND index_name = 'idx_stage_id'
+);
+SET @sql := IF(@idx_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD INDEX `idx_stage_id` (`stage_id`)',
+    'SELECT ''index idx_stage_id already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND index_name = 'idx_feishu_token'
+);
+SET @sql := IF(@idx_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD INDEX `idx_feishu_token` (`feishu_token`)',
+    'SELECT ''index idx_feishu_token already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =====================================================
 -- 13. CI/CD - 发布单表

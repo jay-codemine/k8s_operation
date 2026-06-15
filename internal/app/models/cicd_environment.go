@@ -46,6 +46,7 @@ type CicdApproval struct {
 	ApproveReason string `gorm:"column:approve_reason" json:"approve_reason"` // 审批意见
 	ApproveTime   uint64 `gorm:"column:approve_time" json:"approve_time"`     // 审批时间
 	ExpireTime    uint64 `gorm:"column:expire_time" json:"expire_time"`       // 过期时间
+	FeishuToken   string `gorm:"column:feishu_token;size:64" json:"feishu_token"` // 飞书审批回调Token（唯一标识，用于回调验证）
 	CreatedAt     uint64 `gorm:"column:created_at" json:"created_at"`
 	ModifiedAt    uint64 `gorm:"column:modified_at" json:"modified_at"`
 }

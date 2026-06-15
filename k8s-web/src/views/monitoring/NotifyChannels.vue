@@ -6,9 +6,19 @@
         <h3>通知渠道</h3>
         <span class="header-desc">配置钉钉、飞书、企业微信等告警通知渠道，支持分级推送与限流</span>
       </div>
-      <button class="btn-primary" @click="openDialog()">
-        <span>+</span> 新增渠道
-      </button>
+      <div class="header-actions">
+        <button class="btn-action btn-batch-del" :disabled="selectedIds.length === 0" @click="batchDeleteVisible = true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          批量删除<span v-if="selectedIds.length">({{ selectedIds.length }})</span>
+        </button>
+        <button class="btn-action btn-batch-update" :disabled="selectedIds.length === 0" @click="batchUpdateVisible = true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          批量更新<span v-if="selectedIds.length">({{ selectedIds.length }})</span>
+        </button>
+        <button class="btn-primary" @click="openDialog()">
+          <span>+</span> 新增渠道
+        </button>
+      </div>
     </div>
 
     <!-- 渠道类型快捷入口 -->
@@ -24,7 +34,13 @@
 
     <!-- 渠道卡片列表 -->
     <div class="channels-grid" v-if="list.length">
-      <div class="channel-card" v-for="ch in list" :key="ch.id" :class="{ disabled: !ch.enabled }">
+      <div class="channel-card" v-for="ch in paginatedList" :key="ch.id" :class="{ disabled: !ch.enabled, selected: selectedIds.includes(ch.id) }">
+        <div class="card-select">
+          <label class="table-checkbox" @click.stop>
+            <input type="checkbox" :checked="selectedIds.includes(ch.id)" @change="toggleSelect(ch.id)" />
+            <span class="checkmark"></span>
+          </label>
+        </div>
         <div class="card-header">
           <div class="card-type-icon" :class="ch.type">
             {{ getTypeIcon(ch.type) }}
@@ -77,8 +93,82 @@
       </div>
     </div>
 
+    <!-- 分页 -->
+    <div class="pagination-bar" v-if="list.length > 0">
+      <div class="pagination-info">共 <b>{{ list.length }}</b> 个渠道，当前第 <b>{{ channelPage }}</b> / {{ channelTotalPages }} 页</div>
+      <div class="pagination-controls">
+        <button class="page-btn" :disabled="channelPage <= 1" @click="channelPage--">‹</button>
+        <template v-for="p in channelVisiblePages" :key="p">
+          <button v-if="p === '...'" class="page-btn" disabled>...</button>
+          <button v-else class="page-btn" :class="{ active: p === channelPage }" @click="channelPage = p">{{ p }}</button>
+        </template>
+        <button class="page-btn" :disabled="channelPage >= channelTotalPages" @click="channelPage++">›</button>
+        <select class="page-size-select" v-model="channelPageSize" @change="channelPage = 1">
+          <option :value="6">6条/页</option>
+          <option :value="12">12条/页</option>
+          <option :value="24">24条/页</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 批量删除确认 -->
+    <div class="modal-overlay" v-if="batchDeleteVisible" @click.self="batchDeleteVisible = false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-header"><h3>⚠️ 批量删除确认</h3><button class="modal-close" @click="batchDeleteVisible = false">×</button></div>
+        <div class="modal-body">
+          <p>确定删除选中的 <b style="color:#dc2626">{{ selectedIds.length }}</b> 个通知渠道？关联的告警规则将不再收到通知。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" @click="batchDeleteVisible = false">取消</button>
+          <button class="btn-danger" @click="handleBatchDelete" :disabled="batchDeleting">{{ batchDeleting ? '删除中...' : '确认删除' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批量更新弹窗 -->
+    <div class="modal-overlay" v-if="batchUpdateVisible" @click.self="batchUpdateVisible = false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-header">
+          <h3>📝 批量更新通知渠道</h3>
+          <button class="modal-close" @click="batchUpdateVisible = false">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="batch-update-hint">对选中的 <b>{{ selectedIds.length }}</b> 个渠道统一修改以下属性（留空不修改）：</p>
+          <div class="form-section" style="margin-top: 16px;">
+            <div class="form-row">
+              <label>启用状态</label>
+              <select v-model="batchUpdateForm.enabled" class="batch-field">
+                <option value="">不修改</option>
+                <option value="true">全部启用</option>
+                <option value="false">全部禁用</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>限流 (条/分钟)</label>
+              <input v-model.number="batchUpdateForm.rate_limit" type="number" min="0" max="1000" placeholder="留空不修改" class="batch-field" />
+              <span class="form-hint">设为 0 表示不限流</span>
+            </div>
+            <div class="form-row">
+              <label>恢复通知</label>
+              <select v-model="batchUpdateForm.send_resolved" class="batch-field">
+                <option value="">不修改</option>
+                <option value="true">开启恢复通知</option>
+                <option value="false">关闭恢复通知</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" @click="batchUpdateVisible = false">取消</button>
+          <button class="btn-primary" @click="handleBatchUpdate" :disabled="batchUpdating">
+            {{ batchUpdating ? '更新中...' : '确认更新' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 空状态 -->
-    <div class="empty-state" v-else>
+    <div class="empty-state" v-if="!list.length">
       <div class="empty-icon">📡</div>
       <h3>暂无通知渠道</h3>
       <p>配置通知渠道后，告警触发时将自动推送到钉钉、飞书等平台</p>
@@ -127,8 +217,9 @@
             </h4>
             <div class="form-row">
               <label>Webhook URL <span class="required">*</span></label>
-              <input v-model="form.webhook_url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+              <input v-model="form.webhook_url" :placeholder="form.type === 'feishu' ? 'https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxx' : form.type === 'dingtalk' ? 'https://oapi.dingtalk.com/robot/send?access_token=...' : 'https://...'" />
             </div>
+            <!-- 钉钉安全配置 -->
             <div class="form-row" v-if="form.type === 'dingtalk'">
               <label>加签密钥 (Secret)</label>
               <input v-model="form.secret" type="password" placeholder="SEC..." />
@@ -152,6 +243,20 @@
                   <input type="checkbox" v-model="form.at_all" /> @所有人
                 </label>
               </div>
+            </div>
+            <!-- 飞书安全配置 -->
+            <div class="form-row" v-if="form.type === 'feishu'">
+              <label>签名校验密钥 (Secret)</label>
+              <input v-model="form.secret" type="password" placeholder="如: abcdefg123..." />
+              <span class="form-hint">飞书机器人「安全设置 → 签名校验」中的密钥。启用后发送消息时会附带签名，飞书将验证签名合法性。</span>
+            </div>
+            <div class="form-row" v-if="form.type === 'feishu'">
+              <label>自定义关键词</label>
+              <input v-model="form.security_keyword" placeholder="如: 飞书（多个用英文逗号分隔）" />
+              <span class="form-hint">
+                对应飞书机器人「安全设置 → 自定义关键词」，可填多个（逗号分隔）。
+                发送时消息需包含至少一个关键词才能通过安全校验；若消息不含关键词，系统会自动将第一个注入到消息中。
+              </span>
             </div>
           </div>
 
@@ -415,7 +520,8 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 const { confirm: showConfirm } = useConfirmDialog()
 import {
   listNotifyChannels, createNotifyChannel, updateNotifyChannel,
-  deleteNotifyChannel, testNotifyChannel,
+  deleteNotifyChannel, testNotifyChannel, batchDeleteNotifyChannels,
+  batchUpdateNotifyChannels,
   listNotifyTemplates, createNotifyTemplate, updateNotifyTemplate,
   deleteNotifyTemplate, previewNotifyTemplate, setDefaultNotifyTemplate,
 } from '@/api/monitoring'
@@ -427,6 +533,100 @@ const submitting = ref(false)
 const deleteTarget = ref(null)
 const testing = ref(null)
 const filters = reactive({ type: '', keyword: '' })
+
+// 分页
+const channelPage = ref(1)
+const channelPageSize = ref(6)
+const channelTotalPages = computed(() => Math.ceil(list.value.length / channelPageSize.value) || 1)
+const paginatedList = computed(() => {
+  const start = (channelPage.value - 1) * channelPageSize.value
+  return list.value.slice(start, start + channelPageSize.value)
+})
+const channelVisiblePages = computed(() => {
+  const tp = channelTotalPages.value
+  if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1)
+  const curr = channelPage.value
+  const pages = [1]
+  if (curr > 3) pages.push('...')
+  for (let i = Math.max(2, curr - 1); i <= Math.min(tp - 1, curr + 1); i++) pages.push(i)
+  if (curr < tp - 2) pages.push('...')
+  pages.push(tp)
+  return pages
+})
+
+// 选择
+const selectedIds = ref([])
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx >= 0) selectedIds.value.splice(idx, 1)
+  else selectedIds.value.push(id)
+}
+
+// 批量删除
+const batchDeleteVisible = ref(false)
+const batchDeleting = ref(false)
+async function handleBatchDelete() {
+  if (!selectedIds.value.length) return
+  batchDeleting.value = true
+  try {
+    const res = await batchDeleteNotifyChannels({ ids: selectedIds.value })
+    if (res?.code === 0) {
+      Message.success(`成功删除 ${res.data?.success || selectedIds.value.length} 个渠道`)
+      selectedIds.value = []
+      batchDeleteVisible.value = false
+      loadList()
+    } else {
+      Message.error(res?.msg || '批量删除失败')
+    }
+  } catch (e) {
+    Message.error(e?.msg || '操作失败')
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+// 批量更新
+const batchUpdateVisible = ref(false)
+const batchUpdating = ref(false)
+const batchUpdateForm = reactive({ enabled: '', rate_limit: '', send_resolved: '' })
+async function handleBatchUpdate() {
+  if (!selectedIds.value.length) return
+  const payload = { ids: selectedIds.value }
+  let hasField = false
+  if (batchUpdateForm.enabled !== '') {
+    payload.enabled = batchUpdateForm.enabled === 'true'
+    hasField = true
+  }
+  if (batchUpdateForm.rate_limit !== '' && batchUpdateForm.rate_limit !== null) {
+    payload.rate_limit = Number(batchUpdateForm.rate_limit)
+    hasField = true
+  }
+  if (batchUpdateForm.send_resolved !== '') {
+    payload.send_resolved = batchUpdateForm.send_resolved === 'true'
+    hasField = true
+  }
+  if (!hasField) {
+    Message.warning('请至少选择一个要修改的属性')
+    return
+  }
+  batchUpdating.value = true
+  try {
+    const res = await batchUpdateNotifyChannels(payload)
+    if (res?.code === 0) {
+      Message.success(`批量更新完成: 成功 ${res.data?.success || 0} 个`)
+      selectedIds.value = []
+      batchUpdateVisible.value = false
+      Object.assign(batchUpdateForm, { enabled: '', rate_limit: '', send_resolved: '' })
+      loadList()
+    } else {
+      Message.error(res?.msg || '批量更新失败')
+    }
+  } catch (e) {
+    Message.error(e?.msg || '操作失败')
+  } finally {
+    batchUpdating.value = false
+  }
+}
 
 const channelTypes = [
   { value: 'dingtalk', label: '钉钉', icon: '🔷' },
@@ -736,10 +936,39 @@ async function previewTemplate(tpl) {
 
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h3 { font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; }
-.header-desc { font-size: 13px; color: #9ca3af; margin-left: 12px; }
+.header-left { display: flex; align-items: baseline; gap: 12px; }
+.header-desc { font-size: 13px; color: #9ca3af; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.btn-action { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; }
+.btn-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-batch-del { border-color: #dc2626; color: #dc2626; }
+.btn-batch-del:hover:not(:disabled) { background: #fef2f2; }
+.btn-batch-update { border-color: #d97706; color: #d97706; }
+.btn-batch-update:hover:not(:disabled) { background: #fffbeb; }
 .btn-primary { padding: 8px 18px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
 .btn-primary:hover { background: #4338ca; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Card selection */
+.card-select { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.channel-card { position: relative; }
+.channel-card.selected { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,0.12); }
+.table-checkbox { position: relative; display: inline-flex; cursor: pointer; }
+.table-checkbox input { position: absolute; opacity: 0; width: 0; height: 0; }
+.checkmark { width: 16px; height: 16px; border: 1.5px solid #d1d5db; border-radius: 4px; background: #fff; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.table-checkbox input:checked + .checkmark { background: linear-gradient(135deg, #4f46e5, #7c3aed); border-color: transparent; }
+.table-checkbox input:checked + .checkmark::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+
+/* Pagination */
+.pagination-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #fff; border-radius: 12px; border: 1px solid #e8ecf0; margin-top: 16px; }
+.pagination-info { font-size: 13px; color: #6b7280; }
+.pagination-info b { color: #1e293b; }
+.pagination-controls { display: flex; align-items: center; gap: 4px; }
+.page-btn { min-width: 32px; height: 32px; padding: 0 8px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 13px; color: #374151; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.page-btn:hover:not(:disabled):not(.active) { border-color: #4f46e5; color: #4f46e5; }
+.page-btn.active { background: linear-gradient(135deg, #4f46e5, #6d28d9); color: #fff; border-color: transparent; font-weight: 600; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-size-select { margin-left: 12px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; background: #fff; }
 
 /* 类型筛选条 */
 .channel-type-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -885,4 +1114,10 @@ async function previewTemplate(tpl) {
 .preview-content { padding: 16px; flex: 1; overflow-y: auto; }
 .preview-rendered { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #374151; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.8; }
 .preview-rendered.full { font-size: 13px; }
+
+/* 批量更新 */
+.batch-update-hint { margin: 0; font-size: 14px; color: #4b5563; }
+.batch-update-hint b { color: #4f46e5; }
+.batch-field { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; background: #fff; transition: border-color 0.2s; box-sizing: border-box; }
+.batch-field:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
 </style>

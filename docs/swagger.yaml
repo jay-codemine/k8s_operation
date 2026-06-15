@@ -1313,6 +1313,66 @@ definitions:
         description: Normal | Warning
         type: string
     type: object
+  requests.KubeHPABatchItem:
+    properties:
+      max_replicas:
+        type: integer
+      min_replicas:
+        type: integer
+      name:
+        type: string
+      namespace:
+        type: string
+    type: object
+  requests.KubeHPABatchScaleRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/requests.KubeHPABatchItem'
+        type: array
+    type: object
+  requests.KubeHPACreateRequest:
+    properties:
+      annotations:
+        additionalProperties:
+          type: string
+        type: object
+      cpu_target_util:
+        description: 目标 CPU 利用率 % (1-100)
+        type: integer
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      max_replicas:
+        description: 最大副本数 > min
+        type: integer
+      mem_target_util:
+        description: 目标内存利用率 %
+        type: integer
+      min_replicas:
+        description: 最小副本数 >=0
+        type: integer
+      name:
+        type: string
+      namespace:
+        type: string
+      scale_down_stab_seconds:
+        description: 缩容稳定窗口（秒）
+        type: integer
+      scale_up_stab_seconds:
+        description: 扩容稳定窗口（秒）
+        type: integer
+      target_api_version:
+        description: 默认 apps/v1
+        type: string
+      target_kind:
+        description: Deployment/StatefulSet
+        type: string
+      target_name:
+        description: 目标负载名称
+        type: string
+    type: object
   requests.KubeIngressCreateRequest:
     properties:
       annotations:
@@ -8313,6 +8373,106 @@ paths:
       summary: 获取 Deployment 的 YAML 配置
       tags:
       - K8s Deployment 管理
+  /api/v1/k8s/hpa/batch-scale:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 批量扩缩容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.KubeHPABatchScaleRequest'
+      responses: {}
+      summary: 批量扩容/缩容 HPA（618 促销场景）
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/batch-status:
+    post:
+      responses: {}
+      summary: 批量查询 HPA 当前状态（统一数据，验证扩缩容是否成功）
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.KubeHPACreateRequest'
+      responses: {}
+      summary: 创建 HPA
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/create-from-yaml:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: YAML 内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.YamlCreateRequest'
+      responses: {}
+      summary: 通过 YAML 创建 HPA
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/delete:
+    delete:
+      responses: {}
+      summary: 删除 HPA
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/detail:
+    get:
+      responses: {}
+      summary: 获取 HPA 详情
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/list:
+    get:
+      parameters:
+      - description: 命名空间
+        in: query
+        name: namespace
+        type: string
+      - description: HPA 名称(模糊)
+        in: query
+        name: name
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses: {}
+      summary: 获取 HPA 列表
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/scale:
+    post:
+      responses: {}
+      summary: 单独修改 HPA 副本数（min/max）
+      tags:
+      - K8s HPA 弹性扩缩容
+  /api/v1/k8s/hpa/update:
+    post:
+      responses: {}
+      summary: 更新 HPA
+      tags:
+      - K8s HPA 弹性扩缩容
   /api/v1/k8s/ingress/apply-yaml:
     put:
       consumes:
@@ -12757,6 +12917,57 @@ paths:
       summary: 获取 StorageClass YAML
       tags:
       - K8s StorageClass 管理
+  /api/v1/k8s/vpa/available:
+    get:
+      responses: {}
+      summary: 检测 VPA Operator 是否在集群中安装
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/create:
+    post:
+      responses: {}
+      summary: 创建 VPA
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/create-from-yaml:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: YAML 内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.YamlCreateRequest'
+      responses: {}
+      summary: 通过 YAML 创建 VPA
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/delete:
+    delete:
+      responses: {}
+      summary: 删除 VPA
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/detail:
+    get:
+      responses: {}
+      summary: 获取 VPA 详情
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/list:
+    get:
+      responses: {}
+      summary: 获取 VPA 列表
+      tags:
+      - K8s VPA 垂直扩缩容
+  /api/v1/k8s/vpa/update:
+    post:
+      responses: {}
+      summary: 更新 VPA
+      tags:
+      - K8s VPA 垂直扩缩容
   /api/v1/platform/appstore/categories:
     get:
       description: 获取所有分类及其应用计数

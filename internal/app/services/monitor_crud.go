@@ -721,6 +721,110 @@ func (s *MonitorCRUDService) ToggleAlertRule(ctx context.Context, id int64, enab
 }
 
 // ============================================================
+// 批量删除 / 批量更新
+// ============================================================
+
+// BatchDeleteReq 批量删除请求
+type BatchDeleteReq struct {
+	IDs []int64 `json:"ids" binding:"required"`
+}
+
+// BatchDeleteResult 批量删除结果
+type BatchDeleteResult struct {
+	Total   int `json:"total"`
+	Success int `json:"success"`
+	Failed  int `json:"failed"`
+}
+
+// BatchDeleteAlertRules 批量删除告警规则（软删除）
+func (s *MonitorCRUDService) BatchDeleteAlertRules(ctx context.Context, ids []int64) (*BatchDeleteResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("请指定要删除的规则 ID")
+	}
+	if len(ids) > 200 {
+		return nil, fmt.Errorf("单次最多删除 200 条规则")
+	}
+
+	tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+		Where("id IN ? AND is_del = 0", ids).
+		Update("is_del", 1)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return &BatchDeleteResult{
+		Total:   len(ids),
+		Success: int(tx.RowsAffected),
+		Failed:  len(ids) - int(tx.RowsAffected),
+	}, nil
+}
+
+// BatchUpdateReq 批量更新请求
+type BatchUpdateReq struct {
+	IDs      []int64 `json:"ids" binding:"required"`
+	Severity *string `json:"severity"` // 可选: critical/warning/info
+	Group    *string `json:"group"`    // 可选: 修改分组
+	Enabled  *bool   `json:"enabled"`  // 可选: 启用/禁用
+	Duration *string `json:"duration"` // 可选: 持续时间
+}
+
+// BatchUpdateResult 批量更新结果
+type BatchUpdateResult struct {
+	Total   int      `json:"total"`
+	Success int      `json:"success"`
+	Failed  int      `json:"failed"`
+	Fields  []string `json:"fields"` // 更新的字段列表
+}
+
+// BatchUpdateAlertRules 批量更新告警规则
+func (s *MonitorCRUDService) BatchUpdateAlertRules(ctx context.Context, req BatchUpdateReq) (*BatchUpdateResult, error) {
+	if len(req.IDs) == 0 {
+		return nil, fmt.Errorf("请指定要更新的规则 ID")
+	}
+	if len(req.IDs) > 200 {
+		return nil, fmt.Errorf("单次最多更新 200 条规则")
+	}
+
+	updates := make(map[string]interface{})
+	var fields []string
+
+	if req.Severity != nil && *req.Severity != "" {
+		updates["severity"] = *req.Severity
+		fields = append(fields, "severity")
+	}
+	if req.Group != nil {
+		updates["group"] = *req.Group
+		fields = append(fields, "group")
+	}
+	if req.Enabled != nil {
+		updates["enabled"] = *req.Enabled
+		fields = append(fields, "enabled")
+	}
+	if req.Duration != nil && *req.Duration != "" {
+		updates["duration"] = *req.Duration
+		fields = append(fields, "duration")
+	}
+
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("没有要更新的字段")
+	}
+
+	tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+		Where("id IN ? AND is_del = 0", req.IDs).
+		Updates(updates)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return &BatchUpdateResult{
+		Total:   len(req.IDs),
+		Success: int(tx.RowsAffected),
+		Failed:  len(req.IDs) - int(tx.RowsAffected),
+		Fields:  fields,
+	}, nil
+}
+
+// ============================================================
 // 批量操作
 // ============================================================
 
@@ -1107,3 +1211,126 @@ func (s *MonitorCRUDService) GetAlertRuleGroups(ctx context.Context) ([]string, 
 
 // ignore unused import
 var _ = gorm.ErrRecordNotFound
+
+// ============================================================
+// 批量删除: 告警事件、通知渠道、静默规则
+// ============================================================
+
+// BatchDeleteAlertEvents 批量删除告警事件（硬删除）
+func (s *MonitorCRUDService) BatchDeleteAlertEvents(ctx context.Context, ids []int64) (*BatchDeleteResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("请指定要删除的事件 ID")
+	}
+	if len(ids) > 200 {
+		return nil, fmt.Errorf("单次最多删除 200 条事件")
+	}
+	tx := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAlertEvent{})
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	return &BatchDeleteResult{
+		Total:   len(ids),
+		Success: int(tx.RowsAffected),
+		Failed:  len(ids) - int(tx.RowsAffected),
+	}, nil
+}
+
+// BatchUpdateNotifyChannelsReq 批量更新通知渠道请求
+type BatchUpdateNotifyChannelsReq struct {
+	IDs          []int64 `json:"ids" binding:"required"`
+	Enabled      *bool   `json:"enabled"`       // 可选: 启用/禁用
+	RateLimit    *int    `json:"rate_limit"`    // 可选: 限流(条/分)
+	SendResolved *bool   `json:"send_resolved"` // 可选: 恢复通知
+}
+
+// BatchUpdateNotifyChannels 批量更新通知渠道
+func (s *MonitorCRUDService) BatchUpdateNotifyChannels(ctx context.Context, req BatchUpdateNotifyChannelsReq) (*BatchUpdateResult, error) {
+	if len(req.IDs) == 0 {
+		return nil, fmt.Errorf("请指定要更新的渠道 ID")
+	}
+	if len(req.IDs) > 100 {
+		return nil, fmt.Errorf("单次最多更新 100 个渠道")
+	}
+
+	updates := make(map[string]interface{})
+	var fields []string
+
+	if req.Enabled != nil {
+		updates["enabled"] = *req.Enabled
+		fields = append(fields, "enabled")
+	}
+	if req.RateLimit != nil {
+		updates["rate_limit"] = *req.RateLimit
+		fields = append(fields, "rate_limit")
+	}
+	if req.SendResolved != nil {
+		updates["send_resolved"] = *req.SendResolved
+		fields = append(fields, "send_resolved")
+	}
+
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("没有要更新的字段")
+	}
+
+	tx := global.DB.WithContext(ctx).Model(&models.MonitorNotifyChannel{}).
+		Where("id IN ?", req.IDs).
+		Updates(updates)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return &BatchUpdateResult{
+		Total:   len(req.IDs),
+		Success: int(tx.RowsAffected),
+		Failed:  len(req.IDs) - int(tx.RowsAffected),
+		Fields:  fields,
+	}, nil
+}
+
+// BatchDeleteNotifyChannels 批量删除通知渠道（硬删除）
+func (s *MonitorCRUDService) BatchDeleteNotifyChannels(ctx context.Context, ids []int64) (*BatchDeleteResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("请指定要删除的渠道 ID")
+	}
+	if len(ids) > 100 {
+		return nil, fmt.Errorf("单次最多删除 100 个渠道")
+	}
+	tx := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorNotifyChannel{})
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	return &BatchDeleteResult{
+		Total:   len(ids),
+		Success: int(tx.RowsAffected),
+		Failed:  len(ids) - int(tx.RowsAffected),
+	}, nil
+}
+
+// BatchDeleteSilenceRules 批量删除静默/抑制/聚合规则（硬删除）
+func (s *MonitorCRUDService) BatchDeleteSilenceRules(ctx context.Context, ids []int64) (*BatchDeleteResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("请指定要删除的规则 ID")
+	}
+	if len(ids) > 200 {
+		return nil, fmt.Errorf("单次最多删除 200 条规则")
+	}
+	// 尝试从三个表中删除
+	var totalAffected int64
+	tx1 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorSilenceRule{})
+	if tx1.Error == nil {
+		totalAffected += tx1.RowsAffected
+	}
+	tx2 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorInhibitRule{})
+	if tx2.Error == nil {
+		totalAffected += tx2.RowsAffected
+	}
+	tx3 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAggregateRule{})
+	if tx3.Error == nil {
+		totalAffected += tx3.RowsAffected
+	}
+	return &BatchDeleteResult{
+		Total:   len(ids),
+		Success: int(totalAffected),
+		Failed:  len(ids) - int(totalAffected),
+	}, nil
+}

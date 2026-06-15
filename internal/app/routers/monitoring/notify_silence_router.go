@@ -413,3 +413,67 @@ func (r *MonitorCRUDRouter) DeleteRoutePolicy(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
 }
+
+// ==================== 批量删除: 告警事件 ====================
+
+func (r *MonitorCRUDRouter) BatchDeleteAlertEvents(c *gin.Context) {
+	var req services.BatchDeleteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchDeleteAlertEvents(c.Request.Context(), req.IDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("成功删除 %d 条", result.Success)})
+}
+
+// ==================== 批量删除: 通知渠道 ====================
+
+func (r *MonitorCRUDRouter) BatchDeleteNotifyChannels(c *gin.Context) {
+	var req services.BatchDeleteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchDeleteNotifyChannels(c.Request.Context(), req.IDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("成功删除 %d 个渠道", result.Success)})
+}
+
+// ==================== 批量更新: 通知渠道 ====================
+
+func (r *MonitorCRUDRouter) BatchUpdateNotifyChannels(c *gin.Context) {
+	var req services.BatchUpdateNotifyChannelsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchUpdateNotifyChannels(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("批量更新完成: 成功%d 失败%d", result.Success, result.Failed)})
+}
+
+// ==================== 批量删除: 静默规则 ====================
+
+func (r *MonitorCRUDRouter) BatchDeleteSilenceRules(c *gin.Context) {
+	var req services.BatchDeleteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchDeleteSilenceRules(c.Request.Context(), req.IDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("成功删除 %d 条规则", result.Success)})
+}

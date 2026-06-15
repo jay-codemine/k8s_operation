@@ -356,17 +356,20 @@ func sendDingTalk(ch *models.MonitorNotifyChannel, alert *AlertNotification) err
 }
 
 // sendFeishu 发送飞书通知（富文本 post 卡片）
+// 支持: 签名校验(secret) + 自定义关键词(security_keyword) 安全设置
 func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error {
 	if ch.MsgTemplate != "" {
 		content, err := renderNotifyTemplate(ch.MsgTemplate, alert)
 		if err != nil {
 			return err
 		}
+		// 关键词自动注入
+		content = injectFeishuKeyword(ch, content)
 		body := map[string]interface{}{
 			"msg_type": "text",
 			"content":  map[string]string{"text": content},
 		}
-		return postJSON(ch.WebhookURL, ch.Secret, body)
+		return postFeishuJSON(ch.WebhookURL, ch.Secret, body)
 	}
 
 	isFiring := alert.Status != "resolved"
@@ -436,6 +439,8 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 	lines = append(lines, newLine(fmt.Sprintf("🛡 K8s Operation 智能监控平台  ·  ⏰ %s", firedTime)))
 
 	title := fmt.Sprintf("%s [%s] %s", statusIcon, statusText, alert.RuleName)
+	// 关键词注入: 如果标题不含关键词，注入到标题前面
+	title = injectFeishuKeyword(ch, title)
 	body := map[string]interface{}{
 		"msg_type": "post",
 		"content": map[string]interface{}{
@@ -447,7 +452,7 @@ func sendFeishu(ch *models.MonitorNotifyChannel, alert *AlertNotification) error
 			},
 		},
 	}
-	return postJSON(ch.WebhookURL, ch.Secret, body)
+	return postFeishuJSON(ch.WebhookURL, ch.Secret, body)
 }
 
 // sendWechat 发送企业微信通知（大厂风格 Markdown 卡片）
@@ -939,6 +944,103 @@ func buildAtConfig(ch *models.MonitorNotifyChannel) map[string]interface{} {
 		at["atMobiles"] = strings.Split(ch.AtMobiles, ",")
 	}
 	return at
+}
+
+// postFeishuJSON 飞书专用 JSON POST 请求
+// 飞书签名校验: 将 timestamp 和 sign 放在 JSON body 中（而非 URL params）
+// 算法: HMAC-SHA256(timestamp + "\n" + secret) → Base64
+func postFeishuJSON(url, secret string, payload interface{}) error {
+	// 如果有 secret，计算飞书签名并注入 body
+	if secret != "" {
+		timestamp := fmt.Sprintf("%d", time.Now().Unix()) // 飞书用秒级时间戳
+		stringToSign := timestamp + "\n" + secret
+		mac := hmac.New(sha256.New, []byte(stringToSign))
+		mac.Write([]byte{})
+		sign := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+		// 将 timestamp 和 sign 注入到 payload map 中
+		if m, ok := payload.(map[string]interface{}); ok {
+			m["timestamp"] = timestamp
+			m["sign"] = sign
+		}
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("序列化失败: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP状态码 %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// 飞书响应: {"code":0,"msg":"success","data":{}}
+	var apiResp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if jsonErr := json.Unmarshal(respBody, &apiResp); jsonErr == nil {
+		if apiResp.Code != 0 {
+			hint := feishuErrHint(apiResp.Code)
+			if hint != "" {
+				return fmt.Errorf("飞书API错误 code=%d (%s): %s", apiResp.Code, hint, apiResp.Msg)
+			}
+			return fmt.Errorf("飞书API错误 code=%d: %s", apiResp.Code, apiResp.Msg)
+		}
+	}
+	return nil
+}
+
+// feishuErrHint 飞书常见错误码中文提示
+func feishuErrHint(code int) string {
+	switch code {
+	case 19021:
+		return "签名校验失败：请检查飞书机器人「签名校验」密钥是否正确"
+	case 19022:
+		return "IP 不在白名单中"
+	case 19024:
+		return "自定义关键词校验失败：消息未包含设置的关键词"
+	case 19001:
+		return "Webhook 地址无效或已停用"
+	default:
+		return ""
+	}
+}
+
+// injectFeishuKeyword 飞书关键词注入
+// 如果渠道配置了 security_keyword 且消息内容不包含任何关键词，则自动注入第一个到消息头部
+func injectFeishuKeyword(ch *models.MonitorNotifyChannel, content string) string {
+	if ch.SecurityKeyword == "" {
+		return content
+	}
+	keywords := strings.Split(ch.SecurityKeyword, ",")
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw != "" && strings.Contains(content, kw) {
+			return content // 已包含关键词，无需注入
+		}
+	}
+	// 注入第一个关键词
+	first := strings.TrimSpace(keywords[0])
+	if first != "" {
+		return first + " " + content
+	}
+	return content
 }
 
 // postJSON 发送 JSON POST 请求，并解析钉钉/飞书/企业微信的业务错误码

@@ -399,3 +399,50 @@ func (c *ApprovalController) Stats(ctx *gin.Context) {
 
 	rsp.Success(gin.H{"stats": stats})
 }
+
+// FeishuCallback godoc
+// @Summary 飞书审批回调
+// @Description 飞书交互卡片审批回调接口（公开接口，无需JWT）
+// @Tags CICD Approval
+// @Accept json
+// @Produce json
+// @Param token query string true "审批Token"
+// @Param action query string true "审批动作: approve/reject"
+// @Param reason query string false "审批意见"
+// @Success 200 {object} map[string]any "审批处理成功"
+// @Router /api/v1/k8s/cicd/approval/feishu-callback [get]
+func (c *ApprovalController) FeishuCallback(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	// 支持 GET 参数（飞书卡片按钮跳转链接）和 POST JSON
+	req := &services.FeishuApprovalCallbackRequest{
+		Token:  ctx.Query("token"),
+		Action: ctx.Query("action"),
+		Reason: ctx.Query("reason"),
+	}
+
+	// 如果 GET 参数为空，尝试从 POST body 解析
+	if req.Token == "" {
+		_ = ctx.ShouldBindJSON(req)
+	}
+
+	if req.Token == "" || req.Action == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("缺少必要参数: token 和 action"))
+		return
+	}
+
+	svc := services.NewServices()
+	err := svc.HandleFeishuApprovalCallback(ctx.Request.Context(), req)
+	if err != nil {
+		global.Logger.Error("FeishuCallback error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	message := "审批通过，部署已触发"
+	if req.Action == "reject" {
+		message = "审批已拒绝"
+	}
+
+	rsp.Success(gin.H{"message": message})
+}

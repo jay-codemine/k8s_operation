@@ -64,6 +64,7 @@ const router = createRouter({
         { path: 'security/audit', component: () => import('@/views/security/audit/AuditLog.vue') },
         { path: 'security/ai-approvals', component: () => import('@/views/security/AIApprovals.vue') },
         { path: 'security/diagnosis', component: () => import('@/views/security/rbac/PermissionCheck.vue') },
+        { path: 'security/ldap', component: () => import('@/views/security/LDAPSettings.vue') },
         
         // 兼容旧路径
         { path: 'security/rbac/serviceaccounts', component: () => import('@/views/security/rbac/ServiceAccounts.vue') },
@@ -85,6 +86,8 @@ const router = createRouter({
             { path: 'workloads/daemonsets', component: () => import('@/views/workloads/Daemonsets.vue') },
             { path: 'workloads/jobs', component: () => import('@/views/workloads/Jobs.vue') },
             { path: 'workloads/cronjobs', component: () => import('@/views/workloads/Cronjobs.vue') },
+            { path: 'workloads/hpa', component: () => import('@/views/workloads/HPA.vue') },
+            { path: 'workloads/vpa', component: () => import('@/views/workloads/VPA.vue') },
             { path: 'networking/services', component: () => import('@/views/networking/Services.vue') },
             { path: 'networking/ingresses', component: () => import('@/views/networking/Ingress.vue') },
 

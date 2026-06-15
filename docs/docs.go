@@ -8155,6 +8155,158 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/hpa/batch-scale": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "批量扩容/缩容 HPA（618 促销场景）",
+                "parameters": [
+                    {
+                        "description": "批量扩缩容",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeHPABatchScaleRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/batch-status": {
+            "post": {
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "批量查询 HPA 当前状态（统一数据，验证扩缩容是否成功）",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/create": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "创建 HPA",
+                "parameters": [
+                    {
+                        "description": "创建参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeHPACreateRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/create-from-yaml": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "通过 YAML 创建 HPA",
+                "parameters": [
+                    {
+                        "description": "YAML 内容",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.YamlCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/delete": {
+            "delete": {
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "删除 HPA",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/detail": {
+            "get": {
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "获取 HPA 详情",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/list": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "获取 HPA 列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "命名空间",
+                        "name": "namespace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "HPA 名称(模糊)",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/scale": {
+            "post": {
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "单独修改 HPA 副本数（min/max）",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/hpa/update": {
+            "post": {
+                "tags": [
+                    "K8s HPA 弹性扩缩容"
+                ],
+                "summary": "更新 HPA",
+                "responses": {}
+            }
+        },
         "/api/v1/k8s/ingress/apply-yaml": {
             "put": {
                 "consumes": [
@@ -14783,6 +14935,83 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/vpa/available": {
+            "get": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "检测 VPA Operator 是否在集群中安装",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/create": {
+            "post": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "创建 VPA",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/create-from-yaml": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "通过 YAML 创建 VPA",
+                "parameters": [
+                    {
+                        "description": "YAML 内容",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.YamlCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/delete": {
+            "delete": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "删除 VPA",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/detail": {
+            "get": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "获取 VPA 详情",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/list": {
+            "get": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "获取 VPA 列表",
+                "responses": {}
+            }
+        },
+        "/api/v1/k8s/vpa/update": {
+            "post": {
+                "tags": [
+                    "K8s VPA 垂直扩缩容"
+                ],
+                "summary": "更新 VPA",
+                "responses": {}
+            }
+        },
         "/api/v1/platform/appstore/categories": {
             "get": {
                 "description": "获取所有分类及其应用计数",
@@ -18617,6 +18846,93 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "Normal | Warning",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.KubeHPABatchItem": {
+            "type": "object",
+            "properties": {
+                "max_replicas": {
+                    "type": "integer"
+                },
+                "min_replicas": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "requests.KubeHPABatchScaleRequest": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.KubeHPABatchItem"
+                    }
+                }
+            }
+        },
+        "requests.KubeHPACreateRequest": {
+            "type": "object",
+            "properties": {
+                "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "cpu_target_util": {
+                    "description": "目标 CPU 利用率 % (1-100)",
+                    "type": "integer"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "max_replicas": {
+                    "description": "最大副本数 \u003e min",
+                    "type": "integer"
+                },
+                "mem_target_util": {
+                    "description": "目标内存利用率 %",
+                    "type": "integer"
+                },
+                "min_replicas": {
+                    "description": "最小副本数 \u003e=0",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "scale_down_stab_seconds": {
+                    "description": "缩容稳定窗口（秒）",
+                    "type": "integer"
+                },
+                "scale_up_stab_seconds": {
+                    "description": "扩容稳定窗口（秒）",
+                    "type": "integer"
+                },
+                "target_api_version": {
+                    "description": "默认 apps/v1",
+                    "type": "string"
+                },
+                "target_kind": {
+                    "description": "Deployment/StatefulSet",
+                    "type": "string"
+                },
+                "target_name": {
+                    "description": "目标负载名称",
                     "type": "string"
                 }
             }

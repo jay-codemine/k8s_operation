@@ -7,11 +7,13 @@ import (
 
 // CicdCallbackRouter 公开的回调路由（不需要 JWT 认证）
 // Jenkins 回调使用 HMAC 签名验证
+// 飞书审批回调使用 Token 验证
 type CicdCallbackRouter struct {
 	pipelineCtrl *cicd.PipelineController
 	stageCtrl    *cicd.StageController
 	releaseCtrl  *cicd.CicdReleaseController
 	artifactCtrl *cicd.ArtifactController
+	approvalCtrl *cicd.ApprovalController
 }
 
 func NewCicdCallbackRouter() *CicdCallbackRouter {
@@ -20,6 +22,7 @@ func NewCicdCallbackRouter() *CicdCallbackRouter {
 		stageCtrl:    cicd.NewStageController(),
 		releaseCtrl:  cicd.NewCicdReleaseController(),
 		artifactCtrl: cicd.NewArtifactController(),
+		approvalCtrl: cicd.NewApprovalController(),
 	}
 }
 
@@ -52,5 +55,13 @@ func (r *CicdCallbackRouter) Inject(rg *gin.RouterGroup) {
 	artifact := rg.Group("/artifact")
 	{
 		artifact.POST("/upload", r.artifactCtrl.Upload)
+	}
+
+	// 飞书审批回调（公开接口，使用 Token 验证）
+	// GET/POST /api/v1/k8s/cicd/approval/feishu-callback
+	approval := rg.Group("/approval")
+	{
+		approval.GET("/feishu-callback", r.approvalCtrl.FeishuCallback)
+		approval.POST("/feishu-callback", r.approvalCtrl.FeishuCallback)
 	}
 }

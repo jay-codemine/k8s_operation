@@ -6,9 +6,15 @@
         <h3>告警降噪</h3>
         <span class="header-desc">通过静默、抑制、聚合规则减少告警风暴，精准触达关键告警</span>
       </div>
-      <button class="btn-primary" @click="handleAddRule()">
-        <span>+</span> 新增规则
-      </button>
+      <div class="header-actions">
+        <button class="btn-action btn-batch-del" :disabled="selectedIds.length === 0" @click="batchDeleteVisible = true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          批量删除<span v-if="selectedIds.length">({{ selectedIds.length }})</span>
+        </button>
+        <button class="btn-primary" @click="handleAddRule()">
+          <span>+</span> 新增规则
+        </button>
+      </div>
     </div>
 
     <!-- 规则类型 Tab -->
@@ -24,7 +30,13 @@
 
     <!-- 静默规则列表 -->
     <div class="rules-list" v-if="activeTab === 'silence'">
-      <div class="rule-card" v-for="rule in list" :key="rule.id" :class="{ expired: isExpired(rule), disabled: !rule.enabled }">
+      <div class="rule-card" v-for="rule in paginatedList" :key="rule.id" :class="{ expired: isExpired(rule), disabled: !rule.enabled, selected: selectedIds.includes(rule.id) }">
+        <div class="card-select">
+          <label class="table-checkbox" @click.stop>
+            <input type="checkbox" :checked="selectedIds.includes(rule.id)" @change="toggleSelect(rule.id)" />
+            <span class="checkmark"></span>
+          </label>
+        </div>
         <div class="rule-card-header">
           <div class="rule-status-indicator" :class="getRuleStatus(rule)"></div>
           <div class="rule-title-area">
@@ -144,6 +156,38 @@
         <div class="empty-icon">📦</div>
         <h3>暂无聚合规则</h3>
         <p>配置后，同类告警将被合并为一条通知发送，有效减少告警风暴</p>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <div class="pagination-bar" v-if="currentList.length > 0">
+      <div class="pagination-info">共 <b>{{ currentList.length }}</b> 条，第 <b>{{ silencePage }}</b> / {{ silenceTotalPages }} 页</div>
+      <div class="pagination-controls">
+        <button class="page-btn" :disabled="silencePage <= 1" @click="silencePage--">‹</button>
+        <template v-for="p in silenceVisiblePages" :key="p">
+          <button v-if="p === '...'" class="page-btn" disabled>...</button>
+          <button v-else class="page-btn" :class="{ active: p === silencePage }" @click="silencePage = p">{{ p }}</button>
+        </template>
+        <button class="page-btn" :disabled="silencePage >= silenceTotalPages" @click="silencePage++">›</button>
+        <select class="page-size-select" v-model="silencePageSize" @change="silencePage = 1">
+          <option :value="10">10条/页</option>
+          <option :value="20">20条/页</option>
+          <option :value="50">50条/页</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 批量删除确认 -->
+    <div class="modal-overlay" v-if="batchDeleteVisible" @click.self="batchDeleteVisible = false">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-header"><h3>⚠️ 批量删除确认</h3><button class="modal-close" @click="batchDeleteVisible = false">×</button></div>
+        <div class="modal-body">
+          <p>确定删除选中的 <b style="color:#dc2626">{{ selectedIds.length }}</b> 条规则？此操作不可恢复。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" @click="batchDeleteVisible = false">取消</button>
+          <button class="btn-danger" @click="handleBatchDelete" :disabled="batchDeleting">{{ batchDeleting ? '删除中...' : '确认删除' }}</button>
+        </div>
       </div>
     </div>
 
@@ -366,10 +410,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import {
-  listSilenceRules, createSilenceRule, updateSilenceRule, deleteSilenceRule,
+  listSilenceRules, createSilenceRule, updateSilenceRule, deleteSilenceRule, batchDeleteSilenceRules,
   listInhibitRules, createInhibitRule, updateInhibitRule, deleteInhibitRule,
   listAggregateRules, createAggregateRule, updateAggregateRule, deleteAggregateRule,
 } from '@/api/monitoring'
@@ -382,6 +426,62 @@ const dialogVisible = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 const deleteTarget = ref(null)
+
+// 分页
+const silencePage = ref(1)
+const silencePageSize = ref(10)
+const currentList = computed(() => {
+  if (activeTab.value === 'silence') return list.value
+  if (activeTab.value === 'inhibit') return inhibitList.value
+  return aggregateList.value
+})
+const silenceTotalPages = computed(() => Math.ceil(currentList.value.length / silencePageSize.value) || 1)
+const paginatedList = computed(() => {
+  const start = (silencePage.value - 1) * silencePageSize.value
+  return currentList.value.slice(start, start + silencePageSize.value)
+})
+const silenceVisiblePages = computed(() => {
+  const tp = silenceTotalPages.value
+  if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1)
+  const curr = silencePage.value
+  const pages = [1]
+  if (curr > 3) pages.push('...')
+  for (let i = Math.max(2, curr - 1); i <= Math.min(tp - 1, curr + 1); i++) pages.push(i)
+  if (curr < tp - 2) pages.push('...')
+  pages.push(tp)
+  return pages
+})
+
+// 选择 & 批量删除
+const selectedIds = ref([])
+const batchDeleteVisible = ref(false)
+const batchDeleting = ref(false)
+
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx >= 0) selectedIds.value.splice(idx, 1)
+  else selectedIds.value.push(id)
+}
+
+async function handleBatchDelete() {
+  if (!selectedIds.value.length) return
+  batchDeleting.value = true
+  try {
+    const res = await batchDeleteSilenceRules({ ids: selectedIds.value, type: activeTab.value })
+    if (res?.code === 0) {
+      Message.success(`成功删除 ${res.data?.success || selectedIds.value.length} 条规则`)
+      selectedIds.value = []
+      batchDeleteVisible.value = false
+      loadList()
+    } else {
+      Message.error(res?.msg || '批量删除失败')
+    }
+  } catch (e) {
+    Message.error(e?.msg || '操作失败')
+  } finally {
+    batchDeleting.value = false
+  }
+}
 
 const ruleTabs = [
   { value: 'silence', icon: '🔇', label: '静默规则', desc: '按时间窗口和标签匹配静默告警' },
@@ -607,10 +707,37 @@ onMounted(loadList)
 .silence-rules-page { padding: 24px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h3 { font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; }
-.header-desc { font-size: 13px; color: #9ca3af; margin-left: 12px; }
+.header-left { display: flex; align-items: baseline; gap: 12px; }
+.header-desc { font-size: 13px; color: #9ca3af; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.btn-action { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; }
+.btn-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-batch-del { border-color: #dc2626; color: #dc2626; }
+.btn-batch-del:hover:not(:disabled) { background: #fef2f2; }
 .btn-primary { padding: 8px 18px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .btn-primary:hover { background: #4338ca; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Card selection */
+.card-select { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.rule-card { position: relative; }
+.rule-card.selected { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,0.12); }
+.table-checkbox { position: relative; display: inline-flex; cursor: pointer; }
+.table-checkbox input { position: absolute; opacity: 0; width: 0; height: 0; }
+.checkmark { width: 16px; height: 16px; border: 1.5px solid #d1d5db; border-radius: 4px; background: #fff; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.table-checkbox input:checked + .checkmark { background: linear-gradient(135deg, #4f46e5, #7c3aed); border-color: transparent; }
+.table-checkbox input:checked + .checkmark::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+
+/* Pagination */
+.pagination-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #fff; border-radius: 12px; border: 1px solid #e8ecf0; margin-top: 16px; }
+.pagination-info { font-size: 13px; color: #6b7280; }
+.pagination-info b { color: #1e293b; }
+.pagination-controls { display: flex; align-items: center; gap: 4px; }
+.page-btn { min-width: 32px; height: 32px; padding: 0 8px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 13px; color: #374151; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.page-btn:hover:not(:disabled):not(.active) { border-color: #4f46e5; color: #4f46e5; }
+.page-btn.active { background: linear-gradient(135deg, #4f46e5, #6d28d9); color: #fff; border-color: transparent; font-weight: 600; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-size-select { margin-left: 12px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; background: #fff; }
 
 /* 规则类型 Tab */
 .rule-type-tabs { display: flex; gap: 12px; margin-bottom: 24px; }

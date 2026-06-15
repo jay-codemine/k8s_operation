@@ -50,6 +50,8 @@ func (r *MonitorCRUDRouter) Inject(router *gin.RouterGroup) {
 		rule.POST("/import-yaml", r.ImportAlertRulesYAML)
 		rule.GET("/export-yaml", r.ExportAlertRulesYAML)
 		rule.POST("/batch-bind-channels", r.BatchBindChannels)
+		rule.POST("/batch-delete", r.BatchDeleteAlertRules)
+		rule.POST("/batch-update", r.BatchUpdateAlertRules)
 	}
 
 	// 告警事件
@@ -60,6 +62,7 @@ func (r *MonitorCRUDRouter) Inject(router *gin.RouterGroup) {
 		event.GET("/:id", r.GetAlertEvent)
 		event.PUT("/:id/ack", r.AckAlertEvent)
 		event.PUT("/:id/resolve", r.ResolveAlertEvent)
+		event.POST("/batch-delete", r.BatchDeleteAlertEvents)
 	}
 
 	// 通知渠道管理
@@ -71,6 +74,8 @@ func (r *MonitorCRUDRouter) Inject(router *gin.RouterGroup) {
 		notify.PUT("/:id", r.UpdateNotifyChannel)
 		notify.DELETE("/:id", r.DeleteNotifyChannel)
 		notify.POST("/:id/test", r.TestNotifyChannel)
+		notify.POST("/batch-delete", r.BatchDeleteNotifyChannels)
+		notify.POST("/batch-update", r.BatchUpdateNotifyChannels)
 	}
 
 	// 静默规则管理
@@ -81,6 +86,7 @@ func (r *MonitorCRUDRouter) Inject(router *gin.RouterGroup) {
 		silence.POST("", r.CreateSilenceRule)
 		silence.PUT("/:id", r.UpdateSilenceRule)
 		silence.DELETE("/:id", r.DeleteSilenceRule)
+		silence.POST("/batch-delete", r.BatchDeleteSilenceRules)
 	}
 
 	// 抑制规则管理
@@ -294,6 +300,34 @@ func (r *MonitorCRUDRouter) ToggleAlertRule(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+func (r *MonitorCRUDRouter) BatchDeleteAlertRules(c *gin.Context) {
+	var req services.BatchDeleteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchDeleteAlertRules(c.Request.Context(), req.IDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("批量删除完成: 成功%d 失败%d", result.Success, result.Failed)})
+}
+
+func (r *MonitorCRUDRouter) BatchUpdateAlertRules(c *gin.Context) {
+	var req services.BatchUpdateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
+		return
+	}
+	result, err := r.svc.BatchUpdateAlertRules(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result, "msg": fmt.Sprintf("批量更新完成: 成功%d 失败%d", result.Success, result.Failed)})
 }
 
 // ==================== 告警事件 ====================

@@ -221,6 +221,20 @@ func SetupSetting() error {
 				global.AIRegistry.GetDefaultModelID())
 		}
 	}
+
+	// 读取 LDAP 配置
+	// 对应 config.yaml 中的：
+	// LDAP:
+	if err = s.ReadSection("LDAP", &global.LDAPSetting); err != nil {
+		log.Println("[LDAP] 配置块未找到，LDAP 认证功能未启用")
+		global.LDAPSetting = &setting.LDAPSettingS{Enabled: false}
+	} else if global.LDAPSetting != nil && global.LDAPSetting.Enabled {
+		log.Printf("[LDAP] LDAP 认证已启用: host=%s:%d, base_dn=%s, auto_create=%v\n",
+			global.LDAPSetting.Host,
+			global.LDAPSetting.Port,
+			global.LDAPSetting.BaseDN,
+			global.LDAPSetting.AutoCreate)
+	}
 	// 将 ErrorCode 配置注入 errorcode 包
 	// - AllowOverride=true：开发环境，允许错误码覆盖
 	// - AllowOverride=false：生产环境，发现重复直接 panic

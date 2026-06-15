@@ -544,6 +544,12 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 					zap.Int64("pipeline_id", approvalStage.PipelineID),
 					zap.Int64("approval_id", approval.ID),
 				)
+
+				// 发送飞书审批通知（开发自助发布 + 飞书审批模式）
+				pipeline, pErr := s.dao.PipelineGetByID(ctx, approvalStage.PipelineID)
+				if pErr == nil && pipeline != nil {
+					s.NotifyFeishuApproval(ctx, pipeline, run, approval)
+				}
 			}
 		}
 	}

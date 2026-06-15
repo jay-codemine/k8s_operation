@@ -109,6 +109,14 @@ export const exportAlertRulesYAML = (params = {}) =>
 export const batchBindChannels = (data) =>
   http.post('/api/v1/monitoring/alert-rule/batch-bind-channels', data)
 
+// 批量删除告警规则
+export const batchDeleteAlertRules = (data) =>
+  http.post('/api/v1/monitoring/alert-rule/batch-delete', data)
+
+// 批量更新告警规则
+export const batchUpdateAlertRules = (data) =>
+  http.post('/api/v1/monitoring/alert-rule/batch-update', data)
+
 // ==================== 告警事件 ====================
 
 export const listAlertEvents = (params = {}) =>
@@ -125,6 +133,10 @@ export const ackAlertEvent = (id) =>
 
 export const resolveAlertEvent = (id) =>
   http.put(`/api/v1/monitoring/alert-event/${id}/resolve`)
+
+// 批量删除告警事件
+export const batchDeleteAlertEvents = (data) =>
+  http.post('/api/v1/monitoring/alert-event/batch-delete', data)
 
 // ==================== 通知渠道管理 ====================
 
@@ -146,6 +158,14 @@ export const deleteNotifyChannel = (id) =>
 export const testNotifyChannel = (id) =>
   http.post(`/api/v1/monitoring/notify-channel/${id}/test`)
 
+// 批量删除通知渠道
+export const batchDeleteNotifyChannels = (data) =>
+  http.post('/api/v1/monitoring/notify-channel/batch-delete', data)
+
+// 批量更新通知渠道
+export const batchUpdateNotifyChannels = (data) =>
+  http.post('/api/v1/monitoring/notify-channel/batch-update', data)
+
 // ==================== 静默规则管理 ====================
 
 export const listSilenceRules = (params = {}) =>
@@ -162,6 +182,10 @@ export const updateSilenceRule = (id, data) =>
 
 export const deleteSilenceRule = (id) =>
   http.delete(`/api/v1/monitoring/silence-rule/${id}`)
+
+// 批量删除静默规则
+export const batchDeleteSilenceRules = (data) =>
+  http.post('/api/v1/monitoring/silence-rule/batch-delete', data)
 
 // ==================== 抑制规则管理 ====================
 

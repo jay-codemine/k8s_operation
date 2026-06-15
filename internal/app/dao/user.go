@@ -114,3 +114,29 @@ func (d *Dao) UserMigratePassword(userID uint32, plainPassword string) error {
 
 	return user.Update(d.db, values)
 }
+
+// UserCreateFull 创建用户（含邮箱、手机、角色）
+func (d *Dao) UserCreateFull(name, password, email, phone, role string) (*models.User, error) {
+	hashedPassword, err := utils.HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	nowTime := uint32(time.Now().Unix())
+	user := &models.User{
+		Username: name,
+		Password: hashedPassword,
+		Email:    email,
+		Phone:    phone,
+		Role:     role,
+		Base: &models.Base{
+			CreatedAt:  nowTime,
+			ModifiedAt: nowTime,
+			IsDel:      0,
+		},
+	}
+	if err := user.Create(d.db); err != nil {
+		return nil, err
+	}
+	return user, nil
+}

@@ -235,6 +235,7 @@ const menuPermissions = {
   '/security/users': ['super_admin', 'platform_admin'],
   '/security/roles': ['super_admin', 'platform_admin'],
   '/security/authorization': ['super_admin', 'platform_admin', 'cluster_admin'],
+  '/security/ldap': ['super_admin', 'platform_admin'],
   '/security/diagnosis': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
   
   // 兼容旧路径
@@ -344,6 +345,7 @@ const menuGroupsConfig = reactive([
       { path: '/security/users', label: '用户管理' },
       { path: '/security/roles', label: '角色管理' },
       { path: '/security/authorization', label: '授权管理' },
+      { path: '/security/ldap', label: 'LDAP 认证' },
       { path: '/security/audit', label: '审计日志' },
       { path: '/security/ai-approvals', label: 'AI 审批管理' },
       { path: '/security/diagnosis', label: '权限诊断' },

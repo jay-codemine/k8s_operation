@@ -36,6 +36,9 @@ import (
 	"k8soperation/internal/app/routers/kube_statefulset"
 	"k8soperation/internal/app/routers/kube_storageclass"
 
+	// HPA/VPA 弹性扩缩容路由
+	"k8soperation/internal/app/routers/kube_autoscaler"
+
 	// 平台集群管理路由（DB CRUD，不需要 ClusterMiddleware）
 	"k8soperation/internal/app/routers/kube_cluster"
 
@@ -57,6 +60,9 @@ import (
 	// AI 助手路由
 	"k8soperation/internal/app/routers/ai_assistant"
 
+	// LDAP 认证管理路由
+	"k8soperation/internal/app/routers/ldap"
+
 	// 监控路由
 	"k8soperation/internal/app/routers/monitoring"
 
@@ -75,7 +81,8 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	root.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// ======================================================
-	// API 根路由
+	// API 根路由（子系统前缀隔离，防止与统一平台路由冲突）
+	// 统一平台网关路由规则：/api/k8s/* → k8s_operation:8080
 	// ======================================================
 	api := root.Group("/api")
 	v1 := api.Group("/v1")
@@ -89,6 +96,7 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	for _, r := range []injector{
 		helloworldrouter.NewHelloWorldRouter(),
 		authrouter.NewAuthRouter(),
+		ldap.NewLDAPPublicRouter(),
 	} {
 		r.Inject(public)
 	}
@@ -147,6 +155,12 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// 包含 AI 对话、高危操作审批等
 	// ======================================================
 	ai_assistant.NewAIAssistantRouter().Inject(protected)
+
+	// ======================================================
+	// LDAP 认证管理分组（需要 JWT）
+	// /api/v1/ldap/...
+	// ======================================================
+	ldap.NewLDAPRouter().Inject(protected)
 
 	// ======================================================
 	// 监控分组（需要 JWT）
@@ -359,6 +373,22 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// CRD/CR 动态资源管理（DynamicClient）
 	// /api/v1/k8s/crd/... 和 /api/v1/k8s/cr/...
 	kube_crd.NewKubeDynamicCRDRouter().Inject(k8sTarget)
+
+	// HPA 水平弹性扩缩容
+	hpa := k8sTarget.Group("/hpa")
+	for _, r := range []injector{
+		kube_autoscaler.NewKubeHPARouter(),
+	} {
+		r.Inject(hpa)
+	}
+
+	// VPA 垂直弹性扩缩容
+	vpa := k8sTarget.Group("/vpa")
+	for _, r := range []injector{
+		kube_autoscaler.NewKubeVPARouter(),
+	} {
+		r.Inject(vpa)
+	}
 
 	// K8s RBAC (ServiceAccount, Role, RoleBinding)
 	for _, r := range []injector{
