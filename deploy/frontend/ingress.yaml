@@ -1,0 +1,35 @@
+# ============================================================
+# K8sOperation 前端 - Ingress
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation-web
+    app.kubernetes.io/component: frontend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # TLS 自动签发（可选，取消注释启用）
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: k8sop.example.com              # ← 替换为你的域名
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8soperation-web
+                port:
+                  name: http
+  # TLS（可选，取消注释启用 HTTPS）
+  # tls:
+  #   - hosts:
+  #       - k8sop.example.com
+  #     secretName: k8soperation-web-tls

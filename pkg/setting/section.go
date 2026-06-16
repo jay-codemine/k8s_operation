@@ -91,14 +91,15 @@ type PodLogSetting struct {
 // CacheSettingS 缓存配置
 // CacheSettingS 定义了缓存配置的结构体，包含缓存服务器的各项设置参数
 type CacheSettingS struct {
-	Type       string // 缓存类型，如 redis、memcached 等
-	Name       string // 缓存名称
-	Address    string // 缓存服务器地址，格式如 "host:port"
-	Username   string // 缓存服务器用户名（如果需要认证）
-	Password   string // 缓存服务器密码（如果需要认证）
-	MaxConnect int    // 最大连接数，控制与缓存服务器的并发连接数量
-	Network    string // 网络类型，如 "tcp"、"tcp4"、"tcp6" 等
-	Secret     string // 加密密钥，用于加密缓存数据
+	Type       string   // 缓存类型，如 redis、memcached 等
+	Name       string   // 缓存名称
+	Address    string   // 单节点地址，格式如 "host:port"
+	Addresses  []string // Redis Cluster 节点地址列表，格式如 ["host1:6379", "host2:6379"]
+	Username   string   // 缓存服务器用户名（如果需要认证）
+	Password   string   // 缓存服务器密码（如果需要认证）
+	MaxConnect int      // 最大连接数，控制与缓存服务器的并发连接数量
+	Network    string   // 网络类型，如 "tcp"、"tcp4"、"tcp6" 等
+	Secret     string   // 加密密钥，用于加密缓存数据
 }
 
 type NodeEvictionConfig struct {
