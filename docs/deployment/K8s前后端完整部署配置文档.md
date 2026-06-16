@@ -59,21 +59,50 @@
 
 ```
 deploy/
-├── namespace.yaml              # 命名空间
-├── secret.yaml                 # 敏感配置（密码、Token）
-├── configmap.yaml              # 后端主配置
-├── configmap-nginx.yaml        # 前端 Nginx 配置        ★ 新增
-├── pvc.yaml                    # 后端持久化存储（制品+日志）
-├── pvc-mysql.yaml              # MySQL 数据持久化       ★ 新增
-├── mysql.yaml                  # MySQL StatefulSet      ★ 新增
-├── redis.yaml                  # Redis Deployment       ★ 新增
-├── deployment.yaml             # 后端 Deployment
-├── deployment-frontend.yaml    # 前端 Deployment        ★ 新增
-├── service.yaml                # 后端 Service + RBAC
-├── service-frontend.yaml       # 前端 Service           ★ 新增
-├── ingress.yaml                # 统一 Ingress 入口
-├── kustomization.yaml          # Kustomize 编排
-└── init-job.yaml               # 数据库初始化 Job       ★ 新增
+├── kustomization.yaml              # Kustomize 总编排（前后端一起）
+├── backend/                        # 后端部署（K8s 内 MySQL + Redis）
+│   ├── kustomization.yaml          # kubectl apply -k deploy/backend/
+│   ├── namespace.yaml              # 命名空间
+│   ├── secret.yaml                 # 敏感配置（密码、Token）
+│   ├── configmap.yaml              # 后端主配置
+│   ├── pvc.yaml                    # 持久化存储（制品 + 日志）
+│   ├── service.yaml                # Service + ServiceAccount + RBAC
+│   ├── deployment.yaml             # 后端 Deployment
+│   ├── middleware.yaml             # MySQL + Redis（开发/测试环境）
+│   ├── ingress.yaml                # 后端 Ingress
+│   └── service-nodeport.yaml       # NodePort 暴露
+├── frontend/                       # 前端部署
+│   ├── kustomization.yaml          # kubectl apply -k deploy/frontend/
+│   ├── configmap.yaml              # 前端 Nginx 配置
+│   ├── deployment.yaml             # 前端 Deployment
+│   ├── service.yaml                # ClusterIP Service
+│   ├── service-nodeport.yaml       # NodePort 暴露
+│   └── ingress.yaml                # Ingress 入口
+└── external/                       # 外部中间件模式（生产推荐）
+    ├── kustomization.yaml          # kubectl apply -k deploy/external/
+    ├── namespace.yaml              # 命名空间
+    ├── secret.yaml                 # 外部 MySQL/Redis 密码
+    ├── configmap.yaml              # 外部地址 + Redis Cluster 配置
+    ├── pvc.yaml                    # 应用制品/日志存储（无 MySQL/Redis PVC）
+    ├── service.yaml                # Service + RBAC
+    └── deployment.yaml             # 后端 Deployment（无中间件容器）
+```
+
+### 快速部署命令
+
+```bash
+# 方案 A：前后端一起部署（K8s 内 MySQL + Redis）
+kubectl apply -k deploy/
+
+# 方案 B：仅后端（K8s 内 MySQL + Redis）
+kubectl apply -k deploy/backend/
+
+# 方案 C：仅前端
+kubectl apply -k deploy/frontend/
+
+# 方案 D：外部 MySQL + Redis Cluster 模式（生产推荐）
+kubectl apply -k deploy/external/
+kubectl apply -k deploy/frontend/
 ```
 
 ---
