@@ -18,8 +18,18 @@
 
 FROM alpine:3.20
 
+<<<<<<< HEAD
+# 使用阿里云镜像源加速
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
+
+# 安装运行时依赖（CA证书 + 时区 + 健康检查工具）
+RUN apk add --no-cache ca-certificates tzdata wget && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+=======
 # 安装运行时依赖（CA证书 + 健康检查工具）
 RUN apk add --no-cache ca-certificates wget && \
+>>>>>>> main
     addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
