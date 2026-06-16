@@ -1,10 +1,10 @@
 # ============================================================
-# Kustomization - 一键部署所有资源（前端 + 后端）
+# Kustomization - 一键部署所有资源（前端 + 后端 + 外部中间件）
 # 使用方式：
-#   kubectl apply -k deploy/           # 前后端全部署（K8s内MySQL+Redis）
-#   kubectl apply -k deploy/backend/   # 仅后端（K8s内MySQL+Redis）
+#   kubectl apply -k deploy/           # 前后端全部署（外部 MySQL + Redis Cluster）
+#   kubectl apply -k deploy/backend/   # 仅后端（K8s 内 MySQL + Redis）
 #   kubectl apply -k deploy/frontend/  # 仅前端
-#   kubectl apply -k deploy/external/  # 外部MySQL + Redis Cluster 模式
+#   kubectl apply -k deploy/external/  # 仅后端（外部 MySQL + Redis Cluster）
 # ============================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -12,7 +12,7 @@ kind: Kustomization
 namespace: k8soperation
 
 resources:
-  - backend/           # 后端（Namespace + Secret + ConfigMap + PVC + Service + Deployment）
+  - external/          # 后端（外部 MySQL + Redis Cluster 模式）
   - frontend/          # 前端（Deployment + Service + Ingress）
 
 commonLabels:
