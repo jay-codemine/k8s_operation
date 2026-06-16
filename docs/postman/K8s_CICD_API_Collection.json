@@ -1,0 +1,68 @@
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  完整闭环流程（以发布 nginx 为例）                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  1. 用户在平台创建流水线                                                          │
+│     POST /api/v1/k8s/cicd/pipeline/create                                       │
+│     {                                                                           │
+│       "name": "nginx-deploy",                                                   │
+│       "git_repo": "https://github.com/xxx/nginx-demo.git",                      │
+│       "git_branch": "main",                                                     │
+│       "jenkins_url": "http://jenkins.example.com",                              │
+│       "jenkins_job": "nginx-build-deploy"                                       │
+│     }                                                                           │
+│                                  ↓                                              │
+│  2. 用户触发流水线运行                                                            │
+│     POST /api/v1/k8s/cicd/pipeline/run                                          │
+│     { "id": 1, "branch": "main", "env_vars": {"IMAGE_TAG": "v1.2.0"} }          │
+│                                  ↓                                              │
+│  3. 平台触发 Jenkins 构建                                                         │
+│     ┌────────────────────────────────────────────────────────────────────────┐  │
+│     │  jenkins.TriggerBuildAndWait(ctx, "nginx-build-deploy", params)         │  │
+│     │  params: GIT_BRANCH, GIT_REPO, IMAGE_TAG, PLATFORM_CALLBACK_URL...     │  │
+│     └────────────────────────────────────────────────────────────────────────┘  │
+│                                  ↓                                              │
+│  4. Jenkins 执行 Jenkinsfile                                                    │
+│     ┌────────────────────────────────────────────────────────────────────────┐  │
+│     │  a. Checkout 代码                                                       │  │
+│     │  b. BuildKit 构建镜像                                                   │  │
+│     │  c. 推送到 Harbor                                                       │  │
+│     │  d. (可选) kubectl 部署到 K8s                                           │  │
+│     │  e. post { success/failure } → httpRequest 回调平台                     │  │
+│     └────────────────────────────────────────────────────────────────────────┘  │
+│                                  ↓                                              │
+│  5. Jenkins 回调平台                                                             │
+│     POST /api/v1/k8s/cicd/callback/build  OR  /pipeline/callback               │
+│     {                                                                           │
+│       "job_name": "nginx-build-deploy",                                         │
+│       "build_number": 42,                                                       │
+│       "status": "SUCCESS",                                                      │
+│       "image": "harbor.example.com/nginx:v1.2.0",                               │
+│       "git_commit": "abc1234"                                                   │
+│     }                                                                           │
+│                                  ↓                                              │
+│  6. 平台处理回调（发布单模式）                                                     │
+│     ┌────────────────────────────────────────────────────────────────────────┐  │
+│     │  a. 更新镜像信息                                                         │  │
+│     │  b. 任务入队 Redis Stream                                                │  │
+│     │  c. 更新发布单状态 Queued → Running                                       │  │
+│     └────────────────────────────────────────────────────────────────────────┘  │
+│                                  ↓                                              │
+│  7. Worker 消费任务，执行 K8s 更新                                                │
+│     ┌────────────────────────────────────────────────────────────────────────┐  │
+│     │  a. Patch Deployment 镜像                                               │  │
+│     │  b. 等待 Rollout 完成 (UpdatedReplicas == Replicas)                      │  │
+│     │  c. 保存 PrevImage（用于回滚）                                            │  │
+│     │  d. 标记任务成功/失败                                                     │  │
+│     │  e. tryFinalizeRelease() → 更新发布单终态                                 │  │
+│     └────────────────────────────────────────────────────────────────────────┘  │
+│                                  ↓                                              │
+│  8. 用户查看状态和日志                                                            │
+│     GET /api/v1/k8s/cicd/pipeline/status?id=1                                   │
+│     GET /api/v1/k8s/cicd/pipeline/logs?id=1&build_number=42                     │
+│                                  ↓                                              │
+│  9. 如需回滚                                                                     │
+│     POST /api/v1/k8s/cicd/release/cancel  (智能判断回滚)                         │
+│     POST /api/v1/k8s/cicd/release/rollback                                      │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘

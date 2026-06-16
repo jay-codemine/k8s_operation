@@ -1,0 +1,56 @@
+# Dockerfile - Java Maven 项目多阶段构建
+# ============================================
+# 特点：
+#   - 多阶段构建，分离编译和运行环境
+#   - 使用 JRE 运行镜像减小体积
+#   - 支持健康检查和 JVM 调优
+# ============================================
+
+# ============ 构建阶段 ============
+FROM maven:3.9-eclipse-temurin-17 AS builder
+
+WORKDIR /build
+
+# 先复制 pom.xml 利用缓存
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# 复制源码并构建
+COPY src ./src
+RUN mvn package -DskipTests -B && \
+    mv target/*.jar app.jar
+
+# ============ 运行阶段 ============
+FROM eclipse-temurin:17-jre-alpine
+
+# 安装时区
+RUN apk --no-cache add tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 创建非 root 用户
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+# 从构建阶段复制 JAR
+COPY --from=builder /build/app.jar .
+
+# 复制配置文件（如需要）
+# COPY config/ ./config/
+
+# 切换到非 root 用户
+USER appuser
+
+# 暴露端口
+EXPOSE 8080
+
+# JVM 参数（可通过环境变量覆盖）
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError"
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+
+# 启动命令
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

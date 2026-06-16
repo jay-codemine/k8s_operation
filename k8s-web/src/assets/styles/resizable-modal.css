@@ -1,0 +1,108 @@
+/* 可调整大小的模态框样式 */
+
+/* 基础模态框 */
+.modal-content.resizable-modal {
+  position: relative;
+  overflow: visible;
+}
+
+.modal-content.resizable-modal .modal-body {
+  overflow-y: auto;
+  max-height: calc(100% - 180px);
+}
+
+/* 拖拽手柄基础样式 */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+/* 上下左右边缘手柄 */
+.resize-handle-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: n-resize;
+}
+
+.resize-handle-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: s-resize;
+}
+
+.resize-handle-left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: w-resize;
+}
+
+.resize-handle-right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: e-resize;
+}
+
+/* 四个角手柄 */
+.resize-handle-top-left {
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
+}
+
+.resize-handle-top-right {
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: ne-resize;
+}
+
+.resize-handle-bottom-left {
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: sw-resize;
+}
+
+.resize-handle-bottom-right {
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: se-resize;
+}
+
+/* 悬停高亮效果 */
+.resize-handle:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+.resize-handle-top:hover,
+.resize-handle-bottom:hover {
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.2));
+}
+
+.resize-handle-left:hover,
+.resize-handle-right:hover {
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.2));
+}
+
+.resize-handle-top-left:hover,
+.resize-handle-top-right:hover,
+.resize-handle-bottom-left:hover,
+.resize-handle-bottom-right:hover {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.6), transparent);
+}

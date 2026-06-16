@@ -1,0 +1,42 @@
+# ============================================
+# Go 项目 - 纯运行时 Dockerfile（平台编译模式）
+# ============================================
+# 设计理念：
+#   - 不包含任何编译环境（无 Go SDK）
+#   - 仅接收平台已编译好的二进制文件
+#   - 最终镜像 < 20MB，攻击面极小
+#   - 非 root 用户运行
+#
+# 配合流水线使用：
+#   Jenkins Build Binary 阶段产出 bin/{APP_NAME}
+#   Build Image 阶段执行 nerdctl build --build-arg BIN_NAME=xxx
+# ============================================
+
+FROM alpine:3.20
+
+# 安装运行时依赖（CA证书 + 时区）
+RUN apk add --no-cache ca-certificates tzdata wget && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    addgroup -S app && adduser -S app -G app
+
+WORKDIR /app
+RUN mkdir -p /app/storage/logs /app/configs
+
+# 接收平台编译好的二进制（由流水线 Build Binary 阶段产出）
+ARG BIN_NAME=server
+COPY bin/${BIN_NAME} /app/server
+RUN chmod +x /app/server
+
+RUN chown -R app:app /app
+USER app
+
+ENV GIN_MODE=release
+ENV APP_CONFIG=/app/configs/config.yaml
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
+
+# 使用固定路径作为入口（COPY 已统一重命名为 /app/server）
+ENTRYPOINT ["/app/server"]

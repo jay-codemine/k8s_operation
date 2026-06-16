@@ -1,0 +1,247 @@
+================================================================================
+可拖拽调整大小模态框 - 快速应用指南
+================================================================================
+
+## 方案说明
+
+已创建可复用的 Composable 和样式文件，只需三步即可应用到任何视图：
+
+1. 导入 Composable
+2. 修改模态框 HTML
+3. 导入样式
+
+================================================================================
+## 步骤 1：在 <script setup> 中导入 Composable
+================================================================================
+
+import { useResizableModal } from '@/composables/useResizableModal'
+
+// 为创建模态框添加
+const {
+  modalRef: createModalRef,
+  modalStyle: createModalStyle,
+  startResize: createStartResize
+} = useResizableModal({
+  initialWidth: '800px',
+  initialHeight: 'auto'
+})
+
+// 为编辑模态框添加（如有）
+const {
+  modalRef: editModalRef,
+  modalStyle: editModalStyle,
+  startResize: editStartResize
+} = useResizableModal()
+
+// 为详情模态框添加（如有）
+const {
+  modalRef: detailModalRef,
+  modalStyle: detailModalStyle,
+  startResize: detailStartResize
+} = useResizableModal({ initialWidth: '1000px' })
+
+================================================================================
+## 步骤 2：修改模态框 HTML
+================================================================================
+
+### 原来的代码：
+```vue
+<div v-if="showCreateModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">...</div>
+    ...
+  </div>
+</div>
+```
+
+### 修改为：
+```vue
+<div v-if="showCreateModal" class="modal-overlay">
+  <div 
+    ref="createModalRef"
+    class="modal-content resizable-modal"
+    :style="createModalStyle"
+  >
+    <!-- 8个拖拽手柄 -->
+    <div class="resize-handle resize-handle-top" @mousedown="createStartResize($event, 'top')"></div>
+    <div class="resize-handle resize-handle-bottom" @mousedown="createStartResize($event, 'bottom')"></div>
+    <div class="resize-handle resize-handle-left" @mousedown="createStartResize($event, 'left')"></div>
+    <div class="resize-handle resize-handle-right" @mousedown="createStartResize($event, 'right')"></div>
+    <div class="resize-handle resize-handle-top-left" @mousedown="createStartResize($event, 'top-left')"></div>
+    <div class="resize-handle resize-handle-top-right" @mousedown="createStartResize($event, 'top-right')"></div>
+    <div class="resize-handle resize-handle-bottom-left" @mousedown="createStartResize($event, 'bottom-left')"></div>
+    <div class="resize-handle resize-handle-bottom-right" @mousedown="createStartResize($event, 'bottom-right')"></div>
+    
+    <div class="modal-header">...</div>
+    ...
+  </div>
+</div>
+```
+
+================================================================================
+## 步骤 3：导入样式
+================================================================================
+
+在 <style> 标签中添加：
+
+```vue
+<style scoped>
+@import '@/assets/styles/resizable-modal.css';
+
+/* 其他样式 */
+</style>
+```
+
+或者在文件顶部添加：
+
+```vue
+<style scoped src="@/assets/styles/resizable-modal.css"></style>
+<style scoped>
+/* 原有样式 */
+</style>
+```
+
+================================================================================
+## 完整示例
+================================================================================
+
+<template>
+  <!-- 创建模态框 -->
+  <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+    <div 
+      ref="createModalRef"
+      class="modal-content resizable-modal"
+      :style="createModalStyle"
+      @click.stop
+    >
+      <!-- 8个拖拽手柄 -->
+      <div class="resize-handle resize-handle-top" @mousedown="createStartResize($event, 'top')"></div>
+      <div class="resize-handle resize-handle-bottom" @mousedown="createStartResize($event, 'bottom')"></div>
+      <div class="resize-handle resize-handle-left" @mousedown="createStartResize($event, 'left')"></div>
+      <div class="resize-handle resize-handle-right" @mousedown="createStartResize($event, 'right')"></div>
+      <div class="resize-handle resize-handle-top-left" @mousedown="createStartResize($event, 'top-left')"></div>
+      <div class="resize-handle resize-handle-top-right" @mousedown="createStartResize($event, 'top-right')"></div>
+      <div class="resize-handle resize-handle-bottom-left" @mousedown="createStartResize($event, 'bottom-left')"></div>
+      <div class="resize-handle resize-handle-bottom-right" @mousedown="createStartResize($event, 'bottom-right')"></div>
+      
+      <div class="modal-header">
+        <h2>创建资源</h2>
+        <button class="close-btn" @click="showCreateModal = false">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- 内容 -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="showCreateModal = false">取消</button>
+        <button class="btn btn-primary" @click="create">创建</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { useResizableModal } from '@/composables/useResizableModal'
+
+const showCreateModal = ref(false)
+
+const {
+  modalRef: createModalRef,
+  modalStyle: createModalStyle,
+  startResize: createStartResize
+} = useResizableModal({
+  initialWidth: '800px',
+  initialHeight: 'auto'
+})
+
+const create = () => {
+  // 创建逻辑
+}
+</script>
+
+<style scoped>
+@import '@/assets/styles/resizable-modal.css';
+
+/* 其他样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+</style>
+
+================================================================================
+## 需要应用的视图列表
+================================================================================
+
+✅ Persistentvolumes.vue - 已完成（直接实现版）
+⬜ Deployments.vue
+⬜ Statefulsets.vue
+⬜ Daemonsets.vue
+⬜ Jobs.vue
+⬜ Cronjobs.vue
+⬜ Pods.vue
+⬜ ConfigMaps.vue
+⬜ Secrets.vue
+⬜ Services.vue
+⬜ Ingress.vue
+⬜ Persistentvolumeclaims.vue
+⬜ StorageClasses.vue
+⬜ Nodes.vue
+⬜ Namespaces.vue
+
+================================================================================
+## 自定义配置
+================================================================================
+
+可以在调用 useResizableModal 时传入配置：
+
+const {
+  modalRef,
+  modalStyle,
+  startResize
+} = useResizableModal({
+  initialWidth: '1000px',  // 初始宽度
+  initialHeight: '600px',  // 初始高度
+  minWidth: 500,           // 最小宽度（像素）
+  minHeight: 400,          // 最小高度（像素）
+  maxWidthPercent: 0.9,    // 最大宽度（视口百分比）
+  maxHeightPercent: 0.9    // 最大高度（视口百分比）
+})
+
+================================================================================
+## 注意事项
+================================================================================
+
+1. 每个模态框需要独立的 useResizableModal 调用
+2. 确保 ref 名称不冲突（createModalRef, editModalRef, detailModalRef）
+3. startResize 方法名也需要区分（createStartResize, editStartResize）
+4. @mousedown 事件必须使用对应的 startResize 方法
+5. 如果原来的模态框有 @click.stop，保留它以防止点击关闭
+
+================================================================================
+## 文件位置
+================================================================================
+
+- Composable: k8s-web/src/composables/useResizableModal.js
+- 样式文件: k8s-web/src/assets/styles/resizable-modal.css
+- 完整示例: k8s-web/src/views/storage/Persistentvolumes.vue
+
+================================================================================

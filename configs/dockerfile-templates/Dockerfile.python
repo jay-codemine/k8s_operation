@@ -1,0 +1,61 @@
+# ============================================
+# Python 项目 - 纯运行时 Dockerfile（平台编译模式）
+# ============================================
+# 设计理念：
+#   - 平台已完成 pip install，源码和依赖均已就绪
+#   - Dockerfile 仅负责打包运行环境
+#   - 使用 slim 镜像减小体积
+#   - 非 root 用户运行
+#
+# 配合流水线使用：
+#   Jenkins Install Dependencies 阶段完成 pip install
+#   Build Image 阶段执行 nerdctl build --build-arg PYTHON_VERSION=3.11
+#
+# 注意：Python 项目因为依赖安装在系统级别，
+#   Dockerfile 需要重新 pip install。这是 Python 的特殊性，
+#   但编译型依赖（如 C 扩展）的检测和测试已在平台完成。
+# ============================================
+
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-slim
+
+# 环境变量
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_NO_CACHE_DIR=1
+ENV TZ=Asia/Shanghai
+
+# 安装运行时依赖和时区
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 用户
+RUN groupadd -r app && useradd -r -g app app
+
+WORKDIR /app
+
+# 先安装依赖（利用 Docker 缓存层）
+COPY requirements.txt* ./
+RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+# 复制应用代码（平台已完成测试和 Lint）
+COPY . .
+
+# 设置目录权限
+RUN chown -R app:app /app
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 默认使用 uvicorn（FastAPI），可通过 CMD 覆盖
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

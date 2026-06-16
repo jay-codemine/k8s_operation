@@ -1,0 +1,129 @@
+# ============================================================
+# K8sOperation 前端 Deployment
+# ============================================================
+# 部署方式：
+#   kubectl apply -f deploy/frontend-deployment.yaml
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation-web
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2                                # 前端无状态，可多副本
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8soperation-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8soperation-web
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: web
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/k8soperation-web:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          env:
+            # 后端 API 地址（K8s Service 内部域名）
+            - name: API_BACKEND_URL
+              value: "http://k8soperation.k8soperation.svc:8080"
+
+          # 存活探针
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # 就绪探针
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # 资源限制
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+---
+# ============================================================
+# 前端 Service
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation-web
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: k8soperation-web
+
+---
+# ============================================================
+# 前端 Ingress（对外暴露）
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # TLS（可选，取消注释启用）
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: k8sop.example.com                  # ← 替换为你的域名
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8soperation-web
+                port:
+                  name: http
+  # TLS（可选，取消注释启用）
+  # tls:
+  #   - hosts:
+  #       - k8sop.example.com
+  #     secretName: k8soperation-web-tls

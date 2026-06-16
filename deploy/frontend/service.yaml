@@ -1,0 +1,20 @@
+# ============================================================
+# K8sOperation 前端 - Service
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation-web
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: k8soperation-web

@@ -1,0 +1,175 @@
+/**
+ * K8s Operation Platform - Global Theme Variables
+ * Version: 3.0 (Modern Edition)
+ * 
+ * 现代化配色方案 - 参考 Vercel / Linear / Stripe 设计语言
+ */
+
+:root {
+  /* ========================================
+     品牌色系 - 科技紫蓝渐变
+  ======================================== */
+  --brand-primary: #6366f1;      /* Indigo 主色 */
+  --brand-primary-light: #818cf8;
+  --brand-primary-dark: #4f46e5;
+  --brand-secondary: #8b5cf6;    /* Violet 辅助色 */
+  
+  /* 渐变色 */
+  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --gradient-accent: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  --gradient-warm: linear-gradient(135deg, #f472b6 0%, #fb923c 100%);
+  
+  /* ========================================
+     语义色 - 功能色彩
+  ======================================== */
+  /* 成功色 - 翡翠绿 */
+  --color-success: #10b981;
+  --color-success-light: #34d399;
+  --color-success-dark: #059669;
+  --color-success-bg: rgba(16, 185, 129, 0.1);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  
+  /* 警告色 - 琥珀橙 */
+  --color-warning: #f59e0b;
+  --color-warning-light: #fbbf24;
+  --color-warning-dark: #d97706;
+  --color-warning-bg: rgba(245, 158, 11, 0.1);
+  --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%);
+  
+  /* 危险色 - 玫瑰红 */
+  --color-danger: #ef4444;
+  --color-danger-light: #f87171;
+  --color-danger-dark: #dc2626;
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --gradient-danger: linear-gradient(135deg, #ef4444 0%, #f472b6 100%);
+  
+  /* 信息色 - 天空蓝 */
+  --color-info: #3b82f6;
+  --color-info-light: #60a5fa;
+  --color-info-dark: #2563eb;
+  --color-info-bg: rgba(59, 130, 246, 0.1);
+  --gradient-info: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  
+  /* ========================================
+     中性色 - 灰度系统
+  ======================================== */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  
+  /* ========================================
+     背景色
+  ======================================== */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(17, 24, 39, 0.6);
+  --bg-sidebar: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+  --bg-sidebar-item-hover: rgba(255, 255, 255, 0.1);
+  --bg-sidebar-item-active: rgba(99, 102, 241, 0.3);
+  
+  /* ========================================
+     文字色
+  ======================================== */
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-inverse: #ffffff;
+  --text-link: #6366f1;
+  --text-link-hover: #4f46e5;
+  
+  /* ========================================
+     边框色
+  ======================================== */
+  --border-light: #e5e7eb;
+  --border-default: #d1d5db;
+  --border-dark: #9ca3af;
+  --border-focus: #6366f1;
+  
+  /* ========================================
+     阴影系统
+  ======================================== */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  
+  /* 品牌色阴影 */
+  --shadow-primary: 0 4px 14px rgba(99, 102, 241, 0.4);
+  --shadow-success: 0 4px 14px rgba(16, 185, 129, 0.4);
+  --shadow-warning: 0 4px 14px rgba(245, 158, 11, 0.4);
+  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.4);
+  --shadow-info: 0 4px 14px rgba(59, 130, 246, 0.4);
+  
+  /* ========================================
+     圆角系统
+  ======================================== */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+  
+  /* ========================================
+     间距系统
+  ======================================== */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  
+  /* ========================================
+     动画时长
+  ======================================== */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+  
+  /* ========================================
+     缓动函数
+  ======================================== */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* ========================================
+   深色模式支持（可选）
+======================================== */
+@media (prefers-color-scheme: dark) {
+  :root.auto-theme {
+    --bg-primary: #111827;
+    --bg-secondary: #1f2937;
+    --bg-tertiary: #374151;
+    --bg-elevated: #1f2937;
+    
+    --text-primary: #f9fafb;
+    --text-secondary: #e5e7eb;
+    --text-tertiary: #d1d5db;
+    --text-muted: #9ca3af;
+    
+    --border-light: #374151;
+    --border-default: #4b5563;
+    --border-dark: #6b7280;
+  }
+}

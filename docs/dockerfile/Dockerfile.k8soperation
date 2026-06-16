@@ -1,0 +1,226 @@
+# ==============================================================================
+# K8sOperation 统一运维平台 - 全栈多阶段构建 Dockerfile
+# ==============================================================================
+# 架构：三阶段构建
+#   Stage 1: Node.js 构建前端 (Vue3 + Vite)
+#   Stage 2: Go 编译后端 (Gin + client-go)
+#   Stage 3: 最终运行镜像 (Alpine + Nginx)
+#
+# 最终镜像包含：
+#   - Nginx 反向代理（前端静态文件 + API 转发）
+#   - Go 后端二进制（端口 8080）
+#   - supervisord 进程管理
+#
+# 构建命令：
+#   docker build -f docs/dockerfile/Dockerfile.k8soperation -t k8soperation:latest .
+#
+# 运行命令：
+#   docker run -d --name k8soperation \
+#     -p 80:80 \
+#     -v $(pwd)/configs/config.yaml:/app/configs/config.yaml:ro \
+#     -v $(pwd)/configs/k8s.yaml:/app/configs/k8s.yaml:ro \
+#     k8soperation:latest
+#
+# 仅构建后端（不含前端）：
+#   docker build -f docs/dockerfile/Dockerfile.k8soperation \
+#     --target backend-only -t k8soperation-api:latest .
+# ==============================================================================
+
+
+# ======================== Stage 1: 前端构建 ========================
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+# 利用 Docker 缓存：先复制依赖声明
+COPY k8s-web/package.json k8s-web/package-lock.json ./
+
+# 安装依赖（使用国内镜像加速）
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm ci --prefer-offline --no-audit --no-fund
+
+# 复制前端源码并构建
+COPY k8s-web/ ./
+RUN npm run build
+
+
+# ======================== Stage 2: 后端构建 ========================
+FROM golang:1.24-alpine AS backend-builder
+
+# 构建参数
+ARG APP_VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+
+# 设置 Go 代理
+ENV GOPROXY=https://goproxy.cn,direct
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+
+# 安装构建依赖
+RUN apk --no-cache add git ca-certificates tzdata
+
+WORKDIR /build
+
+# 利用 Docker 缓存：先下载依赖
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+# 复制源码
+COPY . .
+
+# 编译（注入版本信息）
+RUN GIT_COMMIT=${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")} && \
+    BUILD_TIME=${BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")} && \
+    go build -trimpath \
+        -ldflags="-s -w \
+            -X main.Version=${APP_VERSION} \
+            -X main.GitCommit=${GIT_COMMIT} \
+            -X main.BuildTime=${BUILD_TIME}" \
+        -o /app/k8soperation ./cmd/k8soperation
+
+
+# ======================== Stage 3: 最终运行镜像 ========================
+FROM alpine:3.20
+
+LABEL maintainer="K8sOperation Team"
+LABEL description="K8sOperation 统一运维平台 - 前后端一体化部署镜像"
+LABEL version="1.0"
+
+# 安装运行时依赖
+RUN apk --no-cache add \
+        ca-certificates \
+        tzdata \
+        nginx \
+        supervisor \
+        wget \
+        curl && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    addgroup -S app && adduser -S app -G app
+
+# 创建目录结构
+RUN mkdir -p /app/configs \
+             /app/storage/logs \
+             /app/storage/artifacts \
+             /app/storage/agents \
+             /var/log/nginx \
+             /var/log/supervisor \
+             /run/nginx && \
+    chown -R app:app /app
+
+WORKDIR /app
+
+# 复制后端二进制
+COPY --from=backend-builder /app/k8soperation /app/k8soperation
+RUN chmod +x /app/k8soperation
+
+# 复制前端构建产物到 Nginx 目录
+COPY --from=frontend-builder /frontend/dist /usr/share/nginx/html
+
+# 复制配置文件模板（运行时通过 volume 挂载覆盖）
+COPY configs/config.yaml.example /app/configs/config.yaml.example
+COPY configs/k8s.yaml.example /app/configs/k8s.yaml.example
+
+# Nginx 配置
+RUN cat > /etc/nginx/http.d/default.conf << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    # 前端静态文件
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip 压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 1024;
+
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # API 请求转发到后端
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket 支持（容器终端等）
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Swagger 文档
+    location /swagger/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+
+    # 健康检查端点
+    location /healthz/ {
+        proxy_pass http://127.0.0.1:8080;
+    }
+
+    # Prometheus Metrics
+    location /metrics {
+        proxy_pass http://127.0.0.1:8080;
+    }
+
+    # Vue Router History 模式 - SPA 回退
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+EOF
+
+# Supervisord 配置（管理 Nginx + Go 后端）
+RUN cat > /etc/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+user=root
+
+[program:backend]
+command=/app/k8soperation
+directory=/app
+user=app
+autostart=true
+autorestart=true
+stdout_logfile=/app/storage/logs/backend-stdout.log
+stderr_logfile=/app/storage/logs/backend-stderr.log
+stdout_logfile_maxbytes=50MB
+stderr_logfile_maxbytes=50MB
+
+[program:nginx]
+command=nginx -g "daemon off;"
+autostart=true
+autorestart=true
+stdout_logfile=/var/log/nginx/access.log
+stderr_logfile=/var/log/nginx/error.log
+EOF
+
+# 环境变量
+ENV GIN_MODE=release
+ENV APP_CONFIG=/app/configs/config.yaml
+ENV K8S_CONFIG=/app/configs/k8s.yaml
+
+# 暴露端口
+EXPOSE 80 8080
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz/live && \
+        wget -qO- http://127.0.0.1:80/ > /dev/null || exit 1
+
+# 启动
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]

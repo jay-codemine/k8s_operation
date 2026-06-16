@@ -1,0 +1,102 @@
+# ============================================
+# 前端项目 - 纯运行时 Dockerfile（平台编译模式）
+# ============================================
+# 设计理念：
+#   - 不包含 Node.js 编译环境
+#   - 仅接收平台 npm run build 产出的 dist/
+#   - 使用 Nginx 提供静态文件服务
+#   - 自动生成 nginx 配置（SPA 路由兼容）
+#
+# 配合流水线使用：
+#   Jenkins Build Frontend 阶段产出 dist/ 目录
+#   Build Image 阶段执行 nerdctl build --build-arg OUTPUT_DIR=dist
+# ============================================
+
+FROM nginx:1.25-alpine
+
+# 安装时区
+RUN apk --no-cache add tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 生成 Nginx 配置（支持 SPA history 模式 + API 反向代理）
+RUN cat > /etc/nginx/nginx.conf << 'NGINX_CONF'
+user  nginx;
+worker_processes  auto;
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log  /var/log/nginx/access.log main;
+
+    sendfile        on;
+    tcp_nopush      on;
+    keepalive_timeout  65;
+    gzip  on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 1024;
+
+    server {
+        listen       80;
+        server_name  _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # SPA 路由：所有非文件请求都返回 index.html
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # 静态资源缓存
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # 健康检查端点
+        location /health {
+            access_log off;
+            return 200 'ok';
+            add_header Content-Type text/plain;
+        }
+
+        # API 反向代理（按需配置后端地址）
+        # location /api/ {
+        #     proxy_pass http://backend-service:8080/api/;
+        #     proxy_set_header Host $host;
+        #     proxy_set_header X-Real-IP $remote_addr;
+        #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # }
+    }
+}
+NGINX_CONF
+
+# 接收平台构建产出的静态文件（由流水线 Build Frontend 阶段产出）
+ARG OUTPUT_DIR=dist
+COPY ${OUTPUT_DIR}/ /usr/share/nginx/html/
+
+# 设置权限
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+USER nginx
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

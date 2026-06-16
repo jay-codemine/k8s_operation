@@ -1,0 +1,351 @@
+// Jenkinsfile - Go 项目 CI/CD（支持阶段级回调）
+// =============================================================
+// 架构：
+//   Jenkins（虚拟机 + containerd）
+//     -> checkout(平台传入 repo/branch)  阶段回调
+//     -> go test  阶段回调
+//     -> nerdctl build  阶段回调
+//     -> push  阶段回调
+//     -> 最终回调平台（触发审批/部署阶段）
+//
+// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
+// =============================================================
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        skipDefaultCheckout(true)
+    }
+
+    parameters {
+        string(name: 'GIT_REPO', defaultValue: '', description: 'Git 仓库地址（必填）')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
+
+        string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址（必填）')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空自动生成）')
+        string(name: 'DOCKERFILE_PATH', defaultValue: 'Dockerfile', description: 'Dockerfile 路径')
+
+        string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
+        string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
+
+        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
+        string(name: 'GO_VERSION', defaultValue: '1.22', description: 'Go 版本')
+    }
+
+    environment {
+        REGISTRY_CREDS = credentials('harbor-registry')
+        HMAC_SECRET    = credentials('hmac-secret')
+        GOPROXY        = 'https://goproxy.cn,direct'
+        CGO_ENABLED    = '0'
+        GOOS           = 'linux'
+        GOARCH         = 'amd64'
+    }
+
+    stages {
+
+        // ==================== 1. 拉取代码 ====================
+        stage('Checkout') {
+            steps {
+                echo "=== 拉取代码 ==="
+
+                script {
+                    if (!params.GIT_REPO?.trim()) {
+                        error("GIT_REPO 不能为空")
+                    }
+                    if (!params.IMAGE_REPO?.trim()) {
+                        error("IMAGE_REPO 不能为空")
+                    }
+                }
+
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${params.GIT_BRANCH}"]],
+                    userRemoteConfigs: [[
+                        url: params.GIT_REPO,
+                        credentialsId: 'gitee-id'
+                    ]],
+                    extensions: [
+                        [$class: 'CleanBeforeCheckout'],
+                        [$class: 'PruneStaleBranch']
+                    ]
+                ])
+
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_FULL  = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_COMMIT_MSG   = sh(script: 'git log -1 --pretty=%B | head -1', returnStdout: true).trim()
+
+                    env.GIT_BRANCH_NAME  = params.GIT_BRANCH.replaceAll('/', '-')
+                    env.BUILD_TS = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+
+                    env.FINAL_TAG = params.IMAGE_TAG?.trim()
+                        ? params.IMAGE_TAG.trim()
+                        : "${env.GIT_BRANCH_NAME}-${env.GIT_COMMIT_SHORT}-${env.BUILD_TS}"
+
+                    env.FULL_IMAGE = "${params.IMAGE_REPO}:${env.FINAL_TAG}"
+
+                    echo "Commit: ${env.GIT_COMMIT_SHORT}"
+                    echo "Image: ${env.FULL_IMAGE}"
+                }
+            }
+            post {
+                success { script { stageCallback('checkout', 'success') } }
+                failure { script { stageCallback('checkout', 'failed') } }
+            }
+        }
+
+        // ==================== 2. 依赖下载 ====================
+        stage('Dependencies') {
+            steps {
+                echo "=== 下载依赖 ==="
+
+                script {
+                    if (!fileExists('go.mod')) {
+                        echo "未检测到 go.mod，跳过依赖下载"
+                        return
+                    }
+
+                    sh """
+                        set -e
+                        go version
+                        go mod download
+                        go mod verify
+                    """
+                }
+            }
+            post {
+                success { script { stageCallback('dependencies', 'success') } }
+                failure { script { stageCallback('dependencies', 'failed') } }
+            }
+        }
+
+        // ==================== 3. 单元测试 ====================
+        stage('Test') {
+            when { expression { return !params.SKIP_TESTS } }
+            steps {
+                echo "=== 执行测试 ==="
+
+                script {
+                    if (!fileExists('go.mod')) {
+                        echo "未检测到 go.mod，跳过测试"
+                        return
+                    }
+
+                    sh """
+                        set -e
+                        go test -v -race -coverprofile=coverage.out ./...
+                        go tool cover -func=coverage.out | tail -1
+                    """
+                }
+            }
+            post {
+                success { script { stageCallback('test', 'success') } }
+                failure { script { stageCallback('test', 'failed') } }
+            }
+        }
+
+        // ==================== 4. 代码检查（可选） ====================
+        stage('Lint') {
+            when { expression { return !params.SKIP_TESTS } }
+            steps {
+                echo "=== 代码检查 ==="
+
+                script {
+                    // 检查是否安装了 golangci-lint
+                    def hasLint = sh(
+                        script: "which golangci-lint && echo 'yes' || echo 'no'",
+                        returnStdout: true
+                    ).trim()
+
+                    if (hasLint.contains('yes')) {
+                        sh "golangci-lint run --timeout=5m || true"
+                    } else {
+                        echo "未安装 golangci-lint，使用 go vet"
+                        sh "go vet ./..."
+                    }
+                }
+            }
+            post {
+                success { script { stageCallback('lint', 'success') } }
+                failure { script { stageCallback('lint', 'failed') } }
+            }
+        }
+
+        // ==================== 5. 构建镜像 ====================
+        stage('Build Image') {
+            steps {
+                echo "=== 构建镜像 ==="
+
+                sh """
+                    set -e
+                    nerdctl build \\
+                        -t ${env.FULL_IMAGE} \\
+                        -f ${params.DOCKERFILE_PATH} \\
+                        --build-arg GO_VERSION=${params.GO_VERSION} \\
+                        --label git.commit=${env.GIT_COMMIT_FULL} \\
+                        --label git.branch=${env.GIT_BRANCH_NAME} \\
+                        --label build.number=${env.BUILD_NUMBER} \\
+                        --label build.timestamp=${env.BUILD_TS} \\
+                        .
+                """
+            }
+            post {
+                success { script { stageCallback('build', 'success') } }
+                failure { script { stageCallback('build', 'failed') } }
+            }
+        }
+
+        // ==================== 6. 推送镜像 ====================
+        stage('Push Image') {
+            steps {
+                echo "=== 推送镜像 ==="
+
+                script {
+                    def registryHost = params.IMAGE_REPO.split('/')[0]
+
+                    sh """
+                        set -e
+                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
+                        nerdctl push ${env.FULL_IMAGE}
+                    """
+
+                    env.IMAGE_DIGEST = sh(
+                        script: """
+                            nerdctl inspect ${env.FULL_IMAGE} \\
+                            --format '{{range .RepoDigests}}{{println .}}{{end}}' \\
+                            2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST 
+                        ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}" 
+                        : env.FULL_IMAGE
+
+                    echo "Digest: ${env.IMAGE_DIGEST ?: '未获取到'}"
+                    echo "Deploy Image: ${env.IMAGE_WITH_DIGEST}"
+                }
+            }
+            post {
+                success { script { stageCallback('push', 'success') } }
+                failure { script { stageCallback('push', 'failed') } }
+            }
+        }
+    }
+
+    post {
+        success {
+            script { callbackPlatform('SUCCESS', 'Go 项目构建成功') }
+        }
+        failure {
+            script { callbackPlatform('FAILURE', 'Go 项目构建失败') }
+        }
+        aborted {
+            script { callbackPlatform('ABORTED', '构建中止') }
+        }
+        always {
+            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
+            cleanWs()
+        }
+    }
+}
+
+// ==================== 阶段级回调（实时更新UI） ====================
+def stageCallback(String stageType, String status) {
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) {
+        return
+    }
+
+    try {
+        def payload = [
+            job_name     : env.JOB_NAME,
+            build_number : env.BUILD_NUMBER as Integer,
+            pipeline_id  : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+            stage_type   : stageType,
+            status       : status
+        ]
+
+        def body = groovy.json.JsonOutput.toJson(payload)
+        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/callback', '/stage/callback')
+
+        def signature = ''
+        if (env.HMAC_SECRET?.trim()) {
+            def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}"
+            signature = hmacSha256(env.HMAC_SECRET, signContent)
+        }
+
+        def headers = signature ? [[name: 'X-Signature', value: signature]] : []
+
+        httpRequest(
+            url: stageUrl,
+            httpMode: 'POST',
+            contentType: 'APPLICATION_JSON',
+            requestBody: body,
+            customHeaders: headers,
+            validResponseCodes: '100:599',
+            timeout: 10
+        )
+
+        echo "[阶段回调] ${stageType} -> ${status}"
+    } catch (e) {
+        echo "[阶段回调] 非致命错误: ${e.message}"
+    }
+}
+
+// ==================== 最终回调函数 ====================
+def callbackPlatform(String status, String message) {
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) {
+        echo "未配置回调地址"
+        return
+    }
+
+    def payload = [
+        job_name     : env.JOB_NAME,
+        build_number : env.BUILD_NUMBER as Integer,
+        status       : status,
+        pipeline_id  : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+        image_url    : env.FULL_IMAGE ?: '',
+        image_digest : env.IMAGE_DIGEST ?: '',
+        image_with_digest : env.IMAGE_WITH_DIGEST ?: '',
+        git_commit   : env.GIT_COMMIT_SHORT ?: '',
+        git_branch   : env.GIT_BRANCH_NAME ?: '',
+        duration_sec : currentBuild.duration ? (currentBuild.duration / 1000) as Integer : 0,
+        message      : message,
+        build_url    : env.BUILD_URL ?: ''
+    ]
+
+    def body = groovy.json.JsonOutput.toJson(payload)
+
+    def signature = ''
+    if (env.HMAC_SECRET?.trim()) {
+        def signContent = "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}"
+        signature = hmacSha256(env.HMAC_SECRET, signContent)
+    }
+
+    def headers = signature ? [[name: 'X-Signature', value: signature]] : []
+
+    echo "[流水线回调] ${status}: ${message}"
+    echo "[签名内容] ${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}"
+
+    httpRequest(
+        url: params.PLATFORM_CALLBACK_URL,
+        httpMode: 'POST',
+        contentType: 'APPLICATION_JSON',
+        requestBody: body,
+        customHeaders: headers,
+        validResponseCodes: '200:299',
+        consoleLogResponseBody: true
+    )
+}
+
+// ==================== HMAC-SHA256 ====================
+def hmacSha256(String secret, String data) {
+    return sh(
+        script: "echo -n '${data}' | openssl dgst -sha256 -hmac '${secret}' | awk '{print \$2}'",
+        returnStdout: true
+    ).trim()
+}
