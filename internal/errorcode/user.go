@@ -11,12 +11,12 @@ var (
 )
 
 func registerUser() {
-	ErrorUserCreateFail = NewError(200001, "创建用户失败")
-	ErrorUserDeleteFail = NewError(200002, "删除用户失败,用户不存在")
-	ErrorUserUpdateFail = NewError(200003, "更新用户失败,用户不存在")
-	ErrorUserListFail = NewError(200004, "列出用户失败")
+	ErrorUserCreateFail = NewError(209001, "创建用户失败")
+	ErrorUserDeleteFail = NewError(209002, "删除用户失败,用户不存在")
+	ErrorUserUpdateFail = NewError(209003, "更新用户失败,用户不存在")
+	ErrorUserListFail = NewError(209004, "列出用户失败")
 
-	ErrorUserNotFound = NewError(200005, "用户名不存在")
-	ErrorUserPasswordNotMatch = NewError(200006, "两次密码不一致")
-	ErrorUserDisabled = NewError(200007, "账号已禁用，请联系管理员")
+	ErrorUserNotFound = NewError(209005, "用户名不存在")
+	ErrorUserPasswordNotMatch = NewError(209006, "两次密码不一致")
+	ErrorUserDisabled = NewError(209007, "账号已禁用，请联系管理员")
 }

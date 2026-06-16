@@ -32,13 +32,13 @@ var (
 )
 
 func registerRBAC() {
-	// 角色 300xxx
-	ErrorRoleCreateFail = NewError(300001, "创建角色失败")
-	ErrorRoleUpdateFail = NewError(300002, "更新角色失败")
-	ErrorRoleDeleteFail = NewError(300003, "删除角色失败")
-	ErrorRoleNotFound = NewError(300004, "角色不存在")
-	ErrorRoleListFail = NewError(300005, "获取角色列表失败")
-	ErrorRoleSystemLocked = NewError(300006, "系统内置角色不可修改")
+	// 角色 311xxx
+	ErrorRoleCreateFail = NewError(311001, "创建角色失败")
+	ErrorRoleUpdateFail = NewError(311002, "更新角色失败")
+	ErrorRoleDeleteFail = NewError(311003, "删除角色失败")
+	ErrorRoleNotFound = NewError(311004, "角色不存在")
+	ErrorRoleListFail = NewError(311005, "获取角色列表失败")
+	ErrorRoleSystemLocked = NewError(311006, "系统内置角色不可修改")
 
 	// 权限 301xxx
 	ErrorPermissionNotFound = NewError(301001, "权限不存在")
