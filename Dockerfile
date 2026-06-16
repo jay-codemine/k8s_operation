@@ -18,9 +18,9 @@
 
 FROM alpine:3.20
 
-# 安装运行时依赖（CA证书 + 时区 + 健康检查工具）
-# RUN apk add --no-cache ca-certificates wget && \
-#    addgroup -S app && adduser -S app -G app
+# 安装运行时依赖（CA证书 + 健康检查工具）
+RUN apk add --no-cache ca-certificates wget && \
+    addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 RUN mkdir -p /app/storage/logs /app/configs
