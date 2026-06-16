@@ -1,23 +1,58 @@
  # ==============================================================================
-# K8sOperation 前端 - Nginx 运行时 Dockerfile
+# K8sOperation 前端 - 多阶段构建 Dockerfile
 # ==============================================================================
 # 技术栈：Vue 3 + Vite + Arco Design
 # 构建产物：Nginx 托管的静态文件 + API 反向代理
 #
-# 说明：CI 已通过 fe-compile-job 完成 npm build，产物为 dist/ 目录。
-#       本 Dockerfile 仅负责将 dist 打包进 Nginx 镜像，不做二次编译。
-#
 # 构建命令（在项目根目录执行）：
 #   docker build -f k8s-web/Dockerfile -t k8soperation-web:latest ./k8s-web
+#
+# 运行命令：
+#   docker run -d --name k8soperation-web \
+#     -p 80:80 \
+#     k8soperation-web:latest
+#
+# 自定义后端地址：
+#   docker run -d --name k8soperation-web \
+#     -p 80:80 \
+#     -e API_BACKEND_URL=http://k8soperation-api:8080 \
+#     k8soperation-web:latest
 # ==============================================================================
 
+
+# ======================== Stage 1: 构建阶段 ========================
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# 设置国内 npm 镜像加速
+RUN npm config set registry https://registry.npmmirror.com
+
+# 利用 Docker 缓存：先复制依赖声明
+COPY package.json package-lock.json ./
+
+# 安装依赖（ci = clean install，确保可复现）
+RUN npm ci --prefer-offline --no-audit --no-fund
+
+# 复制源码并构建
+COPY . .
+RUN npm run build
+
+
+# ======================== Stage 2: 运行阶段 ========================
 FROM nginx:1.27-alpine
 
 LABEL maintainer="K8sOperation Team"
 LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
 
-# 复制 CI 构建好的静态产物
-COPY dist/ /usr/share/nginx/html
+# 安装运行时工具
+#RUN apk --no-cache add tzdata && \
+#    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+#    echo "Asia/Shanghai" > /etc/timezone && \
+#    apk del tzdata
+
+# 从构建阶段复制产物
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 写入 Nginx 配置
 RUN <<'NGINX_CONF' cat > /etc/nginx/conf.d/default.conf
@@ -110,16 +145,7 @@ RUN <<'SCRIPT' cat > /docker-entrypoint.d/90-backend-url.sh
 # 用法：docker run -e API_BACKEND_URL=http://10.0.0.1:8080 ...
 if [ -n "$API_BACKEND_URL" ]; then
     echo "Configuring backend URL: $API_BACKEND_URL"
-    BACKEND_HOST="${API_BACKEND_URL#http://}"
-    BACKEND_HOST="${BACKEND_HOST#https://}"
-    # 不用 sed -i：ConfigMap subPath 挂载下 rename 会 Resource busy
-    sed "s|server devops-be-svc.k8soperation.svc.cluster.local:8080;|server ${BACKEND_HOST};|g" \
-        /etc/nginx/conf.d/default.conf > /tmp/default.conf.tmp
-    if [ -s /tmp/default.conf.tmp ]; then
-        cat /tmp/default.conf.tmp > /etc/nginx/conf.d/default.conf 2>/dev/null || \
-            echo "WARNING: Cannot update backend URL (read-only mount?), using built-in config"
-        rm -f /tmp/default.conf.tmp
-    fi
+    sed -i "s|server k8soperation-api:8080;|server ${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
 fi
 SCRIPT
 RUN chmod +x /docker-entrypoint.d/90-backend-url.sh
