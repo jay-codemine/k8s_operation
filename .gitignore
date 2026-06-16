@@ -21,3 +21,4 @@ storage/logs/*
 storage/artifacts/*
 !storage/artifacts/.gitkeep*.exe~
 *.exe
+output/

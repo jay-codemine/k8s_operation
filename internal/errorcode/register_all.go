@@ -2,6 +2,8 @@ package errorcode
 
 // Register 统一注册所有错误码
 func Register() {
+	// 允许覆盖重复错误码，避免 panic
+	allowOverride = true
 	registerCommon()
 	registerAuth()
 	registerResource()

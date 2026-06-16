@@ -5,6 +5,10 @@
 #   kubectl apply -k deploy/backend/   # 仅后端（K8s 内 MySQL + Redis）
 #   kubectl apply -k deploy/frontend/  # 仅前端
 #   kubectl apply -k deploy/external/  # 仅后端（外部 MySQL + Redis Cluster）
+#
+# 本地验证（Docker Desktop K8s + NodePort）：
+#   kubectl apply -f deploy/local-test/all-in-one.yaml
+#   或者：bash deploy/local-test/deploy.sh
 # ============================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
