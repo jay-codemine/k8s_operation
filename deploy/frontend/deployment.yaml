@@ -26,9 +26,11 @@ spec:
         app.kubernetes.io/name: k8soperation-web
         app.kubernetes.io/component: frontend
     spec:
+      imagePullSecrets:
+        - name: harbor-secret
       containers:
-        - name: web
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/k8soperation-web:latest
+        - name: devops-fe
+          image: harbor.maitian-yun.com/foxess/devops-fe:latest
           imagePullPolicy: Always
           ports:
             - name: http

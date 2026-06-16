@@ -11,6 +11,7 @@ resources:
   - namespace.yaml
   - secret.yaml
   - configmap.yaml
+  - pv.yaml                # PV 必须在 PVC 之前
   - pvc.yaml
   - service.yaml
   - deployment.yaml

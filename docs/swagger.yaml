@@ -2763,58 +2763,6 @@ definitions:
         - $ref: '#/definitions/services.WorkloadSummary'
         description: 汇总
     type: object
-  services.LDAPConfigResponse:
-    properties:
-      attr_email:
-        type: string
-      attr_phone:
-        type: string
-      attr_username:
-        type: string
-      auto_create:
-        type: boolean
-      base_dn:
-        type: string
-      bind_dn:
-        type: string
-      enabled:
-        type: boolean
-      group_attr:
-        type: string
-      group_base_dn:
-        type: string
-      group_filter:
-        type: string
-      group_role_mapping:
-        items:
-          $ref: '#/definitions/setting.LDAPGroupRoleMapping'
-        type: array
-      host:
-        type: string
-      local_fallback:
-        type: boolean
-      port:
-        type: integer
-      sync_on_login:
-        type: boolean
-      use_tls:
-        type: boolean
-      user_filter:
-        type: string
-    type: object
-  services.LDAPSyncResult:
-    properties:
-      errors:
-        items:
-          type: string
-        type: array
-      failed:
-        type: integer
-      synced:
-        type: integer
-      total:
-        type: integer
-    type: object
   services.NodeSummary:
     properties:
       cpu_usage:
@@ -3038,21 +2986,6 @@ definitions:
         $ref: '#/definitions/services.PodSummary'
       statefulsets:
         $ref: '#/definitions/services.ResourceCount'
-    type: object
-  setting.LDAPGroupRoleMapping:
-    properties:
-      cicdaccess:
-        description: '发布域权限级别: none/read/write/admin'
-        type: string
-      clusterAccess:
-        description: '集群域权限级别: none/read/write/admin'
-        type: string
-      ldapgroup:
-        description: LDAP 组名（cn 值）
-        type: string
-      platformRole:
-        description: 平台角色标识
-        type: string
     type: object
 info:
   contact: {}
@@ -3493,7 +3426,7 @@ paths:
       - 认证管理
   /api/v1/auth/login:
     post:
-      description: 用户登录（支持本地/LDAP 双模式）
+      description: 用户登录
       parameters:
       - description: body
         in: body
@@ -4503,37 +4436,6 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取审批详情
-      tags:
-      - CICD Approval
-  /api/v1/k8s/cicd/approval/feishu-callback:
-    get:
-      consumes:
-      - application/json
-      description: 飞书交互卡片审批回调接口（公开接口，无需JWT）
-      parameters:
-      - description: 审批Token
-        in: query
-        name: token
-        required: true
-        type: string
-      - description: '审批动作: approve/reject'
-        in: query
-        name: action
-        required: true
-        type: string
-      - description: 审批意见
-        in: query
-        name: reason
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审批处理成功
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 飞书审批回调
       tags:
       - CICD Approval
   /api/v1/k8s/cicd/approval/list:
@@ -13066,61 +12968,6 @@ paths:
       summary: 更新 VPA
       tags:
       - K8s VPA 垂直扩缩容
-  /api/v1/ldap/config:
-    get:
-      description: 获取当前 LDAP 认证配置（脱敏）
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/services.LDAPConfigResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: 获取 LDAP 配置
-      tags:
-      - LDAP管理
-  /api/v1/ldap/status:
-    get:
-      description: 获取 LDAP 启用状态和连接状态
-      produces:
-      - application/json
-      responses: {}
-      summary: 获取 LDAP 状态
-      tags:
-      - LDAP管理
-  /api/v1/ldap/sync:
-    post:
-      description: 从 LDAP 同步所有用户到平台
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/services.LDAPSyncResult'
-      security:
-      - ApiKeyAuth: []
-      summary: 全量同步 LDAP 用户
-      tags:
-      - LDAP管理
-  /api/v1/ldap/test:
-    post:
-      description: 测试 LDAP 服务器是否可连接
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: 测试 LDAP 连接
-      tags:
-      - LDAP管理
   /api/v1/platform/appstore/categories:
     get:
       description: 获取所有分类及其应用计数

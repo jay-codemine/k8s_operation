@@ -1,9 +1,9 @@
-# 默认忽略的文件
+# Default ignored files
 /shelf/
 /workspace.xml
-# 基于编辑器的 HTTP 客户端请求
+# Editor-based HTTP Client requests
 /httpRequests/
-# 已忽略包含查询文件的默认文件夹
+# Ignored default folder with query files
 /queries/
 # Datasource local storage ignored files
 /dataSources/

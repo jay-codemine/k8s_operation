@@ -21,4 +21,8 @@ storage/logs/*
 storage/artifacts/*
 !storage/artifacts/.gitkeep*.exe~
 *.exe
+<<<<<<< HEAD
 output/
+=======
+deploy/registry-secret.yaml
+>>>>>>> main

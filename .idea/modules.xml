@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/k8s_operation-main.iml" filepath="$PROJECT_DIR$/.idea/k8s_operation-main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/configs/configs.iml" filepath="$PROJECT_DIR$/configs/configs.iml" />
+      <module fileurl="file://$PROJECT_DIR$/docs/docs.iml" filepath="$PROJECT_DIR$/docs/docs.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/k8s_operation.iml" filepath="$PROJECT_DIR$/.idea/k8s_operation.iml" />
     </modules>
   </component>
 </project>

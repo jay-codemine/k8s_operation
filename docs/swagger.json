@@ -665,7 +665,7 @@
         },
         "/api/v1/auth/login": {
             "post": {
-                "description": "用户登录（支持本地/LDAP 双模式）",
+                "description": "用户登录",
                 "produces": [
                     "application/json"
                 ],
@@ -2226,52 +2226,6 @@
                 "responses": {
                     "200": {
                         "description": "返回审批详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/k8s/cicd/approval/feishu-callback": {
-            "get": {
-                "description": "飞书交互卡片审批回调接口（公开接口，无需JWT）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CICD Approval"
-                ],
-                "summary": "飞书审批回调",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "审批Token",
-                        "name": "token",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "审批动作: approve/reject",
-                        "name": "action",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "审批意见",
-                        "name": "reason",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审批处理成功",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -15050,95 +15004,6 @@
                 "responses": {}
             }
         },
-        "/api/v1/ldap/config": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取当前 LDAP 认证配置（脱敏）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "LDAP管理"
-                ],
-                "summary": "获取 LDAP 配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/services.LDAPConfigResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/ldap/status": {
-            "get": {
-                "description": "获取 LDAP 启用状态和连接状态",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "LDAP管理"
-                ],
-                "summary": "获取 LDAP 状态",
-                "responses": {}
-            }
-        },
-        "/api/v1/ldap/sync": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "从 LDAP 同步所有用户到平台",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "LDAP管理"
-                ],
-                "summary": "全量同步 LDAP 用户",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/services.LDAPSyncResult"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/ldap/test": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "测试 LDAP 服务器是否可连接",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "LDAP管理"
-                ],
-                "summary": "测试 LDAP 连接",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/platform/appstore/categories": {
             "get": {
                 "description": "获取所有分类及其应用计数",
@@ -21080,85 +20945,6 @@
                 }
             }
         },
-        "services.LDAPConfigResponse": {
-            "type": "object",
-            "properties": {
-                "attr_email": {
-                    "type": "string"
-                },
-                "attr_phone": {
-                    "type": "string"
-                },
-                "attr_username": {
-                    "type": "string"
-                },
-                "auto_create": {
-                    "type": "boolean"
-                },
-                "base_dn": {
-                    "type": "string"
-                },
-                "bind_dn": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "group_attr": {
-                    "type": "string"
-                },
-                "group_base_dn": {
-                    "type": "string"
-                },
-                "group_filter": {
-                    "type": "string"
-                },
-                "group_role_mapping": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/setting.LDAPGroupRoleMapping"
-                    }
-                },
-                "host": {
-                    "type": "string"
-                },
-                "local_fallback": {
-                    "type": "boolean"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "sync_on_login": {
-                    "type": "boolean"
-                },
-                "use_tls": {
-                    "type": "boolean"
-                },
-                "user_filter": {
-                    "type": "string"
-                }
-            }
-        },
-        "services.LDAPSyncResult": {
-            "type": "object",
-            "properties": {
-                "errors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "failed": {
-                    "type": "integer"
-                },
-                "synced": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "services.NodeSummary": {
             "type": "object",
             "properties": {
@@ -21475,27 +21261,6 @@
                 },
                 "statefulsets": {
                     "$ref": "#/definitions/services.ResourceCount"
-                }
-            }
-        },
-        "setting.LDAPGroupRoleMapping": {
-            "type": "object",
-            "properties": {
-                "cicdaccess": {
-                    "description": "发布域权限级别: none/read/write/admin",
-                    "type": "string"
-                },
-                "clusterAccess": {
-                    "description": "集群域权限级别: none/read/write/admin",
-                    "type": "string"
-                },
-                "ldapgroup": {
-                    "description": "LDAP 组名（cn 值）",
-                    "type": "string"
-                },
-                "platformRole": {
-                    "description": "平台角色标识",
-                    "type": "string"
                 }
             }
         }

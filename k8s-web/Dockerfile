@@ -46,23 +46,23 @@ LABEL maintainer="K8sOperation Team"
 LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
 
 # 安装运行时工具
-RUN apk --no-cache add tzdata && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone && \
-    apk del tzdata
+#RUN apk --no-cache add tzdata && \
+#    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+#    echo "Asia/Shanghai" > /etc/timezone && \
+#    apk del tzdata
 
 # 从构建阶段复制产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 写入 Nginx 配置
-RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX_CONF'
+RUN <<'NGINX_CONF' cat > /etc/nginx/conf.d/default.conf
 # ============================================================
 # K8sOperation Frontend Nginx Config
 # ============================================================
 
 # 后端 API 上游（通过环境变量注入或默认值）
 upstream backend {
-    server k8soperation-api:8080;
+    server devops-be-svc.k8soperation.svc.cluster.local:8080;
 }
 
 server {
@@ -139,7 +139,7 @@ server {
 NGINX_CONF
 
 # 创建 entrypoint 脚本（支持运行时注入后端地址）
-RUN cat > /docker-entrypoint.d/90-backend-url.sh << 'SCRIPT'
+RUN <<'SCRIPT' cat > /docker-entrypoint.d/90-backend-url.sh
 #!/bin/sh
 # 允许通过环境变量 API_BACKEND_URL 动态配置后端地址
 # 用法：docker run -e API_BACKEND_URL=http://10.0.0.1:8080 ...

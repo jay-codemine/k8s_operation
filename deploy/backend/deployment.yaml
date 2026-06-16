@@ -27,6 +27,8 @@ spec:
         app.kubernetes.io/component: backend
     spec:
       serviceAccountName: k8soperation    # 需要操作 K8s API 的 ServiceAccount
+      imagePullSecrets:
+        - name: harbor-secret
       terminationGracePeriodSeconds: 60   # 优雅退出等待时间（匹配代码中 30s shutdown + 5s cleanup）
       securityContext:
         runAsNonRoot: true
@@ -36,7 +38,7 @@ spec:
 
       containers:
         - name: k8soperation
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/k8soperation:latest
+          image: harbor.maitian-yun.com/foxess/devops-be:latest
           imagePullPolicy: Always
           ports:
             - name: http
