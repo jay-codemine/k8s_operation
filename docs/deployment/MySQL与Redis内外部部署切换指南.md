@@ -1,45 +1,7 @@
 # MySQL 与 Redis 内外部部署切换指南
 
 > 本文档详细说明：K8s 集群部署时，如何在「集群内部署 MySQL/Redis」和「使用外部 MySQL/Redis」之间切换。
-
-## 推荐方式：直接使用对应子目录
-
-项目已提供 **三套独立部署配置**，可根据场景一键选用：
-
-```bash
-# 方案 A：后端 + K8s 内 MySQL/Redis（开发/测试）
-kubectl apply -k deploy/backend/
-
-# 方案 B：外部 MySQL + Redis Cluster（生产推荐）
-kubectl apply -k deploy/external/
-
-# 方案 C：前端
-kubectl apply -k deploy/frontend/
-
-# 方案 D：前后端一起（K8s 内 MySQL/Redis）
-kubectl apply -k deploy/
-```
-
-### 目录结构
-
-```
-deploy/
-├── kustomization.yaml      ← 总编排入口（前后端一起）
-├── backend/                ← K8s 内 MySQL + Redis 单节点模式
-│   ├── configmap.yaml      # Address: redis:6379（单节点）
-│   ├── middleware.yaml     # MySQL + Redis Deployment
-│   └── ...
-├── frontend/               ← 前端（Nginx + Vue3）
-│   └── ...
-└── external/               ← 外部 MySQL + Redis Cluster 模式（生产推荐）
-    ├── configmap.yaml      # Addresses: [多节点]（Cluster 模式）
-    ├── secret.yaml         # 外部密码
-    └── ...                 # 无 middleware.yaml（不部署数据库）
-```
-
----
-
-> 如果需要在同一套配置内手动切换，以下是详细说明（改 3 个文件）。
+> 只需改动 **3 个文件** 即可完成切换。
 
 ---
 
@@ -96,15 +58,13 @@ deploy/
 
 | # | 文件 | 改什么 |
 |---|------|--------|
-| 1 | `deploy/backend/configmap.yaml` | Database.Host → 外部地址；Cache.Address/Addresses → 外部地址 |
-| 2 | `deploy/backend/secret.yaml` | DB_PASSWORD → 外部数据库密码；REDIS_PASSWORD → 外部 Redis 密码 |
-| 3 | `deploy/backend/kustomization.yaml` | 确认 `middleware.yaml` 保持注释（不部署内部数据库） |
-
-> **更简单的方式**：直接使用 `kubectl apply -k deploy/external/`，无需手动改文件。
+| 1 | `deploy/configmap.yaml` | Database.Host → 外部地址；Cache.Address → 外部地址 |
+| 2 | `deploy/secret.yaml` | DB_PASSWORD → 外部数据库密码；REDIS_PASSWORD → 外部 Redis 密码 |
+| 3 | `deploy/kustomization.yaml` | 确认 `middleware.yaml` 保持注释（不部署内部数据库） |
 
 ### 具体修改
 
-#### 1. `deploy/backend/configmap.yaml`
+#### 1. `deploy/configmap.yaml`（只改 2 行）
 
 ```yaml
     Database:
@@ -119,24 +79,13 @@ deploy/
     Cache:
       Type: redis
       Name: sk_sid
-      Address: ""                                 # 单节点留空（Cluster 模式用 Addresses）
-      Addresses:                                   # ← Redis Cluster 节点列表
-        - 192.168.1.201:6379
-        - 192.168.1.202:6379
-        - 192.168.1.203:6379
-        - 192.168.1.204:6379
-        - 192.168.1.205:6379
-        - 192.168.1.206:6379
+      Address: r-bp1xxx.redis.rds.aliyuncs.com:6379  # ← 改这里：外部 Redis 地址
       Username: ""
       Password: "${REDIS_PASSWORD}"
       ...
 ```
 
-> **Redis 模式说明**：
-> - 单节点：填 `Address`，`Addresses` 留空
-> - Cluster 集群：`Address` 留空，`Addresses` 填多个节点地址
-
-#### 2. `deploy/backend/secret.yaml`（改密码）
+#### 2. `deploy/secret.yaml`（改密码）
 
 ```bash
 # 生成外部 MySQL 密码的 base64
@@ -154,7 +103,7 @@ data:
   REDIS_PASSWORD: "eW91ci1yZWRpcy1wYXNzd29yZA==" # ← 替换为外部 Redis 密码
 ```
 
-#### 3. `deploy/backend/kustomization.yaml`（保持注释）
+#### 3. `deploy/kustomization.yaml`（保持注释）
 
 ```yaml
 resources:
@@ -194,13 +143,13 @@ resources:
 
 | # | 文件 | 改什么 |
 |---|------|--------|
-| 1 | `deploy/backend/configmap.yaml` | Database.Host → `mysql`；Cache.Address → `redis:6379` |
-| 2 | `deploy/backend/secret.yaml` | DB_PASSWORD / REDIS_PASSWORD → 内部数据库密码 |
-| 3 | `deploy/backend/kustomization.yaml` | 取消注释 `- middleware.yaml` |
+| 1 | `deploy/configmap.yaml` | Database.Host → `mysql`；Cache.Address → `redis:6379` |
+| 2 | `deploy/secret.yaml` | DB_PASSWORD / REDIS_PASSWORD → 内部数据库密码 |
+| 3 | `deploy/kustomization.yaml` | 取消注释 `- middleware.yaml` |
 
 ### 具体修改
 
-#### 1. `deploy/backend/configmap.yaml`（只改 2 行）
+#### 1. `deploy/configmap.yaml`（只改 2 行）
 
 ```yaml
     Database:
@@ -215,8 +164,7 @@ resources:
     Cache:
       Type: redis
       Name: sk_sid
-      Address: redis:6379                   # ← 改这里：K8s Service 名称:端口（单节点模式）
-      Addresses: []                          # 留空（不使用 Cluster 模式）
+      Address: redis:6379                   # ← 改这里：K8s Service 名称:端口
       Username: ""
       Password: "${REDIS_PASSWORD}"
       ...
@@ -272,25 +220,20 @@ kubectl exec -n k8soperation deploy/mysql -- mysql -u root -p"k8s-internal-2024"
 
 ## 需要修改的文件清单
 
-### 一图看清
+### 一图看清：只需改 3 个文件
 
 ```
 deploy/
-├── kustomization.yaml          ← 总编排入口
-├── backend/                    ← K8s 内 MySQL + Redis 模式
-│   ├── configmap.yaml          ← 改 Host/Address/Addresses（数据库连接地址）
-│   ├── secret.yaml             ← 改 DB_PASSWORD / REDIS_PASSWORD（密码）
-│   ├── kustomization.yaml      ← 注释/取消注释 middleware.yaml
-│   ├── middleware.yaml         （内部部署时使用）
-│   ├── namespace.yaml          （无需改）
-│   ├── pvc.yaml                （无需改）
-│   ├── service.yaml            （无需改）
-│   └── deployment.yaml         （无需改）
-├── frontend/                   ← 前端部署
-└── external/                   ← ★ 外部 MySQL + Redis Cluster 模式（生产推荐）
-    ├── configmap.yaml          # 已配置外部地址 + Redis Cluster
-    ├── secret.yaml             # 外部密码
-    └── ...                     # 一键部署：kubectl apply -k deploy/external/
+├── configmap.yaml       ← 改 Host/Address（数据库连接地址）
+├── secret.yaml          ← 改 DB_PASSWORD / REDIS_PASSWORD（密码）
+├── kustomization.yaml   ← 注释/取消注释 middleware.yaml（是否部署内部数据库）
+│
+├── middleware.yaml      （内部部署时自动使用，无需手动改）
+├── namespace.yaml       （无需改）
+├── pvc.yaml             （无需改）
+├── service.yaml         （无需改）
+├── deployment.yaml      （无需改）
+└── ingress.yaml         （无需改）
 ```
 
 ---
@@ -301,14 +244,14 @@ deploy/
 
 ```bash
 # Step 1: 修改 configmap.yaml
-sed -i 's|Host: .*#.*MySQL.*|Host: mysql|' deploy/backend/configmap.yaml
-sed -i 's|Address: .*#.*Redis.*|Address: redis:6379|' deploy/backend/configmap.yaml
+sed -i 's|Host: .*#.*MySQL.*|Host: mysql|' deploy/configmap.yaml
+sed -i 's|Address: .*#.*Redis.*|Address: redis:6379|' deploy/configmap.yaml
 
 # Step 2: 取消注释 middleware.yaml
-sed -i 's|# - middleware.yaml|- middleware.yaml|' deploy/backend/kustomization.yaml
+sed -i 's|# - middleware.yaml|- middleware.yaml|' deploy/kustomization.yaml
 
 # Step 3: 应用变更
-kubectl apply -k deploy/backend/
+kubectl apply -k deploy/
 
 # Step 4: 等待 MySQL 就绪后初始化数据
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=mysql -n k8soperation --timeout=120s
@@ -317,24 +260,18 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=mysql -n k
 
 ### 从「内部」切换到「外部」
 
-**推荐方式：直接使用 external 目录**
 ```bash
-kubectl apply -k deploy/external/
-```
-
-**手动切换方式：**
-```bash
-# Step 1: 修改 deploy/backend/configmap.yaml 的地址
+# Step 1: 修改 configmap.yaml 的地址
 # 将 Host: mysql 改为外部地址
-# 将 Address: redis:6379 改为空，Addresses 填入 Redis Cluster 节点
+# 将 Address: redis:6379 改为外部地址
 
-# Step 2: 修改 deploy/backend/secret.yaml 的密码（base64 编码的外部密码）
+# Step 2: 修改 secret.yaml 的密码（base64 编码的外部密码）
 
 # Step 3: 注释 middleware.yaml
-sed -i 's|^  - middleware.yaml|  # - middleware.yaml|' deploy/backend/kustomization.yaml
+sed -i 's|^  - middleware.yaml|  # - middleware.yaml|' deploy/kustomization.yaml
 
 # Step 4: 应用变更（会更新配置，Pod 自动重启）
-kubectl apply -k deploy/backend/
+kubectl apply -k deploy/
 
 # Step 5: 删除集群内已部署的 MySQL/Redis（可选）
 kubectl delete deployment mysql redis -n k8soperation
@@ -457,42 +394,18 @@ kubectl delete pod -n k8soperation -l app.kubernetes.io/name=k8soperation
 
 ### Q5: Redis Cluster 模式
 
-项目已原生支持 Redis Cluster，无需额外配置：
-
-```yaml
-# deploy/external/configmap.yaml 中的配置
-Cache:
-  Type: redis
-  Address: ""                     # 留空
-  Addresses:                       # 填写所有 Cluster 节点
-    - 192.168.1.201:6379
-    - 192.168.1.202:6379
-    - 192.168.1.203:6379
-    - 192.168.1.204:6379
-    - 192.168.1.205:6379
-    - 192.168.1.206:6379
-```
-
-- `Addresses` 非空时自动启用 `redis.NewClusterClient`
-- `Addresses` 为空时使用 `Address` 单节点模式 `redis.NewClient`
-- 直接使用 `kubectl apply -k deploy/external/` 即可部署 Redis Cluster 模式
+如果外部 Redis 是 Cluster 模式，需要确认：
+- 使用的客户端库支持 Cluster
+- 地址填写任一节点即可，客户端会自动发现
+- 如果通过代理（如 Twemproxy），填代理地址即可
 
 ---
 
 ## 总结：一张表搞定切换
 
-| 场景 | 推荐命令 | 说明 |
-|------|---------|------|
-| **外部 MySQL + Redis Cluster** | `kubectl apply -k deploy/external/` | 生产推荐，已预配置 Cluster 模式 |
-| **K8s 内 MySQL + Redis** | `kubectl apply -k deploy/backend/` | 开发测试用，取消注释 middleware.yaml |
-| **前端** | `kubectl apply -k deploy/frontend/` | 独立前端部署 |
-| **全部** | `kubectl apply -k deploy/` | 前后端 + K8s 内中间件 |
-
-### 手动切换对照表
-
-| 切换方向 | backend/configmap.yaml | backend/secret.yaml | backend/kustomization.yaml |
+| 切换方向 | configmap.yaml | secret.yaml | kustomization.yaml |
 |---------|----------------|-------------|-------------------|
-| **用外部** | Host → 外部IP/域名<br>Addresses → Redis Cluster 节点列表 | 填外部密码(base64) | 注释 `middleware.yaml` |
-| **用内部** | Host → `mysql`<br>Address → `redis:6379`<br>Addresses → 留空 | 填内部密码(base64) | 取消注释 `middleware.yaml` |
+| **用外部** | Host → 外部IP/域名<br>Address → 外部IP:6379 | 填外部密码(base64) | 注释 `middleware.yaml` |
+| **用内部** | Host → `mysql`<br>Address → `redis:6379` | 填内部密码(base64) | 取消注释 `middleware.yaml` |
 
-**核心原则：生产环境直接用 `deploy/external/`，免改文件一步到位。**
+**核心原则：只改地址和密码，其他文件不用动。**
