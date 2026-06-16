@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation
+    app.kubernetes.io/part-of: k8soperation-platform

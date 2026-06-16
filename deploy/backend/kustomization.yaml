@@ -1,0 +1,23 @@
+# ============================================================
+# K8sOperation 后端 - Kustomization
+# 一键部署：kubectl apply -k deploy/backend/
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: k8soperation
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - service.yaml
+  - deployment.yaml
+  # - middleware.yaml        # 按需取消注释（K8s 内部署 MySQL + Redis）
+  # - service-nodeport.yaml  # 按需取消注释（NodePort 暴露）
+  # - ingress.yaml           # 按需取消注释（Ingress 暴露）
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: k8soperation-platform
