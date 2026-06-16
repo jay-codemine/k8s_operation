@@ -46,10 +46,10 @@ LABEL maintainer="K8sOperation Team"
 LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
 
 # 安装运行时工具
-RUN apk --no-cache add tzdata && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone && \
-    apk del tzdata
+#RUN apk --no-cache add tzdata && \
+#    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+#    echo "Asia/Shanghai" > /etc/timezone && \
+#    apk del tzdata
 
 # 从构建阶段复制产物
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -62,7 +62,7 @@ RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX_CONF'
 
 # 后端 API 上游（通过环境变量注入或默认值）
 upstream backend {
-    server k8soperation-api:8080;
+    server devops-be-svc.k8soperation.svc.cluster.local:8080;
 }
 
 server {

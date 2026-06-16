@@ -21,3 +21,4 @@ storage/logs/*
 storage/artifacts/*
 !storage/artifacts/.gitkeep*.exe~
 *.exe
+deploy/registry-secret.yaml

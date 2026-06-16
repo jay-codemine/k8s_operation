@@ -20,16 +20,14 @@ FROM alpine:3.20
 
 # 安装运行时依赖（CA证书 + 时区 + 健康检查工具）
 RUN apk add --no-cache ca-certificates tzdata wget && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone && \
     addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 RUN mkdir -p /app/storage/logs /app/configs
 
 # 接收平台编译好的二进制（由 Jenkins Build Binary 阶段 或 本地 go build 产出）
-COPY bin/k8s_operation /app/k8s_operation
-RUN chmod +x /app/k8s_operation
+COPY bin/devops-be /app/devops-be
+RUN chmod +x /app/devops-be
 
 RUN chown -R app:app /app
 USER app
@@ -43,4 +41,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
 
-ENTRYPOINT ["/app/k8s_operation"]
+ENTRYPOINT ["/app/devops-be"]

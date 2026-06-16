@@ -21,10 +21,10 @@ data:
 
     Database:
       DBType: mysql
-      Username: root
+      Username: dev_super
       # Password 通过 Secret 环境变量注入，此处占位
       Password: "${DB_PASSWORD}"
-      Host: mysql.k8soperation.svc        # K8s 内部 MySQL Service 地址
+      Host: mysql-for-test.global.svc.cluster.local        # K8s 内部 MySQL Service 地址
       Port: "3306"
       DBName: k8s-platform
       Charset: utf8
@@ -38,14 +38,12 @@ data:
       Name: sk_sid
       Address: redis.k8soperation.svc:6379          # 单节点模式：Redis Service 地址
       Addresses:                                     # Cluster 模式：Redis Cluster 节点列表（非空时启用 Cluster 模式）
-        - redis-cluster-0.redis-cluster.k8soperation.svc:6379
-        - redis-cluster-1.redis-cluster.k8soperation.svc:6379
-        - redis-cluster-2.redis-cluster.k8soperation.svc:6379
+        - redis6-cluster-auth-redis-cluster.global.svc.cluster.local:6379
       Username: ""
       Password: "${REDIS_PASSWORD}"
       MaxConnect: 10
       Network: tcp
-      Secret: "k8smana"
+      Secret: "${CACHE_SECRET}"
 
     App:
       LogLevel: info                        # 生产环境建议 info
