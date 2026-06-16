@@ -1,0 +1,37 @@
+# ============================================================
+# K8sOperation 外部中间件模式 - 前端 Ingress
+# 说明：通过 Ingress 暴露前端访问入口
+# 使用前修改：host 改为实际域名
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8soperation-web
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation-web
+    app.kubernetes.io/component: frontend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # TLS 自动签发（可选，取消注释启用）
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: k8sop.example.com              # ← 替换为你的域名
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8soperation-web
+                port:
+                  name: http
+  # TLS（可选，取消注释启用 HTTPS）
+  # tls:
+  #   - hosts:
+  #       - k8sop.example.com
+  #     secretName: k8soperation-web-tls
