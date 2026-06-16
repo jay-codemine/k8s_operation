@@ -55,7 +55,7 @@ LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 写入 Nginx 配置
-RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX_CONF'
+RUN <<'NGINX_CONF' cat > /etc/nginx/conf.d/default.conf
 # ============================================================
 # K8sOperation Frontend Nginx Config
 # ============================================================
@@ -139,7 +139,7 @@ server {
 NGINX_CONF
 
 # 创建 entrypoint 脚本（支持运行时注入后端地址）
-RUN cat > /docker-entrypoint.d/90-backend-url.sh << 'SCRIPT'
+RUN <<'SCRIPT' cat > /docker-entrypoint.d/90-backend-url.sh
 #!/bin/sh
 # 允许通过环境变量 API_BACKEND_URL 动态配置后端地址
 # 用法：docker run -e API_BACKEND_URL=http://10.0.0.1:8080 ...
