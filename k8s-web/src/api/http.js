@@ -38,8 +38,8 @@ const getRemoteBaseURL = () => {
 }
 
 const http = axios.create({
-  // 穿透访问时动态请求后端穿透地址，本地访问时走 Vite proxy
-  baseURL: isRemoteAccess ? getRemoteBaseURL() : '',
+  // nginx 反向代理 /api/ → 后端，同源相对路径，无需关心端口差异
+  baseURL: '',
   timeout: 45000,
   withCredentials: false, // JWT Header 模式：不走 Cookie
 })
@@ -122,7 +122,7 @@ http.interceptors.request.use(
     if (needsClusterID(config.url)) {
       const clusterStore = useClusterStore(pinia)
       const cid = clusterStore.current?.id ?? getClusterIdFromPath()
-    
+
       // 注意：cid 可能是 number / string；只要不是 null/undefined/空字符串，就写入 header
       if (cid !== undefined && cid !== null && cid !== '') {
         config.headers['X-Cluster-ID'] = String(cid)
