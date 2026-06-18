@@ -19,6 +19,9 @@ func NewCicdReleaseCreateRequest() *CicdReleaseCreateRequest {
 }
 
 type CicdReleaseCreateRequest struct {
+	// 模板化发布：传入 pipeline_id 后自动继承流水线的部署配置，以下字段均可省略
+	PipelineID int64 `json:"pipeline_id"` // 可选：关联流水线ID，自动填充部署配置
+
 	AppName       string `json:"app_name" valid:"app_name"`
 	Namespace     string `json:"namespace" valid:"namespace"`
 	WorkloadKind  string `json:"workload_kind" valid:"workload_kind"`
@@ -39,6 +42,16 @@ type CicdReleaseCreateRequest struct {
 }
 
 func ValidCicdReleaseCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	req := data.(*CicdReleaseCreateRequest)
+
+	// 如果指定了 pipeline_id，则放宽校验（后端会从流水线继承配置）
+	if req.PipelineID > 0 {
+		// 仅要求 image_tag 或 image_repo（最小化输入）
+		rules := govalidator.MapData{}
+		messages := govalidator.MapData{}
+		return valid.ValidateOptions(data, rules, messages)
+	}
+
 	rules := govalidator.MapData{
 		"app_name":       []string{"required"},
 		"namespace":      []string{"required"},

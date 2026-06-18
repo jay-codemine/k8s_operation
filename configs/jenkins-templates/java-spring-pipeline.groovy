@@ -58,6 +58,8 @@ pipeline {
         string(name: 'JAVA_VERSION', defaultValue: '17', description: 'Java 版本')
         string(name: 'MAVEN_GOALS', defaultValue: 'clean package -DskipTests -B', description: 'Maven 构建命令')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
+        string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
+        string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: true, description: '启用 SonarQube 代码质量扫描')
@@ -81,8 +83,8 @@ pipeline {
     }
 
     environment {
-        REGISTRY_CREDS   = credentials('harbor-registry')
-        HMAC_SECRET      = credentials('hmac-secret')
+        REGISTRY_CREDS   = credentials("${params.REGISTRY_CREDENTIAL_ID ?: 'harbor-registry'}")
+        HMAC_SECRET      = credentials("${params.HMAC_CREDENTIAL_ID ?: 'hmac-secret'}")
         MAVEN_OPTS       = '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
         // Maven 本地仓库放在 workspace 外部，跨构建持久缓存（首次下载后后续秒级复用）
         MAVEN_LOCAL_REPO = '/var/lib/jenkins/.m2/repository'

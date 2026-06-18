@@ -39,6 +39,8 @@ pipeline {
         string(name: 'BUILD_COMMAND', defaultValue: 'npm run build', description: '构建命令')
         string(name: 'BUILD_OUTPUT_DIR', defaultValue: 'dist', description: '构建产物目录')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
+        string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
+        string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
@@ -61,8 +63,8 @@ pipeline {
     }
 
     environment {
-        REGISTRY_CREDS = credentials('harbor-registry')
-        HMAC_SECRET    = credentials('hmac-secret')
+        REGISTRY_CREDS = credentials("${params.REGISTRY_CREDENTIAL_ID ?: 'harbor-registry'}")
+        HMAC_SECRET    = credentials("${params.HMAC_CREDENTIAL_ID ?: 'hmac-secret'}")
         NPM_REGISTRY   = 'https://registry.npmmirror.com'
         // npm 缓存放 workspace 外，跨构建持久复用
         NPM_CACHE_DIR  = '/var/lib/jenkins/.npm-cache'

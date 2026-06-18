@@ -41,6 +41,8 @@ pipeline {
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
         string(name: 'GO_VERSION', defaultValue: '1.24', description: 'Go 版本')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
+        string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
+        string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
@@ -69,8 +71,8 @@ pipeline {
         GOCACHE    = "/var/lib/jenkins/.cache/go-build"
         PATH       = "/usr/local/go/bin:${env.GOPATH}/bin:${env.PATH}"
 
-        REGISTRY_CREDS = credentials('harbor-registry')
-        HMAC_SECRET    = credentials('hmac-secret')
+        REGISTRY_CREDS = credentials("${params.REGISTRY_CREDENTIAL_ID ?: 'harbor-registry'}")
+        HMAC_SECRET    = credentials("${params.HMAC_CREDENTIAL_ID ?: 'hmac-secret'}")
         GOPROXY        = 'https://goproxy.cn,direct'
         CGO_ENABLED    = '0'
         GOOS           = 'linux'

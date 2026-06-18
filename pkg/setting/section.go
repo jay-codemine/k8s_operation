@@ -145,15 +145,20 @@ type JenkinsSettingS struct {
 	TriggerTimeout int    `mapstructure:"TriggerTimeout"` // 触发构建等待超时(秒)
 	CallbackURL    string `mapstructure:"CallbackURL"`    // 平台回调地址（后端 API）
 	PlatformURL    string `mapstructure:"PlatformURL"`    // 前端页面地址（用于通知链接）
+	// 凭证 ID 配置（传给 Jenkins 模板，可自定义覆盖默认值）
+	GitCredentialID      string `mapstructure:"GitCredentialID"`      // Git 凭证 ID（默认 gitee-id）
+	RegistryCredentialID string `mapstructure:"RegistryCredentialID"` // 镜像仓库凭证 ID（默认 harbor-registry）
+	HMACCredentialID     string `mapstructure:"HMACCredentialID"`     // HMAC 签名凭证 ID（默认 hmac-secret）
 	// 回调机制配置
 	HMACSecret   string `mapstructure:"HMACSecret"`   // HMAC 签名密钥（用于验证回调请求）
 	PollInterval int    `mapstructure:"PollInterval"` // 轮询间隔(秒)，默认15
 	MaxBuildTime int    `mapstructure:"MaxBuildTime"` // 最大构建时间(分钟)，超时判定失败，默认30
 	// 通知配置
+	EnableDingTalk  bool   `mapstructure:"EnableDingTalk"`  // 是否启用钉钉通知
 	DingTalkWebhook string `mapstructure:"DingTalkWebhook"` // 钉钉机器人 Webhook URL
-	// 飞书审批通知配置
-	FeishuWebhook string `mapstructure:"FeishuWebhook"` // 飞书机器人 Webhook URL（用于审批通知）
-	FeishuSecret  string `mapstructure:"FeishuSecret"`  // 飞书机器人签名密钥
+	EnableFeishu    bool   `mapstructure:"EnableFeishu"`    // 是否启用飞书通知
+	FeishuWebhook   string `mapstructure:"FeishuWebhook"`   // 飞书机器人 Webhook URL
+	FeishuSecret    string `mapstructure:"FeishuSecret"`    // 飞书机器人签名密钥
 }
 
 // =============================================================================

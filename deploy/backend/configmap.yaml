@@ -21,10 +21,10 @@ data:
 
     Database:
       DBType: mysql
-      Username: dev_super
+      Username: root
       # Password 通过 Secret 环境变量注入，此处占位
       Password: "${DB_PASSWORD}"
-      Host: mysql-for-test.global.svc.cluster.local        # K8s 内部 MySQL Service 地址
+      Host: 1.117.227.207                                      # 外部 MySQL 地址
       Port: "3306"
       DBName: k8s-platform
       Charset: utf8
@@ -36,9 +36,8 @@ data:
     Cache:
       Type: redis
       Name: sk_sid
-      Address: redis.k8soperation.svc:6379          # 单节点模式：Redis Service 地址
-      Addresses:                                     # Cluster 模式：Redis Cluster 节点列表（非空时启用 Cluster 模式）
-        - redis6-cluster-auth-redis-cluster.global.svc.cluster.local:6379
+      Address: 1.117.227.207:6379                          # 外部 Redis 单节点地址
+      Addresses: []                                         # 单节点模式，清空 Cluster 列表
       Username: ""
       Password: "${REDIS_PASSWORD}"
       MaxConnect: 10
@@ -97,10 +96,18 @@ data:
       TriggerTimeout: 60
       CallbackURL: "http://k8soperation.k8soperation.svc:8080"   # K8s 内部 Service 地址
       PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（钉钉通知用）
+      # 凭证 ID（对应 Jenkins Credentials 中的 ID，留空用默认值）
+      GitCredentialID: "${GIT_CREDENTIAL_ID}"
+      RegistryCredentialID: "${REGISTRY_CREDENTIAL_ID}"
+      HMACCredentialID: "${HMAC_CREDENTIAL_ID}"
       HMACSecret: "${HMAC_SECRET}"
       PollInterval: 15
       MaxBuildTime: 30
+      EnableDingTalk: ${ENABLE_DINGTALK:-true}
       DingTalkWebhook: "${DINGTALK_WEBHOOK}"
+      EnableFeishu: ${ENABLE_FEISHU:-false}
+      FeishuWebhook: "${FEISHU_WEBHOOK}"
+      FeishuSecret: "${FEISHU_SECRET}"
 
     Security:
       KubeConfigEncryptKey: "${KUBECONFIG_ENCRYPT_KEY}"

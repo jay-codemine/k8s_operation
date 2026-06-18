@@ -37,6 +37,8 @@ pipeline {
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
         string(name: 'PYTHON_VERSION', defaultValue: '3.11', description: 'Python 版本')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
+        string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
+        string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
@@ -59,8 +61,8 @@ pipeline {
     }
 
     environment {
-        REGISTRY_CREDS = credentials('harbor-registry')
-        HMAC_SECRET    = credentials('hmac-secret')
+        REGISTRY_CREDS = credentials("${params.REGISTRY_CREDENTIAL_ID ?: 'harbor-registry'}")
+        HMAC_SECRET    = credentials("${params.HMAC_CREDENTIAL_ID ?: 'hmac-secret'}")
         PIP_INDEX_URL  = 'https://pypi.tuna.tsinghua.edu.cn/simple'
         // BuildKit 层缓存目录（跨构建持久复用，二次构建仅重建变化层）
         BUILDKIT_CACHE = '/var/lib/jenkins/.buildkit-cache'

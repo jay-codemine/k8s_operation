@@ -32,7 +32,7 @@ type CicdWorker struct {
 }
 
 // NewCicdWorker 创建 Worker
-func NewCicdWorker(rdb *redis.Client, factory *services.ClusterClientFactory) *CicdWorker {
+func NewCicdWorker(rdb redis.Cmdable, factory *services.ClusterClientFactory) *CicdWorker {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname = "worker"

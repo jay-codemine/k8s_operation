@@ -269,11 +269,23 @@
             </div>
             <div class="modal-body">
               <div class="field">
-                <label>选择流水线</label>
-                <select v-model="createForm.pipeline_id">
+                <label>选择流水线 <span class="optional">(选择后自动继承部署配置)</span></label>
+                <select v-model="createForm.pipeline_id" @change="onPipelineSelect">
                   <option value="">请选择流水线</option>
-                  <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }} ({{ p.language_type || 'custom' }})</option>
                 </select>
+              </div>
+              <!-- 流水线配置预览提示 -->
+              <div v-if="selectedPipelineInfo" class="pipeline-inherit-hint">
+                <div class="hint-title">✅ 将自动继承以下配置：</div>
+                <div class="hint-items">
+                  <span v-if="selectedPipelineInfo.namespace">命名空间: <b>{{ selectedPipelineInfo.namespace }}</b></span>
+                  <span v-if="selectedPipelineInfo.workload">工作负载: <b>{{ selectedPipelineInfo.workload }}</b></span>
+                  <span v-if="selectedPipelineInfo.container">容器: <b>{{ selectedPipelineInfo.container }}</b></span>
+                  <span v-if="selectedPipelineInfo.cluster">集群ID: <b>{{ selectedPipelineInfo.cluster }}</b></span>
+                  <span v-if="selectedPipelineInfo.image_repo">镜像仓库: <b>{{ selectedPipelineInfo.image_repo }}</b></span>
+                </div>
+                <div class="hint-note">您只需填写版本号/镜像标签即可发布，无需配置 Jenkins</div>
               </div>
               <div class="field">
                 <label>发布名称</label>
@@ -281,15 +293,15 @@
               </div>
               <div class="field-row">
                 <div class="field">
-                  <label>版本号</label>
+                  <label>版本号 / 镜像标签</label>
                   <input v-model="createForm.version" placeholder="v1.0.0" />
                 </div>
-                <div class="field">
+                <div class="field" v-if="!createForm.pipeline_id">
                   <label>命名空间</label>
                   <input v-model="createForm.namespace" placeholder="production" />
                 </div>
               </div>
-              <div class="field">
+              <div class="field" v-if="!createForm.pipeline_id">
                 <label>镜像地址</label>
                 <input v-model="createForm.image" placeholder="registry.cn-hangzhou.aliyuncs.com/xxx/app:v1.0.0" />
               </div>
@@ -596,16 +608,54 @@ export default {
     const showCreateDialog = ref(false)
     const creating = ref(false)
     const createForm = ref({ pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '' })
+    const selectedPipelineInfo = ref(null)
+
+    // 选择流水线后自动显示继承配置信息
+    const onPipelineSelect = () => {
+      const pid = createForm.value.pipeline_id
+      if (!pid) {
+        selectedPipelineInfo.value = null
+        return
+      }
+      const p = pipelines.value.find(item => item.id == pid)
+      if (p) {
+        selectedPipelineInfo.value = {
+          namespace: p.target_namespace || '',
+          workload: p.target_workload_name ? `${p.target_workload_kind || 'Deployment'}/${p.target_workload_name}` : '',
+          container: p.target_container || '',
+          cluster: p.target_cluster_id || '',
+          image_repo: (p.env_vars || []).find(e => e.name === 'IMAGE_REPO')?.value || ''
+        }
+        // 自动填充发布名称
+        if (!createForm.value.name) {
+          createForm.value.name = `${p.name}-release`
+        }
+      } else {
+        selectedPipelineInfo.value = null
+      }
+    }
+
     const handleCreate = async () => {
       if (!createForm.value.name || !createForm.value.version) {
         Message.warning({ content: '请填写发布名称和版本号' }); return
       }
       creating.value = true
       try {
-        const r = await createRelease({ pipeline_id: createForm.value.pipeline_id ? Number(createForm.value.pipeline_id) : undefined, name: createForm.value.name, version: createForm.value.version, namespace: createForm.value.namespace, image: createForm.value.image, description: createForm.value.remark })
+        // 模板化发布：传入 pipeline_id，后端自动继承配置
+        const payload = {
+          pipeline_id: createForm.value.pipeline_id ? Number(createForm.value.pipeline_id) : undefined,
+          name: createForm.value.name,
+          version: createForm.value.version,
+          image_tag: createForm.value.version, // 版本号即镜像标签
+          namespace: createForm.value.namespace,
+          image: createForm.value.image,
+          description: createForm.value.remark
+        }
+        const r = await createRelease(payload)
         if (r.code === 0) {
           Message.success({ content: '发布创建成功' }); showCreateDialog.value = false
           createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '' }
+          selectedPipelineInfo.value = null
           loadAll()
         } else { throw new Error(r.msg || '创建失败') }
       } catch (e) { Message.error({ content: e.message || '创建发布单失败' }) }
@@ -810,6 +860,7 @@ export default {
     return {
       loading, releases, searchKeyword, searchFocused, statusFilter, currentPage, totalPages, total,
       statsData, setFilter, pipelines, showCreateDialog, creating, createForm, handleCreate,
+      selectedPipelineInfo, onPipelineSelect,
       showEditDialog, editing, editForm, editRelease, handleEdit, canEdit, canDelete, deleteRelease,
       showConfirmDialog, confirmTitle, confirmMessage, confirmBtnText, confirmType, confirming, confirmAction,
       viewRelease, cancelRelease, rollbackRelease, retryRelease, handleSearch, clearSearch,
@@ -1194,6 +1245,42 @@ export default {
 
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Pipeline Inherit Hint */
+.pipeline-inherit-hint {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.pipeline-inherit-hint .hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #065f46;
+  margin-bottom: 6px;
+}
+.pipeline-inherit-hint .hint-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.pipeline-inherit-hint .hint-items span {
+  font-size: 12px;
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.pipeline-inherit-hint .hint-items b {
+  color: #064e3b;
+}
+.pipeline-inherit-hint .hint-note {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 8px;
+  font-style: italic;
+}
 
 @media (max-width: 1200px) {
   .metrics-row { grid-template-columns: repeat(3, 1fr); }

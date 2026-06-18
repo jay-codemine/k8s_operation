@@ -83,11 +83,19 @@ Jenkins:
   TriggerTimeout: 60
   CallbackURL: "http://xxx:10537"  # 后端 API 地址（Jenkins 回调用）
   PlatformURL: "http://jxxxx:30851"   # 前端页面地址（钉钉通知链接用）
+  # 凭证 ID 配置（可选，留空则用默认值，对应 Jenkins Credentials 中的 ID）
+  GitCredentialID: "gitee-id"           # Git 凭证 ID
+  RegistryCredentialID: "harbor-registry" # 镜像仓库凭证 ID
+  HMACCredentialID: "hmac-secret"        # HMAC 签名凭证 ID
   HMACSecret: "xxxxx3VbN6dHe1Zx4JuWq"
   PollInterval: 15
   MaxBuildTime: 30
-  # 钉钉通知配置
-  DingTalkWebhook: "xxxx"
+  # 通知配置
+  EnableDingTalk: true                          # 是否启用钉钉通知
+  DingTalkWebhook: "xxxx"                       # 钉钉机器人 Webhook URL
+  EnableFeishu: false                           # 是否启用飞书通知
+  FeishuWebhook: ""                             # 飞书机器人 Webhook URL（EnableFeishu=true 时填写）
+  FeishuSecret: ""                              # 飞书机器人签名密钥（可选）
 
 # ============================================================
 # 监控数据源（仅作为首次启动的引导值，不是运行期的权威配置）

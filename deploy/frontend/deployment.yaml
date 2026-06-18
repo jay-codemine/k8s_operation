@@ -27,10 +27,10 @@ spec:
         app.kubernetes.io/component: frontend
     spec:
       imagePullSecrets:
-        - name: harbor-secret
+        - name: aliyun-registry
       containers:
         - name: devops-fe
-          image: harbor.maitian-yun.com/foxess/devops-fe:latest
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:latest
           imagePullPolicy: Always
           ports:
             - name: http

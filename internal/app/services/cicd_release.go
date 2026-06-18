@@ -21,6 +21,59 @@ func (s *Services) CicdReleaseCreate(
 	userID int64,
 ) (int64, error) {
 
+	// 模板化发布：如果传入 pipeline_id，自动继承流水线的部署配置
+	if req.PipelineID > 0 {
+		pipeline, err := s.dao.PipelineGetByID(ctx, req.PipelineID)
+		if err != nil {
+			return 0, fmt.Errorf("关联流水线不存在(id=%d): %w", req.PipelineID, err)
+		}
+		// 自动填充缺失字段（用户显式传入的优先级更高）
+		if req.AppName == "" {
+			req.AppName = pipeline.Name
+		}
+		if req.Namespace == "" {
+			req.Namespace = pipeline.TargetNamespace
+		}
+		if req.WorkloadKind == "" {
+			req.WorkloadKind = pipeline.TargetWorkloadKind
+		}
+		if req.WorkloadName == "" {
+			req.WorkloadName = pipeline.TargetWorkloadName
+		}
+		if req.ContainerName == "" {
+			req.ContainerName = pipeline.TargetContainer
+		}
+		if req.ImageRepo == "" {
+			// 尝试从流水线环境变量中获取 IMAGE_REPO
+			for _, ev := range pipeline.EnvVars {
+				if ev.Name == "IMAGE_REPO" {
+					req.ImageRepo = ev.Value
+					break
+				}
+			}
+		}
+		if len(req.ClusterIDs) == 0 && pipeline.TargetClusterID > 0 {
+			req.ClusterIDs = []int64{pipeline.TargetClusterID}
+		}
+		// 默认值补充
+		if req.Namespace == "" {
+			req.Namespace = "default"
+		}
+		if req.WorkloadKind == "" {
+			req.WorkloadKind = "Deployment"
+		}
+		// 校验必要字段
+		if req.WorkloadName == "" {
+			return 0, fmt.Errorf("流水线未配置目标工作负载名称，请先编辑流水线补充部署配置")
+		}
+		if req.ContainerName == "" {
+			req.ContainerName = req.WorkloadName // 默认与工作负载同名
+		}
+		if len(req.ClusterIDs) == 0 {
+			return 0, fmt.Errorf("流水线未配置目标集群，请先编辑流水线补充部署配置")
+		}
+	}
+
 	// 幂等：request_id 不为空则复用已创建的 release
 	reqID := strings.TrimSpace(req.RequestID)
 	if reqID != "" {

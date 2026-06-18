@@ -665,6 +665,9 @@ definitions:
         type: string
       namespace:
         type: string
+      pipeline_id:
+        description: 模板化发布：传入 pipeline_id 后自动继承流水线的部署配置，以下字段均可省略
+        type: integer
       request_id:
         description: 可选，幂等校验用
         type: string

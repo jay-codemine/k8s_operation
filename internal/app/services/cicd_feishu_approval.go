@@ -353,10 +353,18 @@ func (s *Services) notifyFeishuApprovalResult(ctx context.Context, approval *mod
 
 // ==================== 辅助函数 ====================
 
-// getFeishuWebhook 获取飞书 Webhook 地址
+// getFeishuWebhook 获取飞书 Webhook 地址（需开关 EnableFeishu=true 且 Webhook 非空）
 func (s *Services) getFeishuWebhook() string {
-	if global.JenkinsSetting != nil && global.JenkinsSetting.FeishuWebhook != "" {
+	if global.JenkinsSetting != nil && global.JenkinsSetting.EnableFeishu && global.JenkinsSetting.FeishuWebhook != "" {
 		return global.JenkinsSetting.FeishuWebhook
+	}
+	return ""
+}
+
+// getFeishuSecret 获取飞书签名密钥
+func (s *Services) getFeishuSecret() string {
+	if global.JenkinsSetting != nil {
+		return global.JenkinsSetting.FeishuSecret
 	}
 	return ""
 }

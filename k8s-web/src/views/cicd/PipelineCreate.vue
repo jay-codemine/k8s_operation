@@ -38,8 +38,133 @@
     </div>
 
     <div class="wizard-body">
-      <!-- 左侧步骤导航 -->
-      <div class="wizard-sidebar">
+      <!-- 快速创建模式切换 -->
+      <div v-if="!isEdit" class="quick-mode-toggle">
+        <button
+          type="button"
+          :class="['mode-btn', { active: !quickMode }]"
+          @click="quickMode = false"
+        >完整模式</button>
+        <button
+          type="button"
+          :class="['mode-btn', { active: quickMode }]"
+          @click="quickMode = true"
+        >极简模式</button>
+      </div>
+
+      <!-- 极简快速创建表单 -->
+      <div v-if="quickMode && !isEdit" class="quick-create-panel">
+        <div class="quick-header">
+          <div class="quick-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div>
+            <h2>极简创建</h2>
+            <p>只需 3 个字段即可创建流水线，Jenkins 配置全自动</p>
+          </div>
+        </div>
+
+        <div class="quick-form">
+          <div class="quick-field">
+            <label>流水线名称 <span class="required">*</span></label>
+            <input v-model="pipelineData.name" class="form-input" placeholder="例如: user-service" />
+            <div class="input-hint">同时作为 K8s 工作负载名称（自动推导）</div>
+          </div>
+
+          <div class="quick-field">
+            <label>Git 仓库地址 <span class="required">*</span></label>
+            <input v-model="pipelineData.git_repo" class="form-input" placeholder="https://gitee.com/org/project.git" />
+          </div>
+
+          <div class="quick-field">
+            <label>语言/框架类型 <span class="required">*</span></label>
+            <div class="quick-lang-selector">
+              <div
+                v-for="opt in serviceTypeOptions.filter(o => o.value !== 'custom')"
+                :key="opt.value"
+                :class="['lang-chip', { selected: pipelineData.language_type === opt.value }]"
+                @click="pipelineData.language_type = opt.value; selectedServiceType = opt.value"
+              >
+                <span class="lang-dot" :style="{ backgroundColor: opt.color }"></span>
+                {{ opt.label }}
+              </div>
+            </div>
+            <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
+          </div>
+
+          <div class="quick-field">
+            <label>镜像仓库地址 <span class="optional">(推荐填写)</span></label>
+            <input v-model="pipelineData.image_repo" class="form-input" placeholder="harbor.example.com/project/app-name" />
+            <div class="input-hint">告诉 Jenkins 镜像推送到哪里，发布时自动使用</div>
+          </div>
+
+          <div class="quick-deploy-section">
+            <label class="quick-toggle-label">
+              <input type="checkbox" v-model="pipelineData.auto_deploy" />
+              <span>构建成功后自动部署到 K8s</span>
+            </label>
+            <div v-if="pipelineData.auto_deploy" class="quick-deploy-fields">
+              <!-- 无集群时的提示 -->
+              <div v-if="clusters.length === 0" class="quick-empty-cluster">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>暂无可用集群，请先在<strong>集群管理</strong>中添加 K8s 集群</span>
+              </div>
+              <div v-else>
+                <div class="quick-field-row">
+                  <div class="quick-field half">
+                    <label>目标集群 <span class="required">*</span></label>
+                    <select v-model="pipelineData.target_cluster_id" class="form-input" @change="onClusterChange">
+                      <option :value="0">请选择集群</option>
+                      <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.cluster_name || c.name }}</option>
+                    </select>
+                  </div>
+                  <div class="quick-field half">
+                    <label>命名空间</label>
+                    <select v-if="pipelineData.target_cluster_id" v-model="pipelineData.target_namespace" class="form-input">
+                      <option value="">default</option>
+                      <option v-for="ns in namespaces" :key="ns.name || ns.metadata?.name" :value="ns.name || ns.metadata?.name">
+                        {{ ns.name || ns.metadata?.name }}
+                      </option>
+                    </select>
+                    <input v-else v-model="pipelineData.target_namespace" class="form-input" placeholder="先选择集群" disabled />
+                  </div>
+                </div>
+                <div class="quick-auto-hint">
+                  工作负载名称、容器名称将自动使用流水线名称，部署环境默认 dev
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-footer">
+          <div class="quick-auto-list">
+            <span class="auto-badge">自动</span>
+            Jenkins Job • 构建模板 • 凭证配置 • 回调地址 • 环境变量
+          </div>
+          <button
+            type="button"
+            class="btn-quick-submit"
+            @click="quickSubmit"
+            :disabled="submitting || !pipelineData.name || !pipelineData.git_repo"
+          >
+            <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            <span v-if="submitting" class="loading-spinner-sm"></span>
+            {{ submitting ? '创建中...' : '立即创建' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 完整模式：左侧步骤导航 -->
+      <div class="wizard-sidebar" v-show="!quickMode || isEdit">
         <div class="steps-container">
           <div
             v-for="(step, index) in steps"
@@ -78,7 +203,7 @@
       </div>
 
       <!-- 右侧表单内容 -->
-      <div class="wizard-content">
+      <div class="wizard-content" v-show="!quickMode || isEdit">
         <form @submit.prevent="submit">
           <!-- Step 1: 基本信息 -->
           <div v-show="currentStep === 0" class="step-panel">
@@ -1453,6 +1578,7 @@ export default {
     const selectedTemplateId = ref('')
     const showEnvVars = ref(true)
     const showResources = ref(true)
+    const quickMode = ref(true) // 默认极简模式
 
     // Git 分支相关
     const branches = ref([])
@@ -2016,6 +2142,44 @@ export default {
       }
     }
 
+    // 极简模式快速提交
+    const quickSubmit = async () => {
+      if (!pipelineData.value.name || !pipelineData.value.git_repo) {
+        alert('请填写流水线名称和 Git 仓库地址')
+        return
+      }
+      try {
+        submitting.value = true
+        // 构建最小化提交数据，后端自动推导其余配置
+        const submitData = {
+          name: pipelineData.value.name,
+          git_repo: pipelineData.value.git_repo,
+          git_branch: pipelineData.value.git_branch || 'main',
+          language_type: pipelineData.value.language_type || 'go',
+          auto_deploy: pipelineData.value.auto_deploy,
+          target_cluster_id: pipelineData.value.target_cluster_id || 0,
+          target_namespace: pipelineData.value.target_namespace || '',
+          env_vars: []
+        }
+        // 注入 IMAGE_REPO
+        if (pipelineData.value.image_repo) {
+          submitData.env_vars.push({ name: 'IMAGE_REPO', value: pipelineData.value.image_repo })
+        }
+        const response = await createPipeline(submitData)
+        if (response.code === 0) {
+          alert('流水线创建成功')
+          router.push('/cicd/pipelines')
+        } else {
+          alert(response.msg || '创建失败')
+        }
+      } catch (error) {
+        console.error('快速创建失败:', error)
+        alert(error.msg || '创建流水线失败')
+      } finally {
+        submitting.value = false
+      }
+    }
+
     // 提交表单
     const submit = async () => {
       if (!validateCurrentStep()) return
@@ -2125,12 +2289,8 @@ export default {
       try {
         const res = await getClusterList({ page: 1, limit: 100 })
         if (res.code === 0 && res.data) {
-          // 权限过滤：只显示用户有权限访问的集群
-          const list = res.data.list || []
-          clusters.value = list.filter(c => 
-            permissionStore.state.isSuperAdmin ||
-            permissionStore.state.accessibleClusterIds.includes(c.id)
-          )
+          // 后端已做权限过滤，直接展示所有返回的集群
+          clusters.value = res.data.list || []
         }
       } catch (error) {
         console.error('加载集群失败:', error)
@@ -2289,6 +2449,7 @@ export default {
 
     onMounted(async () => {
       loadTemplates()
+      loadClusters() // 极简模式也需要集群列表
       if (isEdit) {
         // 编辑模式：先加载流水线数据（含语言类型、环境），再按实际参数加载资源模板
         await loadPipelineData()
@@ -2353,6 +2514,9 @@ export default {
       selectWorkloadKind,
       getClusterName,
       getEnvLabel,
+      // 极简模式
+      quickMode,
+      quickSubmit,
       // 方法
       nextStep,
       previousStep,
@@ -4798,5 +4962,287 @@ export default {
   .gate-strategy-selector {
     grid-template-columns: 1fr;
   }
+}
+
+/* ==================== 极简模式样式 ==================== */
+.quick-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin: 16px 32px 0;
+  width: fit-content;
+}
+
+.mode-btn {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.mode-btn.active {
+  background: white;
+  color: #1e3a5f;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.quick-create-panel {
+  max-width: 680px;
+  margin: 24px auto;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  padding: 36px 40px;
+}
+
+.quick-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.quick-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quick-icon svg {
+  width: 26px;
+  height: 26px;
+  color: white;
+}
+
+.quick-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.quick-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.quick-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.quick-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.quick-field label .required {
+  color: #ef4444;
+}
+
+.quick-field label .optional {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.quick-field .form-input {
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.quick-field .form-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.quick-lang-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lang-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.lang-chip:hover {
+  border-color: #94a3b8;
+}
+
+.lang-chip.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.lang-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.quick-deploy-section {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.quick-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+}
+
+.quick-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #3b82f6;
+}
+
+.quick-deploy-fields {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.quick-field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.quick-field.half {
+  flex: 1;
+}
+
+.quick-auto-hint {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #64748b;
+  background: #eff6ff;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.quick-empty-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.quick-empty-cluster svg {
+  flex-shrink: 0;
+  color: #d97706;
+}
+
+.quick-empty-cluster strong {
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.quick-footer {
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.quick-auto-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.auto-badge {
+  padding: 2px 8px;
+  background: #dcfce7;
+  color: #16a34a;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.btn-quick-submit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-quick-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.btn-quick-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-quick-submit svg {
+  width: 18px;
+  height: 18px;
 }
 </style>

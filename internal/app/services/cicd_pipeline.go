@@ -55,25 +55,58 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		return 0, errors.New("Jenkins Job 名称不能为空，请指定 jenkins_job 或设置 language_type")
 	}
 
+	// ==================== 智能默认值：简化首次创建 ====================
+	// 分支默认 main
+	gitBranch := req.GitBranch
+	if gitBranch == "" {
+		gitBranch = "main"
+	}
+	// 工作负载类型默认 Deployment
+	workloadKind := req.TargetWorkloadKind
+	if workloadKind == "" {
+		workloadKind = "Deployment"
+	}
+	// 工作负载名称默认取流水线名称（去掉常见后缀）
+	workloadName := req.TargetWorkloadName
+	if workloadName == "" && req.AutoDeploy {
+		workloadName = strings.TrimSuffix(strings.TrimSuffix(req.Name, "-pipeline"), "-prod")
+		workloadName = strings.TrimSuffix(strings.TrimSuffix(workloadName, "-dev"), "-test")
+	}
+	// 容器名称默认取工作负载名称
+	containerName := req.TargetContainer
+	if containerName == "" && workloadName != "" {
+		containerName = workloadName
+	}
+	// 命名空间默认 default
+	targetNamespace := req.TargetNamespace
+	if targetNamespace == "" && req.AutoDeploy {
+		targetNamespace = "default"
+	}
+	// 部署环境默认 dev
+	deployEnv := req.DeployEnv
+	if deployEnv == "" {
+		deployEnv = "dev"
+	}
+
 	pipeline := &models.CicdPipeline{
 		Name:               req.Name,
 		Description:        req.Description,
 		GitRepo:            req.GitRepo,
-		GitBranch:          req.GitBranch,
+		GitBranch:          gitBranch,
 		JenkinsURL:         req.JenkinsURL,
 		JenkinsJob:         jenkinsJob,
 		LanguageType:       languageType,
 		Status:             models.PipelineStatusIdle,
 		EnvVars:            models.EnvVars(req.EnvVars),
 		DeployConfig:       models.JSONMap(req.DeployConfig),
-		// 部署配置
+		// 部署配置（含智能默认值）
 		AutoDeploy:         req.AutoDeploy,
 		TargetClusterID:    req.TargetClusterID,
-		TargetNamespace:    req.TargetNamespace,
-		TargetWorkloadKind: req.TargetWorkloadKind,
-		TargetWorkloadName: req.TargetWorkloadName,
-		TargetContainer:    req.TargetContainer,
-		DeployEnv:          req.DeployEnv,
+		TargetNamespace:    targetNamespace,
+		TargetWorkloadKind: workloadKind,
+		TargetWorkloadName: workloadName,
+		TargetContainer:    containerName,
+		DeployEnv:          deployEnv,
 		RequireApproval:    req.RequireApproval,
 		EnableSonar:        req.EnableSonar,
 		EnableArtifactUpload: req.EnableArtifactUpload,
@@ -1722,7 +1755,25 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 
 	// ==================== 通用参数（全语言） ====================
 	setDefault(params, "DOCKERFILE_PATH", "")
-	setDefault(params, "GIT_CREDENTIAL_ID", "gitee-id")
+
+	// 凭证 ID：优先从 config.yaml 读取，否则用默认值
+	gitCredID := "gitee-id"
+	registryCredID := "harbor-registry"
+	hmacCredID := "hmac-secret"
+	if global.JenkinsSetting != nil {
+		if global.JenkinsSetting.GitCredentialID != "" {
+			gitCredID = global.JenkinsSetting.GitCredentialID
+		}
+		if global.JenkinsSetting.RegistryCredentialID != "" {
+			registryCredID = global.JenkinsSetting.RegistryCredentialID
+		}
+		if global.JenkinsSetting.HMACCredentialID != "" {
+			hmacCredID = global.JenkinsSetting.HMACCredentialID
+		}
+	}
+	setDefault(params, "GIT_CREDENTIAL_ID", gitCredID)
+	setDefault(params, "REGISTRY_CREDENTIAL_ID", registryCredID)
+	setDefault(params, "HMAC_CREDENTIAL_ID", hmacCredID)
 
 	// SonarQube 代码质量扫描（根据流水线配置注入，所有语言统一）
 	if pipeline.EnableSonar {

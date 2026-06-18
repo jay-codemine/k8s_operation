@@ -131,9 +131,9 @@ func (u *AuthController) Login(ctx *gin.Context) {
 	session := sessions.Default(ctx)
 	session.Set(utils.EncodeMD5(user.Username), string(sessionBty))
 	if err := session.Save(); err != nil {
-		global.Logger.Error("session 保存失败", zap.String("error", err.Error()))
-		response.ToErrorResponse(errorcode.ServerError)
-		return
+		// Session 保存失败不中断登录（JWT 为主认证方式，Session 仅为辅助）
+		// Redis Cluster 模式下 gin-contrib/sessions 不支持 MOVED 重定向
+		global.Logger.Warn("session 保存失败(不影响登录)", zap.String("error", err.Error()))
 	}
 
 	global.Logger.Info("用户登录成功",

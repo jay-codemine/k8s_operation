@@ -15,8 +15,7 @@ resources:
   - pvc.yaml
   - service.yaml
   - deployment.yaml
-  # - middleware.yaml        # 按需取消注释（K8s 内部署 MySQL + Redis）
-  # - service-nodeport.yaml  # 按需取消注释（NodePort 暴露）
+#  - service-nodeport.yaml  # 按需取消注释（NodePort 暴露
   # - ingress.yaml           # 按需取消注释（Ingress 暴露）
 
 commonLabels:

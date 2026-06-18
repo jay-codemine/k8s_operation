@@ -45,18 +45,12 @@ func (s *Engine) injectMiddlewares() {
 	s.Engine.MaxMultipartMemory = 128 << 20 // 128MB
 
 	// ====== CORS 跨域配置，必须在路由前统一 Use ======
+	// 使用 AllowOriginFunc 动态判断，支持 Nginx 反代同源部署 + 内网穿透 + 本地开发
 	s.Engine.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:5173",
-			"http://127.0.0.1:5173",
-			// 新内网穿透域名（花生壳）
-			"http://708iuyd54169.vicp.fun:52005",  // 内网穿透前端地址
-			"http://708iuyd54169.vicp.fun:59979",  // 内网穿透后端地址
-			// 旧内网穿透域名（保留兼容）
-			"http://james521.gnway.cc:8000",
-			"http://james521.gnway.cc:80",
-			"http://james521.gnway.cc:30851",
-			"http://james521.gnway.cc:10537",
+		AllowOriginFunc: func(origin string) bool {
+			// 允许所有来源（前后端通过 Nginx 合一部署时，Origin 与服务地址一致）
+			// 生产环境如需收紧，可改为白名单判断
+			return true
 		},
 		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{

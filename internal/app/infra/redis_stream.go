@@ -15,10 +15,10 @@ const (
 )
 
 type RedisStream struct {
-	rdb *redis.Client
+	rdb redis.Cmdable
 }
 
-func NewRedisStream(rdb *redis.Client) *RedisStream {
+func NewRedisStream(rdb redis.Cmdable) *RedisStream {
 	return &RedisStream{rdb: rdb}
 }
 
