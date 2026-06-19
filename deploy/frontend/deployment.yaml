@@ -31,15 +31,14 @@ spec:
       containers:
         - name: devops-fe
           image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 80
               protocol: TCP
 
-          env:
-            - name: API_BACKEND_URL
-              value: "http://k8soperation.k8soperation.svc:8080"
+          # 不设置 API_BACKEND_URL，ConfigMap 已包含正确的 nginx upstream 配置
+          env: []
 
           # 存活探针
           livenessProbe:

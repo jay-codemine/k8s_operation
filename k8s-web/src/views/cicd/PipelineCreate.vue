@@ -245,12 +245,17 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label">描述</label>
+                <label class="form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" @click="showDescription = !showDescription">
+                  描述
+                  <span style="font-size:11px;color:#94a3b8;font-weight:400;">（选填）</span>
+                  <svg :style="{transform:showDescription?'rotate(180deg)':'rotate(0)',transition:'0.2s'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
+                </label>
                 <textarea
+                  v-show="showDescription"
                   v-model="pipelineData.description"
                   class="form-textarea"
                   placeholder="简要描述此流水线的用途..."
-                  rows="3"
+                  rows="2"
                 ></textarea>
               </div>
             </div>
@@ -419,53 +424,88 @@
             </div>
 
             <div class="form-card">
+              <!-- 默认顯示：构建功能开关 -->
+              <!-- Jenkins 高级配置（URL/Job）默认折叠 -->
               <div class="form-group">
-                <label class="form-label">Jenkins 服务器地址</label>
-                <div class="input-wrapper">
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
-                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
-                    <line x1="6" y1="6" x2="6.01" y2="6"/>
-                    <line x1="6" y1="18" x2="6.01" y2="18"/>
-                  </svg>
-                  <input
-                    type="url"
-                    v-model="pipelineData.jenkins_url"
-                    class="form-input with-icon"
-                    placeholder="http://jenkins.example.com:8080"
-                  />
+                <div
+                  class="advanced-toggle"
+                  @click="showJenkinsAdvanced = !showJenkinsAdvanced"
+                  style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;background:#f8f9fb;border:1px solid #e8eaf0;border-radius:8px;margin-bottom:4px;"
+                >
+                  <svg :style="{transform: showJenkinsAdvanced?'rotate(90deg)':'rotate(0deg)',transition:'0.2s'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+                  <span style="font-size:13px;font-weight:500;color:#374151;">高级配置（Jenkins 地址 / Job 名称）</span>
+                  <span style="margin-left:auto;font-size:11px;color:#8c8c8c;">留空即自动推导，一般无需修改</span>
                 </div>
-                <div class="input-hint">留空则使用系统默认 Jenkins 服务器</div>
+                <div v-show="showJenkinsAdvanced">
+                  <div class="form-group" style="margin-top:12px;">
+                    <label class="form-label">Jenkins 服务器地址</label>
+                    <div class="input-wrapper">
+                      <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                        <line x1="6" y1="6" x2="6.01" y2="6"/>
+                        <line x1="6" y1="18" x2="6.01" y2="18"/>
+                      </svg>
+                      <input
+                        type="url"
+                        v-model="pipelineData.jenkins_url"
+                        class="form-input with-icon"
+                        placeholder="http://jenkins.example.com:8080"
+                      />
+                    </div>
+                    <div class="input-hint">留空则使用系统默认 Jenkins 服务器</div>
+                  </div>
+                  <div class="form-group" style="margin-top:12px;">
+                    <label class="form-label">
+                      Jenkins Job 名称
+                      <span v-if="pipelineData.language_type === 'custom'" class="required">*</span>
+                    </label>
+                    <div class="input-wrapper">
+                      <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                      </svg>
+                      <input
+                        type="text"
+                        v-model="pipelineData.jenkins_job"
+                        class="form-input with-icon"
+                        :placeholder="pipelineData.language_type === 'custom' ? 'my-app-build（必填）' : `k8s-builder-${pipelineData.language_type}（留空自动推导）`"
+                        :required="pipelineData.language_type === 'custom'"
+                      />
+                    </div>
+                    <div class="input-hint">
+                      <template v-if="pipelineData.language_type !== 'custom'">
+                        <template v-if="pipelineData.jenkins_job && pipelineData.jenkins_job.trim()">
+                          <span style="color:#52c41a;">&#10004;</span> 使用自定义 Job <strong>{{ pipelineData.jenkins_job }}</strong>，平台会自动注入 <code style="color:#1890ff;">LANGUAGE_TYPE={{ pipelineData.language_type }}</code> 参数
+                        </template>
+                        <template v-else>
+                          留空将自动使用平台内置 Job: <strong>k8s-builder-{{ pipelineData.language_type }}</strong>（推荐）
+                        </template>
+                      </template>
+                      <template v-else>自定义类型必须填写 Jenkins Job 名称（Jenkins 上已创建的 Job）</template>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div class="form-group">
+              <!-- Java 版本选择器（仅 Java 项目显示） -->
+              <div v-if="pipelineData.language_type === 'java'" class="form-group">
                 <label class="form-label">
-                  Jenkins Job 名称
-                  <span v-if="pipelineData.language_type === 'custom'" class="required">*</span>
+                  Java 版本
+                  <span class="env-tag" style="background:#1890ff;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">JDK</span>
                 </label>
-                <div class="input-wrapper">
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                  </svg>
-                  <input
-                    type="text"
-                    v-model="pipelineData.jenkins_job"
-                    class="form-input with-icon"
-                    :placeholder="pipelineData.language_type === 'custom' ? 'my-app-build（必填）' : `k8s-builder-${pipelineData.language_type}（留空自动推导）`"
-                    :required="pipelineData.language_type === 'custom'"
-                  />
+                <div class="java-version-selector">
+                  <div
+                    v-for="ver in ['17', '21', '11', '8']"
+                    :key="ver"
+                    :class="['java-ver-chip', { selected: pipelineData.java_version === ver }]"
+                    @click="pipelineData.java_version = ver"
+                  >
+                    <span class="ver-number">{{ ver }}</span>
+                    <span v-if="ver === '17'" class="ver-badge">推荐</span>
+                    <span v-if="ver === '21'" class="ver-badge new">LTS</span>
+                  </div>
                 </div>
-                <div class="input-hint">
-                  <template v-if="pipelineData.language_type !== 'custom'">
-                    <template v-if="pipelineData.jenkins_job && pipelineData.jenkins_job.trim()">
-                      <span style="color:#52c41a;">&#10004;</span> 使用自定义 Job <strong>{{ pipelineData.jenkins_job }}</strong>，平台会自动注入 <code style="color:#1890ff;">LANGUAGE_TYPE={{ pipelineData.language_type }}</code> 参数，Jenkinsfile 分发器会自动加载对应模板。
-                    </template>
-                    <template v-else>
-                      留空将自动使用平台内置 Job: <strong>k8s-builder-{{ pipelineData.language_type }}</strong>（推荐）
-                    </template>
-                  </template>
-                  <template v-else>自定义类型必须填写 Jenkins Job 名称（Jenkins 上已创建的 Job）</template>
-                </div>
+                <div class="input-hint">决定构建环境 JDK 版本（maven:3.9-eclipse-temurin-<strong>{{ pipelineData.java_version }}</strong>）和运行时基础镜像</div>
               </div>
 
               <!-- SonarQube 代码质量扫描开关 -->
@@ -982,19 +1022,15 @@
               <!-- 服务类型和资源模板选择 -->
               <div class="resource-template-section">
                 <div class="form-row">
+                  <!-- 语言类型自动继承，显示当前选择，无需重复配置 -->
                   <div class="form-group half">
-                    <label class="form-label">服务类型</label>
-                    <div class="service-type-selector">
-                      <div
-                        v-for="svc in serviceTypeOptions"
-                        :key="svc.value"
-                        :class="['service-type-card', { selected: selectedServiceType === svc.value }]"
-                        @click="onServiceTypeChange(svc.value)"
-                      >
-                        <span class="svc-dot" :style="{ backgroundColor: svc.color }"></span>
-                        <span class="svc-name">{{ svc.label }}</span>
-                      </div>
+                    <label class="form-label">语言类型</label>
+                    <div class="form-input" style="display:flex;align-items:center;gap:8px;background:#f8f9fb;cursor:default;">
+                      <span class="env-dot" :style="{ backgroundColor: serviceTypeOptions.find(o=>o.value===pipelineData.language_type)?.color || '#8c8c8c' }" style="width:10px;height:10px;border-radius:50%;flex-shrink:0;"></span>
+                      <span style="font-weight:500;">{{ serviceTypeOptions.find(o=>o.value===pipelineData.language_type)?.label || pipelineData.language_type }}</span>
+                      <span style="margin-left:auto;font-size:11px;color:#8c8c8c;">继承自步骤1</span>
                     </div>
+                    <div class="input-hint">资源模板自动按语言类型匹配</div>
                   </div>
                   <div class="form-group half">
                     <label class="form-label">资源模板</label>
@@ -1005,14 +1041,6 @@
                       </option>
                     </select>
                   </div>
-                </div>
-                <!-- 服务类型一致性提示 -->
-                <div class="input-hint" style="margin-top:6px;padding:6px 10px;background:#fffbe6;border:1px solid #ffe58f;border-radius:4px;">
-                  <span style="color:#faad14;">&#9888;</span>
-                  <strong>注意：</strong>此处「服务类型」决定资源模板和部署参数，请确保与上方「语言/框架类型」(<strong>{{ pipelineData.language_type }}</strong>) 保持一致。
-                  <template v-if="selectedServiceType !== pipelineData.language_type && pipelineData.language_type !== 'custom'">
-                    <br/><span style="color:#ff4d4f;">&#10060; 当前不一致：语言类型为 <strong>{{ pipelineData.language_type }}</strong>，服务类型为 <strong>{{ selectedServiceType }}</strong>，可能导致资源模板不匹配！</span>
-                  </template>
                 </div>
               </div>
 
@@ -1579,6 +1607,8 @@ export default {
     const showEnvVars = ref(true)
     const showResources = ref(true)
     const quickMode = ref(true) // 默认极简模式
+    const showJenkinsAdvanced = ref(false) // Jenkins高级配置默认折叠
+    const showDescription = ref(false) // 描述字段默认折叠
 
     // Git 分支相关
     const branches = ref([])
@@ -1739,6 +1769,7 @@ export default {
       language_type: 'go',  // 与 selectedServiceType 联动，后端据此自动推导 jenkins_job
       // 构建核心参数（独立字段，不混入 env_vars）
       image_repo: '',       // 镜像仓库地址（必填），如 harbor.example.com/project/app
+      java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
       skip_tests: false,    // 跳过单元测试
       dockerfile_path: '',  // Dockerfile 路径（空则自动生成）
       git_credential_id: 'gitee-id',  // Git 凭证 ID
@@ -2010,7 +2041,7 @@ export default {
         pipelineData.value.image_repo = existingImageRepo.value
       }
       // 重组 env_vars：默认推荐变量（排除 IMAGE_REPO 等已有独立字段的） + 用户自定义
-      const promotedKeys = ['IMAGE_REPO', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH']
+      const promotedKeys = ['IMAGE_REPO', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
       const newEnvVars = defaults
         .filter(d => !promotedKeys.includes(d.name))
         .map(d => ({ name: d.name, value: d.value }))
@@ -2083,7 +2114,7 @@ export default {
               const found = envArr.find(e => e.name === key)
               return found ? found.value : def
             }
-            const promotedKeys = ['IMAGE_REPO', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID']
+            const promotedKeys = ['IMAGE_REPO', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
             // 回显 Dockerfile 策略模式
             const savedDfPath = getEnv('DOCKERFILE_PATH', '')
@@ -2105,6 +2136,7 @@ export default {
               language_type: langType,
               // 构建核心参数（从 env_vars 提取到独立字段）
               image_repo: getEnv('IMAGE_REPO', ''),
+              java_version: getEnv('JAVA_VERSION', '17'),
               skip_tests: getEnv('SKIP_TESTS', 'false') === 'true',
               dockerfile_path: getEnv('DOCKERFILE_PATH', ''),
               git_credential_id: getEnv('GIT_CREDENTIAL_ID', 'gitee-id'),
@@ -2165,6 +2197,10 @@ export default {
         if (pipelineData.value.image_repo) {
           submitData.env_vars.push({ name: 'IMAGE_REPO', value: pipelineData.value.image_repo })
         }
+        // 注入 JAVA_VERSION（仅 Java 项目）
+        if (pipelineData.value.language_type === 'java') {
+          submitData.env_vars.push({ name: 'JAVA_VERSION', value: pipelineData.value.java_version || '17' })
+        }
         const response = await createPipeline(submitData)
         if (response.code === 0) {
           alert('流水线创建成功')
@@ -2201,6 +2237,10 @@ export default {
         }
         injectEnv('IMAGE_REPO', submitData.image_repo)
         injectEnv('SKIP_TESTS', submitData.skip_tests ? 'true' : 'false')
+        // Java 版本注入（仅 Java 项目）
+        if (submitData.language_type === 'java') {
+          injectEnv('JAVA_VERSION', submitData.java_version || '17')
+        }
         // Dockerfile 策略映射：
         //   auto     → 空（Jenkins 智能检测项目 Dockerfile → 回退平台生成）
         //   project  → 用户指定的路径，默认 'Dockerfile'
@@ -2252,6 +2292,7 @@ export default {
         delete submitData.skip_tests
         delete submitData.dockerfile_path
         delete submitData.git_credential_id
+        delete submitData.java_version
 
         if (isEdit) {
           response = await updatePipeline({
@@ -2517,6 +2558,8 @@ export default {
       // 极简模式
       quickMode,
       quickSubmit,
+      showJenkinsAdvanced,
+      showDescription,
       // 方法
       nextStep,
       previousStep,
@@ -5113,6 +5156,61 @@ export default {
   border-color: #3b82f6;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+/* Java 版本选择器 */
+.java-version-selector {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.java-ver-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+  position: relative;
+}
+
+.java-ver-chip:hover {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.java-ver-chip.selected {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+}
+
+.java-ver-chip .ver-number {
+  font-size: 15px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.java-ver-chip.selected .ver-number {
+  color: #d97706;
+}
+
+.java-ver-chip .ver-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.java-ver-chip .ver-badge.new {
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .lang-dot {

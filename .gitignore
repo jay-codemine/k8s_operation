@@ -22,3 +22,7 @@ storage/artifacts/*
 !storage/artifacts/.gitkeep*.exe~
 *.exe
 deploy/registry-secret.yaml
+
+# K8s Secrets（含敏感信息，禁止提交）
+deploy/backend/secret.yaml
+deploy/jenkins/secret.yaml

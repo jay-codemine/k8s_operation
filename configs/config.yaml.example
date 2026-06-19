@@ -77,12 +77,12 @@ Node:
 
 
 Jenkins:
-  URL: "http://127.0.0.1:8080/"
+  URL: "http://jenkins.devops.svc.cluster.local:8080/"  # K8s 集群内 Jenkins Service 地址
   Username: "admin"
   APIToken: "xxxxxxxx"
   TriggerTimeout: 60
-  CallbackURL: "http://xxx:10537"  # 后端 API 地址（Jenkins 回调用）
-  PlatformURL: "http://jxxxx:30851"   # 前端页面地址（钉钉通知链接用）
+  CallbackURL: "http://k8soperation-backend.k8soperation.svc.cluster.local:38180"  # 后端 Service 地址
+  PlatformURL: "http://k8soperation-frontend.k8soperation.svc.cluster.local"       # 前端 Service 地址
   # 凭证 ID 配置（可选，留空则用默认值，对应 Jenkins Credentials 中的 ID）
   GitCredentialID: "gitee-id"           # Git 凭证 ID
   RegistryCredentialID: "harbor-registry" # 镜像仓库凭证 ID

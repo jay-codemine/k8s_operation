@@ -33,5 +33,6 @@ func (r *KubeStatefulSetmentRouter) Inject(router *gin.RouterGroup) {
 		router.POST("/rollback", statefulset.Rollback)     // 回滚到指定版本
 		router.GET("/yaml", statefulset.Yaml)              // 获取 YAML 配置
 		router.PUT("/apply_yaml", statefulset.ApplyYaml)   // 应用 YAML 配置
+		router.POST("/update-resources", statefulset.UpdateResources) // 快速修改容器资源限制
 	}
 }

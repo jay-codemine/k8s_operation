@@ -1,0 +1,120 @@
+# ============================================================
+# Jenkins StatefulSet
+# 使用 StatefulSet 保证稳定的网络标识和持久化存储
+# ============================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jenkins
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  serviceName: jenkins
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins
+      app.kubernetes.io/component: master
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jenkins
+        app.kubernetes.io/component: master
+    spec:
+      serviceAccountName: jenkins
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        # 安装必要插件（不指定版本号，自动安装最新兼容版本）
+        - name: install-plugins
+          image: jenkins/jenkins:lts
+          command:
+            - jenkins-plugin-cli
+            - --plugins
+            - kubernetes
+            - workflow-aggregator
+            - git
+            - configuration-as-code
+            - credentials-binding
+            - pipeline-stage-view
+            - blueocean
+            - sonar
+            - timestamper
+            - ws-cleanup
+            - http_request
+            - pipeline-utility-steps
+            - junit
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+      containers:
+        - name: jenkins
+          image: jenkins/jenkins:lts
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: agent
+              containerPort: 50000
+              protocol: TCP
+          env:
+            - name: JAVA_OPTS
+              value: >-
+                -Xms512m -Xmx2g
+                -Djenkins.install.runSetupWizard=false
+                -Dcasc.jenkins.config=/var/jenkins_home/casc_configs
+            - name: JENKINS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: admin-password
+            - name: HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: hmac-secret
+            - name: SONAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: sonarqube-token
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+            - name: casc-config
+              mountPath: /var/jenkins_home/casc_configs
+              readOnly: true
+      volumes:
+        - name: jenkins-data
+          persistentVolumeClaim:
+            claimName: jenkins-data
+        - name: casc-config
+          configMap:
+            name: jenkins-casc-config

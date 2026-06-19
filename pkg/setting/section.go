@@ -26,11 +26,10 @@ type ServerSettingS struct {
 //	error: 如果读取过程中发生错误，则返回错误信息
 func (s *Setting) ReadSection(k string, v interface{}) error {
 	// 使用 vp 的 UnmarshalKey 方法将键 k 对应的值解析到 v 中
-	// 如果解析过程中发生错误，则直接返回该错误
+	// 环境变量已在 NewSetting 中于 YAML 文本层面展开，无需额外处理
 	if err := s.vp.UnmarshalKey(k, v); err != nil {
 		return err
 	}
-	// 如果解析成功，返回 nil 表示无错误
 	return nil
 }
 

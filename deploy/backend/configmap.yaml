@@ -20,28 +20,27 @@ data:
       ShutdownTimeout: 300
 
     Database:
-      DBType: mysql
-      Username: root
-      # Password 通过 Secret 环境变量注入，此处占位
+      DBType: "${DB_TYPE}"
+      Username: "${DB_USERNAME}"
       Password: "${DB_PASSWORD}"
-      Host: 1.117.227.207                                      # 外部 MySQL 地址
-      Port: "3306"
-      DBName: k8s-platform
-      Charset: utf8
-      ParseTime: true
-      MaxIdleConns: 10
-      MaxOpenConns: 100
-      MaxLifeSeconds: 300
+      Host: "${DB_HOST}"
+      Port: "${DB_PORT}"
+      DBName: "${DB_NAME}"
+      Charset: "${DB_CHARSET}"
+      ParseTime: "${DB_PARSE_TIME}"
+      MaxIdleConns: "${DB_MAX_IDLE_CONNS}"
+      MaxOpenConns: "${DB_MAX_OPEN_CONNS}"
+      MaxLifeSeconds: "${DB_MAX_LIFE_SECONDS}"
 
     Cache:
-      Type: redis
-      Name: sk_sid
-      Address: 1.117.227.207:6379                          # 外部 Redis 单节点地址
-      Addresses: []                                         # 单节点模式，清空 Cluster 列表
-      Username: ""
+      Type: "${CACHE_TYPE}"
+      Name: "${CACHE_NAME}"
+      Address: "${REDIS_ADDRESS}"
+      Addresses: []
+      Username: "${CACHE_USERNAME}"
       Password: "${REDIS_PASSWORD}"
-      MaxConnect: 10
-      Network: tcp
+      MaxConnect: "${CACHE_MAX_CONNECT}"
+      Network: "${CACHE_NETWORK}"
       Secret: "${CACHE_SECRET}"
 
     App:
@@ -60,7 +59,7 @@ data:
       JWTExpireTime: 120000
       AppName: "k8soperation"
       GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
-      DefaultClusterID: 0
+      DefaultClusterID: 3
       AutoInitK8s: true
       AllowEmptyStart: true
 
@@ -96,16 +95,16 @@ data:
       TriggerTimeout: 60
       CallbackURL: "http://k8soperation.k8soperation.svc:8080"   # K8s 内部 Service 地址
       PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（钉钉通知用）
-      # 凭证 ID（对应 Jenkins Credentials 中的 ID，留空用默认值）
+      # 凭证 ID（对应 Jenkins Credentials 中的 ID）
       GitCredentialID: "${GIT_CREDENTIAL_ID}"
       RegistryCredentialID: "${REGISTRY_CREDENTIAL_ID}"
       HMACCredentialID: "${HMAC_CREDENTIAL_ID}"
       HMACSecret: "${HMAC_SECRET}"
       PollInterval: 15
       MaxBuildTime: 30
-      EnableDingTalk: ${ENABLE_DINGTALK:-true}
+      EnableDingTalk: ${ENABLE_DINGTALK}
       DingTalkWebhook: "${DINGTALK_WEBHOOK}"
-      EnableFeishu: ${ENABLE_FEISHU:-false}
+      EnableFeishu: ${ENABLE_FEISHU}
       FeishuWebhook: "${FEISHU_WEBHOOK}"
       FeishuSecret: "${FEISHU_SECRET}"
 

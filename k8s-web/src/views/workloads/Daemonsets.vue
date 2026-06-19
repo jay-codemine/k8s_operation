@@ -128,6 +128,7 @@
                     <div v-if="canOperate" class="menu-divider"></div>
                     <button v-if="canOperate" class="menu-item" @click="restartDaemonset(ds)"><span class="menu-icon">🔄</span><span>重启</span></button>
                     <button v-if="canOperate" class="menu-item" @click="openUpdateImage(ds)"><span class="menu-icon">🔧</span><span>更新镜像</span></button>
+                    <button v-if="canOperate" class="menu-item" @click="openResourceModal(ds)"><span class="menu-icon">⚡</span><span>资源配置</span></button>
                     <button v-if="canOperate" class="menu-item" @click="openRollback(ds)"><span class="menu-icon">⏪</span><span>回滚</span></button>
                     <div class="menu-divider"></div>
                     <button class="menu-item" @click="openEvents(ds)"><span class="menu-icon">📡</span><span>查看事件</span></button>
@@ -209,6 +210,7 @@
             <button class="card-action-btn primary" @click="viewPods(ds)" title="查看 Pod">📦 Pod</button>
             <button class="card-action-btn" @click="viewDaemonsetLogs(ds)" title="查看日志">📄 日志</button>
             <button class="card-action-btn" @click="viewHistory(ds)" title="版本记录">📜 版本</button>
+            <button class="card-action-btn warning" @click="openResourceModal(ds)" title="快速调整 CPU/Memory（防 OOM）">⚡ 资源</button>
             <button class="card-action-btn" @click="openYamlPreview(ds)" title="查看/编辑 YAML">📝 YAML</button>
             <button v-if="canOperate" class="card-action-btn danger" @click="deleteDaemonset(ds)" title="删除">🗑️ 删除</button>
           </div>
@@ -525,6 +527,92 @@
           <button class="btn btn-secondary" @click="showUpdateImageModal = false">取消</button>
           <button class="btn btn-primary" @click="submitUpdateImage" :disabled="updatingImage || !updateImageForm.image">
             {{ updatingImage ? '更新中...' : '确认更新' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快速资源调整弹窗（防 OOM） -->
+    <div v-if="showResourceModal" class="modal-overlay" @click.self="showResourceModal = false">
+      <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+          <h3>⚡ 快速调整资源配置</h3>
+          <button class="close-btn" @click="showResourceModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="info-box">
+            <div><strong>DaemonSet:</strong> {{ resourceForm.name }}</div>
+            <div><strong>命名空间:</strong> {{ resourceForm.namespace }}</div>
+          </div>
+
+          <!-- 容器选择 -->
+          <div class="form-group" v-if="resourceContainerList.length > 1">
+            <label>选择容器</label>
+            <select v-model="resourceForm.container" class="form-select" @change="onResourceContainerChange">
+              <option value="" disabled>请选择容器</option>
+              <option v-for="c in resourceContainerList" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="form-group" v-else-if="resourceContainerList.length === 1">
+            <label>容器</label>
+            <div class="form-static">{{ resourceContainerList[0] }}</div>
+          </div>
+
+          <!-- 当前资源配置展示 -->
+          <div v-if="currentResources" class="resource-current-info">
+            <div class="section-label" style="margin-bottom: 8px;">📊 当前配置</div>
+            <div class="resource-grid-display">
+              <div class="resource-item-display">
+                <span class="resource-key">CPU Request:</span>
+                <span class="resource-val">{{ currentResources.cpu_request || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">CPU Limit:</span>
+                <span class="resource-val">{{ currentResources.cpu_limit || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">Memory Request:</span>
+                <span class="resource-val">{{ currentResources.memory_request || '未设置' }}</span>
+              </div>
+              <div class="resource-item-display">
+                <span class="resource-key">Memory Limit:</span>
+                <span class="resource-val" :class="{ 'text-danger': !currentResources.memory_limit }">{{ currentResources.memory_limit || '⚠️ 未设置' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="resource-current-info">
+            <div class="form-hint">⚠️ 当前容器未设置资源配置，建议设置以防 OOM</div>
+          </div>
+
+          <!-- 资源编辑表单 -->
+          <div class="resource-edit-section">
+            <div class="section-label" style="margin-bottom: 8px;">✏️ 新配置</div>
+            <div class="resource-form-grid">
+              <div class="form-group">
+                <label>Memory Limit <span class="required">*</span></label>
+                <input v-model="resourceForm.memory_limit" type="text" class="form-input" placeholder="例: 512Mi, 1Gi, 2Gi" />
+                <div class="form-hint">必填，防止 OOM 必须设置内存上限</div>
+              </div>
+              <div class="form-group">
+                <label>Memory Request</label>
+                <input v-model="resourceForm.memory_request" type="text" class="form-input" placeholder="例: 256Mi, 512Mi" />
+                <div class="form-hint">建议设置为 Limit 的 50%-80%</div>
+              </div>
+              <div class="form-group">
+                <label>CPU Limit</label>
+                <input v-model="resourceForm.cpu_limit" type="text" class="form-input" placeholder="例: 500m, 1000m, 2" />
+              </div>
+              <div class="form-group">
+                <label>CPU Request</label>
+                <input v-model="resourceForm.cpu_request" type="text" class="form-input" placeholder="例: 100m, 250m" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showResourceModal = false">取消</button>
+          <button class="btn btn-primary" @click="submitUpdateResources" :disabled="updatingResources || !resourceForm.memory_limit">
+            {{ updatingResources ? '更新中...' : '确认修改' }}
           </button>
         </div>
       </div>
@@ -1269,6 +1357,7 @@ const loadingEvents = ref(false)
 const loadingHistory = ref(false)
 const loadingPods = ref(false)
 const updatingImage = ref(false)
+const updatingResources = ref(false)  // 资源调整中
 const rollingBack = ref(false)
 const creating = ref(false)
 
@@ -1323,6 +1412,20 @@ const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
 const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
 const containerList = ref([])
 const imagesList = ref([])
+
+// 资源快速修改表单
+const showResourceModal = ref(false)
+const resourceForm = ref({
+  namespace: '',
+  name: '',
+  container: '',
+  cpu_request: '',
+  cpu_limit: '',
+  memory_request: '',
+  memory_limit: '',
+})
+const resourceContainerList = ref([])  // 资源弹窗的容器列表
+const currentResources = ref(null)     // 当前容器的资源配置
 
 // 创建表单
 const daemonsetForm = ref({
@@ -1861,6 +1964,109 @@ const submitUpdateImage = async () => {
     Message.error({ content: e?.msg || '更新失败' })
   } finally {
     updatingImage.value = false
+  }
+}
+
+// =========================
+// 资源快速调整
+// =========================
+const openResourceModal = async (ds) => {
+  showMoreOptions.value = false
+  resourceContainerList.value = ds.containers || []
+  const firstContainer = resourceContainerList.value[0] || ''
+  resourceForm.value = {
+    namespace: ds.namespace,
+    name: ds.name,
+    container: firstContainer,
+    cpu_request: '',
+    cpu_limit: '',
+    memory_request: '',
+    memory_limit: '',
+  }
+  currentResources.value = null
+
+  // 获取当前容器的资源配置
+  if (firstContainer) {
+    await loadContainerResources(ds, firstContainer)
+  }
+  showResourceModal.value = true
+}
+
+const loadContainerResources = async (ds, containerName) => {
+  try {
+    const res = await daemonsetsApi.detail({
+      namespace: ds.namespace,
+      name: ds.name
+    })
+    if (res.code === 0 && res.data) {
+      const d = res.data?.data || res.data
+      const containers = d.spec?.template?.spec?.containers || []
+      const target = containers.find(c => c.name === containerName)
+      if (target && target.resources) {
+        const r = target.resources
+        currentResources.value = {
+          cpu_request: r.requests?.cpu || '',
+          cpu_limit: r.limits?.cpu || '',
+          memory_request: r.requests?.memory || '',
+          memory_limit: r.limits?.memory || '',
+        }
+        resourceForm.value.cpu_request = currentResources.value.cpu_request
+        resourceForm.value.cpu_limit = currentResources.value.cpu_limit
+        resourceForm.value.memory_request = currentResources.value.memory_request
+        resourceForm.value.memory_limit = currentResources.value.memory_limit
+      } else {
+        currentResources.value = null
+      }
+    }
+  } catch (e) {
+    console.warn('获取容器资源配置失败:', e)
+  }
+}
+
+const onResourceContainerChange = async () => {
+  const ds = { namespace: resourceForm.value.namespace, name: resourceForm.value.name }
+  await loadContainerResources(ds, resourceForm.value.container)
+}
+
+const submitUpdateResources = async () => {
+  if (!resourceForm.value.memory_limit) {
+    Message.error({ content: '内存上限（Memory Limit）必须设置，防止 OOM' })
+    return
+  }
+
+  const ok = await confirm({
+    title: '确认修改资源配置',
+    content: '此操作将触发滚动更新，修改容器的 CPU/Memory 配置。',
+    type: 'warning',
+    details: [
+      { label: 'DaemonSet', value: `${resourceForm.value.namespace}/${resourceForm.value.name}` },
+      { label: '容器', value: resourceForm.value.container },
+      { label: 'Memory Limit', value: resourceForm.value.memory_limit, highlight: true },
+      { label: 'Memory Request', value: resourceForm.value.memory_request || '未设置' },
+      { label: 'CPU Limit', value: resourceForm.value.cpu_limit || '未设置' },
+      { label: 'CPU Request', value: resourceForm.value.cpu_request || '未设置' },
+    ],
+    tip: '资源修改会触发滚动更新，期间服务保持可用',
+    confirmText: '确认修改',
+  })
+  if (!ok) return
+
+  updatingResources.value = true
+  try {
+    const res = await daemonsetsApi.updateResources(resourceForm.value)
+    if (res.code === 0) {
+      Message.success({ content: '资源配置更新成功' })
+      showResourceModal.value = false
+      autoRefresh.value = true
+      setTimeout(() => { autoRefresh.value = false }, 15000)
+      refreshList()
+    } else {
+      Message.error({ content: res.msg || '资源配置更新失败' })
+    }
+  } catch (e) {
+    Message.error({ content: e?.msg || e?.message || '资源配置更新失败' })
+  } finally {
+    updatingResources.value = false
   }
 }
 

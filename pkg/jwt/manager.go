@@ -18,9 +18,13 @@ type Manager struct {
 // New 创建并返回一个新的JWT Manager实例
 // 使用全局配置中的JWT签名密钥和最大刷新时间进行初始化
 func NewManager() *Manager {
+	maxRefreshMin := int64(global.AppSetting.JWTMaxRefreshTime)
+	if maxRefreshMin <= 0 {
+		maxRefreshMin = 1440 // 默认 24 小时
+	}
 	return &Manager{
-		SignKey:    []byte(global.AppSetting.JWTSigningKey),                          // 从全局配置获取签名密钥
-		MaxRefresh: time.Duration(global.AppSetting.JWTMaxRefreshTime) * time.Minute, // 从全局配置获取最大刷新时间并转换为time.Duration类型
+		SignKey:    []byte(global.AppSetting.JWTSigningKey),
+		MaxRefresh: time.Duration(maxRefreshMin) * time.Minute,
 	}
 }
 
@@ -49,8 +53,12 @@ func (m *Manager) IssueToken(userID, userName string) (string, error) {
 // expireAtTime 计算Token的过期时间戳
 // 返回: 过期时间的时间戳
 func (m *Manager) expireAtTime() int64 {
-	expire := time.Duration(int64(global.AppSetting.JWTExpireTime)) * time.Minute // 从全局配置获取过期时间并转换为time.Duration
-	return utils.TimenowInTimezone().Add(expire).Unix()                           // 计算并返回过期时间戳
+	expireMinutes := int64(global.AppSetting.JWTExpireTime)
+	if expireMinutes <= 0 {
+		expireMinutes = 120 // 默认 2 小时（防止配置加载异常导致 token 立即过期）
+	}
+	expire := time.Duration(expireMinutes) * time.Minute
+	return utils.TimenowInTimezone().Add(expire).Unix() // 计算并返回过期时间戳
 }
 
 // createToken 根据Claims创建并签名JWT Token

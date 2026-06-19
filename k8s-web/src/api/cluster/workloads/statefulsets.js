@@ -206,6 +206,25 @@ const statefulsetsApi = {
   createFromYaml(data) {
     return http.post(`${K8S_BASE}/statefulset/create-from-yaml`, data)
   },
+
+  // =========================
+  // 资源快速调整（防 OOM）
+  // =========================
+
+  /**
+   * 快速修改容器资源限制（CPU/Memory requests/limits）
+   * @param {Object} data
+   * @param {string} data.namespace - 命名空间
+   * @param {string} data.name - StatefulSet 名称
+   * @param {string} data.container - 容器名称
+   * @param {string} [data.cpu_request] - CPU Request (如 100m)
+   * @param {string} [data.cpu_limit] - CPU Limit (如 500m)
+   * @param {string} [data.memory_request] - Memory Request (如 128Mi)
+   * @param {string} data.memory_limit - Memory Limit (如 512Mi, 必填)
+   */
+  updateResources(data) {
+    return http.post(`${K8S_BASE}/statefulset/update-resources`, data)
+  },
 }
 
 export default statefulsetsApi

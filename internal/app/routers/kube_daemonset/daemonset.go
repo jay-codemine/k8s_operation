@@ -28,5 +28,6 @@ func (r *KubeDaemonSetRouter) Inject(router *gin.RouterGroup) {
 		router.POST("/events", ds.Events)
 		router.GET("/yaml", ds.Yaml)             // 获取 DaemonSet YAML 配置
 		router.PUT("/apply_yaml", ds.ApplyYaml)  // 应用 DaemonSet YAML 配置
+		router.POST("/update-resources", ds.UpdateResources) // 快速修改容器资源限制
 	}
 }

@@ -1,8 +1,9 @@
 // ==============================================================================
-// K8s Operation Platform - Go 项目通用构建模板
+// K8s Operation Platform - Go 项目通用构建模板（K8s Pod Agent + Kaniko 容器化版）
 // ==============================================================================
 // 设计理念：一个模板服务 100+ Go 项目，所有项目差异通过参数传入
-// 回调协议：与平台后端 StageCallbackRequest / PipelineCallbackRequest 完全对齐
+// 运行模式：Jenkins K8s 动态 Pod Agent，每次构建创建独立 Pod，完成后自动销毁
+// 镜像构建：使用 Kaniko（无需 Docker daemon、无需特权容器）
 //
 // ======================== Jenkins Job 配置方式 ========================
 // 推荐使用 "Pipeline script from SCM"（版本化管理，自动同步更新）：
@@ -10,10 +11,69 @@
 //   2. Pipeline → Definition: Pipeline script from SCM
 //   3. SCM: Git → Repository URL: 平台仓库地址
 //   4. Script Path: configs/jenkins-templates/go-pipeline.groovy
+//
+// ======================== K8s 环境要求 ========================
+// Jenkins 需安装 Kubernetes Plugin，并配置 K8s Cloud：
+//   Manage Jenkins → Clouds → Kubernetes → 配置 K8s API 地址 + 命名空间
 // ==============================================================================
 
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins-build: go
+spec:
+  containers:
+  - name: golang
+    image: golang:1.24
+    command: ['sleep', '99d']
+    resources:
+      requests:
+        cpu: '500m'
+        memory: '512Mi'
+      limits:
+        cpu: '2'
+        memory: '2Gi'
+    env:
+    - name: GOPROXY
+      value: 'https://goproxy.cn,direct'
+    - name: CGO_ENABLED
+      value: '0'
+    - name: GOOS
+      value: 'linux'
+    - name: GOARCH
+      value: 'amd64'
+    volumeMounts:
+    - name: go-cache
+      mountPath: /go/pkg/mod
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    command: ['sleep', '99d']
+    resources:
+      requests:
+        cpu: '200m'
+        memory: '256Mi'
+      limits:
+        cpu: '1'
+        memory: '1Gi'
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+  volumes:
+  - name: go-cache
+    persistentVolumeClaim:
+      claimName: jenkins-go-cache
+  - name: workspace-volume
+    emptyDir: {}
+"""
+        }
+    }
 
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -65,20 +125,8 @@ pipeline {
     }
 
     environment {
-        GOROOT     = "/usr/local/go"
-        GOPATH     = "/var/lib/jenkins/go"
-        GOMODCACHE = "/var/lib/jenkins/go/pkg/mod"
-        GOCACHE    = "/var/lib/jenkins/.cache/go-build"
-        PATH       = "/usr/local/go/bin:${env.GOPATH}/bin:${env.PATH}"
-
         REGISTRY_CREDS = credentials("${params.REGISTRY_CREDENTIAL_ID ?: 'harbor-registry'}")
         HMAC_SECRET    = credentials("${params.HMAC_CREDENTIAL_ID ?: 'hmac-secret'}")
-        GOPROXY        = 'https://goproxy.cn,direct'
-        CGO_ENABLED    = '0'
-        GOOS           = 'linux'
-        GOARCH         = 'amd64'
-        // BuildKit 层缓存目录（跨构建持久复用，二次构建仅重建变化层）
-        BUILDKIT_CACHE = '/var/lib/jenkins/.buildkit-cache'
     }
 
     stages {
@@ -116,7 +164,6 @@ pipeline {
 
                     def targetBranch = params.GIT_BRANCH?.trim() ?: 'main'
 
-                    // 强制清除 .git（防止浅克隆残留导致 fetch 拉不到最新代码）
                     sh 'rm -rf .git 2>/dev/null || true'
 
                     checkout([
@@ -135,7 +182,6 @@ pipeline {
 
                     env.TARGET_BRANCH = targetBranch
 
-                    // 验证拉取的是最新代码
                     def latestCommit = sh(script: 'git log -1 --format="%h %s (%ci)"', returnStdout: true).trim()
                     echo "[Checkout] ✅ 最新提交: ${latestCommit}"
                     echo "[Checkout] 分支: ${targetBranch} | 仓库: ${params.GIT_REPO}"
@@ -172,17 +218,19 @@ pipeline {
         stage('Dependencies') {
             steps {
                 echo "=== 下载依赖 ==="
-                script {
-                    if (!fileExists('go.mod')) {
-                        echo "未检测到 go.mod，跳过"
-                        return
+                container('golang') {
+                    script {
+                        if (!fileExists('go.mod')) {
+                            echo "未检测到 go.mod，跳过"
+                            return
+                        }
+                        sh '''
+                            set -e
+                            go version
+                            go mod download
+                            go mod verify
+                        '''
                     }
-                    sh '''
-                        set -e
-                        go version
-                        go mod download
-                        go mod verify
-                    '''
                 }
             }
             post {
@@ -194,18 +242,20 @@ pipeline {
         stage('Compile Check') {
             steps {
                 echo "=== 编译检查（直接产出最终二进制，Build Image 复用，避免重复编译） ==="
-                script {
-                    if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
-                    def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
-                    env.APP_NAME = appName
-                    env.BINARY_PATH = "bin/${appName}"
-                    sh """
-                        set -e
-                        mkdir -p bin
-                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \\
-                        go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
-                    """
-                    echo "[编译] 二进制产物: ${env.BINARY_PATH}"
+                container('golang') {
+                    script {
+                        if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
+                        def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
+                        env.APP_NAME = appName
+                        env.BINARY_PATH = "bin/${appName}"
+                        sh """
+                            set -e
+                            mkdir -p bin
+                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
+                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
+                        """
+                        echo "[编译] 二进制产物: ${env.BINARY_PATH}"
+                    }
                 }
             }
             post {
@@ -218,15 +268,17 @@ pipeline {
             when { expression { return !params.SKIP_TESTS } }
             steps {
                 echo "=== 单元测试 ==="
-                script {
-                    if (!fileExists('go.mod')) { echo "跳过测试"; return }
-                    def hasTests = sh(script: "find . -name '*_test.go' | grep . >/dev/null 2>&1 && echo yes || echo no", returnStdout: true).trim()
-                    if (hasTests != 'yes') { echo "无测试文件"; return }
-                    sh '''
-                        set -e
-                        go test -v -coverprofile=coverage.out ./...
-                        go tool cover -func=coverage.out | tail -1
-                    '''
+                container('golang') {
+                    script {
+                        if (!fileExists('go.mod')) { echo "跳过测试"; return }
+                        def hasTests = sh(script: "find . -name '*_test.go' | grep . >/dev/null 2>&1 && echo yes || echo no", returnStdout: true).trim()
+                        if (hasTests != 'yes') { echo "无测试文件"; return }
+                        sh '''
+                            set -e
+                            go test -v -coverprofile=coverage.out ./...
+                            go tool cover -func=coverage.out | tail -1
+                        '''
+                    }
                 }
             }
             post {
@@ -239,10 +291,10 @@ pipeline {
             when { expression { return !params.SKIP_TESTS } }
             steps {
                 echo "=== 代码检查 ==="
-                script {
-                    def hasLint = sh(script: "which golangci-lint >/dev/null 2>&1 && echo yes || echo no", returnStdout: true).trim()
-                    if (hasLint == 'yes') { sh 'golangci-lint run --timeout=5m || true' }
-                    else { sh 'go vet ./...' }
+                container('golang') {
+                    script {
+                        sh 'go vet ./...'
+                    }
                 }
             }
             post {
@@ -251,44 +303,46 @@ pipeline {
             }
         }
 
-        // ==================== SonarQube 代码质量扫描（性能优化版） ====================
-        // 优化要点：
-        //   1. -Dsonar.scm.disabled=true       → 禁用 git blame（节省 60%+ 时间）
-        //   2. -Dsonar.qualitygate.wait=false  → 扫描阶段不阻塞，由 Quality Gate 阶段异步等待
-        //   3. -Dsonar.threads=4               → 启用 4 线程并行分析（多核 CPU 加速 30-50%）
-        //   4. exclusions 追加 bin/build       → 避免扫描编译产物目录
+        // ==================== SonarQube 代码质量扫描 ====================
         stage('SonarQube Analysis') {
             when { expression { return params.ENABLE_SONAR } }
             steps {
                 script {
                     try {
-                        echo "=== SonarQube 代码质量扫描（轻量模式） ==="
+                        echo "=== SonarQube 代码质量扫描 ==="
                         def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
                         def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
                         def sources     = params.SONAR_SOURCES?.trim()      ?: '.'
                         def exclusions  = params.SONAR_EXCLUSIONS?.trim()   ?: '**/vendor/**,**/*_test.go'
 
-                        // 使用 SonarQube Scanner CLI（Go 项目不用 Maven）
                         withSonarQubeEnv('SonarQube') {
-                            sh """
-                                sonar-scanner \\
-                                    -Dsonar.projectKey=${projectKey} \\
-                                    -Dsonar.projectName=${projectName} \\
-                                    -Dsonar.projectVersion=${env.FINAL_TAG} \\
-                                    -Dsonar.sources=${sources} \\
-                                    -Dsonar.exclusions=${exclusions},**/bin/**,**/build/** \\
-                                    -Dsonar.go.coverage.reportPaths=coverage.out \\
-                                    -Dsonar.scm.disabled=true \\
-                                    -Dsonar.qualitygate.wait=false \\
-                                    -Dsonar.threads=4 \\
-                                    -Dsonar.links.ci=${env.BUILD_URL}
-                            """
+                            container('golang') {
+                                sh """
+                                    # 下载 sonar-scanner（如果不存在）
+                                    if ! command -v sonar-scanner &>/dev/null; then
+                                        wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux-x64.zip -O /tmp/sonar.zip || true
+                                        if [ -f /tmp/sonar.zip ]; then
+                                            unzip -qo /tmp/sonar.zip -d /tmp/ && export PATH="/tmp/sonar-scanner-5.0.1.3006-linux-x64/bin:\$PATH"
+                                        fi
+                                    fi
+                                    sonar-scanner \
+                                        -Dsonar.projectKey=${projectKey} \
+                                        -Dsonar.projectName=${projectName} \
+                                        -Dsonar.projectVersion=${env.FINAL_TAG} \
+                                        -Dsonar.sources=${sources} \
+                                        -Dsonar.exclusions=${exclusions},**/bin/**,**/build/** \
+                                        -Dsonar.go.coverage.reportPaths=coverage.out \
+                                        -Dsonar.scm.disabled=true \
+                                        -Dsonar.qualitygate.wait=false \
+                                        -Dsonar.threads=4 \
+                                        -Dsonar.links.ci=${env.BUILD_URL}
+                                """
+                            }
                         }
                         echo "[SonarQube] 扫描已提交，等待质量门禁..."
                         stageCallback('sonar', 'success')
                     } catch (e) {
                         echo "[SonarQube] ❌ 扫描失败: ${e.message}"
-                        echo "[SonarQube] 常见原因: 1) SonarQube 服务未启动  2) Jenkins 与 SonarQube 网络不通  3) SonarQube Token 过期"
                         stageCallback('sonar', 'failed')
                         env.SONAR_ANALYSIS_FAILED = 'true'
                         error("SonarQube 扫描失败: ${e.message}")
@@ -297,7 +351,7 @@ pipeline {
             }
         }
 
-        // ==================== SonarQube 质量门禁检查（平台阈值驱动） ====================
+        // ==================== SonarQube 质量门禁检查 ====================
         stage('Quality Gate') {
             when {
                 allOf {
@@ -340,12 +394,13 @@ pipeline {
             }
         }
 
-        // ==================== 制品归档（Quality Gate 之后、Build Image 之前，失败即终止流水线） ====================
+        // ==================== 制品归档 ====================
         stage('Upload Artifact') {
             when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
             steps {
                 echo "=== 上传制品到平台制品库（gzip 压缩加速） ==="
-                script {
+                container('golang') {
+                    script {
                         def binaryPath = env.BINARY_PATH ?: "bin/${env.APP_NAME ?: 'server'}"
                         if (!fileExists(binaryPath)) { error("[制品上传] 二进制文件不存在: ${binaryPath}") }
 
@@ -361,22 +416,20 @@ pipeline {
 
                         def curlStatus = sh(script: """
                             set -e
-                            curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \\
-                                -X POST '${uploadUrl}' \\
-                                -F 'file=@${gzPath}' \\
-                                -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \\
-                                -F 'run_id=${params.RUN_ID ?: 0}' \\
-                                -F 'build_number=${env.BUILD_NUMBER}' \\
-                                -F 'version=${env.FINAL_TAG}' \\
-                                -F 'language_type=go' \\
-                                -F 'artifact_type=binary' \\
-                                -F 'git_repo=${params.GIT_REPO}' \\
-                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \\
-                                -F 'git_commit=${env.GIT_COMMIT_SHORT}' \\
-                                --connect-timeout 10 \\
-                                --max-time 300 \\
-                                --tcp-nodelay \\
-                                -H "Expect:" \\
+                            curl -s -w '%{http_code}' -o /tmp/artifact_resp.json \
+                                -X POST '${uploadUrl}' \
+                                -F 'file=@${gzPath}' \
+                                -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' \
+                                -F 'run_id=${params.RUN_ID ?: 0}' \
+                                -F 'build_number=${env.BUILD_NUMBER}' \
+                                -F 'version=${env.FINAL_TAG}' \
+                                -F 'language_type=go' \
+                                -F 'artifact_type=binary' \
+                                -F 'git_repo=${params.GIT_REPO}' \
+                                -F 'git_branch=${env.GIT_BRANCH_NAME}' \
+                                -F 'git_commit=${env.GIT_COMMIT_SHORT}' \
+                                --connect-timeout 10 \
+                                --max-time 300 \
                                 --retry 2 --retry-delay 5
                         """, returnStdout: true).trim()
 
@@ -386,10 +439,10 @@ pipeline {
                             echo "[制品上传] ❌ 上传失败: HTTP ${curlStatus[-3..-1]}"
                             def respBody = sh(script: "cat /tmp/artifact_resp.json 2>/dev/null || echo '{}'", returnStdout: true).trim()
                             echo "[制品上传] 响应内容: ${respBody}"
-                            echo "[制品上传] 上传地址: ${uploadUrl}"
                             error("制品上传失败: HTTP ${curlStatus[-3..-1]}")
                         }
                         sh "rm -f ${gzPath} /tmp/artifact_resp.json 2>/dev/null || true"
+                    }
                 }
             }
             post {
@@ -398,31 +451,30 @@ pipeline {
             }
         }
 
-        // ==================== Docker 镜像构建（复用 Compile Check 产出的二进制） ====================
-        
-        stage('Build Image') {
+        // ==================== Kaniko 构建 + 推送镜像（合并为一步） ====================
+        stage('Build & Push Image') {
             steps {
-                echo "=== 构建 Docker 镜像（复用 Compile Check 产出的二进制） ==="
-                script {
-                    def appName = env.APP_NAME ?: (params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server')
-                    env.APP_NAME = appName
-                    if (!env.BINARY_PATH) { env.BINARY_PATH = "bin/${appName}" }
-        
-                    def dockerfile = params.DOCKERFILE_PATH?.trim()
+                echo "=== Kaniko 构建并推送镜像（无需 Docker daemon） ==="
+                container('kaniko') {
+                    script {
+                        def appName = env.APP_NAME ?: (params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server')
+                        env.APP_NAME = appName
+                        if (!env.BINARY_PATH) { env.BINARY_PATH = "bin/${appName}" }
 
-                    // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
-                    // __PLATFORM_GENERATE__ 为平台哨兵值，表示强制使用平台生成
-                    def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
-                    if (!dockerfile || forceGenerate) {
-                        if (fileExists('Dockerfile')) {
-                            dockerfile = 'Dockerfile'
-                            echo "[Build Image] 检测到项目自带 Dockerfile，优先使用（确保自定义配置生效）"
-                        } else {
-                            dockerfile = '.Dockerfile.runtime'
-                            writeFile file: dockerfile, text: """\
+                        def dockerfile = params.DOCKERFILE_PATH?.trim()
+
+                        // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
+                        def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
+                        if (!dockerfile || forceGenerate) {
+                            if (fileExists('Dockerfile')) {
+                                dockerfile = 'Dockerfile'
+                                echo "[Build Image] 检测到项目自带 Dockerfile，优先使用"
+                            } else {
+                                dockerfile = '.Dockerfile.runtime'
+                                writeFile file: dockerfile, text: """\
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata wget && \\
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \\
+RUN apk add --no-cache ca-certificates tzdata wget && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
 RUN mkdir -p /app/storage/logs /app/configs
@@ -431,74 +483,48 @@ RUN chmod +x /app/${appName} && chown -R app:app /app
 USER app
 ENV GIN_MODE=release
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
 ENTRYPOINT ["/app/${appName}"]
 """
-                            echo "[Build Image] ${forceGenerate ? '强制' : '项目无 Dockerfile，'}已自动生成纯运行时 Dockerfile"
+                                echo "[Build Image] ${forceGenerate ? '强制' : '项目无 Dockerfile，'}已自动生成纯运行时 Dockerfile"
+                            }
                         }
-                    }
 
-                    // 使用 BuildKit 本地层缓存 + Dockerfile 内容哈希防止缓存过期
-                    def cacheDir = "${env.BUILDKIT_CACHE}/${env.JOB_NAME}".replaceAll('[^a-zA-Z0-9/_.-]', '_')
-                    def dfHash = sh(script: "md5sum ${dockerfile} | awk '{print \$1}'", returnStdout: true).trim()
-                    def cacheHashFile = "${cacheDir}/.dockerfile_hash"
-                    def oldHash = sh(script: "cat ${cacheHashFile} 2>/dev/null || echo ''", returnStdout: true).trim()
-                    def cacheArgs = ''
-                    if (dfHash != oldHash) {
-                        echo "[Build Image] Dockerfile 内容已变化（${oldHash ?: '无缓存'} → ${dfHash}），清除旧缓存"
-                        sh "rm -rf ${cacheDir} 2>/dev/null || true"
-                    } else {
-                        echo "[Build Image] Dockerfile 未变化，复用 BuildKit 层缓存"
-                        cacheArgs = "--cache-from type=local,src=${cacheDir}"
+                        // 配置镜像仓库认证
+                        def registryHost = params.IMAGE_REPO.split('/')[0]
+                        sh """
+                            mkdir -p /kaniko/.docker
+                            echo '{"auths":{"${registryHost}":{"username":"${REGISTRY_CREDS_USR}","password":"${REGISTRY_CREDS_PSW}"}}}' > /kaniko/.docker/config.json
+                        """
+
+                        // Kaniko 构建 + 推送（一步完成）
+                        sh """
+                            /kaniko/executor \
+                                --context=. \
+                                --dockerfile=${dockerfile} \
+                                --destination=${env.FULL_IMAGE} \
+                                --cache=true \
+                                --cache-repo=${registryHost}/kaniko-cache/go \
+                                --label git.commit=${env.GIT_COMMIT_FULL} \
+                                --label git.branch=${env.GIT_BRANCH_NAME} \
+                                --label build.number=${env.BUILD_NUMBER} \
+                                --label build.timestamp=${env.BUILD_TS} \
+                                --label build.mode=k8s-kaniko \
+                                --snapshot-mode=redo \
+                                --use-new-run
+                        """
+
+                        // Kaniko 完成后镜像已推送，获取 digest
+                        env.IMAGE_DIGEST = ''
+                        env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
+                        echo "[Build & Push] ✅ 镜像已构建并推送: ${env.FULL_IMAGE}"
                     }
-                    sh """
-                        set -e
-                        mkdir -p ${cacheDir}
-                        echo '${dfHash}' > ${cacheHashFile}
-                        nerdctl build \\
-                            -t ${env.FULL_IMAGE} \\
-                            -f ${dockerfile} \\
-                            ${cacheArgs} \\
-                            --cache-to type=local,dest=${cacheDir},mode=max \\
-                            --label git.commit=${env.GIT_COMMIT_FULL} \\
-                            --label git.branch=${env.GIT_BRANCH_NAME} \\
-                            --label build.number=${env.BUILD_NUMBER} \\
-                            --label build.timestamp=${env.BUILD_TS} \\
-                            --label build.mode=platform-compile \\
-                            .
-                    """
                 }
             }
             post {
-                success { script { stageCallback('build', 'success') } }
-                failure { script { stageCallback('build', 'failed') } }
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                echo "=== 推送镜像 ==="
-                script {
-                    def registryHost = params.IMAGE_REPO.split('/')[0]
-                    sh """
-                        set -e
-                        echo \${REGISTRY_CREDS_PSW} | nerdctl login -u \${REGISTRY_CREDS_USR} --password-stdin ${registryHost}
-                        nerdctl push ${env.FULL_IMAGE}
-                    """
-                    env.IMAGE_DIGEST = sh(
-                        script: "nerdctl inspect ${env.FULL_IMAGE} --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null | grep -oE 'sha256:[a-f0-9]+' | head -1 || echo ''",
-                        returnStdout: true
-                    ).trim()
-                    env.IMAGE_WITH_DIGEST = env.IMAGE_DIGEST
-                        ? "${params.IMAGE_REPO}@${env.IMAGE_DIGEST}"
-                        : env.FULL_IMAGE
-                    echo "Digest: ${env.IMAGE_DIGEST ?: '未获取到'}"
-                }
-            }
-            post {
-                success { script { stageCallback('push', 'success') } }
-                failure { script { stageCallback('push', 'failed') } }
+                success { script { stageCallback('build', 'success'); stageCallback('push', 'success') } }
+                failure { script { stageCallback('build', 'failed'); stageCallback('push', 'failed') } }
             }
         }
 
@@ -520,11 +546,6 @@ ENTRYPOINT ["/app/${appName}"]
         }
         failure { script { callbackPlatform('FAILURE', 'Go 项目构建失败') } }
         aborted { script { callbackPlatform('ABORTED', '构建中止') } }
-        always {
-            sh "nerdctl rmi ${env.FULL_IMAGE} || true"
-            // Go 缓存已在 workspace 外（GOMODCACHE/GOCACHE），只清源码
-            sh 'rm -rf bin .git coverage.out 2>/dev/null || true'
-        }
     }
 }
 
@@ -623,7 +644,7 @@ def sonarReportCallback(String qualityGateStatus) {
     }
 }
 
-// ==================== 平台阈值检查（对比 SonarQube 实际指标与平台配置） ====================
+// ==================== 平台阈值检查 ====================
 def checkPlatformThresholds() {
     def report = []
     try {
@@ -658,7 +679,6 @@ def checkPlatformThresholds() {
     return report.join('\n')
 }
 
-// SonarQube rating 数值转字母: 1.0=A, 2.0=B, 3.0=C, 4.0=D, 5.0=E
 def ratingToLetter(Double rating) {
     if (rating <= 1.0) return 'A'
     if (rating <= 2.0) return 'B'
@@ -667,7 +687,7 @@ def ratingToLetter(Double rating) {
     return 'E'
 }
 
-// ==================== HMAC-SHA256（openssl 版，避免 Sandbox 拦截） ====================
+// ==================== HMAC-SHA256 ====================
 def hmacSha256(String secret, String data) {
     def result = ''
     withEnv(["SIGN_SECRET=${secret}", "SIGN_DATA=${data}"]) {

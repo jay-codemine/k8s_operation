@@ -105,6 +105,45 @@ func (s *Services) KubeStatefulSetRollback(ctx context.Context, cli *K8sClients,
 	return statefulset.RollbackStatefulSet(ctx, cli.Kube, param.Name, param.Namespace, param.RevisionName)
 }
 
+// KubeUpdateStatefulSetResources 快速修改 StatefulSet 容器资源配置
+func (s *Services) KubeUpdateStatefulSetResources(ctx context.Context, cli *K8sClients, param *requests.KubeDeploymentUpdateResourcesRequest) (map[string]interface{}, error) {
+	updated, err := statefulset.PatchStatefulSetResources(
+		ctx, cli.Kube,
+		param.Namespace, param.Name, param.Container,
+		param.CPURequest, param.CPULimit,
+		param.MemoryRequest, param.MemoryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	result := map[string]interface{}{
+		"message":   "资源配置更新成功，StatefulSet 将触发滚动更新",
+		"name":      updated.Name,
+		"namespace": updated.Namespace,
+	}
+	for _, c := range updated.Spec.Template.Spec.Containers {
+		if c.Name == param.Container {
+			res := map[string]string{}
+			if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+				res["cpu_request"] = q.String()
+			}
+			if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+				res["memory_request"] = q.String()
+			}
+			if q, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
+				res["cpu_limit"] = q.String()
+			}
+			if q, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
+				res["memory_limit"] = q.String()
+			}
+			result["resources"] = res
+			break
+		}
+	}
+	return result, nil
+}
+
 // KubeStatefulSetCreateFromYaml 从 YAML 创建 StatefulSet（支持多资源：PVC/ConfigMap/Secret/Service+StatefulSet）
 func (s *Services) KubeStatefulSetCreateFromYaml(ctx context.Context, cli *K8sClients, yamlContent string) (*appv1.StatefulSet, []requests.CreatedResourceInfo, error) {
 	// 1. 使用多资源解析器解析 YAML

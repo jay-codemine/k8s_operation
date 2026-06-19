@@ -1857,21 +1857,21 @@
             <div class="section-label" style="margin-bottom: 8px;">✏️ 新配置</div>
             <div class="resource-form-grid">
               <div class="form-group">
-                <label>Memory Limit <span class="required">*</span></label>
+                <label>内存上限 (Memory Limit) <span class="required">*</span></label>
                 <input v-model="resourceForm.memory_limit" type="text" class="form-input" placeholder="例: 512Mi, 1Gi, 2Gi" />
                 <div class="form-hint">必填，防止 OOM 必须设置内存上限</div>
               </div>
               <div class="form-group">
-                <label>Memory Request</label>
+                <label>内存请求 (Memory Request)</label>
                 <input v-model="resourceForm.memory_request" type="text" class="form-input" placeholder="例: 256Mi, 512Mi" />
                 <div class="form-hint">建议设置为 Limit 的 50%-80%</div>
               </div>
               <div class="form-group">
-                <label>CPU Limit</label>
+                <label>CPU 上限 (CPU Limit)</label>
                 <input v-model="resourceForm.cpu_limit" type="text" class="form-input" placeholder="例: 500m, 1000m, 2" />
               </div>
               <div class="form-group">
-                <label>CPU Request</label>
+                <label>CPU 请求 (CPU Request)</label>
                 <input v-model="resourceForm.cpu_request" type="text" class="form-input" placeholder="例: 100m, 250m" />
               </div>
             </div>

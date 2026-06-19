@@ -31,15 +31,26 @@ spec:
         - name: aliyun-registry
       terminationGracePeriodSeconds: 60   # 优雅退出等待时间（匹配代码中 30s shutdown + 5s cleanup）
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsNonRoot: false
         fsGroup: 1000                     # PVC 文件归属组
+
+      initContainers:
+        - name: fix-permissions
+          image: k8soperation:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "chown -R 1000:1000 /app/storage/logs /app/storage/artifacts"]
+          volumeMounts:
+            - name: log-storage
+              mountPath: /app/storage/logs
+            - name: artifact-storage
+              mountPath: /app/storage/artifacts
+          securityContext:
+            runAsUser: 0
 
       containers:
         - name: k8soperation
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-be:latest
-          imagePullPolicy: Always
+          image: k8soperation:local
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
@@ -51,16 +62,101 @@ spec:
               value: "release"
             - name: APP_CONFIG
               value: "/app/configs/config.yaml"
+            - name: DB_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_TYPE
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_USERNAME
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: k8soperation-secret
                   key: DB_PASSWORD
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_NAME
+            - name: DB_CHARSET
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_CHARSET
+            - name: DB_PARSE_TIME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_PARSE_TIME
+            - name: DB_MAX_IDLE_CONNS
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_MAX_IDLE_CONNS
+            - name: DB_MAX_OPEN_CONNS
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_MAX_OPEN_CONNS
+            - name: DB_MAX_LIFE_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DB_MAX_LIFE_SECONDS
+            - name: CACHE_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_TYPE
+            - name: CACHE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_NAME
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: k8soperation-secret
                   key: REDIS_PASSWORD
+            - name: REDIS_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: REDIS_ADDRESS
+            - name: CACHE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_USERNAME
+            - name: CACHE_MAX_CONNECT
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_MAX_CONNECT
+            - name: CACHE_NETWORK
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_NETWORK
+            - name: CACHE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: CACHE_SECRET
             - name: JWT_SIGNING_KEY
               valueFrom:
                 secretKeyRef:
@@ -102,6 +198,48 @@ spec:
                 secretKeyRef:
                   name: k8soperation-secret
                   key: PLATFORM_FRONTEND_URL
+                  optional: true
+            - name: GIT_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: GIT_CREDENTIAL_ID
+                  optional: true
+            - name: REGISTRY_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: REGISTRY_CREDENTIAL_ID
+                  optional: true
+            - name: HMAC_CREDENTIAL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: HMAC_CREDENTIAL_ID
+                  optional: true
+            - name: ENABLE_DINGTALK
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: ENABLE_DINGTALK
+                  optional: true
+            - name: ENABLE_FEISHU
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: ENABLE_FEISHU
+                  optional: true
+            - name: FEISHU_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: FEISHU_WEBHOOK
+                  optional: true
+            - name: FEISHU_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: FEISHU_SECRET
                   optional: true
 
           # ==================== 健康检查探针 ====================
