@@ -33,5 +33,8 @@ func (r *KubeJobRouter) Inject(router *gin.RouterGroup) {
 		// YAML 操作
 		router.GET("/yaml", job.GetYaml)       // 获取 Job YAML
 		router.PUT("/apply-yaml", job.ApplyYaml) // 应用 YAML 修改
+
+		// 事件
+		router.GET("/events", job.Events)      // 获取 Job 事件
 	}
 }

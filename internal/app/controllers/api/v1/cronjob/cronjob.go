@@ -1,4 +1,4 @@
-﻿package cronjob
+package cronjob
 
 import (
 	"fmt"
@@ -12,6 +12,8 @@ import (
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/k8s/cronjob"
 	"k8soperation/pkg/valid"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
 type KubeCronJobController struct{}
@@ -349,5 +351,131 @@ func (c *KubeCronJobController) Trigger(ctx *gin.Context) {
 		"message":   "CronJob 已手动触发",
 		"job_name":  job.Name,
 		"namespace": job.Namespace,
+	})
+}
+
+// Events godoc
+// @Summary 获取 CronJob 相关事件
+// @Tags K8s CronJob 管理
+// @Produce json
+// @Param namespace query string false "命名空间"
+// @Param name query string false "CronJob 名称"
+// @Param limit query int false "返回条数限制（默认50）"
+// @Param since_seconds query int false "最近N秒的事件"
+// @Success 200 {object} string "成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "内部错误"
+// @Router /api/v1/k8s/cronjob/events [get]
+func (c *KubeCronJobController) Events(ctx *gin.Context) {
+	param := requests.NewKubeEventListRequest()
+	r := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, nil); !ok {
+		return
+	}
+	// 强制 Kind=CronJob
+	if param.Kind == "" {
+		param.Kind = "CronJob"
+	}
+	if param.Limit <= 0 {
+		param.Limit = 50
+	}
+	if param.SinceSeconds <= 0 {
+		param.SinceSeconds = 3600
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := services.NewServices()
+	events, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
+	if err != nil {
+		ctx.Error(err)
+		global.Logger.Error("service.KubeEventList(CronJob) error", zap.Error(err))
+		return
+	}
+	r.Success(gin.H{
+		"events":  events,
+		"next":    next,
+		"message": "已获取到最新的事件记录",
+	})
+}
+
+// GetYaml godoc
+// @Summary 获取 CronJob YAML
+// @Tags K8s CronJob 管理
+// @Produce json
+// @Param namespace query string true "命名空间"
+// @Param name query string true "CronJob 名称"
+// @Success 200 {object} string "成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "内部错误"
+// @Router /api/v1/k8s/cronjob/yaml [get]
+func (c *KubeCronJobController) GetYaml(ctx *gin.Context) {
+	param := requests.NewKubeCronJobDetailRequest()
+	r := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidKubeCronJobDetailRequest); !ok {
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+
+	// 获取 CronJob 对象
+	cj, err := cli.Kube.BatchV1().CronJobs(param.Namespace).Get(ctx.Request.Context(), param.Name, metav1.GetOptions{})
+	if err != nil {
+		ctx.Error(err)
+		global.Logger.Error("获取 CronJob 失败", zap.Error(err))
+		return
+	}
+
+	// 清理 managedFields 减少噪音
+	cj.ManagedFields = nil
+
+	// 转为 YAML
+	yamlBytes, err := yaml.Marshal(cj)
+	if err != nil {
+		ctx.Error(err)
+		global.Logger.Error("序列化 CronJob YAML 失败", zap.Error(err))
+		return
+	}
+
+	r.Success(gin.H{
+		"namespace": param.Namespace,
+		"name":      param.Name,
+		"yaml":      string(yamlBytes),
+	})
+}
+
+// ApplyYaml godoc
+// @Summary 应用 CronJob YAML 配置
+// @Tags K8s CronJob 管理
+// @Accept json
+// @Produce json
+// @Param body body requests.YamlCreateRequest true "YAML 内容"
+// @Success 200 {object} string "成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "内部错误"
+// @Router /api/v1/k8s/cronjob/apply-yaml [put]
+func (c *KubeCronJobController) ApplyYaml(ctx *gin.Context) {
+	req := requests.NewYamlCreateRequest()
+	r := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, req, requests.ValidYamlCreateRequest); !ok {
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+
+	svc := services.NewServices()
+	cronJobObj, err := svc.KubeCronJobUpdateFromYaml(ctx.Request.Context(), cli, req.Yaml)
+	if err != nil {
+		ctx.Error(err)
+		global.Logger.Error("service.KubeCronJobApplyYaml error", zap.Error(err))
+		return
+	}
+
+	r.Success(gin.H{
+		"message":   "YAML 应用成功",
+		"name":      cronJobObj.Name,
+		"namespace": cronJobObj.Namespace,
 	})
 }

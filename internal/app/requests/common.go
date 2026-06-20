@@ -155,14 +155,14 @@ type DeleteOptions struct {
 /* ========== 通用事件查询 DTO ========== */
 
 type KubeEventListRequest struct {
-	Namespace     string `json:"namespace,omitempty" valid:"namespace"` // 为空=全局
-	Kind          string `json:"kind,omitempty"      valid:"kind"`      // Deployment/StatefulSet/DaemonSet/Pod/Node...
-	Name          string `json:"name,omitempty"      valid:"name"`
-	Type          string `json:"type,omitempty"      valid:"type"` // Normal | Warning
-	Reason        string `json:"reason,omitempty"    valid:"reason"`
-	Limit         int64  `json:"limit,omitempty"     valid:"limit"` // 默认 50
-	ContinueToken string `json:"continue,omitempty"  valid:"continue"`
-	SinceSeconds  int64  `json:"since_seconds,omitempty" valid:"since_seconds"`
+	Namespace     string `json:"namespace,omitempty" form:"namespace" valid:"namespace"` // 为空=全局
+	Kind          string `json:"kind,omitempty"      form:"kind"      valid:"kind"`      // Deployment/StatefulSet/DaemonSet/Pod/Node...
+	Name          string `json:"name,omitempty"      form:"name"      valid:"name"`
+	Type          string `json:"type,omitempty"      form:"type"      valid:"type"` // Normal | Warning
+	Reason        string `json:"reason,omitempty"    form:"reason"    valid:"reason"`
+	Limit         int64  `json:"limit,omitempty"     form:"limit"     valid:"limit"` // 默认 50
+	ContinueToken string `json:"continue,omitempty"  form:"continue"  valid:"continue"`
+	SinceSeconds  int64  `json:"since_seconds,omitempty" form:"since_seconds" valid:"since_seconds"`
 }
 
 func NewKubeEventListRequest() *KubeEventListRequest {

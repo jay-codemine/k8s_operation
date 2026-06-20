@@ -713,14 +713,23 @@ func getDeploymentStatus(dp *appv1.Deployment) (status, reason string) {
 		return
 	}
 
-	// 4. 检查是否正在更新
+	// 4. 检查是否正在更新（已更新 Pod 数 < 期望数）
 	if updatedReplicas < desiredReplicas {
 		status = "Updating"
 		reason = fmt.Sprintf("正在滚动更新 (%d/%d 已更新)", updatedReplicas, desiredReplicas)
 		return
 	}
 
-	// 5. 检查就绪状态
+	// 4.5 检查旧 Pod 是否还在终止中（总 Pod 数 > 期望数）
+	// 场景：rolling update replicas=1 时，新 Pod 启动但旧 Pod 尚未删除，
+	// 此时 UpdatedReplicas=1(新Pod) ReadyReplicas=1(旧Pod) 会误报 Running
+	if dp.Status.Replicas > desiredReplicas {
+		status = "Updating"
+		reason = fmt.Sprintf("旧 Pod 终止中 (实际 %d > 期望 %d, 就绪 %d)", dp.Status.Replicas, desiredReplicas, readyReplicas)
+		return
+	}
+
+	// 5. 检查就绪状态（实际就绪数 == 期望数）
 	if readyReplicas < desiredReplicas {
 		status = "Updating"
 		reason = fmt.Sprintf("%d/%d Pod 就绪", readyReplicas, desiredReplicas)
@@ -734,8 +743,8 @@ func getDeploymentStatus(dp *appv1.Deployment) (status, reason string) {
 		return
 	}
 
-	// 7. 一切正常
-	if readyReplicas == desiredReplicas && availableReplicas == desiredReplicas {
+	// 7. 严格判断：总数=期望 且 就绪=期望 且 可用=期望 才是 Running
+	if dp.Status.Replicas == desiredReplicas && readyReplicas == desiredReplicas && availableReplicas == desiredReplicas {
 		status = "Running"
 		reason = "所有副本就绪"
 		return

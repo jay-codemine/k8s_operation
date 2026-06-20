@@ -25,4 +25,11 @@ func (r *KubeCronJobRouter) Inject(router *gin.RouterGroup) {
 	// 调度与运行控制
 	router.PUT("/suspend", cj.Suspend)   // 暂停/恢复：spec.suspend = true/false
 	router.POST("/trigger", cj.Trigger)  // 手动触发：立即创建一个 Job
+
+	// 事件
+	router.GET("/events", cj.Events)     // 获取 CronJob 事件
+
+	// YAML 操作
+	router.GET("/yaml", cj.GetYaml)      // 获取 CronJob YAML
+	router.PUT("/apply-yaml", cj.ApplyYaml) // 应用 YAML 修改
 }
