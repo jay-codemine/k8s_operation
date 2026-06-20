@@ -763,7 +763,7 @@ const activeCategory = ref('')
 const categories = ref([])
 
 // 管理模式（表格视图）
-const viewMode = ref('card') // card | table
+const viewMode = ref('table') // card | table
 const selectedRowKeys = ref([])
 
 // 详情抽屉

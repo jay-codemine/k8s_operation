@@ -539,7 +539,7 @@ export default {
     const pipelines = ref([])
     const searchQuery = ref('')
     const statusFilter = ref('')
-    const viewMode = ref('card')
+    const viewMode = ref('table')
     const currentPage = ref(1)
     const pageSize = ref(12)
     const total = ref(0)
