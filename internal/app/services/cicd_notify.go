@@ -836,29 +836,36 @@ func (s *Services) sendDingTalkNotify(webhook string, msg *DingTalkMessage) {
 }
 
 // sendFeishuNotify 发送飞书通知
+// 飞书签名算法: HMAC-SHA256(key=timestamp+"\n"+secret, data="") → Base64
+// 签名通过 JSON body 传递（timestamp + sign 字段），而非 URL 参数
 func (s *Services) sendFeishuNotify(webhook string, msg *FeishuMessage) {
 	if webhook == "" || msg == nil {
 		global.Logger.Warn("[通知] sendFeishuNotify 跳过: webhook 或 msg 为空")
 		return
 	}
 
-	body, err := json.Marshal(msg)
+	// 构建 payload map 以支持注入签名字段
+	payload := map[string]interface{}{
+		"msg_type": msg.MsgType,
+		"content":  msg.Content,
+	}
+
+	// 如果配置了签名密钥，计算飞书签名并注入 body
+	secret := s.getFeishuSecret()
+	if secret != "" {
+		timestamp := fmt.Sprintf("%d", time.Now().Unix())
+		stringToSign := timestamp + "\n" + secret
+		mac := hmac.New(sha256.New, []byte(stringToSign))
+		mac.Write([]byte{})
+		sign := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+		payload["timestamp"] = timestamp
+		payload["sign"] = sign
+	}
+
+	body, err := json.Marshal(payload)
 	if err != nil {
 		global.Logger.Error("[通知] 序列化飞书消息失败", zap.Error(err))
 		return
-	}
-
-	// 如果配置了签名密钥，生成签名
-	secret := s.getFeishuSecret()
-	finalURL := webhook
-	if secret != "" {
-		timestamp := time.Now().Unix()
-		stringToSign := fmt.Sprintf("%d", timestamp)
-		mac := hmac.New(sha256.New, []byte(stringToSign))
-		mac.Write([]byte(secret))
-		signData := mac.Sum(nil)
-		signature := base64.StdEncoding.EncodeToString(signData)
-		finalURL = fmt.Sprintf("%s&timestamp=%d&sign=%s", webhook, timestamp, signature)
 	}
 
 	global.Logger.Info("[通知] 准备发送飞书消息",
@@ -867,7 +874,7 @@ func (s *Services) sendFeishuNotify(webhook string, msg *FeishuMessage) {
 	)
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(finalURL, "application/json", bytes.NewReader(body))
+	resp, err := client.Post(webhook, "application/json", bytes.NewReader(body))
 	if err != nil {
 		global.Logger.Error("[通知] 发送飞书消息失败",
 			zap.String("title", msg.Content.Post.ZhCn.Title),
@@ -887,7 +894,21 @@ func (s *Services) sendFeishuNotify(webhook string, msg *FeishuMessage) {
 		return
 	}
 
+	// 检查飞书业务错误码
+	var feishuResp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if json.Unmarshal(respBody, &feishuResp) == nil && feishuResp.Code != 0 {
+		global.Logger.Error("[通知] 飞书业务错误",
+			zap.Int("code", feishuResp.Code),
+			zap.String("msg", feishuResp.Msg),
+		)
+		return
+	}
+
 	global.Logger.Info("[通知] 飞书消息发送成功",
+		zap.String("title", msg.Content.Post.ZhCn.Title),
 		zap.String("response", string(respBody)),
 	)
 }

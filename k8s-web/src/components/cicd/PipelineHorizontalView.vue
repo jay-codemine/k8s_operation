@@ -167,6 +167,17 @@
               </svg>
               重新部署
             </button>
+            <button 
+              v-if="selectedStage.type === 'deploy' && selectedStage.status === 'success'"
+              class="action-btn rollback"
+              @click="$emit('rollback', selectedStage)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+              </svg>
+              回滚
+            </button>
             <button class="action-btn logs" @click="$emit('view-logs', selectedStage)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -188,7 +199,7 @@ const props = defineProps({
   stages: { type: Array, default: () => [] }
 })
 
-defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs'])
+defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs', 'rollback'])
 
 const activeTab = ref('all')
 const selectedStage = ref(null)
@@ -743,6 +754,15 @@ watch(runningStage, (stage) => {
 
 .action-btn.retry:hover {
   background: #d97706;
+}
+
+.action-btn.rollback {
+  background: #8b5cf6;
+  color: #fff;
+}
+
+.action-btn.rollback:hover {
+  background: #7c3aed;
 }
 
 .action-btn.logs {

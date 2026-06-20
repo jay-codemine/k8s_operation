@@ -448,6 +448,7 @@
               @approve="handleApproveStage"
               @deploy="handleDeployStage"
               @retry-deploy="handleRetryDeploy"
+              @rollback="handleRollback"
               @view-logs="activeTab = 'logs'; loadLogs()"
             />
           </template>
