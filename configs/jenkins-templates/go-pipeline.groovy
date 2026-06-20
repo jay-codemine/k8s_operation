@@ -251,8 +251,8 @@ spec:
                         sh """
                             set -e
                             mkdir -p bin
-                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
-                            go build -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
+                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
+                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
                         """
                         echo "[编译] 二进制产物: ${env.BINARY_PATH}"
                     }
