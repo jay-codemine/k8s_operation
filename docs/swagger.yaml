@@ -1963,7 +1963,7 @@ definitions:
           $ref: '#/definitions/models.EnvVar'
         type: array
       git_branch:
-        description: 可选：分支，默认 main
+        description: 可选：分支，留空用配置默认值
         type: string
       git_repo:
         description: 必填：Git 仓库地址

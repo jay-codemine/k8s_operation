@@ -20057,7 +20057,7 @@ const docTemplate = `{
                     }
                 },
                 "git_branch": {
-                    "description": "可选：分支，默认 main",
+                    "description": "可选：分支，留空用配置默认值",
                     "type": "string"
                 },
                 "git_repo": {
