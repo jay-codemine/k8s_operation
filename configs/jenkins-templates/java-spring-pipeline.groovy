@@ -542,6 +542,7 @@ DOCKERFILE_EOF
                                 --context=. \
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
+                                --customPlatform=linux/amd64 \
                                 --cache=true \
                                 --cache-repo=${registryHost}/kaniko-cache/java \
                                 --build-arg JAVA_VERSION=${javaVersion} \
