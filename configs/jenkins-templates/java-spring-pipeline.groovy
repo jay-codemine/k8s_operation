@@ -523,11 +523,16 @@ DOCKERFILE_EOF
                             }
                         }
 
-                        // 配置镜像仓库认证
+                        // 配置镜像仓库认证（使用 base64 编码避免密码特殊字符破坏 JSON）
                         def registryHost = params.IMAGE_REPO.split('/')[0]
+                        def dockerConfigJson = groovy.json.JsonOutput.toJson([
+                            auths: [(registryHost): [username: env.REGISTRY_CREDS_USR, password: env.REGISTRY_CREDS_PSW]]
+                        ])
+                        def encodedConfig = dockerConfigJson.bytes.encodeBase64().toString()
                         sh """
                             mkdir -p /kaniko/.docker
-                            echo '{"auths":{"${registryHost}":{"username":"${REGISTRY_CREDS_USR}","password":"${REGISTRY_CREDS_PSW}"}}}' > /kaniko/.docker/config.json
+                            echo '${encodedConfig}' | base64 -d > /kaniko/.docker/config.json
+                            echo '[Kaniko Auth] registry=${registryHost} user=${REGISTRY_CREDS_USR}'
                         """
 
                         // Kaniko 构建 + 推送
