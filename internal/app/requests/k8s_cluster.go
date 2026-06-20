@@ -91,24 +91,14 @@ type K8sClusterListRequest struct {
 }
 
 func NewK8sClusterListRequest() *K8sClusterListRequest {
-	return &K8sClusterListRequest{}
+	return &K8sClusterListRequest{
+		Page:  1,
+		Limit: 100,
+	}
 }
 
 func ValidK8sClusterListRequest(data interface{}, ctx *gin.Context) map[string][]string {
-	rules := govalidator.MapData{
-		"page":  []string{"required"},
-		"limit": []string{"required"},
-	}
-	messages := govalidator.MapData{
-		"page": []string{
-			"required: 页码为必填项(page)",
-		},
-		"limit": []string{
-			"required: 每页数量为必填项(limit)",
-		},
-	}
-
-	return valid.ValidateOptions(data, rules, messages)
+	return nil // 全部可选，默认值由 NewK8sClusterListRequest 提供
 }
 
 // =======================
