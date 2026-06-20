@@ -11,7 +11,7 @@
           </svg>
         </div>
         <div class="header-text">
-          <h1>{{ isEdit ? '编辑流水线' : '创建流水线' }}</h1>
+          <h1>{{ isEdit ? '编辑流水线' : '快速创建流水线' }}</h1>
           <p>配置 CI/CD 流水线，实现代码自动构建和部署</p>
         </div>
       </div>
@@ -38,136 +38,10 @@
     </div>
 
     <div class="wizard-body">
-      <!-- 快速创建模式切换 -->
-      <div v-if="!isEdit" class="quick-mode-toggle">
-        <button
-          type="button"
-          :class="['mode-btn', { active: !quickMode }]"
-          @click="quickMode = false"
-        >完整模式</button>
-        <button
-          type="button"
-          :class="['mode-btn', { active: quickMode }]"
-          @click="quickMode = true"
-        >极简模式</button>
-      </div>
 
-      <!-- 极简快速创建表单 -->
-      <div v-if="quickMode && !isEdit" class="quick-create-panel">
-        <div class="quick-header">
-          <div class="quick-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-          </div>
-          <div>
-            <h2>极简创建</h2>
-            <p>填写应用名、仓库地址、语言类型即可，Jenkins 全程自动配置</p>
-          </div>
-        </div>
 
-        <div class="quick-form">
-          <div class="quick-field">
-            <label>应用名称 <span class="required">*</span></label>
-            <input v-model="pipelineData.name" class="form-input" placeholder="例如: user-service 或 springboot-hello" @blur="checkName" />
-            <div v-if="nameChecking" class="input-hint" style="color:#94a3b8">… 检查中</div>
-            <div v-else-if="nameAvailable === false" class="input-hint" style="color:#ef4444">❌ {{ nameCheckMsg }}</div>
-            <div v-else-if="nameAvailable === true" class="input-hint" style="color:#22c55e">✅ 名称可用</div>
-            <div v-else class="input-hint">建议小写字母 + 连字符，同时作为 K8s 工作负载名称</div>
-          </div>
-
-          <div class="quick-field">
-            <label>Git 仓库地址 <span class="required">*</span></label>
-            <input v-model="pipelineData.git_repo" class="form-input" placeholder="https://gitee.com/org/project.git" />
-          </div>
-
-          <div class="quick-field">
-            <label>语言/框架类型 <span class="required">*</span></label>
-            <div class="quick-lang-selector">
-              <div
-                v-for="opt in serviceTypeOptions.filter(o => o.value !== 'custom')"
-                :key="opt.value"
-                :class="['lang-chip', { selected: pipelineData.language_type === opt.value }]"
-                @click="pipelineData.language_type = opt.value; selectedServiceType = opt.value"
-              >
-                <span class="lang-dot" :style="{ backgroundColor: opt.color }"></span>
-                {{ opt.label }}
-              </div>
-            </div>
-            <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
-          </div>
-
-          <div class="quick-field">
-            <label>镜像仓库地址 <span class="optional">(推荐填写)</span></label>
-            <input v-model="pipelineData.image_repo" class="form-input" placeholder="harbor.example.com/project/app-name" />
-            <div class="input-hint">告诉 Jenkins 镜像推送到哪里，发布时自动使用</div>
-          </div>
-
-          <div class="quick-deploy-section">
-            <label class="quick-toggle-label">
-              <input type="checkbox" v-model="pipelineData.auto_deploy" />
-              <span>构建成功后自动部署到 K8s</span>
-            </label>
-            <div v-if="pipelineData.auto_deploy" class="quick-deploy-fields">
-              <!-- 无集群时的提示 -->
-              <div v-if="clusters.length === 0" class="quick-empty-cluster">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <span>暂无可用集群，请先在<strong>集群管理</strong>中添加 K8s 集群</span>
-              </div>
-              <div v-else>
-                <div class="quick-field-row">
-                  <div class="quick-field half">
-                    <label>目标集群 <span class="required">*</span></label>
-                    <select v-model="pipelineData.target_cluster_id" class="form-input" @change="onClusterChange">
-                      <option :value="0">请选择集群</option>
-                      <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.cluster_name || c.name }}</option>
-                    </select>
-                  </div>
-                  <div class="quick-field half">
-                    <label>命名空间</label>
-                    <select v-if="pipelineData.target_cluster_id" v-model="pipelineData.target_namespace" class="form-input">
-                      <option value="">default</option>
-                      <option v-for="ns in namespaces" :key="ns.name || ns.metadata?.name" :value="ns.name || ns.metadata?.name">
-                        {{ ns.name || ns.metadata?.name }}
-                      </option>
-                    </select>
-                    <input v-else v-model="pipelineData.target_namespace" class="form-input" placeholder="先选择集群" disabled />
-                  </div>
-                </div>
-                <div class="quick-auto-hint">
-                  工作负载名称、容器名称将自动使用流水线名称，部署环境默认 dev
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="quick-footer">
-          <div class="quick-auto-list">
-            <span class="auto-badge">自动</span>
-            Jenkins Job • 构建模板 • 凭证配置 • 回调地址 • 环境变量
-          </div>
-          <button
-            type="button"
-            class="btn-quick-submit"
-            @click="quickSubmit"
-            :disabled="submitting || !pipelineData.name || !pipelineData.git_repo"
-          >
-            <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-            <span v-if="submitting" class="loading-spinner-sm"></span>
-            {{ submitting ? '创建中...' : '立即创建' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 完整模式：左侧步骤导航 -->
-      <div class="wizard-sidebar" v-show="!quickMode || isEdit">
+      <!-- 左侧步骤导航 -->
+      <div class="wizard-sidebar">
         <div class="steps-container">
           <div
             v-for="(step, index) in steps"
@@ -206,7 +80,7 @@
       </div>
 
       <!-- 右侧表单内容 -->
-      <div class="wizard-content" v-show="!quickMode || isEdit">
+      <div class="wizard-content">
         <form @submit.prevent="submit">
           <!-- Step 1: 应用信息（应用名 + 语言类型 + Git仓库 + 分支） -->
           <div v-show="currentStep === 0" class="step-panel">
@@ -420,8 +294,8 @@
 
             <div class="form-card">
               <!-- 默认顯示：构建功能开关 -->
-              <!-- Jenkins 高级配置（URL/Job）默认折叠 -->
-              <div class="form-group">
+              <!-- Jenkins 高级配置已自动处理，隐藏不显示 -->
+              <div class="form-group" v-show="false">
                 <div
                   class="advanced-toggle"
                   @click="showJenkinsAdvanced = !showJenkinsAdvanced"
@@ -906,18 +780,8 @@
                   </div>
                 </div>
 
-                <!-- Git 凭证 ID + 跳过测试 -->
+                <!-- Git 凭证 ID 已自动配置，仅保留跳过测试 -->
                 <div class="form-row">
-                  <div class="form-group half">
-                    <label class="form-label">Git 凭证 ID</label>
-                    <input
-                      type="text"
-                      v-model="pipelineData.git_credential_id"
-                      class="form-input"
-                      placeholder="gitee-id"
-                    />
-                    <div class="input-hint">Jenkins 中配置的 Git 凭证 ID</div>
-                  </div>
                   <div class="form-group half">
                     <label class="form-label">跳过单元测试</label>
                     <div class="toggle-row compact">
@@ -982,8 +846,8 @@
             </div>
           </div>
 
-          <!-- Step 3: 部署策略 -->
-          <div v-show="currentStep === 2" class="step-panel">
+          <!-- Step 3 (部署策略) 已移除，使用默认配置 -->
+          <div v-show="false" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon deploy">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1223,8 +1087,8 @@
             </div>
           </div>
 
-          <!-- Step 4: 自动部署配置 -->
-          <div v-show="currentStep === 3" class="step-panel">
+          <!-- Step 3: 自动部署配置 (now step index 2) -->
+          <div v-show="currentStep === 2" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon auto-deploy">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1255,94 +1119,7 @@
 
               <!-- 自动部署配置详情 -->
               <div v-if="pipelineData.auto_deploy" class="auto-deploy-config">
-                <!-- 部署环境选择 -->
-                <div class="form-group">
-                  <label class="form-label">
-                    部署环境
-                    <span class="required">*</span>
-                  </label>
-                  <div class="env-selector">
-                    <div
-                      v-for="env in deployEnvOptions"
-                      :key="env.value"
-                      :class="['env-card', { selected: pipelineData.deploy_env === env.value }]"
-                      @click="selectDeployEnv(env.value)"
-                    >
-                      <div class="env-indicator" :style="{ backgroundColor: env.color }"></div>
-                      <div class="env-info">
-                        <span class="env-name">{{ env.label }}</span>
-                        <span class="env-desc">{{ env.description }}</span>
-                      </div>
-                      <div v-if="pipelineData.deploy_env === env.value" class="env-check">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 部署审批开关（所有环境可配置） -->
-                <div class="form-group">
-                  <div :class="['toggle-row', { warning: pipelineData.deploy_env === 'prod' }]">
-                    <div class="toggle-info">
-                      <label class="form-label">
-                        部署前审批
-                        <span v-if="pipelineData.deploy_env === 'prod'" class="env-tag prod">生产环境建议开启</span>
-                      </label>
-                      <p class="toggle-desc">部署前需要人工审批确认，防止误操作</p>
-                    </div>
-                    <label class="toggle-switch">
-                      <input type="checkbox" v-model="pipelineData.require_approval" />
-                      <span :class="['toggle-slider', { warning: pipelineData.deploy_env === 'prod' }]"></span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- 发布联动告警静默 -->
-                <div class="form-group">
-                  <div class="toggle-row">
-                    <div class="toggle-info">
-                      <label class="form-label">
-                        发布静默告警
-                        <span class="env-tag info">推荐开启</span>
-                      </label>
-                      <p class="toggle-desc">部署期间自动静默 warning/info 级别告警，避免滚动更新触发误报</p>
-                    </div>
-                    <label class="toggle-switch">
-                      <input type="checkbox" v-model="pipelineData.enable_deploy_silence" />
-                      <span class="toggle-slider"></span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- 发布静默配置详情 -->
-                <div v-if="pipelineData.enable_deploy_silence" class="silence-config-panel">
-                  <div class="form-row">
-                    <div class="form-group flex-1">
-                      <label class="form-label">静默缓冲时间（分钟）</label>
-                      <input
-                        type="number"
-                        v-model.number="pipelineData.silence_buffer_minutes"
-                        class="form-input"
-                        min="1"
-                        max="25"
-                        placeholder="10"
-                      />
-                      <div class="input-hint">部署完成后额外保留静默的时间，让新 Pod 稳定</div>
-                    </div>
-                    <div class="form-group flex-1">
-                      <label class="form-label">静默告警级别</label>
-                      <select v-model="pipelineData.silence_severities" class="form-select">
-                        <option value="warning,info">warning + info（推荐）</option>
-                        <option value="warning">仅 warning</option>
-                        <option value="info">仅 info</option>
-                        <option value="critical,warning,info">全部（含 critical）</option>
-                      </select>
-                      <div class="input-hint">critical 级别默认不静默，避免遗漏严重故障</div>
-                    </div>
-                  </div>
-                </div>
+                <!-- 部署环境/审批/告警 - 快速模式下隐藏，使用默认值(dev环境/无需审批) -->
 
                 <!-- 目标集群选择 -->
                 <div class="form-group">
@@ -1405,24 +1182,7 @@
                   </div>
                 </div>
 
-                <!-- 工作负载类型 -->
-                <div class="form-group">
-                  <label class="form-label">
-                    工作负载类型
-                    <span class="required">*</span>
-                  </label>
-                  <div class="workload-kind-selector">
-                    <div
-                      v-for="kind in workloadKindOptions"
-                      :key="kind.value"
-                      :class="['kind-card', { selected: pipelineData.target_workload_kind === kind.value }]"
-                      @click="selectWorkloadKind(kind.value)"
-                    >
-                      <span class="kind-name">{{ kind.label }}</span>
-                      <span class="kind-desc">{{ kind.description }}</span>
-                    </div>
-                  </div>
-                </div>
+                <!-- 工作负载类型 - 快速模式默认Deployment，隐藏选择器 -->
 
                 <!-- 工作负载名称 -->
                 <div class="form-group">
@@ -1465,17 +1225,7 @@
                   <div class="input-hint">将更新该工作负载的容器镜像</div>
                 </div>
 
-                <!-- 容器名称 -->
-                <div class="form-group">
-                  <label class="form-label">容器名称</label>
-                  <input 
-                    type="text" 
-                    v-model="pipelineData.target_container" 
-                    class="form-input"
-                    placeholder="输入要更新的容器名称，留空则更新第一个容器"
-                  />
-                  <div class="input-hint">指定要更新镜像的容器，留空则更新第一个容器</div>
-                </div>
+                <!-- 容器名称 - 快速模式隐藏，默认更新第一个容器 -->
 
                 <!-- 配置摘要 -->
                 <div class="config-summary">
@@ -1588,11 +1338,10 @@ export default {
     const pipelineId = route.params.id
     const isEdit = !!pipelineId
 
-    // 步骤定义：5步合并为4步（应用信息 + 构建配置 + 部署策略 + 自动部署）
+    // 步骤定义：快速发布 3 步（应用信息 + 构建配置 + 自动部署）
     const steps = ref([
       { id: 'basic', title: '应用信息', description: '名称、语言和仓库' },
       { id: 'jenkins', title: '构建配置', description: '镜像仓库和构建参数' },
-      { id: 'deploy', title: '部署策略', description: '滚动更新参数' },
       { id: 'auto-deploy', title: '自动部署', description: 'K8s 目标配置' }
     ])
 
@@ -1600,8 +1349,8 @@ export default {
     const templates = ref([])
     const selectedTemplateId = ref('')
     const showEnvVars = ref(true)
-    const showResources = ref(true)
-    const quickMode = ref(true) // 默认极简模式
+    const showResources = ref(false)
+    const quickMode = ref(false) // 已废弃，保留变量避免引用报错
     const showJenkinsAdvanced = ref(false) // Jenkins高级配置默认折叠
     const showDescription = ref(false) // 描述字段默认折叠
 
@@ -1773,22 +1522,22 @@ export default {
       enable_artifact_upload: false,  // 制品上传到平台制品库开关
 
       deploy_config: {
-        replicas: 3,
+        replicas: 1,
         strategy: 'rollingUpdate',
         resources: {
-          limits: { cpu: '500m', memory: '512Mi' },
-          requests: { cpu: '200m', memory: '256Mi' }
+          limits: { cpu: '200m', memory: '256Mi' },
+          requests: { cpu: '100m', memory: '128Mi' }
         }
       },
       // 自动部署配置
-      auto_deploy: false,
+      auto_deploy: true,
       target_cluster_id: 0,
       target_namespace: '',
       target_workload_kind: 'Deployment',
       target_workload_name: '',
       target_container: '',
       deploy_env: 'dev',
-      require_approval: true,
+      require_approval: false,
       // 发布联动告警静默
       enable_deploy_silence: false,
       silence_buffer_minutes: 10,
@@ -2373,6 +2122,11 @@ export default {
         if (res.code === 0 && res.data) {
           // 后端已做权限过滤，直接展示所有返回的集群
           clusters.value = res.data.list || []
+          // 快速模式：自动选择第一个集群（开发环境只有一个集群）
+          if (!isEdit && clusters.value.length > 0 && !pipelineData.value.target_cluster_id) {
+            pipelineData.value.target_cluster_id = clusters.value[0].id
+            loadNamespaces()
+          }
         }
       } catch (error) {
         console.error('加载集群失败:', error)
@@ -2529,9 +2283,20 @@ export default {
       return option ? option.label : env
     }
 
+    // 快速模式：应用名称自动同步到工作负载名称（仅新建时）
+    watch(() => pipelineData.value.name, (newName) => {
+      if (!isEdit && newName) {
+        // 自动填充工作负载名称（仅当用户未手动修改过时）
+        if (!pipelineData.value.target_workload_name || pipelineData.value.target_workload_name === pipelineData.value._lastAutoName) {
+          pipelineData.value.target_workload_name = newName
+          pipelineData.value._lastAutoName = newName
+        }
+      }
+    })
+
     onMounted(async () => {
       loadTemplates()
-      loadClusters() // 极简模式也需要集群列表
+      loadClusters() // 加载集群列表并自动选择默认集群
       if (isEdit) {
         // 编辑模式：先加载流水线数据（含语言类型、环境），再按实际参数加载资源模板
         await loadPipelineData()

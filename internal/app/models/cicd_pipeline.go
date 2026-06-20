@@ -39,11 +39,12 @@ const (
 )
 
 // DefaultJenkinsJobMap 语言类型 -> Jenkins 通用 Builder Job 名称
+// Job 命名与 configs/jenkins-templates/ 下的模板文件对应
 var DefaultJenkinsJobMap = map[string]string{
-	LanguageTypeGo:       "k8s-builder-go",
-	LanguageTypeJava:     "k8s-builder-java",
-	LanguageTypeFrontend: "k8s-builder-frontend",
-	LanguageTypePython:   "k8s-builder-python",
+	LanguageTypeGo:       "go-pipeline",
+	LanguageTypeJava:     "java-spring-pipeline",
+	LanguageTypeFrontend: "frontend-pipeline",
+	LanguageTypePython:   "python-pipeline",
 }
 
 // DefaultScriptPathMap 语言类型 -> Jenkins Pipeline Script Path

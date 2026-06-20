@@ -1,12 +1,15 @@
-﻿package node
+package node
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
@@ -260,9 +263,19 @@ func (ctl *KubeNodeController) Metrics(ctx *gin.Context) {
 	svc := services.NewServices()
 	items, total, err := svc.KubeNodeMetricsList(ctx.Request.Context(), cli, param)
 	if err != nil {
-		ctx.Error(err)
-		global.Logger.Errorf("获取 Node 指标失败")
-		global.Logger.Error("service.KubeNodeMetricsList error", zap.Error(err))
+		global.Logger.Warn("获取 Node 指标失败", zap.Error(err))
+
+		// metrics-server 不可用时返回空列表而非 500
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "metrics") || strings.Contains(errMsg, "not available") || strings.Contains(errMsg, "could not find the requested resource") {
+			r.SuccessList([]models.NodeMetricItem{}, gin.H{
+				"total":   0,
+				"message": "metrics-server 未安装或不可用，指标数据暂不可用",
+			})
+			return
+		}
+
+		r.ToErrorResponse(errorcode.ErrorMetricsServerUnavailable.WithDetails(errMsg))
 		return
 	}
 
