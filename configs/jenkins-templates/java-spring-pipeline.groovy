@@ -512,7 +512,7 @@ ${agentEnvLines}${otelOptsValue ? "ENV OTEL_OPTS=\"${otelOptsValue}\"\n" : ''}EN
 -XX:HeapDumpPath=/app/logs \\
 -Xlog:gc*:file=/app/logs/gc.log:time,uptime,level \\
 -Djava.security.egd=file:/dev/./urandom"
-ENTRYPOINT ["sh", "-c", "exec java \\\$OTEL_OPTS \\\$JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
 """
                                 sh """
 cat > ${dockerfile} << 'DOCKERFILE_EOF'
