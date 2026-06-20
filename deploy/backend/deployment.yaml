@@ -31,14 +31,21 @@ spec:
         - name: aliyun-registry
       terminationGracePeriodSeconds: 60   # 优雅退出等待时间（匹配代码中 30s shutdown + 5s cleanup）
       securityContext:
-        runAsNonRoot: false
-        fsGroup: 1000                     # PVC 文件归属组
+        runAsUser: 1000             # 明确指定以 app 用户（UID=1000）运行，与 Dockerfile USER app 一致
+        runAsGroup: 1000
+        runAsNonRoot: true          # 禁止以 root 运行，增强安全性
+        fsGroup: 1000               # PVC 挂载目录的 GID，确保文件组归属正确
 
       initContainers:
         - name: fix-permissions
-          image: k8soperation:local
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/alpine:3.20
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "chown -R 1000:1000 /app/storage/logs /app/storage/artifacts"]
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 1000:1000 /app/storage/logs /app/storage/artifacts
+              chmod -R 775 /app/storage/logs /app/storage/artifacts
           volumeMounts:
             - name: log-storage
               mountPath: /app/storage/logs
