@@ -618,7 +618,7 @@ func BuildDeploymentListResponse(deployments []appv1.Deployment) []DeploymentLis
 		}
 
 		// 获取状态
-		status, reason := getDeploymentStatus(&dp)
+		status, reason := GetDeploymentStatus(&dp)
 
 		item := DeploymentListItem{
 			Name:              dp.Name,
@@ -644,8 +644,8 @@ func BuildDeploymentListResponse(deployments []appv1.Deployment) []DeploymentLis
 	return result
 }
 
-// getDeploymentStatus 根据 Deployment 的 status 判断状态
-func getDeploymentStatus(dp *appv1.Deployment) (status, reason string) {
+// GetDeploymentStatus 根据 Deployment 的 status 判断状态（实际就绪=期望才是Running）
+func GetDeploymentStatus(dp *appv1.Deployment) (status, reason string) {
 	// 默认状态
 	status = "Unknown"
 	reason = ""

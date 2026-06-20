@@ -161,9 +161,12 @@ func (c *KubeDaemonSetController) Detail(ctx *gin.Context) {
 		global.Logger.Error("service.KubeDaemonSetDetail error", zap.Error(err))
 		return
 	}
+	status, statusReason := dspkg.GetDaemonSetStatus(ds)
 	r.Success(gin.H{
-		"message": "获取 DaemonSet 详情成功",
-		"data":    ds,
+		"message":       "获取 DaemonSet 详情成功",
+		"status":        status,
+		"status_reason": statusReason,
+		"data":          ds,
 	})
 }
 

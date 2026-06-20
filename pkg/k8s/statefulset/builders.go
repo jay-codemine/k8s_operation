@@ -416,7 +416,7 @@ func BuildStatefulSetListResponse(statefulsets []appv1.StatefulSet) []StatefulSe
 		}
 
 		// 获取状态
-		status, reason := getStatefulSetStatus(&sts)
+		status, reason := GetStatefulSetStatus(&sts)
 
 		item := StatefulSetListItem{
 			Name:            sts.Name,
@@ -443,8 +443,8 @@ func BuildStatefulSetListResponse(statefulsets []appv1.StatefulSet) []StatefulSe
 	return result
 }
 
-// getStatefulSetStatus 根据 StatefulSet 的 status 判断状态
-func getStatefulSetStatus(sts *appv1.StatefulSet) (status, reason string) {
+// GetStatefulSetStatus 根据 StatefulSet 的 status 判断状态（实际就绪=期望才是Running）
+func GetStatefulSetStatus(sts *appv1.StatefulSet) (status, reason string) {
 	// 默认状态
 	status = "Unknown"
 	reason = ""

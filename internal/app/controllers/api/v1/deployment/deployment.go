@@ -84,9 +84,12 @@ func (c *KubeDeploymentController) Detail(ctx *gin.Context) {
 		global.Logger.Error("service.KubeDeploymentDetail error", zap.Error(err))
 		return
 	}
+	status, statusReason := deployment.GetDeploymentStatus(dp)
 	r.Success(gin.H{
-		"message": "获取 Deployment 详情成功",
-		"data":    dp,
+		"message":       "获取 Deployment 详情成功",
+		"status":        status,
+		"status_reason": statusReason,
+		"data":          dp,
 	})
 }
 

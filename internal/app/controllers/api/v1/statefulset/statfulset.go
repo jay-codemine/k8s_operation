@@ -162,9 +162,12 @@ func (c *KubeStatefulSetController) Detail(ctx *gin.Context) {
 		return // ← 修复：错误时必须 return
 	}
 
+	status, statusReason := stsbuilder.GetStatefulSetStatus(sts)
 	r.Success(gin.H{
-		"message": "获取详情成功",
-		"result":  sts,
+		"message":       "获取详情成功",
+		"status":        status,
+		"status_reason": statusReason,
+		"result":        sts,
 	})
 }
 

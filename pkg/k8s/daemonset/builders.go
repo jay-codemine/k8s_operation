@@ -339,7 +339,7 @@ func BuildDaemonSetListResponse(daemonsets []appv1.DaemonSet) []DaemonSetListIte
 		}
 
 		// 获取状态
-		status, reason := getDaemonSetStatus(&ds)
+		status, reason := GetDaemonSetStatus(&ds)
 
 		item := DaemonSetListItem{
 			Name:                   ds.Name,
@@ -365,8 +365,8 @@ func BuildDaemonSetListResponse(daemonsets []appv1.DaemonSet) []DaemonSetListIte
 	return result
 }
 
-// getDaemonSetStatus 根据 DaemonSet 的 status 判断状态
-func getDaemonSetStatus(ds *appv1.DaemonSet) (status, reason string) {
+// GetDaemonSetStatus 根据 DaemonSet 的 status 判断状态（实际就绪=期望才是Running）
+func GetDaemonSetStatus(ds *appv1.DaemonSet) (status, reason string) {
 	// 默认状态
 	status = "Unknown"
 	reason = ""
