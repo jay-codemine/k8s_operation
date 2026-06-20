@@ -267,6 +267,7 @@ const (
 	StageTypeUploadArtifact = "upload_artifact" // 上传制品到制品库
 	StageTypeBuild          = "build"           // 构建镜像
 	StageTypePush           = "push"            // 推送镜像
+	StageTypePrepareAgents  = "prepare_agents"  // 准备构建探针
 	StageTypeApproval       = "approval"        // 人工审批
 	StageTypeDeploy         = "deploy"          // 部署
 )
