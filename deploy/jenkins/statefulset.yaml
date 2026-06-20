@@ -32,22 +32,12 @@ spec:
         - name: install-plugins
           image: jenkins/jenkins:lts
           command:
-            - jenkins-plugin-cli
-            - --plugins
-            - >-
-              kubernetes
-              workflow-aggregator
-              git
-              configuration-as-code
-              credentials-binding
-              http_request
-              pipeline-utility-steps
-              junit
-              sonar
-              pipeline-stage-view
-              timestamper
-              ws-cleanup
-              ansicolor
+            - sh
+            - -c
+            - |
+              echo "[init] 跳过自动安装，Jenkins 启动后请从 UI 手动安装插件"
+              # 若网络恢复可取消注释下面这行自动安装
+              # jenkins-plugin-cli --plugins kubernetes workflow-aggregator git configuration-as-code credentials-binding http_request pipeline-utility-steps junit sonar pipeline-stage-view timestamper ws-cleanup ansicolor || true
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
