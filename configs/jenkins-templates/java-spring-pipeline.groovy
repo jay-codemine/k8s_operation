@@ -204,10 +204,11 @@ spec:
                 echo "=== Maven 编译 & 打包 ==="
                 container('maven') {
                     script {
-                        // 生成阿里云 Maven 镜像 settings.xml
+                        // 生成阿里云 Maven 镜像 settings.xml（直接用 sh 写入，避免 JNLP 权限问题）
                         def settingsFile = "${env.WORKSPACE}/.m2/settings.xml"
-                        sh "mkdir -p ${env.WORKSPACE}/.m2"
-                        writeFile file: settingsFile, text: """\
+                        sh """
+                            mkdir -p ${env.WORKSPACE}/.m2
+                            cat > ${env.WORKSPACE}/.m2/settings.xml << 'SETTINGS_EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <settings>
   <mirrors>
@@ -219,7 +220,8 @@ spec:
     </mirror>
   </mirrors>
 </settings>
-"""
+SETTINGS_EOF
+                        """
                         env.MVN_SETTINGS = settingsFile
 
                         sh 'java -version 2>&1 | head -1'
@@ -494,7 +496,7 @@ ${agentJavaOpts} \
 -Dotel.logs.exporter=none \
 -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
 
-                                writeFile file: dockerfile, text: """\
+                                def dockerfileContent = """\
 FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${javaVersion}-jre-alpine
 ENV TZ=Asia/Shanghai
 WORKDIR /app
@@ -510,7 +512,12 @@ ${agentEnvLines}${otelOptsValue ? "ENV OTEL_OPTS=\"${otelOptsValue}\"\n" : ''}EN
 -XX:HeapDumpPath=/app/logs \\
 -Xlog:gc*:file=/app/logs/gc.log:time,uptime,level \\
 -Djava.security.egd=file:/dev/./urandom"
-ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java \\\$OTEL_OPTS \\\$JAVA_OPTS -jar /app/app.jar"]
+"""
+                                sh """
+cat > ${dockerfile} << 'DOCKERFILE_EOF'
+${dockerfileContent}
+DOCKERFILE_EOF
 """
                                 echo "[Build Image] 自动生成 Dockerfile（注入 ${agentCopyLines.count('COPY')} 个探针）"
                             }

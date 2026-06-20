@@ -25,3 +25,11 @@ var (
 	AIRegistry        *openai.Registry             // AI 多模型注册中心
 	LDAPSetting       *setting.LDAPSettingS        // LDAP 认证配置
 )
+
+// DefaultBranch 返回配置的默认 Git 分支，未配置时返回 "master"
+func DefaultBranch() string {
+	if JenkinsSetting != nil && JenkinsSetting.DefaultBranch != "" {
+		return JenkinsSetting.DefaultBranch
+	}
+	return "master"
+}

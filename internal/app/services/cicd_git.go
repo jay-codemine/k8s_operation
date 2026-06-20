@@ -134,7 +134,7 @@ func (s *Services) getDefaultBranch(ctx context.Context, repoURL string) (string
 	cmd := exec.CommandContext(cmdCtx, "git", "ls-remote", "--symref", repoURL, "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
-		return "main", nil // 默认返回 main
+		return global.DefaultBranch(), nil // 默认返回配置的分支
 	}
 
 	// 解析输出: ref: refs/heads/main	HEAD
@@ -151,7 +151,7 @@ func (s *Services) getDefaultBranch(ctx context.Context, repoURL string) (string
 		}
 	}
 
-	return "main", nil
+	return global.DefaultBranch(), nil
 }
 
 // sortBranches 对分支进行排序
@@ -199,14 +199,17 @@ func (s *Services) getBranchPriority(name string) int {
 
 // generateDefaultBranches 生成默认分支列表（当无法获取远程分支时）
 func (s *Services) generateDefaultBranches(host string) []requests.GitBranch {
-	return []requests.GitBranch{
-		{Name: "main", IsDefault: true},
-		{Name: "master", IsDefault: false},
-		{Name: "develop", IsDefault: false},
-		{Name: "release", IsDefault: false},
-		{Name: "staging", IsDefault: false},
-		{Name: "feature/example", IsDefault: false},
+	defBranch := global.DefaultBranch()
+	branches := []requests.GitBranch{
+		{Name: defBranch, IsDefault: true},
 	}
+	// 补充常见分支
+	for _, name := range []string{"main", "master", "develop", "release", "staging", "feature/example"} {
+		if name != defBranch {
+			branches = append(branches, requests.GitBranch{Name: name, IsDefault: false})
+		}
+	}
+	return branches
 }
 
 // GitValidateRepo 验证 Git 仓库连接

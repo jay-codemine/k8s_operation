@@ -56,6 +56,18 @@ func (c *PipelineController) Create(ctx *gin.Context) {
 	if len(warnings) > 0 {
 		result["warnings"] = warnings
 	}
+
+	// 创建成功后自动触发第一次构建
+	runReq := &requests.PipelineRunRequest{ID: id}
+	run, runErr := svc.PipelineRun(ctx.Request.Context(), runReq, userID)
+	if runErr != nil {
+		global.Logger.Warn("[流水线] 创建后自动触发构建失败", zap.Int64("pipeline_id", id), zap.Error(runErr))
+		result["auto_run_error"] = runErr.Error()
+	} else if run != nil {
+		result["run_id"] = run.ID
+		result["message"] = "流水线创建成功并已自动触发构建"
+	}
+
 	rsp.Success(result)
 }
 
@@ -673,7 +685,7 @@ func (c *PipelineController) TemplateSimulate(ctx *gin.Context) {
 
 	languageType := ctx.Query("language_type")
 	gitRepo := ctx.Query("git_repo")
-	gitBranch := ctx.DefaultQuery("git_branch", "main")
+	gitBranch := ctx.DefaultQuery("git_branch", global.DefaultBranch())
 	imageRepo := ctx.Query("image_repo")
 
 	if languageType == "" || gitRepo == "" || imageRepo == "" {

@@ -65,7 +65,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	// 警告 1：Git 仓库+分支冲突
 	gitBranchForCheck := req.GitBranch
 	if gitBranchForCheck == "" {
-		gitBranchForCheck = "main"
+		gitBranchForCheck = global.DefaultBranch()
 	}
 	conflictPipelines, _ := s.dao.PipelineGetByGitRepoBranch(ctx, req.GitRepo, gitBranchForCheck, 0)
 	if len(conflictPipelines) > 0 {
@@ -120,10 +120,10 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	}
 
 	// ==================== 智能默认值：简化首次创建 ====================
-	// 分支默认 main
+	// 分支默认从配置读取
 	gitBranch := req.GitBranch
 	if gitBranch == "" {
-		gitBranch = "main"
+		gitBranch = global.DefaultBranch()
 	}
 	// 工作负载类型默认 Deployment
 	workloadKind := req.TargetWorkloadKind
@@ -435,7 +435,7 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 
 		gitBranch := item.GitBranch
 		if gitBranch == "" {
-			gitBranch = "main"
+			gitBranch = global.DefaultBranch()
 		}
 
 		pipeline := &models.CicdPipeline{

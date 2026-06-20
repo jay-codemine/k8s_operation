@@ -40,7 +40,6 @@ type PipelineCreateRequest struct {
 
 func NewPipelineCreateRequest() *PipelineCreateRequest {
 	return &PipelineCreateRequest{
-		GitBranch:    "main",
 		LanguageType: "custom",
 	}
 }
@@ -74,7 +73,7 @@ type PipelineBatchItem struct {
 	Name         string          `json:"name"`          // 必填：流水线名称
 	Description  string          `json:"description"`   // 可选：描述
 	GitRepo      string          `json:"git_repo"`      // 必填：Git 仓库地址
-	GitBranch    string          `json:"git_branch"`    // 可选：分支，默认 main
+	GitBranch    string          `json:"git_branch"`    // 可选：分支，留空用配置默认值
 	LanguageType string          `json:"language_type"` // 推荐：go/java/frontend/python/custom
 	EnvVars      []models.EnvVar `json:"env_vars"`      // 可选：环境变量
 
