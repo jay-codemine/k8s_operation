@@ -1,0 +1,94 @@
+# ============================================================
+# Jenkins Cache PVs - 静态 hostPath PV（开发/本地环境）
+# 参考：deploy/backend/pv.yaml 的相同模式
+# 用途：为 4 个构建缓存 PVC 提前绑定存储，避免 WaitForFirstConsumer 导致 Pending
+#
+# 注意：jenkins-data PVC 由 standard StorageClass 动态供给，无需在此创建
+# ============================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-go-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: go
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""          # 静态绑定，不使用 StorageClass 动态供给
+  claimRef:                     # 预绑定到指定 PVC，防止被其他 PVC 抢占
+    namespace: devops
+    name: jenkins-go-cache
+  hostPath:
+    path: /data/jenkins/go-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-maven-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: maven
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-maven-cache
+  hostPath:
+    path: /data/jenkins/maven-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-npm-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: npm
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-npm-cache
+  hostPath:
+    path: /data/jenkins/npm-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-pip-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: pip
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-pip-cache
+  hostPath:
+    path: /data/jenkins/pip-cache
+    type: DirectoryOrCreate

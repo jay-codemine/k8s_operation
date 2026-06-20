@@ -40,6 +40,7 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	{
 		pipeline.GET("/list", r.pipelineCtrl.List)         // 获取流水线列表
 		pipeline.GET("/detail", r.pipelineCtrl.Detail)     // 获取流水线详情
+		pipeline.GET("/check-name", r.pipelineCtrl.CheckName) // 检查应用名称是否可用
 		pipeline.POST("/create", r.pipelineCtrl.Create)    // 创建流水线
 		pipeline.POST("/batch-create", r.pipelineCtrl.BatchCreate) // 批量创建流水线（导入多个项目）
 		pipeline.POST("/update", r.pipelineCtrl.Update)    // 更新流水线

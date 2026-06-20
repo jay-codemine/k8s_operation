@@ -663,6 +663,9 @@ definitions:
         type: string
       image_tag:
         type: string
+      message:
+        description: 可选：发布说明/备注
+        type: string
       namespace:
         type: string
       pipeline_id:
@@ -5164,6 +5167,30 @@ paths:
       summary: Jenkins 构建状态回调（生产级）
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/check-name:
+    get:
+      description: 检查指定应用名称是否已被占用
+      parameters:
+      - description: 应用名称
+        in: query
+        name: name
+        required: true
+        type: string
+      - description: 排除的流水线 ID（编辑时使用）
+        in: query
+        name: exclude_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回 available
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 检查应用名称是否可用
+      tags:
+      - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/create:
     post:
       consumes:
@@ -7692,6 +7719,38 @@ paths:
             additionalProperties: true
             type: object
       summary: 回滚 DaemonSet
+      tags:
+      - K8s DaemonSet 管理
+  /api/v1/k8s/daemonset/update-resources:
+    post:
+      consumes:
+      - application/json
+      description: 直接修改 DaemonSet 容器的 CPU/Memory requests/limits
+      parameters:
+      - description: 资源配置
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.KubeDeploymentUpdateResourcesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 快速修改容器资源限制
       tags:
       - K8s DaemonSet 管理
   /api/v1/k8s/daemonset/update_image:
@@ -12719,6 +12778,38 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取 StatefulSet 对应的 Pod 列表
+      tags:
+      - K8s StatefulSet 管理
+  /api/v1/k8s/statefulset/update-resources:
+    post:
+      consumes:
+      - application/json
+      description: 直接修改 StatefulSet 容器的 CPU/Memory requests/limits
+      parameters:
+      - description: 资源配置
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.KubeDeploymentUpdateResourcesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 快速修改容器资源限制
       tags:
       - K8s StatefulSet 管理
   /api/v1/k8s/statefulset/update_image:

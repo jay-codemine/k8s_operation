@@ -30,7 +30,7 @@ func BuildCicdRelease(
 		Concurrency: req.Concurrency,
 
 		Status:  models.CicdReleaseStatusPending,
-		Message: "",
+		Message: req.Message,
 
 		CreatedUserID: userID,
 		RequestID:     resolveRequestID(req.RequestID),

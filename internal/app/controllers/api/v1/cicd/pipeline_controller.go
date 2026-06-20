@@ -45,14 +45,49 @@ func (c *PipelineController) Create(ctx *gin.Context) {
 	userID := ctx.GetInt64("user_id")
 
 	svc := services.NewServices()
-	id, err := svc.PipelineCreate(ctx.Request.Context(), param, userID)
+	id, warnings, err := svc.PipelineCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("PipelineCreate error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorPipelineCreateFail.WithDetails(err.Error()))
 		return
 	}
 
-	rsp.Success(gin.H{"pipeline_id": id})
+	result := gin.H{"pipeline_id": id}
+	if len(warnings) > 0 {
+		result["warnings"] = warnings
+	}
+	rsp.Success(result)
+}
+
+// CheckName godoc
+// @Summary 检查应用名称是否可用
+// @Description 检查指定应用名称是否已被占用
+// @Tags CICD Pipeline
+// @Produce json
+// @Param name query string true "应用名称"
+// @Param exclude_id query int false "排除的流水线 ID（编辑时使用）"
+// @Success 200 {object} map[string]any "返回 available"
+// @Router /api/v1/k8s/cicd/pipeline/check-name [get]
+func (c *PipelineController) CheckName(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	name := ctx.Query("name")
+	if name == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("应用名称不能为空"))
+		return
+	}
+
+	excludeID, _ := strconv.ParseInt(ctx.Query("exclude_id"), 10, 64)
+
+	svc := services.NewServices()
+	available, _, err := svc.PipelineCheckName(ctx.Request.Context(), name, excludeID)
+	if err != nil {
+		global.Logger.Error("PipelineCheckName error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{"available": available})
 }
 
 // BatchCreate godoc

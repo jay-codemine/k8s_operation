@@ -51,6 +51,18 @@ export const createPipeline = (data) => {
 }
 
 /**
+ * 检查应用名称是否可用
+ * @param {string} name - 应用名称
+ * @param {number} [excludeId] - 编辑时排除的流水线 ID
+ * @returns {Promise<{available: boolean}>}
+ */
+export const checkPipelineName = (name, excludeId = 0) => {
+  const params = { name }
+  if (excludeId > 0) params.exclude_id = excludeId
+  return http.get(`${BASE_URL}/check-name`, { params })
+}
+
+/**
  * 更新流水线
  * @param {Object} data - 更新参数，对应后端 PipelineUpdateRequest
  * @param {number} data.id - 流水线ID（必填）

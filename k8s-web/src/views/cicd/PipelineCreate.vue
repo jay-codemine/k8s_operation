@@ -62,15 +62,18 @@
           </div>
           <div>
             <h2>极简创建</h2>
-            <p>只需 3 个字段即可创建流水线，Jenkins 配置全自动</p>
+            <p>填写应用名、仓库地址、语言类型即可，Jenkins 全程自动配置</p>
           </div>
         </div>
 
         <div class="quick-form">
           <div class="quick-field">
-            <label>流水线名称 <span class="required">*</span></label>
-            <input v-model="pipelineData.name" class="form-input" placeholder="例如: user-service" />
-            <div class="input-hint">同时作为 K8s 工作负载名称（自动推导）</div>
+            <label>应用名称 <span class="required">*</span></label>
+            <input v-model="pipelineData.name" class="form-input" placeholder="例如: user-service 或 springboot-hello" @blur="checkName" />
+            <div v-if="nameChecking" class="input-hint" style="color:#94a3b8">… 检查中</div>
+            <div v-else-if="nameAvailable === false" class="input-hint" style="color:#ef4444">❌ {{ nameCheckMsg }}</div>
+            <div v-else-if="nameAvailable === true" class="input-hint" style="color:#22c55e">✅ 名称可用</div>
+            <div v-else class="input-hint">建议小写字母 + 连字符，同时作为 K8s 工作负载名称</div>
           </div>
 
           <div class="quick-field">
@@ -205,7 +208,7 @@
       <!-- 右侧表单内容 -->
       <div class="wizard-content" v-show="!quickMode || isEdit">
         <form @submit.prevent="submit">
-          <!-- Step 1: 基本信息 -->
+          <!-- Step 1: 应用信息（应用名 + 语言类型 + Git仓库 + 分支） -->
           <div v-show="currentStep === 0" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon basic">
@@ -216,15 +219,16 @@
                 </svg>
               </div>
               <div>
-                <h2>基本信息</h2>
-                <p>设置流水线的名称和描述信息</p>
+                <h2>应用信息</h2>
+                <p>设置应用名称、语言类型和代码仓库</p>
               </div>
             </div>
-
+          
             <div class="form-card">
+              <!-- 应用名称 -->
               <div class="form-group">
                 <label class="form-label">
-                  流水线名称
+                  应用名称
                   <span class="required">*</span>
                 </label>
                 <div class="input-wrapper">
@@ -237,49 +241,38 @@
                     type="text"
                     v-model="pipelineData.name"
                     class="form-input with-icon"
-                    placeholder="例如：frontend-deploy-pipeline"
+                    placeholder="例如：user-service 或 springboot-hello"
                     required
+                    @blur="checkName"
                   />
                 </div>
-                <div class="input-hint">使用小写字母、数字和连字符，例如 my-app-pipeline</div>
+                <div v-if="nameChecking" class="input-hint" style="color:#94a3b8">… 检查中</div>
+                <div v-else-if="nameAvailable === false" class="input-hint" style="color:#ef4444">❌ {{ nameCheckMsg }}</div>
+                <div v-else-if="nameAvailable === true" class="input-hint" style="color:#22c55e">✅ 名称可用</div>
+                <div v-else class="input-hint">建议使用小写字母和连字符，同时作为 K8s 工作负载名称</div>
               </div>
-
+          
+              <!-- 语言/框架类型 -->
               <div class="form-group">
-                <label class="form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" @click="showDescription = !showDescription">
-                  描述
-                  <span style="font-size:11px;color:#94a3b8;font-weight:400;">（选填）</span>
-                  <svg :style="{transform:showDescription?'rotate(180deg)':'rotate(0)',transition:'0.2s'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
+                <label class="form-label">
+                  语言/框架类型
+                  <span class="required">*</span>
                 </label>
-                <textarea
-                  v-show="showDescription"
-                  v-model="pipelineData.description"
-                  class="form-textarea"
-                  placeholder="简要描述此流水线的用途..."
-                  rows="2"
-                ></textarea>
+                <div class="quick-lang-selector">
+                  <div
+                    v-for="opt in serviceTypeOptions"
+                    :key="opt.value"
+                    :class="['lang-chip', { selected: pipelineData.language_type === opt.value }]"
+                    @click="pipelineData.language_type = opt.value; selectedServiceType = opt.value"
+                  >
+                    <span class="lang-dot" :style="{ backgroundColor: opt.color }"></span>
+                    {{ opt.label }}
+                  </div>
+                </div>
+                <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
               </div>
-            </div>
-          </div>
-
-          <!-- Step 2: 代码仓库配置 -->
-          <div v-show="currentStep === 1" class="step-panel">
-            <div class="panel-header">
-              <div class="panel-icon git">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="18" r="3"/>
-                  <circle cx="6" cy="6" r="3"/>
-                  <circle cx="18" cy="6" r="3"/>
-                  <path d="M18 9a9 9 0 0 1-9 9"/>
-                  <path d="M6 9a9 9 0 0 0 9 9"/>
-                </svg>
-              </div>
-              <div>
-                <h2>代码仓库</h2>
-                <p>配置 Git 代码仓库和分支信息</p>
-              </div>
-            </div>
-
-            <div class="form-card">
+          
+              <!-- Git 仓库地址 -->
               <div class="form-group">
                 <label class="form-label">
                   Git 仓库地址
@@ -295,7 +288,7 @@
                       type="url"
                       v-model="pipelineData.git_repo"
                       class="form-input with-icon"
-                      placeholder="https://github.com/your-org/your-repo.git"
+                      placeholder="https://gitee.com/your-org/your-repo.git"
                       required
                       @blur="onRepoUrlChange"
                     />
@@ -317,14 +310,15 @@
                   </button>
                 </div>
               </div>
-
+          
+              <!-- 分支 -->
               <div class="form-group">
                 <label class="form-label">
                   分支
                   <span class="required">*</span>
                   <span v-if="branches.length > 0" class="branch-count">（共 {{ branches.length }} 个分支）</span>
                 </label>
-                
+                          
                 <!-- 有分支列表时显示下拉选择 -->
                 <div v-if="branches.length > 0" class="branch-selector">
                   <div class="branch-search">
@@ -367,7 +361,7 @@
                     </div>
                   </div>
                 </div>
-
+          
                 <!-- 没有分支列表时显示输入框 -->
                 <div v-else class="input-wrapper">
                   <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -385,30 +379,31 @@
                   />
                 </div>
                 <div class="input-hint">
-                  <span v-if="branches.length === 0">输入分支名称，或点击上方"获取分支"按钮自动获取</span>
+                  <span v-if="branches.length === 0">输入分支名称，或点击上方“获取分支”按鈕自动获取</span>
                   <span v-else>已选择：<strong>{{ pipelineData.git_branch }}</strong></span>
                 </div>
               </div>
-
-              <!-- Git 配置提示卡片 -->
-              <div class="info-card">
-                <div class="info-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="16" x2="12" y2="12"/>
-                    <line x1="12" y1="8" x2="12.01" y2="8"/>
-                  </svg>
-                </div>
-                <div class="info-content">
-                  <div class="info-title">提示</div>
-                  <div class="info-text">确保仓库地址可访问，并已在 Jenkins 中配置好相应的凭证</div>
-                </div>
+          
+              <!-- 描述（可折叠） -->
+              <div class="form-group">
+                <label class="form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" @click="showDescription = !showDescription">
+                  描述
+                  <span style="font-size:11px;color:#94a3b8;font-weight:400;">(选填)</span>
+                  <svg :style="{transform:showDescription?'rotate(180deg)':'rotate(0)',transition:'0.2s'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
+                </label>
+                <textarea
+                  v-show="showDescription"
+                  v-model="pipelineData.description"
+                  class="form-textarea"
+                  placeholder="简要描述此应用的用途..."
+                  rows="2"
+                ></textarea>
               </div>
             </div>
           </div>
-
-          <!-- Step 3: Jenkins 配置 -->
-          <div v-show="currentStep === 2" class="step-panel">
+          
+          <!-- Step 2: 构建配置 -->
+          <div v-show="currentStep === 1" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon jenkins">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -418,8 +413,8 @@
                 </svg>
               </div>
               <div>
-                <h2>Jenkins 配置</h2>
-                <p>配置 Jenkins 服务器和构建任务</p>
+                <h2>构建配置</h2>
+                <p>镜像仓库和 Jenkins 构建参数</p>
               </div>
             </div>
 
@@ -987,8 +982,8 @@
             </div>
           </div>
 
-          <!-- Step 4: 部署策略 -->
-          <div v-show="currentStep === 3" class="step-panel">
+          <!-- Step 3: 部署策略 -->
+          <div v-show="currentStep === 2" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon deploy">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1228,8 +1223,8 @@
             </div>
           </div>
 
-          <!-- Step 5: 自动部署配置 -->
-          <div v-show="currentStep === 4" class="step-panel">
+          <!-- Step 4: 自动部署配置 -->
+          <div v-show="currentStep === 3" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon auto-deploy">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1576,6 +1571,7 @@ import {
   getResourceTemplates,
   validateResourceConfig
 } from '@/api/cicd.js'
+import { checkPipelineName } from '@/api/platform/pipeline.js'
 import { getClusterList } from '@/api/cluster.js'
 import namespaceApi from '@/api/cluster/config/namespace'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
@@ -1592,11 +1588,10 @@ export default {
     const pipelineId = route.params.id
     const isEdit = !!pipelineId
 
-    // 步骤定义
+    // 步骤定义：5步合并为4步（应用信息 + 构建配置 + 部署策略 + 自动部署）
     const steps = ref([
-      { id: 'basic', title: '基本信息', description: '名称和描述' },
-      { id: 'git', title: '代码仓库', description: 'Git 配置' },
-      { id: 'jenkins', title: 'Jenkins', description: '构建配置' },
+      { id: 'basic', title: '应用信息', description: '名称、语言和仓库' },
+      { id: 'jenkins', title: '构建配置', description: '镜像仓库和构建参数' },
       { id: 'deploy', title: '部署策略', description: '滚动更新参数' },
       { id: 'auto-deploy', title: '自动部署', description: 'K8s 目标配置' }
     ])
@@ -1772,7 +1767,7 @@ export default {
       java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
       skip_tests: false,    // 跳过单元测试
       dockerfile_path: '',  // Dockerfile 路径（空则自动生成）
-      git_credential_id: 'gitee-id',  // Git 凭证 ID
+      git_credential_id: '',  // Jenkins 中配置的 Git 凭证 ID
       env_vars: [],
       enable_sonar: false,  // SonarQube 代码质量扫描开关（Java 项目默认启用）
       enable_artifact_upload: false,  // 制品上传到平台制品库开关
@@ -1801,6 +1796,31 @@ export default {
     })
 
     const submitting = ref(false)
+
+    // 应用名称实时校验状态
+    const nameChecking = ref(false)      // 正在检查中
+    const nameAvailable = ref(null)      // null=未检查, true=可用, false=已占用
+    const nameCheckMsg = ref('')         // 提示信息
+    const createWarnings = ref([])       // 创建成功后的警告信息
+
+    // 应用名称可用性检查（模板：name blur 时触发）
+    const checkName = async () => {
+      const name = pipelineData.value.name.trim()
+      if (!name) { nameAvailable.value = null; nameCheckMsg.value = ''; return }
+      nameChecking.value = true
+      nameAvailable.value = null
+      try {
+        const res = await checkPipelineName(name, isEdit ? Number(pipelineId) : 0)
+        if (res.code === 0) {
+          nameAvailable.value = res.data?.available !== false
+          nameCheckMsg.value = nameAvailable.value ? '' : '该应用名称已存在，请更换一个'
+        }
+      } catch (e) {
+        console.warn('名称检查失败:', e)
+      } finally {
+        nameChecking.value = false
+      }
+    }
 
     // SonarQube 质量门禁配置
     const sonarConfig = ref({
@@ -1834,11 +1854,13 @@ export default {
       switch (currentStep.value) {
         case 0:
           if (!pipelineData.value.name.trim()) {
-            alert('请输入流水线名称')
+            alert('请输入应用名称')
             return false
           }
-          break
-        case 1:
+          if (nameAvailable.value === false) {
+            alert('应用名称已存在，请更换一个名称')
+            return false
+          }
           if (!pipelineData.value.git_repo.trim()) {
             alert('请输入 Git 仓库地址')
             return false
@@ -1848,7 +1870,7 @@ export default {
             return false
           }
           break
-        case 2:
+        case 1:
           // jenkins_job 仅在 language_type 为 custom 时必填，其他语言类型由后端自动推导
           if (pipelineData.value.language_type === 'custom' && !pipelineData.value.jenkins_job.trim()) {
             alert('自定义类型必须填写 Jenkins Job 名称')
@@ -2177,7 +2199,11 @@ export default {
     // 极简模式快速提交
     const quickSubmit = async () => {
       if (!pipelineData.value.name || !pipelineData.value.git_repo) {
-        alert('请填写流水线名称和 Git 仓库地址')
+        alert('请填写应用名称和 Git 仓库地址')
+        return
+      }
+      if (nameAvailable.value === false) {
+        alert('应用名称已存在，请更换一个名称')
         return
       }
       try {
@@ -2203,7 +2229,15 @@ export default {
         }
         const response = await createPipeline(submitData)
         if (response.code === 0) {
-          alert('流水线创建成功')
+          // 处理警告信息
+          if (response.data?.warnings?.length) {
+            const warnMsg = '应用创建成功！但有以下注意事项：\n\n' +
+              response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
+              '\n\n建议确认后再进行构建。'
+            alert(warnMsg)
+          } else {
+            alert('应用创建成功！')
+          }
           router.push('/cicd/pipelines')
         } else {
           alert(response.msg || '创建失败')
@@ -2304,7 +2338,14 @@ export default {
         }
 
         if (response.code === 0) {
-          alert(isEdit ? '更新流水线成功' : '创建流水线成功')
+          if (!isEdit && response.data?.warnings?.length) {
+            const warnMsg = '应用创建成功！但有以下注意事项：\n\n' +
+              response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
+              '\n\n建议确认后再进行构建。'
+            alert(warnMsg)
+          } else {
+            alert(isEdit ? '更新流水线成功' : '应用创建成功！')
+          }
           router.push('/cicd/pipelines')
         } else {
           alert(response.msg || '操作失败')
@@ -2560,6 +2601,11 @@ export default {
       quickSubmit,
       showJenkinsAdvanced,
       showDescription,
+      // 应用名称实时校验
+      nameChecking,
+      nameAvailable,
+      nameCheckMsg,
+      checkName,
       // 方法
       nextStep,
       previousStep,

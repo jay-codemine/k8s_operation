@@ -11,6 +11,7 @@ resources:
   - namespace.yaml
   - rbac.yaml
   - secret.yaml
+  - pv.yaml        # 静态 hostPath PV（缓存类 PVC 直接绑定）
   - pvc.yaml
   - configmap.yaml
   - statefulset.yaml

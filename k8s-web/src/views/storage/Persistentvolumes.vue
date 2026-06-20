@@ -28,6 +28,24 @@
         </button>
       </div>
 
+      <!-- StorageClass 下拉筛选 -->
+      <div class="filter-dropdown">
+        <select v-model="storageClassFilter" @change="currentPage = 1">
+          <option value="">所有 StorageClass</option>
+          <option v-for="sc in uniqueStorageClasses" :key="sc" :value="sc">{{ sc || '(空)' }}</option>
+        </select>
+      </div>
+
+      <!-- 回收策略下拉筛选 -->
+      <div class="filter-dropdown">
+        <select v-model="reclaimFilter" @change="currentPage = 1">
+          <option value="">所有回收策略</option>
+          <option value="Retain">Retain</option>
+          <option value="Delete">Delete</option>
+          <option value="Recycle">Recycle</option>
+        </select>
+      </div>
+
       <div class="action-buttons">
         <!-- 批量操作按钮 -->
         <button 
@@ -132,9 +150,10 @@
               </span>
             </td>
             <td>
-              <div class="pv-name">
+              <div class="pv-name clickable" @click="viewDetail(pv)">
                 <span class="icon">💾</span>
                 <span>{{ pv.name }}</span>
+                <span class="detail-hint">🔍</span>
               </div>
             </td>
             <td>{{ pv.capacity }}</td>
@@ -155,24 +174,27 @@
             <td style="white-space: nowrap;">{{ pv.createdAt }}</td>
             <td>
               <div class="action-icons">
-                <button class="action-btn icon-only" @click="viewDetail(pv)" title="查看详情">
-                  📋
+                <button class="action-btn primary" @click="viewDetail(pv)" title="查看详情">
+                  📋 详情
                 </button>
-                <button class="action-btn icon-only" @click="viewYaml(pv)" title="查看YAML">
-                  📝
+                <button class="action-btn" @click="viewYaml(pv)" title="查看/编辑 YAML">
+                  📝 编辑
                 </button>
-                <button v-if="canOperate" class="action-btn icon-only danger" @click="confirmDelete(pv)" title="删除">
-                  🗑️
+                <button v-if="canOperate" class="action-btn expand" @click="openExpandModal(pv)" title="扩容">
+                  🔼 扩容
+                </button>
+                <button v-if="canOperate" class="action-btn danger" @click="confirmDelete(pv)" title="删除">
+                  🗑️ 删除
                 </button>
                 
                 <!-- 更多菜单 -->
                 <div class="more-actions-wrapper">
                   <button 
-                    class="action-btn icon-only more-btn" 
+                    class="action-btn more-btn" 
                     @click="toggleMoreMenu(pv)"
                     title="更多操作"
                   >
-                    ⋮
+                    ⋮ 更多
                   </button>
                   <div 
                     v-if="activeMoreMenu === pv.name" 
@@ -742,6 +764,52 @@
       </div>
     </div>
 
+    <!-- PV 扩容模态框 -->
+    <div v-if="showExpandModal" class="modal-overlay" @click="showExpandModal = false">
+      <div class="modal-content" @click.stop style="width: 600px; max-width: 90vw;">
+        <div class="modal-header">
+          <h2>🔼 PV 扩容</h2>
+          <button class="close-btn" @click="showExpandModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="info-box" style="margin-bottom: 16px;">
+            <div><strong>PV 名称:</strong> {{ expandPVForm.name }}</div>
+            <div><strong>状态:</strong> <span class="status-indicator" :class="getStatusClass(expandPVForm.status)">{{ expandPVForm.status }}</span></div>
+            <div v-if="expandPVForm.storageClassName"><strong>StorageClass:</strong> {{ expandPVForm.storageClassName }}</div>
+          </div>
+          <div class="capacity-preview-box" style="margin-bottom: 16px;">
+            <div class="capacity-comparison" style="display:flex;align-items:center;gap:16px;">
+              <div>
+                <div style="font-size:12px;color:#718096;">当前容量</div>
+                <div style="font-size:20px;font-weight:700;color:#2d3748;">{{ expandPVForm.currentCapacity }}</div>
+              </div>
+              <div style="font-size:20px;color:#a0aec0;">→</div>
+              <div>
+                <div style="font-size:12px;color:#718096;">目标容量</div>
+                <div style="font-size:20px;font-weight:700;color:#48bb78;">{{ expandPVForm.newCapacity || '待输入' }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="warning-box" style="margin-bottom:16px;">
+            <div class="warning-icon">⚠️</div>
+            <div>只能扩大不能缩小，需 StorageClass 支持扩容。</div>
+          </div>
+          <div class="form-group">
+            <label class="required">目标容量</label>
+            <input type="text" v-model="expandPVForm.newCapacity" class="form-input" placeholder="例如: 20Gi" required>
+            <span class="form-hint">必须大于当前容量 {{ expandPVForm.currentCapacity }}，示例: 20Gi, 50Gi</span>
+          </div>
+          <div v-if="expandPVError" class="error-message">{{ expandPVError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showExpandModal = false">取消</button>
+          <button class="btn btn-primary" @click="doExpandPV" :disabled="expandingPV || !expandPVForm.newCapacity">
+            {{ expandingPV ? '扩容中...' : '确认扩容' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 删除确认模态框 -->
     <div v-if="showDeleteModal" class="modal-overlay" @click="showDeleteModal = false">
       <div class="modal-content modal-danger" @click.stop>
@@ -823,6 +891,7 @@ const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
 const statusFilter = ref('all')
 const storageClassFilter = ref('')
+const reclaimFilter = ref('')
 
 // 视图模式
 const viewMode = ref('table')
@@ -848,6 +917,52 @@ const showDeleteModal = ref(false)
 const showBatchDeleteModal = ref(false)
 const creating = ref(false)
 const yamlSaving = ref(false)
+
+// PV 扩容
+const showExpandModal = ref(false)
+const expandingPV = ref(false)
+const expandPVError = ref('')
+const expandPVForm = ref({
+  name: '',
+  status: '',
+  currentCapacity: '',
+  newCapacity: '',
+  storageClassName: ''
+})
+
+const openExpandModal = (pv) => {
+  expandPVForm.value = {
+    name: pv.name,
+    status: pv.status,
+    currentCapacity: pv.capacity,
+    newCapacity: '',
+    storageClassName: pv.storageClassName || ''
+  }
+  expandPVError.value = ''
+  showExpandModal.value = true
+}
+
+const doExpandPV = async () => {
+  if (!expandPVForm.value.newCapacity) {
+    expandPVError.value = '请输入目标容量'
+    return
+  }
+  expandingPV.value = true
+  expandPVError.value = ''
+  try {
+    await pvApi.expand({
+      name: expandPVForm.value.name,
+      newCapacity: expandPVForm.value.newCapacity
+    })
+    showExpandModal.value = false
+    refreshList()
+    alert(`PV ${expandPVForm.value.name} 扩容成功！`)
+  } catch (error) {
+    expandPVError.value = error.response?.data?.message || error.message || '扩容失败'
+  } finally {
+    expandingPV.value = false
+  }
+}
 
 // PV 增强详情
 const detailLoading = ref(false)
@@ -1047,7 +1162,23 @@ const filteredPVs = computed(() => {
     result = result.filter(pv => pv.status === statusFilter.value)
   }
 
+  // StorageClass 过滤
+  if (storageClassFilter.value !== '') {
+    result = result.filter(pv => (pv.storageClassName || '') === storageClassFilter.value)
+  }
+
+  // 回收策略过滤
+  if (reclaimFilter.value) {
+    result = result.filter(pv => pv.reclaimPolicy === reclaimFilter.value)
+  }
+
   return result
+})
+
+// 唯一 StorageClass 列表（用于下拉筛选）
+const uniqueStorageClasses = computed(() => {
+  const classes = new Set(pvs.value.map(pv => pv.storageClassName || ''))
+  return Array.from(classes).filter(c => c !== '').sort()
 })
 
 const paginatedPVs = computed(() => {

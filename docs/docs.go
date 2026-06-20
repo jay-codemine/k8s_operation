@@ -3227,6 +3227,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/check-name": {
+            "get": {
+                "description": "检查指定应用名称是否已被占用",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "检查应用名称是否可用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用名称",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "排除的流水线 ID（编辑时使用）",
+                        "name": "exclude_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回 available",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/create": {
             "post": {
                 "description": "创建新的 CI/CD 流水线配置，关联 Git 仓库和 Jenkins Job",
@@ -7016,6 +7052,54 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "DaemonSet 回滚成功",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/daemonset/update-resources": {
+            "post": {
+                "description": "直接修改 DaemonSet 容器的 CPU/Memory requests/limits",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s DaemonSet 管理"
+                ],
+                "summary": "快速修改容器资源限制",
+                "parameters": [
+                    {
+                        "description": "资源配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeDeploymentUpdateResourcesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
                         "schema": {
                             "type": "string"
                         }
@@ -14542,6 +14626,54 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/statefulset/update-resources": {
+            "post": {
+                "description": "直接修改 StatefulSet 容器的 CPU/Memory requests/limits",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s StatefulSet 管理"
+                ],
+                "summary": "快速修改容器资源限制",
+                "parameters": [
+                    {
+                        "description": "资源配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeDeploymentUpdateResourcesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/statefulset/update_image": {
             "put": {
                 "description": "仅修改 .spec.template.spec.containers[*].image，不影响其它字段；根据 UpdateStrategy 触发滚动更新",
@@ -18022,6 +18154,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "image_tag": {
+                    "type": "string"
+                },
+                "message": {
+                    "description": "可选：发布说明/备注",
                     "type": "string"
                 },
                 "namespace": {

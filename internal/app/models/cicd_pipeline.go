@@ -152,7 +152,10 @@ const (
 // CicdPipeline 对应表：cicd_pipeline
 type CicdPipeline struct {
 	ID          int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name        string `gorm:"column:name" json:"name"`
+	// Name 应用名称，与 deleted_at 组成复合唯一索引：
+	// 活跃记录 deleted_at=0，保证同名应用不重复；
+	// 软删除后 deleted_at=时间戳，不同时间戳允许重名。
+	Name        string `gorm:"column:name;uniqueIndex:idx_pipeline_name_del" json:"name"`
 	Description string `gorm:"column:description" json:"description"`
 
 	// Git配置
@@ -205,7 +208,7 @@ type CicdPipeline struct {
 	CreatedUserID int64  `gorm:"column:created_user_id" json:"created_user_id"`
 	CreatedAt     uint64 `gorm:"column:created_at" json:"created_at"`
 	ModifiedAt    uint64 `gorm:"column:modified_at" json:"modified_at"`
-	DeletedAt     uint64 `gorm:"column:deleted_at" json:"deleted_at"`
+	DeletedAt     uint64 `gorm:"column:deleted_at;uniqueIndex:idx_pipeline_name_del" json:"deleted_at"` // 与 name 组成复合唯一索引，活跃时=0
 	IsDel         uint8  `gorm:"column:is_del" json:"is_del"`
 }
 

@@ -28,25 +28,26 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
       initContainers:
-        # 安装必要插件（不指定版本号，自动安装最新兼容版本）
+        # 安装必要插件（不指定版本号，自动安装最新兼容版本；blueocean 依赖树太大已移除）
         - name: install-plugins
           image: jenkins/jenkins:lts
           command:
             - jenkins-plugin-cli
             - --plugins
-            - kubernetes
-            - workflow-aggregator
-            - git
-            - configuration-as-code
-            - credentials-binding
-            - pipeline-stage-view
-            - blueocean
-            - sonar
-            - timestamper
-            - ws-cleanup
-            - http_request
-            - pipeline-utility-steps
-            - junit
+            - >-
+              kubernetes
+              workflow-aggregator
+              git
+              configuration-as-code
+              credentials-binding
+              http_request
+              pipeline-utility-steps
+              junit
+              sonar
+              pipeline-stage-view
+              timestamper
+              ws-cleanup
+              ansicolor
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home

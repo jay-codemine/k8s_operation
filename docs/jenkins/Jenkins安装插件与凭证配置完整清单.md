@@ -5,6 +5,22 @@
 
 ---
 
+## 快速安装顺序（生产环境参考）
+
+```
+步骤 1  修改 deploy/jenkins/secret.yaml（改密码 / HMAC 密钥 / SonarQube Token）
+步骤 2  修改 deploy/jenkins/configmap.yaml（改 SonarQube 服务器地址）
+步骤 3  kubectl apply -k deploy/jenkins/   ← 一键部署全部资源
+步骤 4  等待 initContainer 安装插件（约 3-5 分钟）
+步骤 5  浏览器访问 http://<节点IP>:30080，用 ops-dev 登录
+步骤 6  手动添加 Git 凭证（k8soperation）和 Harbor 凭证（robot$test-k8soperation）
+步骤 7  创建 4 个 Pipeline Job（关联 Git 仓库 + 指定 Script Path）
+步骤 8  生成 API Token → 填入 configs/config.yaml 的 APIToken 字段
+步骤 9  重启后端服务使配置生效
+```
+
+---
+
 ## 一、平台整体架构（全 K8s Pod 容器化）
 
 ### 1.1 架构拓扑
@@ -254,59 +270,207 @@ sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
 
 ---
 
-## 七、必装插件清单
+## 七、插件安装完整指南
 
-以下插件通过 `initContainer` 中的 `jenkins-plugin-cli` 自动安装（不指定版本号，安装最新兼容版）：
+### 7.0 两种安装方式详细对比
 
-| # | 插件名称 | 用途说明 | 被哪些模板使用 |
-|---|----------|----------|----------------|
-| 1 | **kubernetes** | Kubernetes Cloud 集成，动态创建 Pod Agent 执行构建任务 | 全部 |
-| 2 | **workflow-aggregator** | Pipeline 核心插件集（Declarative Pipeline + Stage View） | 全部 |
-| 3 | **git** | Git SCM 支持，拉取源代码 | 全部 |
-| 4 | **configuration-as-code** | JCasC 插件，通过 YAML 自动化配置 Jenkins | 系统级 |
-| 5 | **credentials-binding** | 凭证绑定，Pipeline 中 `credentials()` 函数 | 全部 |
-| 6 | **pipeline-stage-view** | Pipeline 阶段可视化视图 | 系统级 |
-| 7 | **blueocean** | Blue Ocean 现代化 Pipeline UI | 系统级 |
-| 8 | **sonar** | SonarQube Scanner（`withSonarQubeEnv` / `waitForQualityGate`） | 全部（可选启用） |
-| 9 | **timestamper** | 构建日志添加时间戳 | 全部 |
-| 10 | **ws-cleanup** | 工作空间清理（`deleteDir()` 步骤） | Go / Python |
-| 11 | **http_request** | HTTP 请求步骤（`httpRequest()`），用于阶段回调和最终回调 | 全部 |
-| 12 | **pipeline-utility-steps** | Pipeline 工具步骤（`readJSON`、`writeFile`、`readFile` 等） | Go / Java |
-| 13 | **junit** | JUnit 测试报告解析（`junit` 步骤） | Java |
+> **问：可以只用 initContainer 安装，或者只用 Jenkins UI 安装吗？**
+> **答：两种方式都可以，全部完成安装，但适用场景和优缺点不同。**
 
-### 插件分类说明
+```
+插件安装方式
+│
+├── 方式一：initContainer 安装 ← K8s 部署时自动执行（推荐）
+│                          在 statefulset.yaml 中定义插件列表
+│                          Pod 启动 → initContainer 先运行 → 安装完成 → Jenkins 启动
+│
+└── 方式二：Jenkins UI 安装 ← Jenkins 运行中手动操作
+                           Manage Jenkins → Plugins → Available plugins
+```
+
+#### 详细对比表
+
+| 对比项 | initContainer 安装 | Jenkins UI 安装 |
+|--------|------------------|----------------|
+| **执行时机** | Jenkins 启动前，Pod 创建时自动运行 | Jenkins 运行中手动操作 |
+| **操作方式** | `jenkins-plugin-cli` 命令行 | 网页点击安装 |
+| **是否自动** | ✅ 全自动，无需人工 | ❌ 需手动操作 |
+| **可重现性** | ✅ 嵌入代码，重建 Pod 自动重装 | ❌ 不在代码里，PVC 丢失后需手动重装 |
+| **生效展题** | ✅ Jenkins 启动即就就绪 | ⚠️ 需重启 Jenkins 才能生效 |
+| **适用场景** | ✅ 生产环境、标准化部署 | ✅ 临时补装、应急测试 |
+| **插件来源** | Jenkins 插件仓库（需网络） | Jenkins 插件仓库（需网络） |
+| **PVC 丢失后** | ✅ 重建不同名 Pod 自动重装 | ❌ 插件全部丢失需手动重装 |
+| **网络中断** | ⚠️ 下载中断不完整会留下 `.jpi.tmp` 文件 | ⚠️ 同上 |
+
+#### 两种方式均可完成安装圆满，建议策略
+
+```
+生产环境：  initContainer 为主 + UI 补充（应急用）
+暴走工具：  两种都可以，哪个方便用哪个
+全新安装：  initContainer 自动完成，无需手动操作
+重装 Jenkins：  修改 statefulset.yaml + 重建 Pod ，自动安装
+```
+
+#### 已知问题：sonar 插件下载中断留下 .tmp 文件
+
+`jenkins-plugin-cli` 在下载过程中网络中断会留下未完成的 `.jpi.tmp` 临时文件，导致下次安装时 `jenkins-plugin-cli` 误认已安装而跳过。
+
+```bash
+# 现象：jenkins-plugin-cli --plugins sonar 返回 Done 但 sonar.jpi 不存在
+# 原因：存在 sonar.jpi.tmp （下载未完成）
+
+# 修复方法：清理 .tmp 文件并重新安装
+kubectl -n devops exec jenkins-0 -- sh -c \
+  "rm -f /var/jenkins_home/plugins/sonar.jpi.tmp && jenkins-plugin-cli --plugins sonar"
+
+# 验证：
+kubectl -n devops exec jenkins-0 -- sh -c "ls /var/jenkins_home/plugins/ | grep sonar"
+# 预期输出: sonar  sonar.jpi  sonar-quality-gates  sonar-quality-gates.jpi
+```
+
+> 根本解决：`rollout restart` 重建 Pod 时，initContainer 会清除 .tmp 文件重新下载。
+
+---
+
+### 7.1 必装插件清单（13 个）
+
+以下插件通过 `initContainer` 中的 `jenkins-plugin-cli` 自动安装（**不指定版本号**，安装最新兼容版）：
+
+> ⚠️ 注意：`blueocean` 依赖树过大（100+ 子依赖），已从列表移除，避免 init container 安装失败。
+
+| # | 插件 ID（安装名） | 插件全称 | 用途说明 | 被哪些模板使用 |
+|---|---------|---------|----------|----------------|
+| 1 | `kubernetes` | Kubernetes | K8s Cloud 集成，动态创建 Pod Agent 执行构建 | 全部 |
+| 2 | `workflow-aggregator` | Pipeline (Workflow Aggregator) | Pipeline 核心语法（`pipeline{}`、`stage`、`steps` 等） | 全部 |
+| 3 | `git` | Git | Git SCM 支持，拉取源代码（`checkout` 步骤） | 全部 |
+| 4 | `configuration-as-code` | Configuration as Code (JCasC) | 通过 YAML 自动化配置 Jenkins（K8s Cloud、凭证等） | 系统级 |
+| 5 | `credentials-binding` | Credentials Binding | Pipeline 中 `credentials()` 凭证注入 | 全部 |
+| 6 | `http_request` | HTTP Request | `httpRequest()` 步骤，用于阶段回调和最终回调 | 全部 |
+| 7 | `pipeline-utility-steps` | Pipeline Utility Steps | `readJSON`、`writeFile`、`fileExists` 等工具步骤 | Go / Java |
+| 8 | `junit` | JUnit | `junit` 步骤解析测试报告（`**/surefire-reports/*.xml`） | Java |
+| 9 | `sonar` | SonarQube Scanner | `withSonarQubeEnv()` + `waitForQualityGate()`（可选启用） | 全部（可选） |
+| 10 | `pipeline-stage-view` | Pipeline: Stage View | 流水线阶段可视化图，构建历史看板 | 系统级 |
+| 11 | `timestamper` | Timestamper | 构建日志每行添加时间戳 | 全部 |
+| 12 | `ws-cleanup` | Workspace Cleanup | 工作空间清理（`cleanWs()` / `deleteDir()` 步骤） | 全部 |
+| 13 | `ansicolor` | AnsiColor | 日志支持 ANSI 彩色输出（Maven/Go 构建日志更易读） | 全部 |
+
+### 7.2 插件分类说明
 
 | 分类 | 插件 | 说明 |
 |------|------|------|
 | **构建核心** | kubernetes, workflow-aggregator, credentials-binding | Pipeline 执行必须 |
 | **代码管理** | git | 源码拉取 |
 | **CI 功能** | http_request, pipeline-utility-steps, junit | 回调通信、数据解析、测试报告 |
-| **质量扫描** | sonar | SonarQube 集成（可选） |
-| **UI/体验** | blueocean, pipeline-stage-view, timestamper | 可视化和日志 |
+| **质量扫描** | sonar | SonarQube 集成（ENABLE_SONAR=false 可跳过） |
+| **UI/体验** | pipeline-stage-view, timestamper, ansicolor | 可视化和日志优化 |
 | **运维辅助** | configuration-as-code, ws-cleanup | 自动配置和清理 |
 
-### 插件安装命令（手动安装参考）
+### 7.3 不需要安装的插件
 
-如果不使用 K8s 部署的 initContainer 方式，可在 Jenkins CLI 手动安装：
+> 本项目全容器化架构，以下常见插件**一律不需要安装**：
 
-```bash
-jenkins-plugin-cli --plugins \
-  kubernetes \
-  workflow-aggregator \
-  git \
-  configuration-as-code \
-  credentials-binding \
-  pipeline-stage-view \
-  blueocean \
-  sonar \
-  timestamper \
-  ws-cleanup \
-  http_request \
-  pipeline-utility-steps \
-  junit
+| 不需要安装 | 原因 |
+|-----------|------|
+| Docker Plugin / Docker Pipeline | 构建使用 Kaniko，完全不需要 Docker daemon |
+| Maven Integration Plugin | Maven 运行在 K8s Pod 容器（`maven:3.9-eclipse-temurin-17`）内，不依赖 Jenkins 工具链 |
+| NodeJS Plugin | Node/npm 运行在 Pod 容器（`node:18-alpine`）内，不依赖 Jenkins 工具链 |
+| JDK Tool / Global Tool 配置 | JDK 通过容器镜像提供，不注册 Jenkins 全局工具 |
+| Email Extension Plugin | 平台通过 Webhook 发通知，Jenkins 侧不需要 |
+| Blue Ocean | 依赖树过大（100+插件），已从安装列表移除，推荐用 Stage View 替代 |
+| Publish Over SSH | 部署通过 K8s API，不需要 SSH 推送 |
+| Deploy to container Plugin | 部署通过 kubectl/Helm，不需要此插件 |
+
+### 7.4 安装操作步骤（三种方式）
+
+#### 方式 A：initContainer 自动安装（推荐，K8s 部署时自动执行）
+
+在 `deploy/jenkins/statefulset.yaml` 的 initContainer 中已配置，Pod 启动时自动安装：
+
+```yaml
+command:
+  - jenkins-plugin-cli
+  - --plugins
+  - >
+    kubernetes
+    workflow-aggregator
+    git
+    configuration-as-code
+    credentials-binding
+    http_request
+    pipeline-utility-steps
+    junit
+    sonar
+    pipeline-stage-view
+    timestamper
+    ws-cleanup
+    ansicolor
 ```
 
-> **重要**：`http_request` 插件是所有模板回调平台的核心依赖，缺少此插件会导致 `httpRequest()` 步骤报错。
+> **重要**：不指定版本号，由 `jenkins-plugin-cli` 自动解析最新兼容版本。指定版本号易因依赖冲突导致 CrashLoopBackOff。
+
+> ⚠️ **YAML 格式坑：必须用 `>-` 而非 `>`**  
+> `>` 会在最后一个插件名后保留换行符 `\n`，导致 URL 变成 `ansicolor\n.hpi`，报错 `Illegal character in path`。  
+> `>-` 折叠并去掉末尾换行，插件名干净正确。这是 **已知 Bug，需特别注意**。
+
+#### 方式 B：Jenkins UI 手动安装（应急补装）
+
+若 initContainer 未安装成功，进入 **Manage Jenkins → Plugins → Available plugins** 搜索安装：
+
+```
+git
+http_request
+pipeline-utility-steps
+configuration-as-code
+junit
+sonar
+pipeline-stage-view
+timestamper
+ws-cleanup
+ansicolor
+```
+
+安装完成后勾选 **"Restart Jenkins when installation is complete"** 自动重启。
+
+#### 方式 C：命令行补装（在运行中的 Pod 内执行）
+
+```bash
+# 利用 jenkins-plugin-cli 在运行中的 Pod 内直接补装
+kubectl -n devops exec jenkins-0 -- sh -c \
+  "jenkins-plugin-cli --plugins git http_request pipeline-utility-steps junit sonar pipeline-stage-view timestamper ws-cleanup ansicolor"
+
+# 如果某个插件需要清除 .tmp 
+# 先清除未完成的临时文件再重装
+kubectl -n devops exec jenkins-0 -- sh -c \
+  "rm -f /var/jenkins_home/plugins/sonar.jpi.tmp && jenkins-plugin-cli --plugins sonar"
+
+# 安装完成后重启 Pod 让 Jenkins 加载新插件
+kubectl -n devops rollout restart statefulset/jenkins
+kubectl -n devops get pod -w
+```
+
+#### 方式 D：重建 Pod 强制重新安装（最干净）
+
+```bash
+# 应用最新 StatefulSet 配置
+kubectl apply -f deploy/jenkins/statefulset.yaml
+
+# 删除 Pod 让 StatefulSet 重建（自动触发 initContainer）
+kubectl -n devops delete pod jenkins-0
+
+# 或者用 rollout restart
+kubectl -n devops rollout restart statefulset/jenkins
+
+# 观察进度（约 3~5 分钟）
+kubectl -n devops get pod -w
+```
+
+#### 验证插件安装情况
+
+```bash
+# 查看已安装的插件文件
+kubectl -n devops exec jenkins-0 -- sh -c \
+  "ls /var/jenkins_home/plugins/ | grep '.jpi$' | sed 's/.jpi//' | sort"
+```
 
 ---
 
@@ -316,43 +480,48 @@ jenkins-plugin-cli --plugins \
 
 ### 8.1 凭证总览
 
-| # | 凭证 ID | 类型 | 用途 | 作用域 |
-|---|---------|------|------|--------|
-| 1 | `gitee-id` | Username with password | Git 源码仓库认证（Gitee/GitLab/GitHub） | Global |
-| 2 | `harbor-registry` | Username with password | Docker 镜像仓库推送/拉取认证（Harbor） | Global |
-| 3 | `hmac-secret` | Secret text | Webhook HMAC 签名验证（平台回调安全校验） | Global |
+> 凭证 ID 需与 `configs/config.yaml` 中的 Jenkins 配置块保持一致。当前项目实际配置如下：
+
+| # | 凭证 ID（当前配置） | 类型 | 用途 | 作用域 | config.yaml 对应字段 |
+|---|---------|------|------|--------|------|
+| 1 | `k8soperation` | Username with password | Git 源码仓库认证（Gitee/GitLab/GitHub） | Global | `GitCredentialID` |
+| 2 | `robot$test-k8soperation` | Username with password | Harbor 镜像仓库推送/拉取认证 | Global | `RegistryCredentialID` |
+| 3 | `hmac-secret` | Secret text | Webhook HMAC 签名验证（平台回调安全校验） | Global | `HMACCredentialID` |
+| 4 | `sonarqube-token` | Secret text | SonarQube 认证 Token（JCasC 自动注入） | Global | — |
+
+> **凭证 1 & 2**：需手动添加。**凭证 3 & 4**：由 JCasC 从 K8s Secret 自动注入，无需手动创建。
 
 ### 8.2 凭证创建步骤
 
-#### 凭证 1：`gitee-id`（Git 仓库凭证）
+#### 凭证 1：`k8soperation`（Git 仓库凭证）
 
 ```
 路径：Manage Jenkins → Credentials → System → Global credentials → Add Credentials
 
 Kind:        Username with password
 Scope:       Global
-Username:    <你的 Git 用户名>
+Username:    <你的 Gitee/GitHub 账号>
 Password:    <你的 Git 密码或 Access Token>
-ID:          gitee-id
+ID:          k8soperation
 Description: Git 源码仓库凭证（Gitee）
 ```
 
-> **说明**：所有 Pipeline 模板中 `checkout` 阶段使用此凭证拉取代码。如使用 GitLab/GitHub，ID 保持 `gitee-id` 不变（或在 `config.yaml` 中修改 `GitCredentialID` 字段）。
+> **说明**：所有 Pipeline 模板中 `checkout` 阶段使用此凭证拉取代码。ID 可在 `config.yaml` 的 `GitCredentialID` 字段自定义修改。
 
-#### 凭证 2：`harbor-registry`（镜像仓库凭证）
+#### 凭证 2：`robot$test-k8soperation`（Harbor 镜像仓库凭证）
 
 ```
 路径：Manage Jenkins → Credentials → System → Global credentials → Add Credentials
 
 Kind:        Username with password
 Scope:       Global
-Username:    <Harbor 用户名>
-Password:    <Harbor 密码>
-ID:          harbor-registry
-Description: Harbor 镜像仓库凭证
+Username:    robot$test-k8soperation
+Password:    <Harbor 机器人账号密码>
+ID:          robot$test-k8soperation
+Description: Harbor 镜像仓库凭证（机器人账号）
 ```
 
-> **说明**：Kaniko 构建镜像后推送到 Harbor 时使用。模板中会自动生成 `/kaniko/.docker/config.json` 进行认证。
+> **说明**：Kaniko 构建镜像后推送到 Harbor 时使用。模板中会自动生成 `/kaniko/.docker/config.json` 进行认证。ID 可在 `config.yaml` 的 `RegistryCredentialID` 字段修改。
 
 #### 凭证 3：`hmac-secret`（HMAC 签名凭证）
 
@@ -374,12 +543,12 @@ Description: HMAC signing secret for platform callback
 
 ```yaml
 Jenkins:
-  GitCredentialID: "gitee-id"           # 默认 Git 凭证 ID
-  RegistryCredentialID: "harbor-registry" # 默认镜像仓库凭证 ID
-  HMACCredentialID: "hmac-secret"        # 默认 HMAC 凭证 ID
+  GitCredentialID: "k8soperation"              # 当前 Git 凭证 ID
+  RegistryCredentialID: "robot$test-k8soperation" # 当前镜像仓库凭证 ID
+  HMACCredentialID: "hmac-secret"              # 当前 HMAC 凭证 ID
 ```
 
-如果你在 Jenkins 中使用了不同的凭证 ID 名称，只需同步修改 `config.yaml` 即可。
+> 如果你在 Jenkins 中使用了不同的凭证 ID 名称，只需同步修改 `config.yaml` 即可，Pipeline 模板无需改动。
 
 ---
 
@@ -403,6 +572,73 @@ securityRealm:
 | 用户名 | `ops-dev` |
 | 密码 | 通过 K8s Secret `jenkins-secret` 注入 |
 | 注册 | 禁用自助注册 |
+
+### 9.1.1 修改管理员用户名和密码
+
+用户名和密码分别保存在两个文件中，**两者相互独立，可单独修改**：
+
+| 配置项 | 配置文件 | 当前值 | 说明 |
+|--------|---------|--------|------|
+| 用户名 | `deploy/jenkins/configmap.yaml` 第 24 行 `id:` | `ops-dev` | JCasC 创建的 Jenkins 登录账号 |
+| 密码 | `deploy/jenkins/secret.yaml` 第 17 行 `admin-password:` | `admin123`（base64编码） | K8s Secret 注入到容器环境变量 |
+
+#### 修改用户名
+
+编辑 `deploy/jenkins/configmap.yaml`：
+
+```yaml
+# deploy/jenkins/configmap.yaml
+securityRealm:
+  local:
+    allowsSignup: false
+    users:
+      - id: "admin"          # ← 改成你想要的用户名（如 admin、jenkins 等）
+        password: "${JENKINS_ADMIN_PASSWORD}"
+```
+
+#### 修改密码
+
+密码必须先 base64 编码后填入 `deploy/jenkins/secret.yaml`：
+
+```bash
+# 第一步：生成新密码的 base64 编码
+echo -n "你的新密码" | base64
+# 例：echo -n "MyPass2024!" | base64  → 输出: TXlQYXNzMjAyNCE=
+```
+
+编辑 `deploy/jenkins/secret.yaml`：
+
+```yaml
+# deploy/jenkins/secret.yaml
+data:
+  admin-password: TXlQYXNzMjAyNCE=   # ← 替换为上面 base64 输出的值
+  hmac-secret: bXlfc3VwZXJfc2VjcmV0X2htYWNfa2V5XzIwMjQ=
+  sonarqube-token: eW91ci1zb25hcnF1YmUtdG9rZW4=
+```
+
+> ⚠️ **注意**：`secret.yaml` 中只存 base64 编码值，**不能写明文密码**，否则 K8s 会报错。
+
+#### 修改后重新部署生效
+
+```bash
+# 应用 ConfigMap 和 Secret 更新
+kubectl apply -f deploy/jenkins/configmap.yaml
+kubectl apply -f deploy/jenkins/secret.yaml
+
+# 重启 Jenkins Pod（让 JCasC 重新加载配置）
+kubectl -n devops rollout restart statefulset/jenkins
+
+# 查看启动状态
+kubectl -n devops get pod -w
+# 等待 STATUS 变为 Running（约 3~5 分钟）
+```
+
+> **重启后**：使用新用户名+新密码重新登录 Jenkins。  
+> **注意**：修改用户名后，`configs/config.yaml` 中的 `Username` 字段也需要同步更新：
+> ```yaml
+> Jenkins:
+>   Username: "admin"   # ← 与 configmap.yaml 中 id 保持一致
+> ```
 
 ### 9.2 Kubernetes Cloud 配置
 
@@ -477,15 +713,64 @@ metadata:
 
 ## 十一、持久化存储（PVC）清单
 
-| # | PVC 名称 | 容量 | 用途 |
-|---|----------|------|------|
-| 1 | `jenkins-data` | 20Gi | Jenkins 主数据（配置、历史、插件） |
-| 2 | `jenkins-go-cache` | 10Gi | Go 模块缓存 (`/go/pkg/mod`) |
-| 3 | `jenkins-maven-cache` | 20Gi | Maven 本地仓库 (`/root/.m2/repository`) |
-| 4 | `jenkins-npm-cache` | 10Gi | npm 缓存 (`/root/.npm`) |
-| 5 | `jenkins-pip-cache` | 5Gi | pip 缓存 (`/root/.cache/pip`) |
+| # | PVC 名称 | 容量 | 挂载路径 | 用途 | 生产建议容量 |
+|---|----------|------|---------|------|------|
+| 1 | `jenkins-data` | 20Gi | `/var/jenkins_home` | Jenkins 主数据（配置、历史、插件） | 50Gi |
+| 2 | `jenkins-go-cache` | 10Gi | `/go/pkg/mod` | Go 模块缓存 | 20Gi |
+| 3 | `jenkins-maven-cache` | 20Gi | `/root/.m2/repository` | Maven 本地仓库 | 50Gi |
+| 4 | `jenkins-npm-cache` | 10Gi | `/root/.cache/npm` | npm/前端缓存 | 20Gi |
+| 5 | `jenkins-pip-cache` | 5Gi | `/root/.cache/pip` | pip 缓存 | 10Gi |
 
 > 构建缓存 PVC 实现跨构建共享依赖，大幅加速第二次及后续构建。
+
+### 11.1 PVC 扩容（数据满了不需要重启）
+
+前提：StorageClass 需支持扩容（`ALLOWVOLUMEEXPANSION=true`）
+
+```bash
+# 查看 StorageClass 是否支持扩容
+kubectl get storageclass
+
+# 方式一：kubectl patch 直接扩容（最快）
+kubectl patch pvc jenkins-maven-cache -n devops \
+  -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+kubectl patch pvc jenkins-go-cache -n devops \
+  -p '{"spec":{"resources":{"requests":{"storage":"20Gi"}}}}'
+
+kubectl patch pvc jenkins-data -n devops \
+  -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+# 方式二：修改 pvc.yaml 后 apply（推荐，配置可持久化）
+# 修改 deploy/jenkins/pvc.yaml 中的 storage 值后：
+kubectl apply -f deploy/jenkins/pvc.yaml
+```
+
+> **注意**：PVC 只能扩大，不能缩小。apply 后 K8s 会自动触发底层 PV 扩容，**不需要重启 Pod**。
+
+### 11.2 缓存使用量查看
+
+```bash
+# 查看所有 Jenkins 相关 PVC 状态
+kubectl get pvc -n devops
+
+# 查看 Jenkins 主目录磁盘使用
+kubectl exec -it jenkins-0 -n devops -- df -h /var/jenkins_home
+
+# 查看 Maven 缓存大小
+kubectl exec -it jenkins-0 -n devops -- du -sh /root/.m2/repository
+```
+
+### 11.3 缓存清理（满了先清再扩）
+
+```bash
+# 清理 Maven 超过 30 天未使用的依赖
+kubectl exec -it jenkins-0 -n devops -- \
+  find /root/.m2/repository -name "*.jar" -atime +30 -delete
+
+# 清理 Go 模块缓存（谨慎，会影响下次构建速度）
+kubectl exec -it jenkins-0 -n devops -- go clean -modcache
+```
 
 ---
 

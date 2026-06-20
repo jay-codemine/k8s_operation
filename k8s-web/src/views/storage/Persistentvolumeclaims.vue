@@ -51,6 +51,22 @@
           ✖️ 退出批量
         </button>
 
+        <!-- 视图切换 -->
+        <div class="view-toggle">
+          <button
+            class="btn btn-view"
+            :class="{ active: viewMode === 'table' }"
+            @click="viewMode = 'table'"
+            title="表格视图"
+          >📋</button>
+          <button
+            class="btn btn-view"
+            :class="{ active: viewMode === 'card' }"
+            @click="viewMode = 'card'"
+            title="卡片视图"
+          >🗂️</button>
+        </div>
+
         <label class="auto-refresh-toggle">
           <input type="checkbox" v-model="autoRefresh" />
           <span>自动刷新</span>
@@ -79,7 +95,7 @@
     </div>
 
     <!-- 表格容器 -->
-    <div class="table-container">
+    <div v-if="viewMode === 'table'" class="table-container">
       <table class="resource-table">
         <thead>
           <tr>
@@ -139,24 +155,27 @@
             <td>{{ pvc.createdAt }}</td>
             <td>
               <div class="action-icons">
-                <button v-if="canOperate" class="icon-btn primary" @click="editYaml(pvc)" title="编辑">
-                  ✏️
+                <button class="action-btn primary" @click="openPVCDetail(pvc)" title="查看详情">
+                  📋 详情
                 </button>
-                <button v-if="canOperate" class="icon-btn expand" @click="openExpandModal(pvc)" title="扩容">
-                  🔼
+                <button v-if="canOperate" class="action-btn" @click="editYaml(pvc)" title="编辑">
+                  ✏️ 编辑
                 </button>
-                <button v-if="canOperate" class="icon-btn danger" @click="deleteSinglePVC(pvc)" title="删除">
-                  🗑️
+                <button v-if="canOperate" class="action-btn expand" @click="openExpandModal(pvc)" title="扩容">
+                  🔼 扩容
+                </button>
+                <button v-if="canOperate" class="action-btn danger" @click="deleteSinglePVC(pvc)" title="删除">
+                  🗑️ 删除
                 </button>
                 
                 <!-- 更多菜单 -->
                 <div class="more-actions-wrapper">
                   <button 
-                    class="icon-btn more-btn" 
+                    class="action-btn more-btn" 
                     @click="toggleMoreMenu(pvc)"
                     title="更多操作"
                   >
-                    ⋮
+                    ⋮ 更多
                   </button>
                   <div 
                     v-if="activeMoreMenu === pvc.name" 
@@ -182,7 +201,7 @@
 
     <!-- 分页组件 -->
     <Pagination 
-      v-if="totalFromServer > 0"
+      v-if="viewMode === 'table' && totalFromServer > 0"
       v-model:currentPage="currentPage"
       v-model:itemsPerPage="itemsPerPage"
       :totalItems="totalFromServer"
@@ -191,6 +210,41 @@
     <div v-if="!loading && pvcs.length === 0" class="empty-state">
       <div class="empty-icon">📦</div>
       <div class="empty-text">暂无 PVC 数据</div>
+    </div>
+
+    <!-- 卡片视图 -->
+    <div v-if="viewMode === 'card'" class="cards-container">
+      <div class="cards-grid">
+        <div v-for="pvc in pvcs" :key="pvc.name + pvc.namespace" class="pvc-card">
+          <div class="card-header">
+            <div class="card-title-row">
+              <span class="icon">💾</span>
+              <span class="card-name">{{ pvc.name }}</span>
+              <span class="status-indicator" :class="pvc.status.toLowerCase()">{{ pvc.status }}</span>
+            </div>
+            <span class="namespace-badge">{{ pvc.namespace }}</span>
+          </div>
+          <div class="card-body">
+            <div class="card-info-grid">
+              <div class="info-row"><span class="info-label">容量</span><span class="info-value highlight">{{ pvc.capacity || '-' }}</span></div>
+              <div class="info-row"><span class="info-label">访问模式</span><span class="info-value">{{ (pvc.accessModes || []).join(', ') }}</span></div>
+              <div class="info-row"><span class="info-label">存储类</span><span class="info-value">{{ pvc.storageClassName || '-' }}</span></div>
+              <div class="info-row"><span class="info-label">绑定 PV</span><span class="info-value">{{ pvc.volumeName || '-' }}</span></div>
+              <div class="info-row"><span class="info-label">创建时间</span><span class="info-value">{{ pvc.createdAt }}</span></div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <button class="card-action-btn primary" @click="openPVCDetail(pvc)">📋 详情</button>
+            <button v-if="canOperate" class="card-action-btn" @click="editYaml(pvc)">✏️ 编辑</button>
+            <button v-if="canOperate" class="card-action-btn" @click="openExpandModal(pvc)">🔼 扩容</button>
+            <button v-if="canOperate" class="card-action-btn danger" @click="deleteSinglePVC(pvc)">🗑️ 删除</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="!loading && pvcs.length === 0" class="empty-state">
+        <div class="empty-icon">📦</div>
+        <div class="empty-text">暂无 PVC 数据</div>
+      </div>
     </div>
 
     <!-- 创建 PVC 模态框 -->
@@ -761,6 +815,7 @@ const expandForm = ref({
 
 // 自动刷新
 const autoRefresh = ref(false)
+const viewMode = ref('table') // 'table' | 'card'
 let autoRefreshTimer = null
 const AUTO_REFRESH_INTERVAL = 90000 // 90秒
 
@@ -2814,6 +2869,241 @@ onUnmounted(() => {
   border-radius: 4px;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ==========================
+   视图切换（action-bar）
+   ========================== */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #edf2f7;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.btn-view {
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: all 0.2s;
+  color: #718096;
+}
+
+.btn-view:hover {
+  background: white;
+  color: #326ce5;
+}
+
+.btn-view.active {
+  background: white;
+  color: #326ce5;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+/* ==========================
+   操作按钮（文字+图标样式）
+   ========================== */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f7fafc;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+  color: #2d3748;
+}
+
+.action-btn.primary {
+  background: #ebf8ff;
+  border-color: #90cdf4;
+  color: #2b6cb0;
+}
+
+.action-btn.primary:hover {
+  background: #bee3f8;
+  border-color: #63b3ed;
+}
+
+.action-btn.expand {
+  background: #f0fff4;
+  border-color: #9ae6b4;
+  color: #276749;
+}
+
+.action-btn.expand:hover {
+  background: #c6f6d5;
+  border-color: #68d391;
+}
+
+.action-btn.danger {
+  background: #fff5f5;
+  border-color: #feb2b2;
+  color: #c53030;
+}
+
+.action-btn.danger:hover {
+  background: #fed7d7;
+  border-color: #fc8181;
+}
+
+.action-btn.more-btn {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ==========================
+   PVC 卡片视图
+   ========================== */
+.cards-container {
+  padding: 16px 0;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.pvc-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s, transform 0.2s;
+  overflow: hidden;
+}
+
+.pvc-card:hover {
+  box-shadow: 0 4px 16px rgba(50, 108, 229, 0.12);
+  transform: translateY(-2px);
+}
+
+.pvc-card .card-header {
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pvc-card .card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pvc-card .card-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 14px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pvc-card .card-body {
+  padding: 14px 16px;
+}
+
+.card-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.info-label {
+  flex: 0 0 70px;
+  color: #a0aec0;
+  font-size: 12px;
+}
+
+.info-value {
+  color: #4a5568;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-value.highlight {
+  font-weight: 600;
+  color: #326ce5;
+}
+
+.pvc-card .card-footer {
+  padding: 10px 16px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f7fafc;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.card-action-btn:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.card-action-btn.primary {
+  background: #ebf8ff;
+  border-color: #90cdf4;
+  color: #2b6cb0;
+}
+
+.card-action-btn.primary:hover {
+  background: #bee3f8;
+}
+
+.card-action-btn.danger {
+  background: #fff5f5;
+  border-color: #feb2b2;
+  color: #c53030;
+}
+
+.card-action-btn.danger:hover {
+  background: #fed7d7;
 }
 
 </style>

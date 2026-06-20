@@ -26,15 +26,79 @@ import (
 
 // ==================== 流水线 CRUD ====================
 
+// PipelineCheckName 检查应用名称是否可用
+// excludeID > 0 时排除该 ID（编辑模式下排除自身）
+// 返回: (available bool, conflictName string, err error)
+func (s *Services) PipelineCheckName(ctx context.Context, name string, excludeID int64) (bool, string, error) {
+	if name == "" {
+		return false, "", errors.New("应用名称不能为空")
+	}
+	p, err := s.dao.PipelineGetByName(ctx, name)
+	if err == nil {
+		// 找到同名记录
+		if excludeID > 0 && p.ID == excludeID {
+			// 就是自身，可用
+			return true, "", nil
+		}
+		return false, p.Name, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, "", nil
+	}
+	return false, "", fmt.Errorf("检查名称失败: %w", err)
+}
+
 // PipelineCreate 创建流水线
-func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCreateRequest, userID int64) (int64, error) {
+func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCreateRequest, userID int64) (int64, []string, error) {
 	// 检查名称是否已存在
 	_, err := s.dao.PipelineGetByName(ctx, req.Name)
 	if err == nil {
-		return 0, errors.New("流水线名称已存在")
+		return 0, nil, errors.New("应用名称已存在，请更换一个名称")
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, fmt.Errorf("检查名称失败: %w", err)
+		return 0, nil, fmt.Errorf("检查名称失败: %w", err)
+	}
+
+	// 收集警告信息（不阻止创建）
+	var warnings []string
+
+	// 警告 1：Git 仓库+分支冲突
+	gitBranchForCheck := req.GitBranch
+	if gitBranchForCheck == "" {
+		gitBranchForCheck = "main"
+	}
+	conflictPipelines, _ := s.dao.PipelineGetByGitRepoBranch(ctx, req.GitRepo, gitBranchForCheck, 0)
+	if len(conflictPipelines) > 0 {
+		names := make([]string, 0, len(conflictPipelines))
+		for _, cp := range conflictPipelines {
+			names = append(names, cp.Name)
+		}
+		warnings = append(warnings, fmt.Sprintf("该仓库分支已被应用 [%s] 使用，可能导致 Jenkins 构建冲突",
+			strings.Join(names, ", ")))
+	}
+
+	// 警告 2：自动部署工作负载冲突
+	if req.AutoDeploy && req.TargetClusterID > 0 {
+		wlName := req.TargetWorkloadName
+		if wlName == "" {
+			wlName = strings.TrimSuffix(strings.TrimSuffix(req.Name, "-pipeline"), "-prod")
+			wlName = strings.TrimSuffix(strings.TrimSuffix(wlName, "-dev"), "-test")
+		}
+		ns := req.TargetNamespace
+		if ns == "" {
+			ns = "default"
+		}
+		if wlName != "" {
+			conflictDeploys, _ := s.dao.PipelineGetByWorkload(ctx, req.TargetClusterID, ns, wlName, 0)
+			if len(conflictDeploys) > 0 {
+				dnames := make([]string, 0, len(conflictDeploys))
+				for _, cd := range conflictDeploys {
+					dnames = append(dnames, cd.Name)
+				}
+				warnings = append(warnings, fmt.Sprintf("工作负载 [%s/%s] 已被应用 [%s] 的自动部署占用，可能导致部署相互覆盖",
+					ns, wlName, strings.Join(dnames, ", ")))
+			}
+		}
 	}
 
 	// 模板化发布：根据 language_type 自动推导 JenkinsJob
@@ -48,11 +112,11 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		if job, ok := models.DefaultJenkinsJobMap[languageType]; ok {
 			jenkinsJob = job
 		} else {
-			return 0, fmt.Errorf("不支持的语言类型: %s", languageType)
+			return 0, nil, fmt.Errorf("不支持的语言类型: %s", languageType)
 		}
 	}
 	if jenkinsJob == "" {
-		return 0, errors.New("Jenkins Job 名称不能为空，请指定 jenkins_job 或设置 language_type")
+		return 0, nil, errors.New("Jenkins Job 名称不能为空，请指定 jenkins_job 或设置 language_type")
 	}
 
 	// ==================== 智能默认值：简化首次创建 ====================
@@ -118,10 +182,10 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	}
 
 	if err := s.dao.PipelineCreate(ctx, pipeline); err != nil {
-		return 0, fmt.Errorf("创建流水线失败: %w", err)
+		return 0, nil, fmt.Errorf("创建流水线失败: %w", err)
 	}
 
-	return pipeline.ID, nil
+	return pipeline.ID, warnings, nil
 }
 
 // PipelineDetail 获取流水线详情

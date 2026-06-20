@@ -406,6 +406,13 @@
                   <label>镜像地址 <span class="required">*</span></label>
                   <input v-model="createForm.image" placeholder="harbor.example.com/proj/app:v1.0.0" />
                 </div>
+                <div class="field">
+                  <label>目标集群 <span class="required">*</span></label>
+                  <select v-model="createForm.cluster_id">
+                    <option value="">请选择目标集群</option>
+                    <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.cluster_name || c.name }}</option>
+                  </select>
+                </div>
               </template>
               <div class="field">
                 <label>备注 <span class="optional">(选填)</span></label>
@@ -542,6 +549,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getPipelines } from '@/api/platform/pipeline'
+import { getK8sClusterList } from '@/api/platform/cluster'
 import {
   getReleases,
   getReleaseStats,
@@ -706,10 +714,19 @@ export default {
       } catch (e) { console.error('加载流水线失败:', e) }
     }
 
+    // 集群列表（用于手动发布时选择目标集群）
+    const clusters = ref([])
+    const loadClusters = async () => {
+      try {
+        const r = await getK8sClusterList()
+        if (r.code === 0) clusters.value = r.data?.list || r.data || []
+      } catch (e) { console.error('加载集群列表失败:', e) }
+    }
+
     // 创建
     const showCreateDialog = ref(false)
     const creating = ref(false)
-    const createForm = ref({ pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '' })
+    const createForm = ref({ pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' })
     const selectedPipelineInfo = ref(null)
 
     // 选择应用后自动显示部署目标信息
@@ -743,33 +760,49 @@ export default {
       if (!createForm.value.pipeline_id && !createForm.value.name) {
         Message.warning({ content: '请填写应用名称' }); return
       }
+      if (!createForm.value.pipeline_id && !createForm.value.cluster_id) {
+        Message.warning({ content: '请选择目标集群' }); return
+      }
       creating.value = true
       try {
-        // 自动生成发布名称：应用名-版本号
+        // 自动生成应用名称
         const selectedPipeline = pipelines.value.find(p => p.id == createForm.value.pipeline_id)
         const appName = selectedPipeline ? selectedPipeline.name : createForm.value.name
-        const autoName = `${appName}-${createForm.value.version}`
-        // 构建发布 payload
+
+        // 解析完整镜像地址为 image_repo + image_tag
+        // 例：harbor.example.com/proj/app:v1.0.0 → repo=harbor.example.com/proj/app, tag=v1.0.0
+        let imageRepo = ''
+        let imageTag = createForm.value.version
+        if (createForm.value.image) {
+          const lastColon = createForm.value.image.lastIndexOf(':')
+          if (lastColon > 0 && !createForm.value.image.substring(lastColon + 1).includes('/')) {
+            imageRepo = createForm.value.image.substring(0, lastColon)
+            imageTag = createForm.value.image.substring(lastColon + 1) || createForm.value.version
+          } else {
+            imageRepo = createForm.value.image
+          }
+        }
+
+        // 构建符合后端 CicdReleaseCreateRequest 的 payload
         const payload = {
           pipeline_id: createForm.value.pipeline_id ? Number(createForm.value.pipeline_id) : undefined,
-          name: autoName,
           app_name: appName,
-          version: createForm.value.version,
-          image_tag: createForm.value.version,
+          image_tag: imageTag,
           namespace: createForm.value.namespace || 'production',
-          image: createForm.value.image,
-          description: createForm.value.remark
+          message: createForm.value.remark || ''
         }
         // 新应用手动发布时传入部署目标
         if (!createForm.value.pipeline_id) {
+          payload.image_repo = imageRepo
           payload.workload_kind = createForm.value.workload_kind || 'Deployment'
           payload.workload_name = createForm.value.workload_name || appName
           payload.container_name = createForm.value.container_name || ''
+          payload.cluster_ids = [Number(createForm.value.cluster_id)]
         }
         const r = await createRelease(payload)
         if (r.code === 0) {
           Message.success({ content: '发布创建成功' }); showCreateDialog.value = false
-          createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '' }
+          createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' }
           selectedPipelineInfo.value = null
           loadAll()
         } else { throw new Error(r.msg || '创建失败') }
@@ -970,11 +1003,11 @@ export default {
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
 
-    onMounted(() => { loadAll(); loadPipelines() })
+    onMounted(() => { loadAll(); loadPipelines(); loadClusters() })
 
     return {
       loading, releases, searchKeyword, searchFocused, statusFilter, currentPage, totalPages, total,
-      statsData, setFilter, pipelines, showCreateDialog, creating, createForm, handleCreate,
+      statsData, setFilter, pipelines, clusters, showCreateDialog, creating, createForm, handleCreate,
       selectedPipelineInfo, onPipelineSelect,
       showEditDialog, editing, editForm, editRelease, handleEdit, canEdit, canDelete, deleteRelease,
       showConfirmDialog, confirmTitle, confirmMessage, confirmBtnText, confirmType, confirming, confirmAction,

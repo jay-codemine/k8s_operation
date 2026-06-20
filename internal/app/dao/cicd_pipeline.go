@@ -40,6 +40,39 @@ func (d *Dao) PipelineGetByName(ctx context.Context, name string) (*models.CicdP
 	return &p, nil
 }
 
+// PipelineGetByGitRepoBranch 根据仓库+分支查找已有流水线（用于冲突警告）
+// excludeID != 0 时排除该 ID（编辑模式下排除自身）
+func (d *Dao) PipelineGetByGitRepoBranch(ctx context.Context, gitRepo, gitBranch string, excludeID int64) ([]*models.CicdPipeline, error) {
+	var list []*models.CicdPipeline
+	query := d.db.WithContext(ctx).
+		Where("git_repo = ? AND git_branch = ? AND is_del = 0", gitRepo, gitBranch)
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+	err := query.Select("id, name").Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// PipelineGetByWorkload 根据自动部署目标查找已有流水线（用于冲突警告）
+// excludeID != 0 时排除该 ID
+func (d *Dao) PipelineGetByWorkload(ctx context.Context, clusterID int64, namespace, workloadName string, excludeID int64) ([]*models.CicdPipeline, error) {
+	var list []*models.CicdPipeline
+	query := d.db.WithContext(ctx).
+		Where("target_cluster_id = ? AND target_namespace = ? AND target_workload_name = ? AND auto_deploy = 1 AND is_del = 0",
+			clusterID, namespace, workloadName)
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+	err := query.Select("id, name").Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // PipelineList 获取流水线列表
 func (d *Dao) PipelineList(ctx context.Context, keyword, status string, page, pageSize int) ([]*models.CicdPipeline, int64, error) {
 	var list []*models.CicdPipeline

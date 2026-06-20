@@ -38,6 +38,7 @@ type CicdReleaseCreateRequest struct {
 
 	ClusterIDs []int64 `json:"cluster_ids" valid:"cluster_ids"`
 
+	Message   string `json:"message"`   // 可选：发布说明/备注
 	RequestID string `json:"request_id"` // 可选，幂等校验用
 }
 
