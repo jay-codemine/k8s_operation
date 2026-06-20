@@ -1677,6 +1677,7 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 }
 
 // waitAutoDeployRollout 等待自动部署的 Rollout 完成
+// 严格检查：必须所有新 Pod 就绪 + 无旧 Pod 残留 + 无 ImagePullBackOff/CrashLoopBackOff
 func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) error {
 	timeout := 5 * time.Minute
 	interval := 5 * time.Second
@@ -1693,26 +1694,41 @@ func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.
 			replicas = *dp.Spec.Replicas
 		}
 
-		logs.WriteString(fmt.Sprintf("[ROLLOUT] 期望: %d | 更新: %d | 就绪: %d | 可用: %d | Gen: %d/%d\n",
+		logs.WriteString(fmt.Sprintf("[ROLLOUT] 期望: %d | 总数: %d | 更新: %d | 就绪: %d | 可用: %d | Gen: %d/%d\n",
 			replicas,
+			dp.Status.Replicas,
 			dp.Status.UpdatedReplicas,
 			dp.Status.ReadyReplicas,
 			dp.Status.AvailableReplicas,
 			dp.Status.ObservedGeneration, dp.Generation))
 
-		// 检查 Rollout 是否失败
+		// 检查 Rollout 是否超过 ProgressDeadline
 		for _, cond := range dp.Status.Conditions {
 			if cond.Type == "Progressing" && cond.Reason == "ProgressDeadlineExceeded" {
 				return fmt.Errorf("Rollout 超时: %s", cond.Message)
 			}
 		}
 
-		// Rollout 完成条件：所有副本已更新、就绪且可用
+		// 检查 Pod 级别错误（ImagePullBackOff / CrashLoopBackOff 等）
+		if dp.Spec.Selector != nil {
+			podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, dp.Spec.Selector, logs)
+			if podErr != nil {
+				return podErr
+			}
+		}
+
+		// Rollout 完成条件（参考 kubectl rollout status 逻辑）：
+		// 1. ObservedGeneration >= Generation（控制器已处理最新配置）
+		// 2. UpdatedReplicas == replicas（所有 Pod 已更新到新版本）
+		// 3. Replicas == UpdatedReplicas（旧 Pod 已全部终止，无残留）
+		// 4. ReadyReplicas == replicas（所有新 Pod 就绪）
+		// 5. AvailableReplicas == replicas（所有新 Pod 可用）
 		if dp.Status.ObservedGeneration >= dp.Generation &&
 			dp.Status.UpdatedReplicas == replicas &&
+			dp.Status.Replicas == dp.Status.UpdatedReplicas &&
 			dp.Status.ReadyReplicas == replicas &&
 			dp.Status.AvailableReplicas == replicas {
-			logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪（Ready=%d, Available=%d）\n", replicas, dp.Status.ReadyReplicas, dp.Status.AvailableReplicas))
+			logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪（Ready=%d, Available=%d, 无旧 Pod 残留）\n", replicas, dp.Status.ReadyReplicas, dp.Status.AvailableReplicas))
 			return nil
 		}
 
