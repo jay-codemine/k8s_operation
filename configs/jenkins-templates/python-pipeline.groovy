@@ -248,7 +248,7 @@ spec:
             steps {
                 container('python') {
                     script {
-                        def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'python-app'
+                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'python-app'
                         def archiveName = "${appName}-${env.FINAL_TAG}.tar.gz"
                         sh "tar czf ${archiveName} --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' ."
                         def uploadUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/artifact/upload').replace('/stage/callback', '/artifact/upload')

@@ -245,7 +245,7 @@ spec:
                 container('golang') {
                     script {
                         if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
-                        def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server'
+                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'server'
                         env.APP_NAME = appName
                         env.BINARY_PATH = "bin/${appName}"
                         sh """
@@ -457,7 +457,7 @@ spec:
                 echo "=== Kaniko 构建并推送镜像（无需 Docker daemon） ==="
                 container('kaniko') {
                     script {
-                        def appName = env.APP_NAME ?: (params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'server')
+                        def appName = env.APP_NAME ?: (params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'server')
                         env.APP_NAME = appName
                         if (!env.BINARY_PATH) { env.BINARY_PATH = "bin/${appName}" }
 

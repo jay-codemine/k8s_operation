@@ -255,7 +255,7 @@ spec:
                     script {
                         def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
                         if (!fileExists(outputDir)) { error("构建产物目录不存在: ${outputDir}") }
-                        def appName = params.GIT_REPO?.split('/')?.getAt(-1)?.replace('.git', '') ?: 'frontend-app'
+                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'frontend-app'
                         def archiveName = "${appName}-${env.FINAL_TAG}.tar.gz"
                         sh "tar czf ${archiveName} -C ${outputDir} ."
                         def uploadUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/artifact/upload').replace('/stage/callback', '/artifact/upload')
