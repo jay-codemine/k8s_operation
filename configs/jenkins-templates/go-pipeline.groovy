@@ -29,7 +29,7 @@ metadata:
 spec:
   containers:
   - name: golang
-    image: golang:1.24
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/golang:1.24
     command: ['sleep', '99d']
     resources:
       requests:
@@ -53,7 +53,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
     command: ['sleep', '99d']
     resources:
       requests:
@@ -472,7 +472,7 @@ spec:
                             } else {
                                 dockerfile = '.Dockerfile.runtime'
                                 writeFile file: dockerfile, text: """\
-FROM alpine:3.20
+FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     addgroup -S app && adduser -S app -G app
