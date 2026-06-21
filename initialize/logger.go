@@ -14,7 +14,7 @@ func ensureDir(filePath string) error {
 	info, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			if err := os.MkdirAll(dir, 0o775); err != nil {
 				return fmt.Errorf("create log dir %q: %w", dir, err)
 			}
 			return nil
@@ -23,6 +23,18 @@ func ensureDir(filePath string) error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("log path %q exists but is not a directory", dir)
+	}
+	// 尝试确保目录有写权限（hostPath PV 可能继承 root 权限）
+	// chmod 失败不阻塞，验证写权限就够
+	if err := os.Chmod(dir, 0o775); err != nil {
+		// 权限设置失败，检查目录是否可写
+		testFile := filepath.Join(dir, ".write_test")
+		if f, e := os.OpenFile(testFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); e != nil {
+			return fmt.Errorf("log dir %q is not writable (chmod failed: %v, write test: %v)", dir, err, e)
+		} else {
+			f.Close()
+			_ = os.Remove(testFile)
+		}
 	}
 	return nil
 }

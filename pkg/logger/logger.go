@@ -72,7 +72,7 @@ func NewLogger(level zapcore.Level, ropt RotateOptions, options ...Option) *Logg
 	// 确保日志目录存在
 	if ropt.FileName != "" {
 		logDir := filepath.Dir(ropt.FileName)
-		if err := os.MkdirAll(logDir, 0o755); err != nil {
+		if err := os.MkdirAll(logDir, 0o775); err != nil {
 			// 日志目录创建失败，打印警告但不阻塞启动
 			fmt.Fprintf(os.Stderr, "[WARN] create log directory %q failed: %v\n", logDir, err)
 		}
