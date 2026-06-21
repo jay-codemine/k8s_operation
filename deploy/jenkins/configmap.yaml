@@ -51,21 +51,37 @@ data:
             retentionTimeout: 5
             waitForPodSec: 600
 
-    # 全局凭证（按需配置）
+    # 全局凭证（通过 K8s Secret 注入，重启不丢失）
     credentials:
       system:
         domainCredentials:
           - credentials:
+              # HMAC 签名密钥（回调验签）
               - string:
                   scope: GLOBAL
                   id: "hmac-secret"
                   secret: "${HMAC_SECRET}"
                   description: "HMAC signing secret for platform callback"
+              # SonarQube Token
               - string:
                   scope: GLOBAL
                   id: "sonarqube-token"
                   secret: "${SONAR_TOKEN}"
                   description: "SonarQube authentication token"
+              # 镜像仓库凭证（阿里云 ACR / Harbor）
+              - usernamePassword:
+                  scope: GLOBAL
+                  id: "harbor-registry"
+                  username: "${REGISTRY_USERNAME}"
+                  password: "${REGISTRY_PASSWORD}"
+                  description: "Container registry credentials (Aliyun ACR)"
+              # Git 凭证（Gitee）
+              - usernamePassword:
+                  scope: GLOBAL
+                  id: "gitee-id"
+                  username: "${GITEE_USERNAME}"
+                  password: "${GITEE_PASSWORD}"
+                  description: "Gitee Git credential (Personal Access Token)"
 
     # 必装插件
     unclassified:

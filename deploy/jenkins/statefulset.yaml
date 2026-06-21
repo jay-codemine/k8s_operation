@@ -73,6 +73,26 @@ spec:
                 secretKeyRef:
                   name: jenkins-secret
                   key: sonarqube-token
+            - name: REGISTRY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: registry-username
+            - name: REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: registry-password
+            - name: GITEE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: gitee-username
+            - name: GITEE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: gitee-password
           resources:
             requests:
               cpu: "1"
