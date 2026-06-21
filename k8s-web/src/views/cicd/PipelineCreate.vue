@@ -1630,6 +1630,23 @@ export default {
             return false
           }
           break
+        case 2:
+          // 自动部署配置校验
+          if (pipelineData.value.auto_deploy) {
+            if (!pipelineData.value.target_cluster_id) {
+              alert('请选择目标集群')
+              return false
+            }
+            if (!pipelineData.value.target_namespace) {
+              alert('请选择目标命名空间')
+              return false
+            }
+            if (!pipelineData.value.target_workload_name) {
+              alert('请填写或选择工作负载名称（即 K8s 中的 Deployment 名称）')
+              return false
+            }
+          }
+          break
       }
       return true
     }
@@ -1955,6 +1972,21 @@ export default {
         alert('应用名称已存在，请更换一个名称')
         return
       }
+      // 自动部署开启时，检查部署配置完整性
+      if (pipelineData.value.auto_deploy) {
+        if (!pipelineData.value.target_cluster_id) {
+          alert('请选择目标集群')
+          return
+        }
+        if (!pipelineData.value.target_namespace) {
+          alert('请选择目标命名空间')
+          return
+        }
+        if (!pipelineData.value.target_workload_name) {
+          alert('请填写或选择工作负载名称')
+          return
+        }
+      }
       try {
         submitting.value = true
         // 构建最小化提交数据，后端自动推导其余配置
@@ -1966,6 +1998,9 @@ export default {
           auto_deploy: pipelineData.value.auto_deploy,
           target_cluster_id: pipelineData.value.target_cluster_id || 0,
           target_namespace: pipelineData.value.target_namespace || '',
+          target_workload_kind: pipelineData.value.target_workload_kind || 'Deployment',
+          target_workload_name: pipelineData.value.target_workload_name || '',
+          target_container: pipelineData.value.target_container || pipelineData.value.target_workload_name || '',
           env_vars: []
         }
         // 注入 IMAGE_REPO
@@ -2076,6 +2111,11 @@ export default {
         delete submitData.dockerfile_path
         delete submitData.git_credential_id
         delete submitData.java_version
+
+        // 确保容器名称有值（自动部署时必须）
+        if (submitData.auto_deploy && !submitData.target_container && submitData.target_workload_name) {
+          submitData.target_container = submitData.target_workload_name
+        }
 
         if (isEdit) {
           response = await updatePipeline({
@@ -2242,9 +2282,22 @@ export default {
       }
     }
     
-    // 工作负载变化
+    // 工作负载变化 - 自动填充容器名称
     const onWorkloadChange = () => {
-      // 可以在这里自动填充容器名称
+      const selectedName = pipelineData.value.target_workload_name
+      if (!selectedName) {
+        pipelineData.value.target_container = ''
+        return
+      }
+      // 从已加载的工作负载列表中找到选中项，获取第一个容器名称
+      const workload = workloads.value.find(w => w.name === selectedName)
+      if (workload && workload.containers && workload.containers.length > 0) {
+        // 使用工作负载的第一个容器名称
+        pipelineData.value.target_container = workload.containers[0]
+      } else {
+        // 回退：容器名默认使用工作负载名称（与后端智能默认值一致）
+        pipelineData.value.target_container = selectedName
+      }
     }
     
     // 选择部署环境

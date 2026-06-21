@@ -323,6 +323,32 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 		return nil
 	}
 
+	// 智能默认值：自动部署启用时，确保容器名称有值
+	autoDeployEnabled := false
+	if req.AutoDeploy != nil {
+		autoDeployEnabled = *req.AutoDeploy
+	} else {
+		autoDeployEnabled = pipeline.AutoDeploy
+	}
+	if autoDeployEnabled {
+		// 如果容器名为空，默认用工作负载名
+		container := ""
+		if req.TargetContainer != nil {
+			container = *req.TargetContainer
+		} else {
+			container = pipeline.TargetContainer
+		}
+		workloadName := ""
+		if req.TargetWorkloadName != nil {
+			workloadName = *req.TargetWorkloadName
+		} else {
+			workloadName = pipeline.TargetWorkloadName
+		}
+		if container == "" && workloadName != "" {
+			updates["target_container"] = workloadName
+		}
+	}
+
 	return s.dao.PipelineUpdate(ctx, req.ID, updates)
 }
 
