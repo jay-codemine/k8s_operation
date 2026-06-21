@@ -120,6 +120,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               <span>批量回滚</span>
             </button>
+            <button class="batch-action-btn stop" @click="handleBatchCancel" :disabled="batchLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              <span>批量取消</span>
+            </button>
             <button class="batch-action-btn cancel" @click="selectedIds = []">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               <span>取消选择</span>
@@ -561,6 +565,7 @@ import {
   retryRelease as retryReleaseApi,
   batchRetryRelease as batchRetryReleaseApi,
   batchRollbackRelease as batchRollbackReleaseApi,
+  batchCancelRelease as batchCancelReleaseApi,
   syncReleasesFromPipeline as syncReleasesApi
 } from '@/api/cicd'
 
@@ -788,6 +793,7 @@ export default {
           pipeline_id: createForm.value.pipeline_id ? Number(createForm.value.pipeline_id) : undefined,
           app_name: appName,
           image_tag: imageTag,
+          image_repo: imageRepo || (selectedPipelineInfo.value ? selectedPipelineInfo.value.image_repo : '') || undefined,
           namespace: createForm.value.namespace || 'production',
           message: createForm.value.remark || ''
         }
@@ -950,6 +956,30 @@ export default {
       })
     }
 
+    // 批量取消
+    const handleBatchCancel = () => {
+      const ids = selectedIds.value.filter(id => {
+        const rel = releases.value.find(r => r.id === id)
+        return rel && ['Pending', 'Queued', 'Running', 'Succeeded'].includes(rel.status)
+      })
+      if (ids.length === 0) {
+        Message.warning({ content: '请选择可取消的记录（等待中/排队中/运行中/已成功状态）' }); return
+      }
+      openConfirm('批量取消', `确定要取消已选的 ${ids.length} 个发布单吗？\n已部署成功/运行中的会触发回滚，未部署的直接取消。`, '确认取消', 'warning', async () => {
+        batchLoading.value = true
+        try {
+          const r = await batchCancelReleaseApi(ids)
+          if (r.code === 0) {
+            const data = r.data || {}
+            Message.success({ content: data.message || `批量取消完成`, duration: 3000 })
+            selectedIds.value = []
+            loadAll()
+          } else { throw new Error(r.msg || '批量取消失败') }
+        } catch (e) { Message.error({ content: e.message || '批量取消失败' }) }
+        finally { batchLoading.value = false }
+      })
+    }
+
     // 同步流水线记录
     const syncFromPipeline = async () => {
       syncing.value = true
@@ -1015,7 +1045,7 @@ export default {
       statusText, normalizeStatus, strategyText, formatImage, getFullImage, formatDate, loadAll,
       visiblePages, goToPage, jumpPage, jumpToPage, pageSizeRef, onPageSizeChange,
       selectedIds, batchLoading, isAllSelected, isIndeterminate, toggleAll, toggleSelect,
-      handleBatchRetry, handleBatchRollback,
+      handleBatchRetry, handleBatchRollback, handleBatchCancel,
       syncing, syncFromPipeline
     }
   }
@@ -1243,6 +1273,16 @@ export default {
   background: linear-gradient(135deg, #d97706, #b45309);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.batch-action-btn.stop {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+}
+.batch-action-btn.stop:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
 }
 
 .batch-action-btn.cancel {

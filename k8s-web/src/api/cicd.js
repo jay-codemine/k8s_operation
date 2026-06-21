@@ -213,6 +213,14 @@ export const batchRollbackRelease = (ids) => {
 }
 
 /**
+ * 批量取消发布单
+ * @param {number[]} ids - 发布单ID列表
+ */
+export const batchCancelRelease = (ids) => {
+  return http.post(`${RELEASE_BASE}/batch-cancel`, { ids })
+}
+
+/**
  * 同步流水线运行记录到发布管理
  */
 export const syncReleasesFromPipeline = () => {

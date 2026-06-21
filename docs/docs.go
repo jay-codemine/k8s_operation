@@ -3987,6 +3987,41 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/release/batch-cancel": {
+            "post": {
+                "description": "批量取消（智能判断：已部署成功/运行中的会触发回滚，未部署的直接取消）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "批量取消发布单",
+                "parameters": [
+                    {
+                        "description": "批量取消参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.CicdReleaseBatchCancelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/release/batch-retry": {
             "post": {
                 "description": "批量重新发布（根据最近一次发布记录重新发布）",
@@ -18495,6 +18530,17 @@ const docTemplate = `{
                 "status": {
                     "description": "SUCCESS / FAILURE / ABORTED",
                     "type": "string"
+                }
+            }
+        },
+        "requests.CicdReleaseBatchCancelRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

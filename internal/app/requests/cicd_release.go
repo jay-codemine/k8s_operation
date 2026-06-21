@@ -47,9 +47,13 @@ func ValidCicdReleaseCreateRequest(data interface{}, ctx *gin.Context) map[strin
 
 	// 如果指定了 pipeline_id，则放宽校验（后端会从流水线继承配置）
 	if req.PipelineID > 0 {
-		// 仅要求 image_tag 或 image_repo（最小化输入）
-		rules := govalidator.MapData{}
-		messages := govalidator.MapData{}
+		// 仅要求 image_tag（最小化输入）
+		rules := govalidator.MapData{
+			"image_tag": []string{"required"},
+		}
+		messages := govalidator.MapData{
+			"image_tag": []string{"required: image_tag不能为空"},
+		}
 		return valid.ValidateOptions(data, rules, messages)
 	}
 
@@ -179,6 +183,26 @@ func NewCicdReleaseBatchRollbackRequest() *CicdReleaseBatchRollbackRequest {
 }
 
 func ValidCicdReleaseBatchRollbackRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 批量取消 ==========
+
+type CicdReleaseBatchCancelRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchCancelRequest() *CicdReleaseBatchCancelRequest {
+	return &CicdReleaseBatchCancelRequest{}
+}
+
+func ValidCicdReleaseBatchCancelRequest(data interface{}, ctx *gin.Context) map[string][]string {
 	rules := govalidator.MapData{
 		"ids": []string{"required"},
 	}

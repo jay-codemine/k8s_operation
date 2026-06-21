@@ -631,6 +631,13 @@ definitions:
         description: SUCCESS / FAILURE / ABORTED
         type: string
     type: object
+  requests.CicdReleaseBatchCancelRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
   requests.CicdReleaseBatchRetryRequest:
     properties:
       ids:
@@ -5679,6 +5686,29 @@ paths:
       summary: 更新流水线
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/release/batch-cancel:
+    post:
+      consumes:
+      - application/json
+      description: 批量取消（智能判断：已部署成功/运行中的会触发回滚，未部署的直接取消）
+      parameters:
+      - description: 批量取消参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.CicdReleaseBatchCancelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量取消发布单
+      tags:
+      - CICD Release
   /api/v1/k8s/cicd/release/batch-retry:
     post:
       consumes:

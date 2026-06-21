@@ -52,6 +52,21 @@ func (s *Services) CicdReleaseCreate(
 				}
 			}
 		}
+		// 回退策略：从最近部署镜像解析仓库地址
+		if req.ImageRepo == "" && pipeline.LastDeployImage != "" {
+			img := pipeline.LastDeployImage
+			// 去掉 digest 部分（如 repo@sha256:xxx）
+			if atIdx := strings.Index(img, "@"); atIdx > 0 {
+				img = img[:atIdx]
+			}
+			// 去掉 tag 部分（如 repo:v1.0.0）
+			if colonIdx := strings.LastIndex(img, ":"); colonIdx > 0 && !strings.Contains(img[colonIdx:], "/") {
+				img = img[:colonIdx]
+			}
+			if img != "" {
+				req.ImageRepo = img
+			}
+		}
 		if len(req.ClusterIDs) == 0 && pipeline.TargetClusterID > 0 {
 			req.ClusterIDs = []int64{pipeline.TargetClusterID}
 		}
@@ -71,6 +86,9 @@ func (s *Services) CicdReleaseCreate(
 		}
 		if len(req.ClusterIDs) == 0 {
 			return 0, fmt.Errorf("流水线未配置目标集群，请先编辑流水线补充部署配置")
+		}
+		if req.ImageRepo == "" {
+			return 0, fmt.Errorf("流水线未配置镜像仓库(IMAGE_REPO)，且无最近部署记录，请先编辑流水线或补充 IMAGE_REPO 环境变量")
 		}
 	}
 
@@ -408,6 +426,17 @@ func (s *Services) CicdReleaseRetry(ctx context.Context, releaseID int64, userID
 		clusterIDs = append(clusterIDs, t.ClusterID)
 	}
 
+	// 回退策略：如果原发布单没有关联任务（早期同步的数据），通过 BuildID 回查流水线配置获取集群ID
+	if len(clusterIDs) == 0 && rel.BuildID > 0 {
+		run, runErr := s.dao.PipelineRunGetByID(ctx, rel.BuildID)
+		if runErr == nil && run != nil {
+			pipeline, pErr := s.dao.PipelineGetByID(ctx, run.PipelineID)
+			if pErr == nil && pipeline != nil && pipeline.TargetClusterID > 0 {
+				clusterIDs = []int64{pipeline.TargetClusterID}
+			}
+		}
+	}
+
 	// 构建新的发布请求
 	newReq := &requests.CicdReleaseCreateRequest{
 		AppName:       rel.AppName,
@@ -579,6 +608,41 @@ func (s *Services) CicdReleaseBatchRollback(ctx context.Context, ids []int64, us
 				NewID:   newID,
 				Success: true,
 				Message: "回滚成功",
+			})
+		}
+	}
+	return results, nil
+}
+
+// BatchCancelResult 批量取消结果
+type BatchCancelResult struct {
+	ID      int64  `json:"id"`
+	Action  string `json:"action"` // "canceled" 或 "rollback"
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// CicdReleaseBatchCancel 批量取消发布单（智能判断：已部署的触发回滚，未部署的直接取消）
+func (s *Services) CicdReleaseBatchCancel(ctx context.Context, ids []int64, userID int64) ([]BatchCancelResult, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("发布单ID列表不能为空")
+	}
+
+	results := make([]BatchCancelResult, 0, len(ids))
+	for _, id := range ids {
+		cancelResult, err := s.CicdReleaseCancel(ctx, id, userID)
+		if err != nil {
+			results = append(results, BatchCancelResult{
+				ID:      id,
+				Success: false,
+				Message: err.Error(),
+			})
+		} else {
+			results = append(results, BatchCancelResult{
+				ID:      id,
+				Action:  cancelResult.Action,
+				Success: true,
+				Message: "取消成功",
 			})
 		}
 	}

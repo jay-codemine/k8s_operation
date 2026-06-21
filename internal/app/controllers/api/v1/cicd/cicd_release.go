@@ -428,6 +428,53 @@ func (c *CicdReleaseController) BatchRollback(ctx *gin.Context) {
 	})
 }
 
+// BatchCancel godoc
+// @Summary 批量取消发布单
+// @Description 批量取消（智能判断：已部署成功/运行中的会触发回滚，未部署的直接取消）
+// @Tags CICD Release
+// @Accept json
+// @Produce json
+// @Param body body requests.CicdReleaseBatchCancelRequest true "批量取消参数"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/batch-cancel [post]
+func (c *CicdReleaseController) BatchCancel(ctx *gin.Context) {
+	param := requests.NewCicdReleaseBatchCancelRequest()
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCicdReleaseBatchCancelRequest); !ok {
+		return
+	}
+
+	if len(param.IDs) == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("发布单ID列表不能为空"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+	svc := services.NewServices()
+	results, err := svc.CicdReleaseBatchCancel(ctx.Request.Context(), param.IDs, userID)
+	if err != nil {
+		global.Logger.Error("CicdReleaseBatchCancel error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	// 统计成功/失败
+	successCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		}
+	}
+
+	rsp.Success(gin.H{
+		"message": fmt.Sprintf("批量取消完成：成功 %d / 共 %d", successCount, len(results)),
+		"results": results,
+		"success": successCount,
+		"total":   len(results),
+	})
+}
+
 // SyncFromPipeline godoc
 // @Summary 同步流水线运行记录到发布管理
 // @Description 将最近的流水线运行记录同步到发布管理页面

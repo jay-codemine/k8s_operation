@@ -1513,6 +1513,34 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 		return
 	}
 
+	// 创建关联的部署任务（让批量发布/重试可以获取到集群信息，回查 client-go 部署目标）
+	if pipeline.TargetClusterID > 0 {
+		targetImage := image // 完整镜像地址，如 registry.cn/proj/app:v1.0
+		if imageDigest != "" && targetImage != "" {
+			// 优先使用 digest 确保镜像一致性
+			if idx := strings.LastIndex(targetImage, ":"); idx > 0 && !strings.Contains(targetImage[idx:], "/") {
+				targetImage = targetImage[:idx] + "@" + imageDigest
+			}
+		}
+		task := &models.CicdReleaseTask{
+			ReleaseID:   release.ID,
+			ClusterID:   pipeline.TargetClusterID,
+			Status:      releaseStatus,
+			Message:     "流水线同步",
+			TargetImage: targetImage,
+			StartedAt:   now,
+			FinishedAt:  now,
+			CreatedAt:   now,
+			ModifiedAt:  now,
+		}
+		if err := s.dao.CicdTasksCreate(ctx, []*models.CicdReleaseTask{task}); err != nil {
+			global.Logger.Warn("[同步发布] 创建部署任务失败",
+				zap.Int64("release_id", release.ID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	global.Logger.Info("[同步发布] 发布单创建成功",
 		zap.Int64("pipeline_id", pipeline.ID),
 		zap.Int64("run_id", run.ID),
