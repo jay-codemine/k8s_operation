@@ -265,7 +265,7 @@ func BuildCronJobListResponse(cronjobs []batchv1.CronJob, jobs []batchv1.Job) []
 			FailedJobsHistoryLimit:     cj.Spec.FailedJobsHistoryLimit,
 			Image:                      firstImage,
 			Containers:                 containers,
-			CreatedAt:                  cj.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:                  cj.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 			JobStats:                   jobStatsMap[string(cj.UID)],
 		}
 

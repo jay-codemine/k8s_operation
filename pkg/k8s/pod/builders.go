@@ -62,7 +62,7 @@ func BuildPodListResponse(pods []corev1.Pod) []PodListItem {
 			HostIP:            pod.Status.HostIP,
 			Image:             image,
 			RestartCount:      restartCount,
-			CreatedAt:         pod.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:         pod.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 			Containers:        containers,
 			Conditions:        pod.Status.Conditions,
 			ContainerStatuses: pod.Status.ContainerStatuses,

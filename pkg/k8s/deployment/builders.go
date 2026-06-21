@@ -634,7 +634,7 @@ func BuildDeploymentListResponse(deployments []appv1.Deployment) []DeploymentLis
 			Containers:        containers,
 			Selector:          dp.Spec.Selector.MatchLabels,
 			UpdateStrategy:    string(dp.Spec.Strategy.Type),
-			CreatedAt:         dp.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:         dp.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 			Conditions:        dp.Status.Conditions,
 		}
 

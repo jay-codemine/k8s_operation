@@ -66,7 +66,7 @@ func BuildStorageClassListResponse(storageClasses []storagev1.StorageClass) []St
 			Parameters:        sc.Parameters,
 			MountOptions:      sc.MountOptions,
 			IsDefault:         isDefault,
-			CreatedAt:         sc.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:         sc.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 		}
 
 		result = append(result, item)

@@ -433,7 +433,7 @@ func BuildStatefulSetListResponse(statefulsets []appv1.StatefulSet) []StatefulSe
 			Selector:        selector,
 			UpdateStrategy:  string(sts.Spec.UpdateStrategy.Type),
 			ServiceName:     sts.Spec.ServiceName,
-			CreatedAt:       sts.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:       sts.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 			Conditions:      sts.Status.Conditions,
 		}
 

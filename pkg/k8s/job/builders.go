@@ -421,7 +421,7 @@ func BuildJobListResponse(jobs []batchv1.Job) []JobListItem {
 			StartTime:      startTime,
 			CompletionTime: completionTime,
 			Suspend:        suspend,
-			CreatedAt:      j.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:      j.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 		}
 
 		result = append(result, item)
@@ -579,6 +579,6 @@ func BuildJobDetailResponse(j *batchv1.Job) gin.H {
 		"start_time":      startTime,
 		"completion_time": completionTime,
 		"suspend":         suspend,
-		"created_at":      j.CreationTimestamp.Format("2006-01-02 15:04:05"),
+		"created_at":      j.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 	}
 }

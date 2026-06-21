@@ -356,7 +356,7 @@ func BuildDaemonSetListResponse(daemonsets []appv1.DaemonSet) []DaemonSetListIte
 			Containers:             containers,
 			Selector:               selector,
 			UpdateStrategy:         string(ds.Spec.UpdateStrategy.Type),
-			CreatedAt:              ds.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:              ds.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 		}
 
 		result = append(result, item)
