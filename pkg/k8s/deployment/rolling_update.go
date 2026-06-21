@@ -342,7 +342,7 @@ func GetRolloutStatus(ctx context.Context, client kubernetes.Interface, namespac
 			AvailableReplicas: rs.Status.AvailableReplicas,
 			Image:             image,
 			IsCurrent:         isCurrent,
-			CreatedAt:         rs.CreationTimestamp.Format("2006-01-02 15:04:05"),
+			CreatedAt:         rs.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 		}
 		info.ReplicaSets = append(info.ReplicaSets, brief)
 

@@ -43,7 +43,7 @@ func BuildHPAItem(h *autoscalingv2.HorizontalPodAutoscaler) HPAItem {
 		CurrentReplicas:   h.Status.CurrentReplicas,
 		DesiredReplicas:   h.Status.DesiredReplicas,
 		Labels:            h.Labels,
-		CreationTimestamp: h.CreationTimestamp.Format("2006-01-02 15:04:05"),
+		CreationTimestamp: h.CreationTimestamp.Time.Local().Format("2006-01-02 15:04:05"),
 	}
 	if h.Spec.MinReplicas != nil {
 		item.MinReplicas = *h.Spec.MinReplicas
