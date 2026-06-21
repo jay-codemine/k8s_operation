@@ -11,7 +11,11 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
+	"k8soperation/internal/app/requests"
+	kevent "k8soperation/pkg/k8s/event"
 	"k8soperation/pkg/utils"
 )
 
@@ -125,6 +129,93 @@ func (s *K8sRBACService) DeleteServiceAccount(ctx context.Context, cli *kubernet
 		return err
 	}
 	return nil
+}
+
+// UpdateServiceAccount 更新 ServiceAccount（Labels + Annotations + AutomountToken）
+func (s *K8sRBACService) UpdateServiceAccount(ctx context.Context, cli *kubernetes.Clientset, namespace, name string, labels map[string]string, annotations map[string]string, autoMount *bool) error {
+	sa, err := cli.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		global.Logger.Error("获取 ServiceAccount 失败", zap.Error(err))
+		return err
+	}
+
+	if labels != nil {
+		sa.Labels = labels
+	}
+	if annotations != nil {
+		sa.Annotations = annotations
+	}
+	if autoMount != nil {
+		sa.AutomountServiceAccountToken = autoMount
+	}
+
+	_, err = cli.CoreV1().ServiceAccounts(namespace).Update(ctx, sa, metav1.UpdateOptions{})
+	if err != nil {
+		global.Logger.Error("更新 ServiceAccount 失败", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetServiceAccountYaml 获取 ServiceAccount YAML 表示
+func (s *K8sRBACService) GetServiceAccountYaml(ctx context.Context, cli *kubernetes.Clientset, namespace, name string) (string, error) {
+	sa, err := cli.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		global.Logger.Error("获取 ServiceAccount 失败", zap.Error(err))
+		return "", err
+	}
+
+	// 清理 server-side 字段
+	sa.ManagedFields = nil
+
+	yamlBytes, err := yaml.Marshal(sa)
+	if err != nil {
+		global.Logger.Error("序列化 ServiceAccount YAML 失败", zap.Error(err))
+		return "", fmt.Errorf("failed to marshal ServiceAccount to YAML: %w", err)
+	}
+	return string(yamlBytes), nil
+}
+
+// ApplyServiceAccountYaml 通过 YAML 更新 ServiceAccount
+func (s *K8sRBACService) ApplyServiceAccountYaml(ctx context.Context, cli *kubernetes.Clientset, yamlStr string) error {
+	saObj := &corev1.ServiceAccount{}
+	if err := yaml.Unmarshal([]byte(yamlStr), saObj); err != nil {
+		return fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	if saObj.Kind != "" && saObj.Kind != "ServiceAccount" {
+		return fmt.Errorf("YAML kind must be 'ServiceAccount', got: %s", saObj.Kind)
+	}
+	if saObj.Name == "" {
+		return fmt.Errorf("ServiceAccount name is required")
+	}
+	if saObj.Namespace == "" {
+		saObj.Namespace = "default"
+	}
+
+	_, err := cli.CoreV1().ServiceAccounts(saObj.Namespace).Update(ctx, saObj, metav1.UpdateOptions{})
+	if err != nil {
+		global.Logger.Error("应用 ServiceAccount YAML 失败", zap.Error(err))
+		return fmt.Errorf("failed to apply ServiceAccount YAML: %w", err)
+	}
+	return nil
+}
+
+// GetServiceAccountEvents 获取 ServiceAccount 相关事件
+func (s *K8sRBACService) GetServiceAccountEvents(ctx context.Context, cli *kubernetes.Clientset, namespace, name string) ([]models.EventItem, error) {
+	req := &requests.KubeEventListRequest{
+		Namespace:    namespace,
+		Kind:         "ServiceAccount",
+		Name:         name,
+		Limit:        50,
+		SinceSeconds: 3600,
+	}
+	items, _, err := kevent.ListEvents(ctx, cli, req)
+	if err != nil {
+		global.Logger.Error("获取 ServiceAccount 事件失败", zap.Error(err))
+		return nil, err
+	}
+	return items, nil
 }
 
 // ==================== Role / ClusterRole ====================

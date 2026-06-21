@@ -20,7 +20,11 @@ func (r *K8sRBACRouter) Inject(router *gin.RouterGroup) {
 		g.GET("/serviceaccounts", ctl.ListServiceAccounts)
 		g.GET("/serviceaccount", ctl.GetServiceAccount)
 		g.POST("/serviceaccount", ctl.CreateServiceAccount)
+		g.PUT("/serviceaccount", ctl.UpdateServiceAccount)
 		g.DELETE("/serviceaccount", ctl.DeleteServiceAccount)
+		g.GET("/serviceaccount/yaml", ctl.GetServiceAccountYaml)
+		g.PUT("/serviceaccount/yaml", ctl.ApplyServiceAccountYaml)
+		g.GET("/serviceaccount/events", ctl.GetServiceAccountEvents)
 
 		// Role / ClusterRole
 		g.GET("/roles", ctl.ListRoles)

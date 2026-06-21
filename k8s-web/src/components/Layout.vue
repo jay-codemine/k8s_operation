@@ -349,6 +349,7 @@ const menuGroupsConfig = reactive([
       { path: '/security/audit', label: '审计日志' },
       { path: '/security/ai-approvals', label: 'AI 审批管理' },
       { path: '/security/diagnosis', label: '权限诊断' },
+      { path: '/security/rbac/serviceaccounts', label: 'ServiceAccount' },
     ],
   },
   // CI/CD

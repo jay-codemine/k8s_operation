@@ -46,6 +46,46 @@ export function deleteServiceAccount(clusterId, namespace, name) {
   })
 }
 
+// 更新 ServiceAccount（Labels / Annotations / AutomountToken）
+export function updateServiceAccount(clusterId, data) {
+  return http({
+    url: '/api/v1/k8s/rbac/serviceaccount',
+    method: 'put',
+    headers: { 'X-Cluster-ID': clusterId },
+    data
+  })
+}
+
+// 获取 ServiceAccount YAML
+export function getServiceAccountYaml(clusterId, namespace, name) {
+  return http({
+    url: '/api/v1/k8s/rbac/serviceaccount/yaml',
+    method: 'get',
+    headers: { 'X-Cluster-ID': clusterId },
+    params: { namespace, name }
+  })
+}
+
+// 应用 ServiceAccount YAML
+export function applyServiceAccountYaml(clusterId, yamlContent) {
+  return http({
+    url: '/api/v1/k8s/rbac/serviceaccount/yaml',
+    method: 'put',
+    headers: { 'X-Cluster-ID': clusterId },
+    data: { yaml: yamlContent }
+  })
+}
+
+// 获取 ServiceAccount 事件
+export function getServiceAccountEvents(clusterId, namespace, name) {
+  return http({
+    url: '/api/v1/k8s/rbac/serviceaccount/events',
+    method: 'get',
+    headers: { 'X-Cluster-ID': clusterId },
+    params: { namespace, name }
+  })
+}
+
 // ==================== Role / ClusterRole ====================
 
 // 获取 Role 列表（包含 ClusterRole）

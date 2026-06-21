@@ -148,6 +148,144 @@ func (c *K8sRBACController) DeleteServiceAccount(ctx *gin.Context) {
 	resp.Success(gin.H{"message": "删除成功"})
 }
 
+// UpdateServiceAccount godoc
+// @Summary 更新 ServiceAccount
+// @Description 更新 K8s ServiceAccount Labels / Annotations / AutomountToken
+// @Tags K8s RBAC
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body object true "更新参数"
+// @Success 200 {object} string "成功"
+// @Router /api/v1/k8s/rbac/serviceaccount [put]
+func (c *K8sRBACController) UpdateServiceAccount(ctx *gin.Context) {
+	resp := response.NewResponse(ctx)
+
+	var req struct {
+		Name        string            `json:"name" binding:"required"`
+		Namespace   string            `json:"namespace" binding:"required"`
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
+		AutoMount   *bool             `json:"auto_mount_token"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		resp.ToErrorResponse(errorcode.InvalidParams.WithDetails(err.Error()))
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := k8srbac.NewK8sRBACService()
+
+	err := svc.UpdateServiceAccount(ctx.Request.Context(), cli.Kube, req.Namespace, req.Name, req.Labels, req.Annotations, req.AutoMount)
+	if err != nil {
+		global.Logger.Error("更新 ServiceAccount 失败", zap.Error(err))
+		resp.ToErrorResponse(errorcode.ErrorK8sResourceUpdateFail.WithDetails(err.Error()))
+		return
+	}
+
+	resp.Success(gin.H{"message": "更新成功"})
+}
+
+// GetServiceAccountYaml godoc
+// @Summary 获取 ServiceAccount YAML
+// @Description 获取指定 ServiceAccount 的 YAML 表示
+// @Tags K8s RBAC
+// @Produce json
+// @Security ApiKeyAuth
+// @Param namespace query string true "命名空间"
+// @Param name query string true "名称"
+// @Success 200 {object} string "成功"
+// @Router /api/v1/k8s/rbac/serviceaccount/yaml [get]
+func (c *K8sRBACController) GetServiceAccountYaml(ctx *gin.Context) {
+	resp := response.NewResponse(ctx)
+	namespace := ctx.Query("namespace")
+	name := ctx.Query("name")
+
+	if namespace == "" || name == "" {
+		resp.ToErrorResponse(errorcode.InvalidParams)
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := k8srbac.NewK8sRBACService()
+
+	yamlStr, err := svc.GetServiceAccountYaml(ctx.Request.Context(), cli.Kube, namespace, name)
+	if err != nil {
+		global.Logger.Error("获取 ServiceAccount YAML 失败", zap.Error(err))
+		resp.ToErrorResponse(errorcode.ErrorK8sResourceGetFail.WithDetails(err.Error()))
+		return
+	}
+
+	resp.Success(gin.H{"yaml": yamlStr})
+}
+
+// ApplyServiceAccountYaml godoc
+// @Summary 应用 ServiceAccount YAML
+// @Description 通过 YAML 更新 ServiceAccount
+// @Tags K8s RBAC
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param body body object true "YAML 内容"
+// @Success 200 {object} string "成功"
+// @Router /api/v1/k8s/rbac/serviceaccount/yaml [put]
+func (c *K8sRBACController) ApplyServiceAccountYaml(ctx *gin.Context) {
+	resp := response.NewResponse(ctx)
+
+	var req struct {
+		Yaml string `json:"yaml" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		resp.ToErrorResponse(errorcode.InvalidParams.WithDetails(err.Error()))
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := k8srbac.NewK8sRBACService()
+
+	err := svc.ApplyServiceAccountYaml(ctx.Request.Context(), cli.Kube, req.Yaml)
+	if err != nil {
+		global.Logger.Error("应用 ServiceAccount YAML 失败", zap.Error(err))
+		resp.ToErrorResponse(errorcode.ErrorK8sResourceUpdateFail.WithDetails(err.Error()))
+		return
+	}
+
+	resp.Success(gin.H{"message": "YAML 应用成功"})
+}
+
+// GetServiceAccountEvents godoc
+// @Summary 获取 ServiceAccount 事件
+// @Description 获取指定 ServiceAccount 的 K8s 事件
+// @Tags K8s RBAC
+// @Produce json
+// @Security ApiKeyAuth
+// @Param namespace query string true "命名空间"
+// @Param name query string true "名称"
+// @Success 200 {object} string "成功"
+// @Router /api/v1/k8s/rbac/serviceaccount/events [get]
+func (c *K8sRBACController) GetServiceAccountEvents(ctx *gin.Context) {
+	resp := response.NewResponse(ctx)
+	namespace := ctx.Query("namespace")
+	name := ctx.Query("name")
+
+	if namespace == "" || name == "" {
+		resp.ToErrorResponse(errorcode.InvalidParams)
+		return
+	}
+
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := k8srbac.NewK8sRBACService()
+
+	events, err := svc.GetServiceAccountEvents(ctx.Request.Context(), cli.Kube, namespace, name)
+	if err != nil {
+		global.Logger.Error("获取 ServiceAccount 事件失败", zap.Error(err))
+		resp.ToErrorResponse(errorcode.ErrorK8sResourceGetFail.WithDetails(err.Error()))
+		return
+	}
+
+	resp.SuccessList(events, len(events))
+}
+
 // ==================== Role / ClusterRole ====================
 
 // ListRoles godoc
