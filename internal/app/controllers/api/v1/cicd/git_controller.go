@@ -1,4 +1,4 @@
-﻿package cicd
+package cicd
 
 import (
 	"github.com/gin-gonic/gin"

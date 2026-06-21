@@ -1,4 +1,4 @@
-﻿package storageclass
+package storageclass
 
 import (
 	"github.com/gin-gonic/gin"

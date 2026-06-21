@@ -191,7 +191,7 @@
 
           <td>
             <div class="pod-name">
-              <span :title="pod.name">{{ pod.name }}</span>
+              <a class="pod-name-link" :title="pod.name" @click="openDetail(pod)">{{ pod.name }}</a>
             </div>
           </td>
 
@@ -307,7 +307,9 @@
           <div class="card-header">
             <div class="card-title-row">
               <span class="card-icon">📦</span>
-              <h3 class="card-title" :title="pod.name">{{ pod.name }}</h3>
+              <h3 class="card-title">
+                <a class="card-title-link" :title="pod.name" @click="openDetail(pod)">{{ pod.name }}</a>
+              </h3>
               <span class="status-indicator" :class="(pod.status || 'unknown').toLowerCase()">
                 {{ pod.status || 'Unknown' }}
               </span>
@@ -1807,7 +1809,12 @@ const fetchPods = async () => {
 
 // 批量获取 Pod metrics（异步，不阻塞主流程）
 const fetchPodsMetrics = async () => {
+  // 切换命名空间时先清空旧数据
+  metricsMap.value = {};
+  pods.value.forEach(pod => { pod.metrics = null; });
+  
   if (!namespaceFilter.value) return; // 需要指定 namespace
+  if (pods.value.length === 0) return; // 没有 Pod 不需要请求
   
   try {
     const res = await podsApi.metricsList({ namespace: namespaceFilter.value });
@@ -2868,6 +2875,20 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* 可点击的 Pod 名称链接 */
+.pod-name-link {
+  color: #326ce5;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.pod-name-link:hover {
+  color: #1a47b8;
+  text-decoration: underline;
 }
 
 .pod-name .icon {
@@ -4055,6 +4076,19 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 卡片视图可点击的 Pod 名称链接 */
+.card-title-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.card-title-link:hover {
+  color: #326ce5;
+  text-decoration: underline;
 }
 
 /* 卡片主体 */

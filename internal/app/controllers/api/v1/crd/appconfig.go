@@ -1,4 +1,4 @@
-﻿package appconfig
+package appconfig
 
 import (
 	"github.com/gin-gonic/gin"

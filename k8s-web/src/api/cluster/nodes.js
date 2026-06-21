@@ -20,7 +20,7 @@ const nodesApi = {
 
   // Node 指标（CPU/内存使用率）
   metrics(params) {
-    return http.get(`${K8S_BASE}/node/metrics`, { params })
+    return http.get(`${K8S_BASE}/node/metrics`, { params, _silent: true })
   },
 
   // Node 事件

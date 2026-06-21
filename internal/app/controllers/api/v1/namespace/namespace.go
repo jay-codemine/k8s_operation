@@ -1,4 +1,4 @@
-﻿package namespace
+package namespace
 
 import (
 	"fmt"
