@@ -53,6 +53,7 @@ spec:
               mountPath: /app/storage/artifacts
           securityContext:
             runAsUser: 0
+            runAsNonRoot: false
 
       containers:
         - name: k8soperation
