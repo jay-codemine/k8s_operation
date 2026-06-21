@@ -955,11 +955,24 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 		}
 	}
 
-	// 根据幂等键查找运行记录
-	run, err := s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
-	if err != nil {
-		return nil, fmt.Errorf("未找到对应的运行记录: pipeline=%d, build=%d, err=%w", 
-			pipeline.ID, req.BuildNumber, err)
+	// 查找运行记录：优先使用 run_id 精确匹配（避免 build_number 重用导致找到旧记录）
+	var run *models.CicdPipelineRun
+	if req.RunID > 0 {
+		run, err = s.dao.PipelineRunGetByID(ctx, req.RunID)
+		if err != nil {
+			global.Logger.Warn("[回调] 通过 run_id 查找失败，回退到 build_number",
+				zap.Int64("run_id", req.RunID),
+				zap.Error(err),
+			)
+			run = nil
+		}
+	}
+	if run == nil {
+		run, err = s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
+		if err != nil {
+			return nil, fmt.Errorf("未找到对应的运行记录: pipeline=%d, build=%d, err=%w",
+				pipeline.ID, req.BuildNumber, err)
+		}
 	}
 
 	// 幂等检查：如果已经收到过回调，直接返回成功
@@ -1024,9 +1037,15 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 
 	// ==================== 发送钉钉通知 ====================
 	// 如果构建成功且需要审批，发送审批提醒（包含构建成功信息）
-	// 否则发送构建结果通知
+	// 如果构建成功且配置了自动部署，不发送构建结果通知（避免与部署通知重复）
+	// 其他情况发送构建结果通知
 	if runStatus == models.PipelineRunStatusSuccess && pipeline.RequireApproval {
 		go s.NotifyApprovalRequired(ctx, pipeline, run)
+	} else if runStatus == models.PipelineRunStatusSuccess && pipeline.AutoDeploy {
+		// 自动部署场景：部署完成后会发送更丰富的部署通知，跳过构建结果通知
+		global.Logger.Info("[回调] 自动部署已启用，跳过构建成功通知",
+			zap.Int64("pipeline_id", pipeline.ID),
+		)
 	} else {
 		go s.NotifyBuildResult(ctx, pipeline, run, runStatus == models.PipelineRunStatusSuccess)
 	}
@@ -1668,11 +1687,28 @@ func (s *Services) autoDeployToK8sWithResult(ctx context.Context, pipeline *mode
 func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.CicdPipeline, kubeClient kubernetes.Interface, image, workloadKind string, runID int64) {
 	var err error
 	var logs strings.Builder
+	var rolloutResult *RolloutResult
 	startTime := time.Now()
 
 	logs.WriteString(fmt.Sprintf("[自动部署] 开始更新 %s/%s\n", pipeline.TargetNamespace, pipeline.TargetWorkloadName))
 	logs.WriteString(fmt.Sprintf("工作负载类型: %s\n", workloadKind))
 	logs.WriteString(fmt.Sprintf("镜像: %s\n\n", image))
+
+	// 获取流水线运行记录（用于通知中的分支、Commit、发布人等信息）
+	var run *models.CicdPipelineRun
+	if runID > 0 {
+		run, _ = s.dao.PipelineRunGetByID(ctx, runID)
+	}
+
+	// 获取集群名称和用户名
+	clusterName := s.getClusterName(pipeline.TargetClusterID)
+	var username string
+	if run != nil && run.TriggerUserID > 0 {
+		username = s.getUsernameByID(run.TriggerUserID)
+	}
+
+	// 记录部署前的旧镜像（用于回滚通知）
+	oldImage := pipeline.LastDeployImage
 
 	// 获取 deploy stage 并设为 running
 	var deployStageID int64
@@ -1696,7 +1732,7 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			ctx, pipeline.TargetWorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 		if err == nil {
 			logs.WriteString("[INFO] 镜像更新已提交，等待 Rollout 完成...\n")
-			err = s.waitAutoDeployRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, &logs)
+			rolloutResult, err = s.waitAutoDeployRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, &logs)
 		}
 	case "StatefulSet":
 		patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, 
@@ -1715,6 +1751,19 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 	// 更新流水线部署状态
 	now := uint64(time.Now().Unix())
 	duration := int(time.Since(startTime).Seconds())
+
+	// 构建通知信息
+	notifyInfo := &AutoDeployNotifyInfo{
+		Pipeline:    pipeline,
+		Run:         run,
+		Image:       image,
+		OldImage:    oldImage,
+		Duration:    duration,
+		ClusterName: clusterName,
+		Username:    username,
+		Rollout:     rolloutResult,
+	}
+
 	if err != nil {
 		global.Logger.Error("[自动部署] Rollout 失败",
 			zap.Int64("pipeline_id", pipeline.ID),
@@ -1732,7 +1781,9 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			})
 		}
 		// Rollout 失败后发送通知
-		s.notifyAutoDeployResult(ctx, pipeline, image, false, err.Error())
+		notifyInfo.Success = false
+		notifyInfo.ErrMsg = err.Error()
+		s.notifyAutoDeployResult(ctx, notifyInfo)
 	} else {
 		global.Logger.Info("[自动部署] Rollout 完成",
 			zap.Int64("pipeline_id", pipeline.ID),
@@ -1755,13 +1806,14 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusSuccess)
 		}
 		// Rollout 完成后发送通知
-		s.notifyAutoDeployResult(ctx, pipeline, image, true, "")
+		notifyInfo.Success = true
+		s.notifyAutoDeployResult(ctx, notifyInfo)
 	}
 }
 
 // waitAutoDeployRollout 等待自动部署的 Rollout 完成
 // 严格检查：必须所有新 Pod 就绪 + 无旧 Pod 残留 + 无 ImagePullBackOff/CrashLoopBackOff
-func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) error {
+func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) (*RolloutResult, error) {
 	timeout := 5 * time.Minute
 	interval := 5 * time.Second
 	endTime := time.Now().Add(timeout)
@@ -1769,7 +1821,7 @@ func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.
 	for time.Now().Before(endTime) {
 		dp, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("获取 Deployment 失败: %v", err)
+			return nil, fmt.Errorf("获取 Deployment 失败: %v", err)
 		}
 
 		replicas := int32(1)
@@ -1788,7 +1840,7 @@ func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.
 		// 检查 Rollout 是否超过 ProgressDeadline
 		for _, cond := range dp.Status.Conditions {
 			if cond.Type == "Progressing" && cond.Reason == "ProgressDeadlineExceeded" {
-				return fmt.Errorf("Rollout 超时: %s", cond.Message)
+				return nil, fmt.Errorf("Rollout 超时: %s", cond.Message)
 			}
 		}
 
@@ -1796,7 +1848,7 @@ func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.
 		if dp.Spec.Selector != nil {
 			podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, dp.Spec.Selector, logs)
 			if podErr != nil {
-				return podErr
+				return nil, podErr
 			}
 		}
 
@@ -1812,13 +1864,17 @@ func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.
 			dp.Status.ReadyReplicas == replicas &&
 			dp.Status.AvailableReplicas == replicas {
 			logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪（Ready=%d, Available=%d, 无旧 Pod 残留）\n", replicas, dp.Status.ReadyReplicas, dp.Status.AvailableReplicas))
-			return nil
+			return &RolloutResult{
+				Ready:     dp.Status.ReadyReplicas,
+				Total:     replicas,
+				Available: dp.Status.AvailableReplicas,
+			}, nil
 		}
 
 		time.Sleep(interval)
 	}
 
-	return fmt.Errorf("Rollout 超时（%v）", timeout)
+	return nil, fmt.Errorf("Rollout 超时（%v）", timeout)
 }
 
 // autoDeployWithLegacyConfig 兼容旧的 DeployConfig JSON 配置
@@ -1893,7 +1949,7 @@ func (s *Services) executeLegacyDeployAsync(ctx context.Context, pipeline *model
 	logs.WriteString("[INFO] 镜像更新已提交，等待 Rollout 完成...\n")
 
 	// 2. 等待 Rollout 完成
-	err = s.waitAutoDeployRollout(ctx, global.ManagementKubeClient, namespace, deploymentName, &logs)
+	_, err = s.waitAutoDeployRollout(ctx, global.ManagementKubeClient, namespace, deploymentName, &logs)
 	if err != nil {
 		global.Logger.Error("[旧配置部署] Rollout 失败", zap.Error(err))
 		s.ReleaseDeploySilence(ctx, silenceRuleID, false)

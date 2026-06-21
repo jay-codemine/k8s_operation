@@ -590,6 +590,7 @@ def callbackPlatform(String status, String message) {
         build_number      : env.BUILD_NUMBER as Integer,
         status            : status,
         pipeline_id       : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+        run_id            : params.RUN_ID ? params.RUN_ID as Long : 0,
         image_url         : env.FULL_IMAGE ?: '',
         image_digest      : env.IMAGE_DIGEST ?: '',
         image_with_digest : env.IMAGE_WITH_DIGEST ?: '',

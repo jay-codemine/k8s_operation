@@ -320,7 +320,7 @@ func ValidPipelineHistoryRequest(data interface{}, ctx *gin.Context) map[string]
 // ==================== Jenkins构建状态回调（生产级） ====================
 
 // PipelineCallbackRequest Jenkins 构建回调请求
-// 幂等键: job_name + build_number 或 pipeline_id + build_number
+// 幂等键: run_id（优先）或 pipeline_id + build_number
 type PipelineCallbackRequest struct {
 	// 必须字段
 	JobName     string `json:"job_name" valid:"job_name"`         // Jenkins Job 名称
@@ -329,6 +329,7 @@ type PipelineCallbackRequest struct {
 
 	// 平台关联字段
 	PipelineID int64  `json:"pipeline_id" valid:"pipeline_id"` // 流水线ID（用于快速匹配）
+	RunID      int64  `json:"run_id"`                           // 运行记录ID（精确匹配，避免 build_number 重复问题）
 	RequestID  string `json:"request_id" valid:"request_id"`   // 请求ID（用于日志追踪）
 
 	// 构建产物 - 支持 image 或 image_url

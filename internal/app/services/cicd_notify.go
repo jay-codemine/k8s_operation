@@ -72,6 +72,31 @@ type FeishuPostTag struct {
 	UserID string `json:"user_id,omitempty"`
 }
 
+// ==================== 自动部署通知数据结构 ====================
+
+// AutoDeployNotifyInfo 自动部署通知所需的完整数据
+type AutoDeployNotifyInfo struct {
+	Pipeline     *models.CicdPipeline
+	Run          *models.CicdPipelineRun // 可能为 nil（无法获取时）
+	Image        string                  // 本次部署的镜像
+	OldImage     string                  // 上一次部署的镜像（用于回滚通知）
+	Success      bool                    // 部署是否成功
+	ErrMsg       string                  // 错误信息
+	Duration     int                     // 部署耗时（秒）
+	ClusterName  string                  // 集群名称
+	Username     string                  // 发布人用户名
+	Rollout      *RolloutResult          // Rollout 结果（Pod Ready 等）
+	IsRollback   bool                    // 是否为回滚通知
+	RollbackReason string               // 回滚原因
+}
+
+// RolloutResult Rollout 完成后的状态信息
+type RolloutResult struct {
+	Ready      int32 // 就绪 Pod 数
+	Total      int32 // 期望 Pod 数
+	Available  int32 // 可用 Pod 数
+}
+
 // ==================== 部署通知 ====================
 
 // NotifyBuildStarted 发送构建开始通知
@@ -192,11 +217,18 @@ func (s *Services) NotifyCancelDeployResult(ctx context.Context, pipeline *model
 }
 
 // notifyAutoDeployResult 发送自动部署结果通知（内部使用）
-// 用于 Jenkins 回调后的自动部署场景
-func (s *Services) notifyAutoDeployResult(ctx context.Context, pipeline *models.CicdPipeline, image string, success bool, errMsg string) {
-	title, text := s.buildAutoDeployText(pipeline, image, success, errMsg)
+// 用于 Jenkins 回调后的自动部署场景，支持丰富的通知数据
+func (s *Services) notifyAutoDeployResult(ctx context.Context, info *AutoDeployNotifyInfo) {
+	var title, text string
+	if info.IsRollback {
+		title, text = s.buildAutoRollbackText(info)
+	} else if info.Success {
+		title, text = s.buildAutoDeploySuccessText(info)
+	} else {
+		title, text = s.buildAutoDeployFailedText(info)
+	}
 
-	if webhook := s.getDingTalkWebhook(pipeline); webhook != "" {
+	if webhook := s.getDingTalkWebhook(info.Pipeline); webhook != "" {
 		msg := s.textToDingTalkMessage(title, text)
 		s.sendDingTalkNotify(webhook, msg)
 	}
@@ -207,61 +239,233 @@ func (s *Services) notifyAutoDeployResult(ctx context.Context, pipeline *models.
 	}
 }
 
-// buildAutoDeployText 自动部署通知文本
-func (s *Services) buildAutoDeployText(pipeline *models.CicdPipeline, image string, success bool, errMsg string) (string, string) {
-	statusIcon := "✅"
-	statusText := "自动部署成功"
-	if !success {
-		statusIcon = "❌"
-		statusText = "自动部署失败"
-	}
-
-	envText := s.getEnvDisplayNameWithCluster(pipeline.DeployEnv, pipeline.TargetClusterID)
+// buildAutoDeploySuccessText 构建自动部署成功通知文本
+func (s *Services) buildAutoDeploySuccessText(info *AutoDeployNotifyInfo) (string, string) {
+	pipeline := info.Pipeline
 	platformURL := s.getPlatformURL()
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
 
 	workloadKind := pipeline.TargetWorkloadKind
 	if workloadKind == "" {
 		workloadKind = "Deployment"
 	}
 
-	text := fmt.Sprintf(`### %s %s
-
-**流水线**: %s
-
-**环境**: %s
-
-**命名空间**: %s
-
-**工作负载**: %s/%s
-
-**镜像**: %s
-
-**时间**: %s`,
-		statusIcon,
-		statusText,
-		pipeline.Name,
-		envText,
-		pipeline.TargetNamespace,
-		workloadKind,
-		pipeline.TargetWorkloadName,
-		image,
-		time.Now().Format("2006-01-02 15:04:05"),
-	)
-
-	if !success && errMsg != "" {
-		text += fmt.Sprintf("\n\n**错误**: %s", errMsg)
+	// 获取分支和commit信息
+	branch := pipeline.GitBranch
+	commitShort := ""
+	if info.Run != nil {
+		if info.Run.GitBranch != "" {
+			branch = info.Run.GitBranch
+		}
+		if info.Run.GitCommit != "" {
+			commitShort = info.Run.GitCommit
+			if len(commitShort) > 7 {
+				commitShort = commitShort[:7]
+			}
+		}
 	}
 
-	text += "\n\n---\n"
+	// 提取镜像版本标签
+	imageVersion := extractImageTag(info.Image)
+
+	text := fmt.Sprintf("### 【%s发布通知】\n\n", envName)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+	if branch != "" {
+		text += fmt.Sprintf("**🌿 分支**：%s\n\n", branch)
+	}
+	if commitShort != "" {
+		text += fmt.Sprintf("**📝 Commit**：%s\n\n", commitShort)
+	}
+	text += fmt.Sprintf("**🐳 镜像版本**：\n\n%s\n\n", info.Image)
+
+	// 集群信息
+	clusterName := info.ClusterName
+	if clusterName == "" {
+		clusterName = "default"
+	}
+	text += fmt.Sprintf("**☸️ 集群**：%s\n\n", clusterName)
+	text += fmt.Sprintf("**📁 命名空间**：%s\n\n", pipeline.TargetNamespace)
+	text += fmt.Sprintf("**⚙️ 工作负载**：%s/%s\n\n", workloadKind, pipeline.TargetWorkloadName)
+
+	// 发布人和时间
+	username := info.Username
+	if username == "" {
+		username = "system"
+	}
+	text += fmt.Sprintf("**👤 发布人**：%s\n\n", username)
+	text += fmt.Sprintf("**🕐 发布时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	text += fmt.Sprintf("**⏱️ 发布耗时**：%s\n\n", formatDurationSeconds(info.Duration))
+
+	// 发布结果
+	text += "**✅ 发布结果**：\n\n"
+	if info.Rollout != nil {
+		text += fmt.Sprintf("> ✅ %s Ready\n>\n", workloadKind)
+		text += fmt.Sprintf("> ✅ Pod Ready：%d/%d\n>\n", info.Rollout.Ready, info.Rollout.Total)
+		text += "> ✅ 健康检查通过\n\n"
+	} else {
+		text += fmt.Sprintf("> ✅ %s Ready\n>\n", workloadKind)
+		text += "> ✅ 健康检查通过\n\n"
+	}
+
+	// 当前版本
+	if imageVersion != "" {
+		text += fmt.Sprintf("**🏷 当前版本**：%s\n\n", imageVersion)
+	}
+
+	// 流水线详情
+	text += "---\n"
 	if platformURL != "" {
-		text += fmt.Sprintf("🔗 [查看流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
-	}
-	if pipeline.JenkinsURL != "" && pipeline.JenkinsJob != "" {
-		text += fmt.Sprintf("🛠 [查看 Jenkins 构建](%s/job/%s/%d/console)",
-			pipeline.JenkinsURL, pipeline.JenkinsJob, pipeline.LastBuildNumber)
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
 	}
 
-	return fmt.Sprintf("[%s] %s", statusText, pipeline.Name), text
+	text += fmt.Sprintf("**🟢 状态**：%s发布成功", envName)
+
+	return fmt.Sprintf("【%s发布通知】%s", envName, pipeline.Name), text
+}
+
+// buildAutoDeployFailedText 构建自动部署失败通知文本
+func (s *Services) buildAutoDeployFailedText(info *AutoDeployNotifyInfo) (string, string) {
+	pipeline := info.Pipeline
+	platformURL := s.getPlatformURL()
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
+
+	workloadKind := pipeline.TargetWorkloadKind
+	if workloadKind == "" {
+		workloadKind = "Deployment"
+	}
+
+	// 获取分支和commit信息
+	branch := pipeline.GitBranch
+	commitShort := ""
+	if info.Run != nil {
+		if info.Run.GitBranch != "" {
+			branch = info.Run.GitBranch
+		}
+		if info.Run.GitCommit != "" {
+			commitShort = info.Run.GitCommit
+			if len(commitShort) > 7 {
+				commitShort = commitShort[:7]
+			}
+		}
+	}
+
+	text := fmt.Sprintf("### 【%s发布失败】\n\n", envName)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+	if branch != "" {
+		text += fmt.Sprintf("**🌿 分支**：%s\n\n", branch)
+	}
+	if commitShort != "" {
+		text += fmt.Sprintf("**📝 Commit**：%s\n\n", commitShort)
+	}
+
+	// 集群信息
+	clusterName := info.ClusterName
+	if clusterName == "" {
+		clusterName = "default"
+	}
+	text += fmt.Sprintf("**☸️ 集群**：%s\n\n", clusterName)
+	text += fmt.Sprintf("**📁 命名空间**：%s\n\n", pipeline.TargetNamespace)
+	text += fmt.Sprintf("**⚙️ 工作负载**：%s/%s\n\n", workloadKind, pipeline.TargetWorkloadName)
+
+	// 发布人和时间
+	username := info.Username
+	if username == "" {
+		username = "system"
+	}
+	text += fmt.Sprintf("**👤 发布人**：%s\n\n", username)
+	text += fmt.Sprintf("**🕐 发布时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	text += fmt.Sprintf("**⏱️ 执行耗时**：%s\n\n", formatDurationSeconds(info.Duration))
+
+	// 失败信息
+	text += "**❌ 失败阶段**：Deploy\n\n"
+
+	// 解析错误原因
+	errReason, errDetail := parseDeployError(info.ErrMsg)
+	text += fmt.Sprintf("**🔴 错误原因**：%s\n\n", errReason)
+	if errDetail != "" {
+		text += fmt.Sprintf("**📋 错误详情**：%s\n\n", errDetail)
+	}
+
+	// 镜像版本
+	text += fmt.Sprintf("**🐳 镜像版本**：\n\n%s\n\n", info.Image)
+
+	// 流水线详情
+	text += "---\n"
+	if platformURL != "" {
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+	}
+
+	text += fmt.Sprintf("**🔴 状态**：%s发布失败，请立即处理", envName)
+
+	return fmt.Sprintf("【%s发布失败】%s", envName, pipeline.Name), text
+}
+
+// buildAutoRollbackText 构建自动回滚通知文本
+func (s *Services) buildAutoRollbackText(info *AutoDeployNotifyInfo) (string, string) {
+	pipeline := info.Pipeline
+	platformURL := s.getPlatformURL()
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
+
+	text := fmt.Sprintf("### ↩️【%s自动回滚通知】\n\n", envName)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+
+	// 集群信息
+	clusterName := info.ClusterName
+	if clusterName == "" {
+		clusterName = "default"
+	}
+	text += fmt.Sprintf("**☸️ 集群**：%s\n\n", clusterName)
+	text += fmt.Sprintf("**📁 命名空间**：%s\n\n", pipeline.TargetNamespace)
+
+	// 版本信息
+	newVersion := extractImageTag(info.Image)
+	oldVersion := extractImageTag(info.OldImage)
+	if newVersion != "" {
+		text += fmt.Sprintf("**🆕 新版本**：%s\n\n", newVersion)
+	}
+	if oldVersion != "" {
+		text += fmt.Sprintf("**↩️ 回滚版本**：%s\n\n", oldVersion)
+	}
+
+	// 发布人和时间
+	username := info.Username
+	if username == "" {
+		username = "system"
+	}
+	text += fmt.Sprintf("**👤 发布人**：%s\n\n", username)
+	text += fmt.Sprintf("**🕐 回滚时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+
+	// 回滚原因
+	rollbackReason := info.RollbackReason
+	if rollbackReason == "" {
+		rollbackReason = "Deployment Ready 超时\n健康检查失败"
+	}
+	text += fmt.Sprintf("**🔴 回滚原因**：\n\n> %s\n\n", strings.ReplaceAll(rollbackReason, "\n", "\n> "))
+
+	// 回滚结果
+	text += "**✅ 回滚结果**：\n\n"
+	workloadKind := pipeline.TargetWorkloadKind
+	if workloadKind == "" {
+		workloadKind = "Deployment"
+	}
+	if info.Rollout != nil {
+		text += fmt.Sprintf("> ✅ %s Ready\n>\n", workloadKind)
+		text += fmt.Sprintf("> ✅ Pod Ready：%d/%d\n>\n", info.Rollout.Ready, info.Rollout.Total)
+		text += "> ✅ 服务恢复正常\n\n"
+	} else {
+		text += fmt.Sprintf("> ✅ %s Ready\n>\n", workloadKind)
+		text += "> ✅ 服务恢复正常\n\n"
+	}
+
+	// 流水线详情
+	text += "---\n"
+	if platformURL != "" {
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+	}
+
+	text += "**↩️ 状态**：已自动回滚至稳定版本"
+
+	return fmt.Sprintf("【%s自动回滚通知】%s", envName, pipeline.Name), text
 }
 
 // notifyLegacyDeployResult 发送旧版配置自动部署结果通知
@@ -689,6 +893,130 @@ func (s *Services) getEnvDisplayNameWithCluster(env string, clusterID int64) str
 	}
 
 	return "未设置"
+}
+
+// getEnvDisplayLabel 获取环境标签（不带 emoji，用于通知标题）
+func (s *Services) getEnvDisplayLabel(env string, clusterID int64) string {
+	switch env {
+	case models.DeployEnvDev:
+		return "开发环境"
+	case models.DeployEnvTest:
+		return "测试环境"
+	case models.DeployEnvStaging:
+		return "预发环境"
+	case models.DeployEnvProd, "production":
+		return "生产环境"
+	}
+
+	// 从集群名推断
+	if clusterID > 0 {
+		var cluster models.K8sCluster
+		if err := global.DB.Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+			name := cluster.ClusterName
+			if strings.Contains(name, "生产") || strings.Contains(name, "prod") {
+				return "生产环境"
+			}
+			if strings.Contains(name, "预发") || strings.Contains(name, "staging") {
+				return "预发环境"
+			}
+			if strings.Contains(name, "测试") || strings.Contains(name, "test") {
+				return "测试环境"
+			}
+			if strings.Contains(name, "开发") || strings.Contains(name, "dev") {
+				return "开发环境"
+			}
+		}
+	}
+
+	return "生产环境"
+}
+
+// getClusterName 获取集群名称
+func (s *Services) getClusterName(clusterID int64) string {
+	if clusterID <= 0 {
+		return "default"
+	}
+	var cluster models.K8sCluster
+	if err := global.DB.Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+		return cluster.ClusterName
+	}
+	return "default"
+}
+
+// getUsernameByID 通过用户ID获取用户名
+func (s *Services) getUsernameByID(userID int64) string {
+	if userID <= 0 {
+		return "system"
+	}
+	user, err := s.dao.UserGetByID(userID)
+	if err != nil || user == nil {
+		return fmt.Sprintf("user-%d", userID)
+	}
+	return user.Username
+}
+
+// extractImageTag 从镜像地址中提取标签
+func extractImageTag(image string) string {
+	if image == "" {
+		return ""
+	}
+	// 处理 image@digest 格式
+	if idx := strings.Index(image, "@"); idx > 0 {
+		image = image[:idx]
+	}
+	// 提取 tag
+	if idx := strings.LastIndex(image, ":"); idx > 0 {
+		return image[idx+1:]
+	}
+	return "latest"
+}
+
+// formatDurationSeconds 格式化秒数为人类可读格式 (如 3m12s)
+func formatDurationSeconds(seconds int) string {
+	if seconds <= 0 {
+		return "0s"
+	}
+	d := time.Duration(seconds) * time.Second
+	if d >= time.Hour {
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		s := seconds % 60
+		return fmt.Sprintf("%dh%dm%ds", h, m, s)
+	}
+	if d >= time.Minute {
+		m := int(d.Minutes())
+		s := seconds % 60
+		return fmt.Sprintf("%dm%ds", m, s)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
+// parseDeployError 解析部署错误信息，分离错误原因和详情
+func parseDeployError(errMsg string) (reason string, detail string) {
+	if errMsg == "" {
+		return "未知错误", ""
+	}
+	// 常见错误模式识别
+	if strings.Contains(errMsg, "ImagePullBackOff") || strings.Contains(errMsg, "ErrImagePull") {
+		return "ImagePullBackOff", errMsg
+	}
+	if strings.Contains(errMsg, "CrashLoopBackOff") {
+		return "CrashLoopBackOff", errMsg
+	}
+	if strings.Contains(errMsg, "超时") || strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "Timeout") {
+		return "Deployment Ready 超时", errMsg
+	}
+	if strings.Contains(errMsg, "ProgressDeadlineExceeded") {
+		return "Rollout 超时", errMsg
+	}
+	if strings.Contains(errMsg, "OOMKilled") {
+		return "OOMKilled", errMsg
+	}
+	// 默认：直接使用错误信息作为原因
+	if len(errMsg) > 50 {
+		return errMsg[:50] + "...", errMsg
+	}
+	return errMsg, ""
 }
 
 // ==================== 消息转换 ====================

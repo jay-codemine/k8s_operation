@@ -357,6 +357,7 @@ def callbackPlatform(String status, String message) {
     if (!callbackUrl) { echo "未配置回调地址"; return }
     def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, status: status,
         pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+        run_id: params.RUN_ID ? params.RUN_ID as Long : 0,
         image_url: env.FULL_IMAGE ?: '', image_digest: env.IMAGE_DIGEST ?: '', image_with_digest: env.IMAGE_WITH_DIGEST ?: '',
         git_commit: env.GIT_COMMIT_SHORT ?: '', git_branch: env.GIT_BRANCH_NAME ?: '',
         duration_sec: currentBuild.duration ? (currentBuild.duration / 1000) as Integer : 0, message: message, build_url: env.BUILD_URL ?: '']

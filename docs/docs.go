@@ -20598,6 +20598,10 @@ const docTemplate = `{
                     "description": "请求ID（用于日志追踪）",
                     "type": "string"
                 },
+                "run_id": {
+                    "description": "运行记录ID（精确匹配，避免 build_number 重复问题）",
+                    "type": "integer"
+                },
                 "status": {
                     "description": "SUCCESS / FAILURE / ABORTED",
                     "type": "string"

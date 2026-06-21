@@ -300,10 +300,13 @@ func (d *Dao) PipelineGetByJenkinsJob(ctx context.Context, jobName string) (*mod
 }
 
 // PipelineRunGetByBuildNumber 根据幂等键查找运行记录 (pipeline_id + build_number)
+// 注意：同一 pipeline_id + build_number 可能存在多条记录（Jenkins 重用构建号），
+// 必须按 id DESC 取最新记录，否则会命中旧记录导致回调被误判为重复
 func (d *Dao) PipelineRunGetByBuildNumber(ctx context.Context, pipelineID int64, buildNumber int) (*models.CicdPipelineRun, error) {
 	var run models.CicdPipelineRun
 	err := d.db.WithContext(ctx).
 		Where("pipeline_id = ? AND build_number = ?", pipelineID, buildNumber).
+		Order("id DESC").
 		First(&run).Error
 	if err != nil {
 		return nil, err
