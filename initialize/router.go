@@ -93,6 +93,7 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// ======================================================
 	public := v1.Group("")
 	public.Use(middlewares.AuthJWTSkip())
+	public.Use(middlewares.LoginRateLimit()) // 登录接口限流（每 IP 10次/分钟）
 	for _, r := range []injector{
 		helloworldrouter.NewHelloWorldRouter(),
 		authrouter.NewAuthRouter(),

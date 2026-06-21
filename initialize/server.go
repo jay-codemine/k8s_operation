@@ -73,6 +73,7 @@ func (s *Engine) injectMiddlewares() {
 
 	// 注册中间件
 	s.Use(middlewares.PrometheusMiddleware()) // Prometheus 指标采集（必须在 Logger 之前）
+	s.Use(middlewares.RateLimit())            // IP 级别限流（100 req/s，防止滥用）
 	s.Use(middlewares.Logger())
 	s.Use(middlewares.Recovery())
 	s.Use(middlewares.K8sError())

@@ -20,6 +20,7 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
+	"k8soperation/pkg/cache"
 	"k8soperation/pkg/jenkins"
 	"k8soperation/pkg/k8s/deployment"
 )
@@ -824,27 +825,37 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 	// 如果有构建号，获取 Jenkins 构建状态
 	var buildInfo *jenkins.BuildInfo
 	if pipeline.LastBuildNumber > 0 {
-		client := s.getJenkinsClient(pipeline.JenkinsURL)
-		if client != nil {
-			buildInfo, _ = client.GetBuildInfo(ctx, pipeline.JenkinsJob, pipeline.LastBuildNumber)
+		// 先尝试读缓存
+		var cached jenkins.BuildInfo
+		if err := cache.GetBuildInfo(ctx, pipeline.ID, pipeline.LastBuildNumber, &cached); err == nil && cached.Number > 0 {
+			buildInfo = &cached
+		} else {
+			client := s.getJenkinsClient(pipeline.JenkinsURL)
+			if client != nil {
+				buildInfo, _ = client.GetBuildInfo(ctx, pipeline.JenkinsJob, pipeline.LastBuildNumber)
+				if buildInfo != nil {
+					// 写入缓存：正在构建用短 TTL，已完成用长 TTL
+					cache.SetBuildInfo(ctx, pipeline.ID, pipeline.LastBuildNumber, buildInfo, buildInfo.Building)
+				}
+			}
+		}
 
-			// 如果构建已完成，同步更新本地状态
-			if buildInfo != nil && !buildInfo.Building {
-				runStatus := jenkins.BuildStatusToRunStatus(buildInfo.Building, buildInfo.Result)
-				if runStatus != pipeline.LastRunStatus {
-					_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus)
-					pipeline.LastRunStatus = runStatus
-					pipeline.Status = models.PipelineStatusIdle
+		// 如果构建已完成，同步更新本地状态
+		if buildInfo != nil && !buildInfo.Building {
+			runStatus := jenkins.BuildStatusToRunStatus(buildInfo.Building, buildInfo.Result)
+			if runStatus != pipeline.LastRunStatus {
+				_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus)
+				pipeline.LastRunStatus = runStatus
+				pipeline.Status = models.PipelineStatusIdle
 
-					// 同步更新运行记录状态
-					if latestRun != nil && latestRun.BuildNumber == pipeline.LastBuildNumber && latestRun.Status == models.PipelineRunStatusRunning {
-						_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, runStatus)
-						latestRun.Status = runStatus
+				// 同步更新运行记录状态
+				if latestRun != nil && latestRun.BuildNumber == pipeline.LastBuildNumber && latestRun.Status == models.PipelineRunStatusRunning {
+					_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, runStatus)
+					latestRun.Status = runStatus
 
-						// 重要：同步更新各阶段状态（包括将审批阶段设为 waiting）
-						// 避免回调未触发时，审批阶段状态与流水线状态不一致
-						_ = s.UpdateBuildStagesComplete(ctx, latestRun.ID, runStatus, latestRun.ImageURL, latestRun.ImageDigest, "")
-					}
+					// 重要：同步更新各阶段状态（包括将审批阶段设为 waiting）
+					// 避免回调未触发时，审批阶段状态与流水线状态不一致
+					_ = s.UpdateBuildStagesComplete(ctx, latestRun.ID, runStatus, latestRun.ImageURL, latestRun.ImageDigest, "")
 				}
 			}
 		}
@@ -959,6 +970,9 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 		zap.String("status", runStatus),
 		zap.String("image", image),
 	)
+
+	// 回调到达，主动清除该构建的 Redis 缓存，避免老缓存延迟展示最终状态
+	cache.InvalidatePipeline(ctx, pipeline.ID, req.BuildNumber)
 
 	// ==================== 更新阶段状态 ====================
 	// 构建完成后，更新各阶段状态（包括将审批阶段设为 waiting）
@@ -1097,6 +1111,13 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 		return s.getDefaultStagesForPipeline(pipeline), nil
 	}
 
+	// 先尝试读缓存
+	isRunning := pipeline.Status == models.PipelineStatusRunning
+	var cachedStages []PipelineStageInfo
+	if err := cache.GetStages(ctx, id, buildNumber, &cachedStages); err == nil && len(cachedStages) > 0 {
+		return cachedStages, nil
+	}
+
 	// 从 Jenkins 获取阶段数据
 	pipelineRun, err := client.GetPipelineRun(ctx, pipeline.JenkinsJob, buildNumber)
 	if err != nil {
@@ -1135,6 +1156,9 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 
 	// 追加平台特有阶段（审批/部署）—— 使用 DB 真实数据
 	stages = s.appendPlatformStages(ctx, stages, pipeline, pipelineRun.Status, buildNumber)
+
+	// 写入缓存：运行中用短 TTL，已完成用长 TTL
+	cache.SetStages(ctx, id, buildNumber, stages, isRunning)
 
 	return stages, nil
 }
