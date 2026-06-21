@@ -264,3 +264,13 @@ export const rollbackDeployStage = (stageId, targetRS) => {
 export const getDeployHistory = (stageId) => {
   return http.get(`${STAGE_URL}/history`, { params: { stage_id: Number(stageId) } })
 }
+
+// ==================== Jenkins 配置信息 ====================
+
+/**
+ * 获取 Jenkins 配置信息（回调地址、凭证ID 等诊断信息）
+ * @returns {Promise<{configured, url, callback_url, ...}>}
+ */
+export const getJenkinsConfig = () => {
+  return http.get(`${BASE_URL}/jenkins-config`)
+}

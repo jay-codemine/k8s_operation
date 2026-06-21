@@ -537,7 +537,9 @@ ENTRYPOINT ["/app/${appName}"]
                 if (!params.ENABLE_SONAR) {
                     msg = 'Go 项目构建成功'
                 } else if (env.SONAR_ANALYSIS_FAILED == 'true') {
-                    msg = "Go 项目构建成功 | SonarQube: UNAVAILABLE（扫描阶段连接失败，请检查 SonarQube 服务状态）"
+                    msg = "Go 项目构建失败 | SonarQube: UNAVAILABLE（扫描阶段连接失败，请检查 SonarQube 服务状态）"
+                    callbackPlatform('FAILURE', msg)
+                    return
                 } else {
                     msg = "Go 项目构建成功 | SonarQube: ${env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED'}"
                 }
@@ -550,8 +552,14 @@ ENTRYPOINT ["/app/${appName}"]
 }
 
 // ==================== 阶段级回调（与平台 StageCallbackRequest 对齐） ====================
+// 获取回调地址（兼容首次构建 params 未注册的情况，fallback 到 JCasC 全局环境变量）
+def getCallbackUrl() {
+    return params.PLATFORM_CALLBACK_URL?.trim() ?: env.PLATFORM_CALLBACK_URL?.trim() ?: ''
+}
+
 def stageCallback(String stageType, String status) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) return
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) return
     try {
         def payload = [
             job_name     : env.JOB_NAME,
@@ -561,7 +569,7 @@ def stageCallback(String stageType, String status) {
             status       : status
         ]
         def body = groovy.json.JsonOutput.toJson(payload)
-        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/stage/callback')
+        def stageUrl = callbackUrl.replace('/pipeline/callback', '/stage/callback')
         def signature = ''
         if (env.HMAC_SECRET?.trim()) {
             signature = hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}")
@@ -575,7 +583,8 @@ def stageCallback(String stageType, String status) {
 
 // ==================== 最终回调（与平台 PipelineCallbackRequest 对齐） ====================
 def callbackPlatform(String status, String message) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) { echo "未配置回调地址"; return }
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) { echo "未配置回调地址"; return }
     def payload = [
         job_name          : env.JOB_NAME,
         build_number      : env.BUILD_NUMBER as Integer,
@@ -596,16 +605,17 @@ def callbackPlatform(String status, String message) {
         signature = hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}")
     }
     def headers = signature ? [[name: 'X-Signature', value: signature]] : []
-    httpRequest(url: params.PLATFORM_CALLBACK_URL, httpMode: 'POST', contentType: 'APPLICATION_JSON',
+    httpRequest(url: callbackUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON',
         requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
 }
 
 // ==================== SonarQube 指标回传平台 ====================
 def sonarReportCallback(String qualityGateStatus) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) return
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) return
     try {
         def projectKey = params.SONAR_PROJECT_KEY?.trim() ?: env.JOB_NAME.replaceAll('/', '_')
-        def sonarUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/pipeline/sonar-callback')
+        def sonarUrl = callbackUrl.replace('/pipeline/callback', '/pipeline/sonar-callback')
 
         def metrics = [:]
         withSonarQubeEnv('SonarQube') {

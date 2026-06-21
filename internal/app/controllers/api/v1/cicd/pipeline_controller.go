@@ -827,3 +827,40 @@ func (c *PipelineController) DeploySilenceStatus(ctx *gin.Context) {
 		"rules":      rules,
 	})
 }
+
+// JenkinsConfig godoc
+// @Summary 获取 Jenkins 配置信息
+// @Description 返回当前平台的 Jenkins 连接配置（脱敏），用于前端展示和诊断
+// @Tags CICD Pipeline
+// @Produce json
+// @Success 200 {object} map[string]any "返回 Jenkins 配置信息"
+// @Router /api/v1/k8s/cicd/pipeline/jenkins-config [get]
+func (c *PipelineController) JenkinsConfig(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	config := gin.H{
+		"configured": false,
+	}
+
+	if global.JenkinsSetting != nil {
+		config["configured"] = global.JenkinsSetting.URL != ""
+		config["url"] = global.JenkinsSetting.URL
+		config["username"] = global.JenkinsSetting.Username
+		config["callback_url"] = global.JenkinsSetting.CallbackURL
+		config["platform_url"] = global.JenkinsSetting.PlatformURL
+		config["default_branch"] = global.JenkinsSetting.DefaultBranch
+		config["trigger_timeout"] = global.JenkinsSetting.TriggerTimeout
+		config["poll_interval"] = global.JenkinsSetting.PollInterval
+		config["max_build_time"] = global.JenkinsSetting.MaxBuildTime
+		config["git_credential_id"] = global.JenkinsSetting.GitCredentialID
+		config["registry_credential_id"] = global.JenkinsSetting.RegistryCredentialID
+		config["hmac_credential_id"] = global.JenkinsSetting.HMACCredentialID
+		// 回调完整地址（Jenkins Pod 实际访问的）
+		if global.JenkinsSetting.CallbackURL != "" {
+			config["full_callback_url"] = global.JenkinsSetting.CallbackURL + "/api/v1/k8s/cicd/pipeline/callback"
+			config["full_stage_callback_url"] = global.JenkinsSetting.CallbackURL + "/api/v1/k8s/cicd/stage/callback"
+		}
+	}
+
+	rsp.Success(config)
+}

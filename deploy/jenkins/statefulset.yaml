@@ -35,9 +35,9 @@ spec:
             - sh
             - -c
             - |
-              echo "[init] 跳过自动安装，Jenkins 启动后请从 UI 手动安装插件"
-              # 若网络恢复可取消注释下面这行自动安装
-              # jenkins-plugin-cli --plugins kubernetes workflow-aggregator git configuration-as-code credentials-binding http_request pipeline-utility-steps junit sonar pipeline-stage-view timestamper ws-cleanup ansicolor || true
+              echo "[init] 开始自动安装插件（超时5分钟）..."
+              mkdir -p /var/jenkins_home/plugins
+              timeout 300 jenkins-plugin-cli --plugin-download-directory /var/jenkins_home/plugins --plugins kubernetes workflow-aggregator git configuration-as-code credentials-binding http_request pipeline-utility-steps junit sonar pipeline-stage-view timestamper ws-cleanup ansicolor && echo "[init] 插件安装完成" || echo "[init] 插件安装失败或超时，Jenkins 启动后可从 UI 手动安装"
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
@@ -75,11 +75,11 @@ spec:
                   key: sonarqube-token
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: "1"
+              memory: 2Gi
             limits:
-              cpu: "2"
-              memory: 4Gi
+              cpu: "4"
+              memory: 8Gi
           livenessProbe:
             httpGet:
               path: /login

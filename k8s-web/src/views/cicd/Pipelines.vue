@@ -83,6 +83,71 @@
       </div>
     </div>
 
+    <!-- Jenkins 配置信息（可折叠） -->
+    <div class="jenkins-config-panel" v-if="jenkinsConfig.configured">
+      <div class="config-panel-header" @click="jenkinsConfigExpanded = !jenkinsConfigExpanded">
+        <div class="config-panel-title">
+          <svg class="config-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          <span>Jenkins 连接配置</span>
+          <span class="config-status connected">已连接</span>
+        </div>
+        <svg :class="['expand-icon', { expanded: jenkinsConfigExpanded }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      <transition name="collapse">
+        <div v-show="jenkinsConfigExpanded" class="config-panel-body">
+          <div class="config-grid">
+            <div class="config-item">
+              <span class="config-label">Jenkins 地址</span>
+              <span class="config-value">{{ jenkinsConfig.url || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">用户名</span>
+              <span class="config-value">{{ jenkinsConfig.username || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">回调地址 (CallbackURL)</span>
+              <span class="config-value highlight">{{ jenkinsConfig.full_callback_url || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">阶段回调地址</span>
+              <span class="config-value">{{ jenkinsConfig.full_stage_callback_url || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">平台前端地址</span>
+              <span class="config-value">{{ jenkinsConfig.platform_url || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">默认分支</span>
+              <span class="config-value">{{ jenkinsConfig.default_branch || 'main' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">Git 凭证ID</span>
+              <span class="config-value mono">{{ jenkinsConfig.git_credential_id || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">镜像仓库凭证ID</span>
+              <span class="config-value mono">{{ jenkinsConfig.registry_credential_id || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">触发超时(s)</span>
+              <span class="config-value">{{ jenkinsConfig.trigger_timeout || '-' }}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">最大构建时间(s)</span>
+              <span class="config-value">{{ jenkinsConfig.max_build_time || '-' }}</span>
+            </div>
+          </div>
+          <p class="config-tip">以上配置来自 config.yaml，修改后重启后端生效。切换集群时请更新 CallbackURL 为目标集群可访问的后端地址。</p>
+        </div>
+      </transition>
+    </div>
+
     <!-- 搜索和筛选 -->
     <div class="filter-bar">
       <div class="search-wrapper">
@@ -526,7 +591,8 @@ import {
   getPipelines as fetchPipelines,
   runPipeline as triggerPipeline,
   stopPipeline as cancelPipeline,
-  deletePipeline as removePipeline
+  deletePipeline as removePipeline,
+  getJenkinsConfig
 } from '@/api/platform/pipeline'
 import permissionStore from '@/stores/permission'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
@@ -548,6 +614,20 @@ export default {
     const activeMenu = ref(null)
     const jumpPage = ref(1)
     const selectedIds = ref([])
+
+    // ===== Jenkins 配置面板 =====
+    const jenkinsConfig = ref({ configured: false })
+    const jenkinsConfigExpanded = ref(false)
+    const loadJenkinsConfig = async () => {
+      try {
+        const res = await getJenkinsConfig()
+        if (res.code === 0 && res.data) {
+          jenkinsConfig.value = res.data
+        }
+      } catch (e) {
+        console.warn('获取 Jenkins 配置失败:', e)
+      }
+    }
 
     // ===== 多选功能 =====
     const isAllSelected = computed(() => {
@@ -929,6 +1009,7 @@ export default {
 
     onMounted(() => {
       loadPipelines()
+      loadJenkinsConfig()
       document.addEventListener('click', closeMenu)
     })
 
@@ -962,6 +1043,8 @@ export default {
       filteredPipelines,
       paginatedPipelines,
       canOperate,
+      jenkinsConfig,
+      jenkinsConfigExpanded,
       loadPipelines,
       handleRunPipeline,
       handleStopPipeline,
@@ -2252,6 +2335,132 @@ export default {
   transform: none !important;
 }
 
+/* Jenkins 配置面板 */
+.jenkins-config-panel {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.config-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.config-panel-header:hover {
+  background: #fafafa;
+}
+
+.config-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.config-icon {
+  width: 18px;
+  height: 18px;
+  color: #666;
+}
+
+.config-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 400;
+}
+
+.config-status.connected {
+  background: #e6f7e6;
+  color: #52c41a;
+}
+
+.expand-icon {
+  width: 18px;
+  height: 18px;
+  color: #999;
+  transition: transform 0.3s ease;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.config-panel-body {
+  padding: 0 20px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-label {
+  font-size: 12px;
+  color: #999;
+}
+
+.config-value {
+  font-size: 13px;
+  color: #333;
+  word-break: break-all;
+}
+
+.config-value.highlight {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.config-value.mono {
+  font-family: 'SF Mono', SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
+.config-tip {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #ad6800;
+  line-height: 1.5;
+}
+
+/* collapse transition */
+.collapse-enter-active,
+.collapse-leave-active {
+  transition: all 0.3s ease;
+  max-height: 500px;
+  overflow: hidden;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+
 /* 响应式 */
 @media (max-width: 1200px) {
   .stats-grid {
@@ -2275,6 +2484,10 @@ export default {
   
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .config-grid {
+    grid-template-columns: 1fr;
   }
   
   .filter-bar {

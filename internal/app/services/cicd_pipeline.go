@@ -952,7 +952,12 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	runStatus := jenkins.BuildStatusToRunStatus(false, req.Status)
 
 	// 更新运行记录（含回调标记、镜像信息）
-	if err := s.dao.PipelineRunUpdateCallback(ctx, run.ID, runStatus, image, req.ImageDigest, req.Message, req.Duration); err != nil {
+	// 仅在构建失败/中止时保存错误信息，避免成功消息污染 error_message 字段
+	errMsg := ""
+	if runStatus != models.PipelineRunStatusSuccess {
+		errMsg = req.Message
+	}
+	if err := s.dao.PipelineRunUpdateCallback(ctx, run.ID, runStatus, image, req.ImageDigest, errMsg, req.Duration); err != nil {
 		return nil, fmt.Errorf("更新运行记录失败: %w", err)
 	}
 
@@ -977,7 +982,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	// ==================== 更新阶段状态 ====================
 	// 构建完成后，更新各阶段状态（包括将审批阶段设为 waiting）
 	// 失败时，将错误信息保存到失败的阶段
-	if err := s.UpdateBuildStagesComplete(ctx, run.ID, runStatus, image, req.ImageDigest, req.Message); err != nil {
+	if err := s.UpdateBuildStagesComplete(ctx, run.ID, runStatus, image, req.ImageDigest, errMsg); err != nil {
 		global.Logger.Warn("[回调] 更新阶段状态失败",
 			zap.Int64("run_id", run.ID),
 			zap.Error(err),
@@ -989,7 +994,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	run.ImageURL = image
 	run.ImageDigest = req.ImageDigest
 	run.DurationSec = req.Duration
-	run.ErrorMessage = req.Message
+	run.ErrorMessage = errMsg
 
 	// ==================== 发送钉钉通知 ====================
 	// 如果构建成功且需要审批，发送审批提醒（包含构建成功信息）

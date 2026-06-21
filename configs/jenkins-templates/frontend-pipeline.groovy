@@ -334,12 +334,18 @@ CMD ["nginx", "-g", "daemon off;"]
 }
 
 // ==================== 回调函数 ====================
+// 获取回调地址（兼容首次构建 params 未注册的情况，fallback 到 JCasC 全局环境变量）
+def getCallbackUrl() {
+    return params.PLATFORM_CALLBACK_URL?.trim() ?: env.PLATFORM_CALLBACK_URL?.trim() ?: ''
+}
+
 def stageCallback(String stageType, String status) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) return
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) return
     try {
         def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0, stage_type: stageType, status: status]
         def body = groovy.json.JsonOutput.toJson(payload)
-        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/stage/callback')
+        def stageUrl = callbackUrl.replace('/pipeline/callback', '/stage/callback')
         def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}") : ''
         def headers = signature ? [[name: 'X-Signature', value: signature]] : []
         httpRequest(url: stageUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '100:599', timeout: 10)
@@ -347,7 +353,8 @@ def stageCallback(String stageType, String status) {
 }
 
 def callbackPlatform(String status, String message) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) { echo "未配置回调地址"; return }
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) { echo "未配置回调地址"; return }
     def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, status: status,
         pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
         image_url: env.FULL_IMAGE ?: '', image_digest: env.IMAGE_DIGEST ?: '', image_with_digest: env.IMAGE_WITH_DIGEST ?: '',
@@ -356,7 +363,7 @@ def callbackPlatform(String status, String message) {
     def body = groovy.json.JsonOutput.toJson(payload)
     def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}") : ''
     def headers = signature ? [[name: 'X-Signature', value: signature]] : []
-    httpRequest(url: params.PLATFORM_CALLBACK_URL, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
+    httpRequest(url: callbackUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
 }
 
 def hmacSha256(String secret, String data) {

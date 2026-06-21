@@ -57,6 +57,7 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		pipeline.GET("/template-simulate", r.pipelineCtrl.TemplateSimulate) // 模拟模板化发布流程
 		pipeline.GET("/sonar-report", r.pipelineCtrl.SonarReport)          // SonarQube 代码质量报告
 		pipeline.GET("/deploy-silence-status", r.pipelineCtrl.DeploySilenceStatus) // 发布静默状态查询
+		pipeline.GET("/jenkins-config", r.pipelineCtrl.JenkinsConfig)               // Jenkins 配置信息（回调地址等）
 		// sonar-callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT，Jenkins 回调无需认证）
 		// callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT）
 	}
