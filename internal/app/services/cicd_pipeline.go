@@ -688,7 +688,7 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 	_ = s.dao.PipelineRunUpdateBuildNumber(ctx, run.ID, result.BuildNumber)
 	_ = s.dao.PipelineUpdateRunInfo(ctx, pipeline.ID, models.PipelineRunStatusRunning, result.BuildNumber, result.BuildURL)
 
-	// 发送构建开始钉钉通知
+	// 立即发送「发布开始」通知（用户点击发布按钮时即时触发）
 	s.NotifyBuildStarted(ctx, pipeline, run, result.BuildNumber)
 }
 
@@ -1722,6 +1722,8 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			})
 		}
 	}
+
+	// 「发布开始」通知已在触发时发送（triggerJenkinsBuild），此处不再重复发送
 
 	switch workloadKind {
 	case "Deployment":

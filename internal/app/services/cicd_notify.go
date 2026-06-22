@@ -99,7 +99,7 @@ type RolloutResult struct {
 
 // ==================== 部署通知 ====================
 
-// NotifyBuildStarted 发送构建开始通知
+// NotifyBuildStarted 发送发布开始通知
 func (s *Services) NotifyBuildStarted(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, buildNumber int) {
 	title, text := s.buildBuildStartedText(pipeline, run, buildNumber)
 
@@ -131,7 +131,7 @@ func (s *Services) NotifyDeployResult(ctx context.Context, pipeline *models.Cicd
 	}
 }
 
-// NotifyBuildResult 发送构建结果通知（异步）
+// NotifyBuildResult 发送发布结果通知（异步）
 func (s *Services) NotifyBuildResult(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, success bool) {
 	title, text := s.buildBuildResultText(pipeline, run, success)
 
@@ -146,7 +146,7 @@ func (s *Services) NotifyBuildResult(ctx context.Context, pipeline *models.CicdP
 	}
 }
 
-// NotifyBuildResultSync 发送构建结果通知（同步，用于后台 Worker 中确保通知可追踪）
+// NotifyBuildResultSync 发送发布结果通知（同步，用于后台 Worker 中确保通知可追踪）
 func (s *Services) NotifyBuildResultSync(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, success bool) {
 	title, text := s.buildBuildResultText(pipeline, run, success)
 
@@ -216,6 +216,22 @@ func (s *Services) NotifyCancelDeployResult(ctx context.Context, pipeline *model
 	}
 }
 
+// notifyAutoDeployStarted 发送自动部署开始通知（内部使用）
+// 在部署开始执行前发送，让相关人员及时获知部署状态
+func (s *Services) notifyAutoDeployStarted(ctx context.Context, info *AutoDeployNotifyInfo) {
+	title, text := s.buildAutoDeployStartedText(info)
+
+	if webhook := s.getDingTalkWebhook(info.Pipeline); webhook != "" {
+		msg := s.textToDingTalkMessage(title, text)
+		s.sendDingTalkNotify(webhook, msg)
+	}
+
+	if webhook := s.getFeishuWebhook(); webhook != "" {
+		msg := s.textToFeishuMessage(title, text)
+		s.sendFeishuNotify(webhook, msg)
+	}
+}
+
 // notifyAutoDeployResult 发送自动部署结果通知（内部使用）
 // 用于 Jenkins 回调后的自动部署场景，支持丰富的通知数据
 func (s *Services) notifyAutoDeployResult(ctx context.Context, info *AutoDeployNotifyInfo) {
@@ -237,6 +253,78 @@ func (s *Services) notifyAutoDeployResult(ctx context.Context, info *AutoDeployN
 		msg := s.textToFeishuMessage(title, text)
 		s.sendFeishuNotify(webhook, msg)
 	}
+}
+
+// buildAutoDeployStartedText 构建自动部署开始通知文本
+func (s *Services) buildAutoDeployStartedText(info *AutoDeployNotifyInfo) (string, string) {
+	pipeline := info.Pipeline
+	platformURL := s.getPlatformURL()
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
+
+	workloadKind := pipeline.TargetWorkloadKind
+	if workloadKind == "" {
+		workloadKind = "Deployment"
+	}
+
+	// 获取分支和commit信息
+	branch := pipeline.GitBranch
+	commitShort := ""
+	if info.Run != nil {
+		if info.Run.GitBranch != "" {
+			branch = info.Run.GitBranch
+		}
+		if info.Run.GitCommit != "" {
+			commitShort = info.Run.GitCommit
+			if len(commitShort) > 7 {
+				commitShort = commitShort[:7]
+			}
+		}
+	}
+
+	// 提取镜像版本标签
+	imageVersion := extractImageTag(info.Image)
+
+	text := fmt.Sprintf("### 🚀【%s发布开始】\n\n", envName)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+	if branch != "" {
+		text += fmt.Sprintf("**🌿 分支**：%s\n\n", branch)
+	}
+	if commitShort != "" {
+		text += fmt.Sprintf("**📝 Commit**：%s\n\n", commitShort)
+	}
+
+	// 集群信息
+	clusterName := info.ClusterName
+	if clusterName == "" {
+		clusterName = "default"
+	}
+	text += fmt.Sprintf("**☸️ 集群**：%s\n\n", clusterName)
+	text += fmt.Sprintf("**📁 命名空间**：%s\n\n", pipeline.TargetNamespace)
+	text += fmt.Sprintf("**⚙️ 工作负载**：%s/%s\n\n", workloadKind, pipeline.TargetWorkloadName)
+
+	// 发布人和时间
+	username := info.Username
+	if username == "" {
+		username = "system"
+	}
+	text += fmt.Sprintf("**👤 发布人**：%s\n\n", username)
+	text += fmt.Sprintf("**🕐 开始时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+
+	// 镜像版本
+	text += fmt.Sprintf("**🐳 镜像版本**：\n\n%s\n\n", info.Image)
+	if imageVersion != "" {
+		text += fmt.Sprintf("**🏷 版本标签**：%s\n\n", imageVersion)
+	}
+
+	// 流水线详情
+	text += "---\n"
+	if platformURL != "" {
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+	}
+
+	text += fmt.Sprintf("**🟡 状态**：%s发布中，请等待...", envName)
+
+	return fmt.Sprintf("【%s发布开始】%s", envName, pipeline.Name), text
 }
 
 // buildAutoDeploySuccessText 构建自动部署成功通知文本
@@ -268,7 +356,7 @@ func (s *Services) buildAutoDeploySuccessText(info *AutoDeployNotifyInfo) (strin
 	// 提取镜像版本标签
 	imageVersion := extractImageTag(info.Image)
 
-	text := fmt.Sprintf("### 【%s发布通知】\n\n", envName)
+	text := fmt.Sprintf("### 【%s发布完成】\n\n", envName)
 	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
 	if branch != "" {
 		text += fmt.Sprintf("**🌿 分支**：%s\n\n", branch)
@@ -318,9 +406,9 @@ func (s *Services) buildAutoDeploySuccessText(info *AutoDeployNotifyInfo) (strin
 		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
 	}
 
-	text += fmt.Sprintf("**🟢 状态**：%s发布成功", envName)
+	text += fmt.Sprintf("**🟢 状态**：%s发布完成", envName)
 
-	return fmt.Sprintf("【%s发布通知】%s", envName, pipeline.Name), text
+	return fmt.Sprintf("【%s发布完成】%s", envName, pipeline.Name), text
 }
 
 // buildAutoDeployFailedText 构建自动部署失败通知文本
@@ -536,40 +624,37 @@ func (s *Services) buildLegacyDeployText(pipeline *models.CicdPipeline, namespac
 
 // ==================== 消息构建（统一返回 title, text） ====================
 
-// buildBuildStartedText 构建开始通知文本
+// buildBuildStartedText 发布开始通知文本
 func (s *Services) buildBuildStartedText(pipeline *models.CicdPipeline, run *models.CicdPipelineRun, buildNumber int) (string, string) {
 	platformURL := s.getPlatformURL()
-	envText := s.getEnvDisplayNameWithCluster(pipeline.DeployEnv, pipeline.TargetClusterID)
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
 
-	text := fmt.Sprintf(`### 🚀 构建已触发
+	// 获取发布人
+	username := "system"
+	if run != nil && run.TriggerUserID > 0 {
+		username = s.getUsernameByID(run.TriggerUserID)
+	}
 
-**流水线**: %s
-
-**环境**: %s
-
-**分支**: %s
-
-**构建号**: #%d
-
-**触发时间**: %s`,
-		pipeline.Name,
-		envText,
-		run.GitBranch,
-		buildNumber,
-		time.Now().Format("2006-01-02 15:04:05"),
-	)
+	text := fmt.Sprintf("### 🚀【%s发布开始】\n\n", envName)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+	text += fmt.Sprintf("**🌿 分支**：%s\n\n", run.GitBranch)
+	text += fmt.Sprintf("**🔢 构建号**：#%d\n\n", buildNumber)
+	text += fmt.Sprintf("**👤 发布人**：%s\n\n", username)
+	text += fmt.Sprintf("**🕐 开始时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 
 	// 添加快捷链接
-	text += "\n\n---\n"
+	text += "---\n"
 	if platformURL != "" {
-		text += fmt.Sprintf("🔗 [查看流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
 	}
 	if pipeline.JenkinsURL != "" && pipeline.JenkinsJob != "" {
 		text += fmt.Sprintf("🛠 [查看 Jenkins 构建日志](%s/job/%s/%d/console)",
 			pipeline.JenkinsURL, pipeline.JenkinsJob, buildNumber)
 	}
 
-	return fmt.Sprintf("[构建开始] %s #%d", pipeline.Name, buildNumber), text
+	text += fmt.Sprintf("\n\n**🟡 状态**：%s发布中，请等待...", envName)
+
+	return fmt.Sprintf("【%s发布开始】%s", envName, pipeline.Name), text
 }
 
 // buildDeployResultText 部署结果通知文本
@@ -624,58 +709,52 @@ func (s *Services) buildDeployResultText(pipeline *models.CicdPipeline, stage *m
 	return fmt.Sprintf("[%s] %s", statusText, pipeline.Name), text
 }
 
-// buildBuildResultText 构建结果通知文本
+// buildBuildResultText 发布结果通知文本（适用于未配置自动部署的流水线）
 func (s *Services) buildBuildResultText(pipeline *models.CicdPipeline, run *models.CicdPipelineRun, success bool) (string, string) {
 	statusIcon := "✅"
-	statusText := "构建成功"
+	statusText := "发布完成"
 	if !success {
 		statusIcon = "❌"
-		statusText = "构建失败"
+		statusText = "发布失败"
 	}
 
 	platformURL := s.getPlatformURL()
+	envName := s.getEnvDisplayLabel(pipeline.DeployEnv, pipeline.TargetClusterID)
 
-	text := fmt.Sprintf(`### %s %s
-
-**流水线**: %s
-
-**分支**: %s
-
-**构建号**: #%d
-
-**镜像**: %s
-
-**耗时**: %ds
-
-**时间**: %s`,
-		statusIcon,
-		statusText,
-		pipeline.Name,
-		run.GitBranch,
-		run.BuildNumber,
-		run.ImageURL,
-		run.DurationSec,
-		time.Now().Format("2006-01-02 15:04:05"),
-	)
+	text := fmt.Sprintf("### %s【%s%s】\n\n", statusIcon, envName, statusText)
+	text += fmt.Sprintf("**📦 应用**：%s\n\n", pipeline.Name)
+	text += fmt.Sprintf("**🌿 分支**：%s\n\n", run.GitBranch)
+	text += fmt.Sprintf("**🔢 构建号**：#%d\n\n", run.BuildNumber)
+	if run.ImageURL != "" {
+		text += fmt.Sprintf("**🐳 镜像版本**：\n\n%s\n\n", run.ImageURL)
+	}
+	text += fmt.Sprintf("**⏱️ 耗时**：%s\n\n", formatDurationSeconds(run.DurationSec))
+	text += fmt.Sprintf("**🕐 时间**：%s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 
 	if !success && run.ErrorMessage != "" {
-		text += fmt.Sprintf("\n\n**错误**: %s", run.ErrorMessage)
+		text += fmt.Sprintf("**❌ 错误信息**：%s\n\n", run.ErrorMessage)
 	}
 
 	if success && pipeline.RequireApproval {
-		text += "\n\n⏳ **等待审批**: 请前往平台进行人工审批"
+		text += "⏳ **等待审批**：请前往平台进行人工审批\n\n"
 	}
 
-	text += "\n\n---\n"
+	text += "---\n"
 	if platformURL != "" {
-		text += fmt.Sprintf("🔗 [查看流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
+		text += fmt.Sprintf("🔗 [流水线详情](%s/cicd/pipelines/%d?tab=stages)\n\n", platformURL, pipeline.ID)
 	}
 	if pipeline.JenkinsURL != "" && pipeline.JenkinsJob != "" {
 		text += fmt.Sprintf("🛠 [查看 Jenkins 构建](%s/job/%s/%d/console)",
 			pipeline.JenkinsURL, pipeline.JenkinsJob, run.BuildNumber)
 	}
 
-	return fmt.Sprintf("[%s] %s", statusText, pipeline.Name), text
+	if success {
+		text += fmt.Sprintf("\n\n**🟢 状态**：%s%s", envName, statusText)
+	} else {
+		text += fmt.Sprintf("\n\n**🔴 状态**：%s%s，请检查", envName, statusText)
+	}
+
+	return fmt.Sprintf("【%s%s】%s", envName, statusText, pipeline.Name), text
 }
 
 // buildApprovalText 审批提醒通知文本

@@ -4,11 +4,14 @@
 #   - 多阶段构建，分离编译和运行环境
 #   - 使用 JRE 运行镜像减小体积
 #   - 支持健康检查和 JVM 调优
+#   - 支持 OTEL Agent 探针注入
 # ============================================
 
-# ============ 构建阶段 ============
-FROM maven:3.9-eclipse-temurin-17 AS builder
+# ============ 构建参数 ============
+ARG JAVA_VERSION=17
 
+# ============ 构建阶段 ============
+FROM maven:3.9-eclipse-temurin-${JAVA_VERSION} AS builder
 WORKDIR /build
 
 # 先复制 pom.xml 利用缓存
@@ -21,10 +24,10 @@ RUN mvn package -DskipTests -B && \
     mv target/*.jar app.jar
 
 # ============ 运行阶段 ============
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:${JAVA_VERSION}-jre-alpine
 
-# 安装时区
-RUN apk --no-cache add tzdata && \
+# 安装时区 + 常用诊断工具
+RUN apk --no-cache add tzdata curl && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 
@@ -34,10 +37,10 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
 # 从构建阶段复制 JAR
-COPY --from=builder /build/app.jar .
+COPY --from=builder /build/app.jar ./app.jar
 
-# 复制配置文件（如需要）
-# COPY config/ ./config/
+# 复制 OTEL Agent（可选，由平台自动注入）
+# COPY --from=otel /opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 
 # 切换到非 root 用户
 USER appuser
@@ -46,11 +49,12 @@ USER appuser
 EXPOSE 8080
 
 # JVM 参数（可通过环境变量覆盖）
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError"
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp"
+ENV OTEL_OPTS=""
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+# 健康检查（支持 Spring Boot Actuator 和普通 HTTP）
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD curl -sf http://localhost:8080/actuator/health || curl -sf http://localhost:8080/health || exit 1
 
 # 启动命令
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS $OTEL_OPTS -jar app.jar"]

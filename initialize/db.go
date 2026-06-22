@@ -132,6 +132,7 @@ func autoMigrateTables() error {
 		{"monitor_inhibit_rule", &models.MonitorInhibitRule{}},
 		{"monitor_aggregate_rule", &models.MonitorAggregateRule{}},
 		{"monitor_notify_template", &models.MonitorNotifyTemplate{}},
+		{"monitor_notify_route_policy", &models.MonitorNotifyRoutePolicy{}},
 	}
 	for _, m := range monitorModels {
 		if err := global.DB.AutoMigrate(m.model); err != nil {
@@ -148,6 +149,22 @@ func autoMigrateTables() error {
 
 	// 汇总一行（只记总数，有错才刷详情）
 	log.Printf("[AutoMigrate] OK (ai: %d, monitor: %d)", len(aiModels), len(monitorModels))
+
+	// AIOps 智能运维模块
+	aiopsModels := []struct {
+		name  string
+		model interface{}
+	}{
+		{"aiops_analysis_record", &models.AIOpsAnalysisRecord{}},
+		{"aiops_inspection_report", &models.AIOpsInspectionReport{}},
+	}
+	for _, m := range aiopsModels {
+		if err := global.DB.AutoMigrate(m.model); err != nil {
+			log.Printf("[AutoMigrate] 创建表 %s 失败: %v", m.name, err)
+			// 不返回错误，允许降级运行
+		}
+	}
+
 	return nil
 }
 

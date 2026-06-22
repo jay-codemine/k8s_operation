@@ -329,9 +329,9 @@
                   v-if="canOperate && pipeline.status !== 'running'"
                   class="action-btn-sm run"
                   @click="handleRunPipeline(pipeline)"
-                  title="运行"
+                  title="发布"
                 >
-                  ▶ 运行
+                  ▶ 发布
                 </button>
                 <button 
                   v-if="canOperate && (pipeline.status === 'running' || pipeline.lastRunStatus === 'pending')"
@@ -404,7 +404,7 @@
               class="action-btn run" 
               @click="handleRunPipeline(pipeline)"
               :disabled="pipeline.status === 'running'"
-              title="运行"
+              title="发布"
             >
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3"/>

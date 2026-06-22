@@ -2,8 +2,8 @@
 -- K8s Platform 完整数据库初始化脚本（FULL）
 -- 版本: 2.3.0
 -- 日期: 2026-05-18
--- 说明: 一键创建数据库 + 全部 50 张表 + 默认种子数据
---      已整合: 用户/RBAC/集群/CI-CD/制品/资源模板/镜像/IAM/应用商城/AI助手/监控
+-- 说明: 一键创建数据库 + 全部 54 张表 + 默认种子数据
+--      已整合: 用户/RBAC/集群/CI-CD/制品/资源模板/镜像/IAM/应用商城/AI助手/监控/AIOps
 -- 数据库账号: root / 123456
 -- 使用方式（任选其一）:
 --   ⚠️ PowerShell 不支持 `<` 重定向，请用以下方式之一：
@@ -1666,6 +1666,7 @@ CREATE TABLE IF NOT EXISTS `monitor_alert_rule` (
   `eval_interval` int DEFAULT 60 COMMENT '评估间隔(秒)',
   `last_eval_at` bigint DEFAULT 0,
   `last_eval_result` varchar(20) DEFAULT '' COMMENT 'normal/firing/pending/error',
+  `pending_since` bigint DEFAULT 0 COMMENT '告警条件首次满足时间',
   `created_by` bigint DEFAULT 0,
   `created_at` bigint DEFAULT 0,
   `modified_at` bigint DEFAULT 0,
@@ -1818,6 +1819,86 @@ CREATE TABLE IF NOT EXISTS `monitor_notify_template` (
   UNIQUE KEY `idx_name` (`name`),
   KEY `idx_type` (`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控通知模板表';
+
+-- =====================================================
+-- 51. 监控 - 通知路由策略表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `monitor_notify_route_policy` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL COMMENT '策略名称',
+  `description` varchar(500) DEFAULT '' COMMENT '描述',
+  `priority` int DEFAULT 100 COMMENT '优先级(越小越优先,0为最高)',
+  `channel_ids` varchar(500) NOT NULL DEFAULT '' COMMENT '目标通知渠道ID(逗号分隔)',
+  `match_mode` varchar(20) DEFAULT 'any' COMMENT '匹配模式: all(全部满足)/any(任一满足)',
+  `severities` varchar(100) DEFAULT '' COMMENT '匹配级别(逗号分隔): critical,warning,info',
+  `groups` varchar(500) DEFAULT '' COMMENT '匹配规则分组(逗号分隔)',
+  `label_match` text COMMENT '标签匹配条件JSON [{key,op,value}]',
+  `is_default` tinyint(1) DEFAULT 0 COMMENT '是否为兜底默认策略',
+  `enabled` tinyint(1) DEFAULT 1,
+  `created_by` bigint DEFAULT 0,
+  `created_at` bigint DEFAULT 0,
+  `modified_at` bigint DEFAULT 0,
+  `is_del` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`),
+  KEY `idx_priority` (`priority`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='监控通知路由策略表';
+
+-- =====================================================
+-- 52. AIOps - AI 分析记录表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `aiops_analysis_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `type` varchar(30) NOT NULL COMMENT '类型: alert_analysis/log_diagnosis/inspection',
+  `ref_id` bigint DEFAULT 0 COMMENT '关联ID(告警事件ID/巡检报告ID)',
+  `title` varchar(300) NOT NULL COMMENT '分析标题',
+  `input` text COMMENT '输入数据(告警详情/日志片段/巡检摘要)',
+  `result` longtext COMMENT 'AI分析结果(Markdown)',
+  `severity` varchar(20) DEFAULT '' COMMENT 'AI判定严重级别',
+  `suggestions` text COMMENT 'AI建议JSON',
+  `model` varchar(100) DEFAULT '' COMMENT '使用的AI模型',
+  `tokens_used` int DEFAULT 0 COMMENT '消耗Token数',
+  `latency_ms` bigint DEFAULT 0 COMMENT '分析耗时(ms)',
+  `status` varchar(20) DEFAULT 'success' COMMENT '状态: success/failed/timeout',
+  `error` varchar(500) DEFAULT '' COMMENT '错误信息',
+  `user_id` bigint DEFAULT 0 COMMENT '发起人',
+  `created_at` bigint DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`),
+  KEY `idx_ref_id` (`ref_id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AIOps AI分析记录表';
+
+-- =====================================================
+-- 53. AIOps - 巡检报告表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS `aiops_inspection_report` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `type` varchar(30) NOT NULL COMMENT '巡检类型: scheduled/manual',
+  `scope` varchar(30) DEFAULT 'full' COMMENT '巡检范围: full/cluster/namespace',
+  `scope_id` varchar(100) DEFAULT '' COMMENT '范围ID(集群ID等)',
+  `health_score` int DEFAULT 0 COMMENT '健康评分 0-100',
+  `level` varchar(20) NOT NULL COMMENT '健康等级: healthy/warning/critical',
+  `summary` text COMMENT '巡检摘要(AI生成)',
+  `details` longtext COMMENT '巡检详情JSON',
+  `ai_analysis` longtext COMMENT 'AI综合分析(Markdown)',
+  `findings` int DEFAULT 0 COMMENT '发现问题数',
+  `suggestions_count` int DEFAULT 0 COMMENT '建议数',
+  `duration` bigint DEFAULT 0 COMMENT '巡检耗时(ms)',
+  `status` varchar(20) DEFAULT 'running' COMMENT '状态: running/completed/failed',
+  `error` varchar(500) DEFAULT '' COMMENT '错误信息',
+  `triggered_by` bigint DEFAULT 0 COMMENT '触发人(0=系统定时)',
+  `created_at` bigint DEFAULT 0,
+  `completed_at` bigint DEFAULT 0 COMMENT '完成时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AIOps巡检报告表';
+
+-- 【兼容存量集群】monitor_alert_rule 幂等补丁：若老库缺 pending_since 字段，自动补上
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'monitor_alert_rule' AND column_name = 'pending_since');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `monitor_alert_rule` ADD COLUMN `pending_since` BIGINT DEFAULT 0 COMMENT ''告警条件首次满足时间'' AFTER `last_eval_result`', 'SELECT ''pending_since exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =====================================================
 -- 构建探针种子数据（OpenTelemetry Java Agent）
