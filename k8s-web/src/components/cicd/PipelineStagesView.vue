@@ -104,6 +104,7 @@
 
                 <!-- 审批操作 -->
                 <div v-if="stage.type === 'approval' && stage.status === 'waiting'" class="approval-actions">
+                  <template v-if="props.canApprove">
                   <button class="btn btn-approve" @click.stop="$emit('approve', stage, 'approve')">
                     <svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
                     通过
@@ -112,6 +113,13 @@
                     <svg viewBox="0 0 16 16"><path fill="currentColor" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
                     拒绝
                   </button>
+                  </template>
+                  <span v-else class="approval-no-perm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;color:#f59e0b">
+                      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                    </svg>
+                    等待管理员审批
+                  </span>
                 </div>
 
                 <!-- 部署操作 -->
@@ -165,6 +173,10 @@ const props = defineProps({
     default: () => []
   },
   loading: {
+    type: Boolean,
+    default: false
+  },
+  canApprove: {
     type: Boolean,
     default: false
   }
@@ -663,7 +675,21 @@ watch(() => props.stages, (newStages) => {
 .approval-actions, .deploy-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+/* 审批无权限提示 */
+.approval-no-perm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #92400e;
 }
 
 .btn {

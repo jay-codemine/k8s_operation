@@ -130,7 +130,7 @@ func (d *Dao) CicdReleaseStats(ctx context.Context) (map[string]int64, error) {
 // CicdReleaseCancel 取消发布单
 func (d *Dao) CicdReleaseCancel(ctx context.Context, releaseID int64) (bool, error) {
 	return d.CicdReleaseUpdateStatusCAS(ctx, releaseID,
-		[]string{models.CicdReleaseStatusPending, models.CicdReleaseStatusQueued, models.CicdReleaseStatusRunning},
+		[]string{models.CicdReleaseStatusPending, models.CicdReleaseStatusAwaitingApproval, models.CicdReleaseStatusQueued, models.CicdReleaseStatusRunning},
 		models.CicdReleaseStatusCanceled,
 		"user canceled",
 	)
@@ -148,12 +148,12 @@ func (d *Dao) CicdReleaseGetByBuildID(ctx context.Context, buildID int64) (*mode
 	return &rel, nil
 }
 
-// CicdReleaseUpdate 编辑发布单（仅 Pending 状态可编辑）
+// CicdReleaseUpdate 编辑发布单（仅 Pending/AwaitingApproval/Failed/Canceled 状态可编辑）
 func (d *Dao) CicdReleaseUpdate(ctx context.Context, releaseID int64, updates map[string]any) error {
 	updates["modified_at"] = time.Now().Unix()
 	return d.db.WithContext(ctx).
 		Model(&models.CicdRelease{}).
-		Where("id = ? AND is_del = 0 AND status IN ?", releaseID, []string{models.CicdReleaseStatusPending, models.CicdReleaseStatusFailed, models.CicdReleaseStatusCanceled}).
+		Where("id = ? AND is_del = 0 AND status IN ?", releaseID, []string{models.CicdReleaseStatusPending, models.CicdReleaseStatusAwaitingApproval, models.CicdReleaseStatusFailed, models.CicdReleaseStatusCanceled}).
 		Updates(updates).Error
 }
 

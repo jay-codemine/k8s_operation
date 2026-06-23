@@ -245,7 +245,7 @@
       </div>
     </div>
 
-    <!-- 权限配置弹窗（大厂风格） -->
+    <!-- 权限配置弹窗（大厂风格 + CICD标签分组） -->
     <div v-if="showPermModal" class="modal-mask" @click="showPermModal = false">
       <div class="modal modal-perm" @click.stop>
         <div class="modal-header">
@@ -263,20 +263,49 @@
             </div>
             <div v-show="!module.collapsed" class="module-content">
               <div class="module-desc">{{ module.description }}</div>
-              <div class="perm-grid">
-                <div
-                  v-for="perm in module.permissions"
-                  :key="perm.id"
-                  :class="['perm-item', { selected: selectedPermIds.includes(perm.id) }]"
-                  @click="togglePermission(perm.id)"
-                >
-                  <span class="perm-check">{{ selectedPermIds.includes(perm.id) ? '✓' : '' }}</span>
-                  <div class="perm-info">
-                    <span class="perm-name">{{ perm.display_name }}</span>
-                    <span class="perm-code">{{ perm.name }}</span>
+              
+              <!-- CICD 域：按标签分组展示 -->
+              <template v-if="module.tags && module.tags.length > 0">
+                <div v-for="tag in module.tags" :key="tag.name" class="perm-tag-group">
+                  <div class="tag-header">
+                    <span class="tag-label">🏷️ {{ tag.name }}</span>
+                    <button class="btn-tag-select" @click="selectTagPerms(tag)">全选</button>
+                    <button class="btn-tag-select" @click="clearTagPerms(tag)">清空</button>
+                  </div>
+                  <div class="perm-grid">
+                    <div
+                      v-for="perm in tag.permissions"
+                      :key="perm.id"
+                      :class="['perm-item', { selected: selectedPermIds.includes(perm.id) }]"
+                      @click="togglePermission(perm.id)"
+                    >
+                      <span class="perm-check">{{ selectedPermIds.includes(perm.id) ? '✓' : '' }}</span>
+                      <div class="perm-info">
+                        <span class="perm-name">{{ perm.display_name }}</span>
+                        <span class="perm-code">{{ perm.name }}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </template>
+              
+              <!-- 平台域/集群域：扁平展示 -->
+              <template v-else>
+                <div class="perm-grid">
+                  <div
+                    v-for="perm in module.permissions"
+                    :key="perm.id"
+                    :class="['perm-item', { selected: selectedPermIds.includes(perm.id) }]"
+                    @click="togglePermission(perm.id)"
+                  >
+                    <span class="perm-check">{{ selectedPermIds.includes(perm.id) ? '✓' : '' }}</span>
+                    <div class="perm-info">
+                      <span class="perm-name">{{ perm.display_name }}</span>
+                      <span class="perm-code">{{ perm.name }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
           
@@ -379,7 +408,7 @@ const permSubmitting = ref(false)
 const showUsersModal = ref(false)
 const roleUsers = ref([])
 
-// 权限模块分组（v2: 按三域划分）
+// 权限模块分组（v2: 按三域划分，CICD域支持标签子分组）
 const permissionModules = reactive([
   {
     key: 'platform',
@@ -387,7 +416,8 @@ const permissionModules = reactive([
     icon: '🏛',
     description: '用户管理/角色权限/系统设置/审计日志',
     collapsed: false,
-    permissions: []
+    permissions: [],
+    tags: [] // 平台域不用标签分组
   },
   {
     key: 'cluster',
@@ -395,15 +425,17 @@ const permissionModules = reactive([
     icon: '☸️',
     description: '集群管理/工作负载/服务与路由/配置管理/存储/节点/监控日志',
     collapsed: false,
-    permissions: []
+    permissions: [],
+    tags: [] // 集群域不用标签分组
   },
   {
     key: 'cicd',
     name: '🚀 发布域',
     icon: '🚀',
-    description: '流水线管理/制品与镜像/审批管理',
+    description: '流水线管理/构建与部署/制品与镜像/审批与管理',
     collapsed: false,
-    permissions: []
+    permissions: [],
+    tags: [] // 标签子分组（动态生成）
   }
 ])
 
@@ -607,7 +639,7 @@ const openPermissionModal = async (role) => {
   }
 }
 
-// 分类权限到各模块（v2: 基于 scope 字段）
+// 分类权限到各模块（v3: 基于 scope 字段 + CICD 标签子分组）
 const categorizePermissions = () => {
   permissionModules.forEach(module => {
     module.permissions = allPermissions.value.filter(p => {
@@ -618,10 +650,23 @@ const categorizePermissions = () => {
       const scopeMap = {
         platform: ['user', 'role', 'settings', 'audit', 'platform'],
         cluster: ['cluster', 'workload', 'network', 'config', 'storage', 'node', 'monitor', 'namespace', 'deployment', 'pod', 'service', 'configmap', 'secret', 'ingress', 'pvc'],
-        cicd: ['pipeline', 'artifact', 'release', 'approval', 'build', 'image']
+        cicd: ['pipeline', 'artifact', 'release', 'approval', 'build', 'image', 'deploy', 'environment', 'template']
       }
       return scopeMap[module.key]?.some(k => resourceType.includes(k))
     })
+
+    // 为 CICD 域生成标签子分组
+    if (module.key === 'cicd') {
+      const tagMap = {}
+      module.permissions.forEach(p => {
+        const tag = p.tag || '其他'
+        if (!tagMap[tag]) tagMap[tag] = []
+        tagMap[tag].push(p)
+      })
+      module.tags = Object.entries(tagMap).map(([name, perms]) => ({ name, permissions: perms }))
+    } else {
+      module.tags = []
+    }
   })
 }
 
@@ -641,7 +686,7 @@ const getModuleSelectedCount = (module) => {
 }
 
 // 全选
-const selectAllPerms = () => {
+ const selectAllPerms = () => {
   selectedPermIds.value = allPermissions.value.map(p => p.id)
 }
 
@@ -655,6 +700,21 @@ const selectViewPerms = () => {
   selectedPermIds.value = allPermissions.value
     .filter(p => p.action === 'view' || p.name?.includes(':view'))
     .map(p => p.id)
+}
+
+// 标签组全选
+const selectTagPerms = (tag) => {
+  tag.permissions.forEach(p => {
+    if (!selectedPermIds.value.includes(p.id)) {
+      selectedPermIds.value.push(p.id)
+    }
+  })
+}
+
+// 标签组清空
+const clearTagPerms = (tag) => {
+  const ids = tag.permissions.map(p => p.id)
+  selectedPermIds.value = selectedPermIds.value.filter(id => !ids.includes(id))
 }
 
 // 保存权限配置
@@ -1425,4 +1485,46 @@ onMounted(() => {
 .scope-tag.scope-read { background: #dbeafe; color: #1e40af; }
 .scope-tag.scope-write { background: #fef3c7; color: #92400e; }
 .scope-tag.scope-admin { background: #dcfce7; color: #166534; }
+
+/* CICD 标签分组样式 */
+.perm-tag-group {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.tag-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tag-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+  flex: 1;
+}
+
+.btn-tag-select {
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 11px;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.btn-tag-select:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
 </style>

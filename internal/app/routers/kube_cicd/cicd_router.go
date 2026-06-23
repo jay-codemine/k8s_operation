@@ -3,6 +3,7 @@ package kube_cicd
 import (
 	"github.com/gin-gonic/gin"
 	"k8soperation/internal/app/controllers/api/v1/cicd"
+	"k8soperation/middlewares"
 )
 
 type CicdRouter struct {
@@ -53,11 +54,14 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		pipeline.GET("/status", r.pipelineCtrl.Status)     // 获取实时状态
 		pipeline.GET("/stages", r.pipelineCtrl.Stages)     // 获取阶段数据（Jenkins Pipeline）
 		pipeline.GET("/history", r.pipelineCtrl.History)   // 获取运行历史
+		pipeline.GET("/build-records", r.pipelineCtrl.BuildRecords) // 获取全量构建记录（跨流水线）
+		pipeline.GET("/build-records/export", r.pipelineCtrl.ExportBuildRecords) // 导出构建记录CSV
 		pipeline.GET("/template-verify", r.pipelineCtrl.TemplateVerify)     // 模板化发布验证
 		pipeline.GET("/template-simulate", r.pipelineCtrl.TemplateSimulate) // 模拟模板化发布流程
 		pipeline.GET("/sonar-report", r.pipelineCtrl.SonarReport)          // SonarQube 代码质量报告
 		pipeline.GET("/deploy-silence-status", r.pipelineCtrl.DeploySilenceStatus) // 发布静默状态查询
 		pipeline.GET("/jenkins-config", r.pipelineCtrl.JenkinsConfig)               // Jenkins 配置信息（回调地址等）
+		pipeline.GET("/discover", r.pipelineCtrl.Discover)                           // 从K8s Deployment自动发现应用信息
 		// sonar-callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT，Jenkins 回调无需认证）
 		// callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT）
 	}
@@ -99,9 +103,9 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	{
 		environment.GET("/list", r.environmentCtrl.List)       // 获取环境列表
 		environment.GET("/detail", r.environmentCtrl.Detail)   // 获取环境详情
-		environment.POST("/create", r.environmentCtrl.Create)  // 创建环境
-		environment.POST("/update", r.environmentCtrl.Update)  // 更新环境
-		environment.POST("/delete", r.environmentCtrl.Delete)  // 删除环境
+		environment.POST("/create", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Create)  // 创建环境
+		environment.POST("/update", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Update)  // 更新环境
+		environment.POST("/delete", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Delete)  // 删除环境
 	}
 
 	// ==================== 审批流程 ====================
@@ -114,8 +118,9 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		approval.GET("/stats", r.approvalCtrl.Stats)     // 获取审批统计
 		approval.POST("/create", r.approvalCtrl.Create)  // 创建审批申请
 		approval.POST("/update", r.approvalCtrl.Update)  // 更新审批记录
-		approval.POST("/delete", r.approvalCtrl.Delete)  // 删除审批记录
-		approval.POST("/action", r.approvalCtrl.Action)  // 审批操作
+		approval.POST("/delete", middlewares.RequireCICDPermission("cicd:approval:manage"), r.approvalCtrl.Delete)  // 删除审批记录
+		approval.POST("/action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.Action)  // 审批操作
+		approval.POST("/batch-action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.BatchAction)  // 批量审批操作
 	}
 
 	// ==================== 流水线阶段 ====================
@@ -138,9 +143,9 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	{
 		template.GET("/list", r.templateCtrl.List)       // 获取模板列表
 		template.GET("/detail", r.templateCtrl.Detail)   // 获取模板详情
-		template.POST("/create", r.templateCtrl.Create)  // 创建模板
-		template.POST("/update", r.templateCtrl.Update)  // 更新模板
-		template.POST("/delete", r.templateCtrl.Delete)  // 删除模板
+		template.POST("/create", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Create)  // 创建模板
+		template.POST("/update", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Update)  // 更新模板
+		template.POST("/delete", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Delete)  // 删除模板
 	}
 
 	// ==================== 资源配置管理 ====================
@@ -173,17 +178,16 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	// /api/v1/k8s/cicd/artifact/...
 	artifact := rg.Group("/artifact")
 	{
-		artifact.GET("/list", r.artifactCtrl.List)                 // 制品列表（分页 + 筛选）
+		artifact.GET("/list", r.artifactCtrl.List)                 // 制品列表
 		artifact.GET("/detail", r.artifactCtrl.Detail)             // 制品详情
 		artifact.GET("/by-run", r.artifactCtrl.ListByRunID)        // 某次运行的制品列表
-		artifact.POST("/create", r.artifactCtrl.CreateRecord)      // 创建制品记录（镜像类型 / 无文件）
-		// upload 已移至 cicd_callback_router.go（公开接口，Jenkins 回调无需 JWT，手动上传也可用）
-		artifact.POST("/attach", r.artifactCtrl.AttachFile)        // 为已有制品补传/替换文件
-		artifact.POST("/update", r.artifactCtrl.Update)            // 更新制品信息
+		artifact.POST("/create", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.CreateRecord)      // 创建制品记录
+		artifact.POST("/attach", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.AttachFile)        // 补传/替换文件
+		artifact.POST("/update", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.Update)            // 更新制品信息
 		artifact.GET("/download", r.artifactCtrl.Download)         // 下载制品文件
-		artifact.POST("/delete", r.artifactCtrl.Delete)            // 删除制品
-		artifact.POST("/batch-delete", r.artifactCtrl.BatchDelete) // 批量删除制品
-		artifact.GET("/stats", r.artifactCtrl.Stats)               // 制品统计（按类型分组）
+		artifact.POST("/delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.Delete)            // 删除制品
+		artifact.POST("/batch-delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.BatchDelete) // 批量删除
+		artifact.GET("/stats", r.artifactCtrl.Stats)               // 制品统计
 	}
 
 	// ==================== 构建探针管理 ====================

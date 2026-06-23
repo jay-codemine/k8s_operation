@@ -666,20 +666,20 @@ export default {
     }
     const clearSelection = () => { selectedIds.value = [] }
 
-    // ===== 操作权限控制 =====
-    // viewer 角色只能查看，不能执行任何修改操作
+    // ===== 操作权限控制（v3: 细粒度权限） =====
     const canOperate = computed(() => {
       if (permissionStore.state.isSuperAdmin) return true
-      const roleTypes = permissionStore.roleTypes.value
-      console.log('[Pipelines] 当前用户角色类型:', roleTypes)
-      // viewer 角色无操作权限
-      if (roleTypes.length === 1 && roleTypes.includes('viewer')) return false
-      // 需要 developer 或更高权限才能操作流水线
-      return roleTypes.some(r => ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'cicd_admin'].includes(r))
+      // 检查是否有任何 CICD 写权限
+      return permissionStore.hasAnyCICDPermission([
+        'cicd:pipeline:create', 'cicd:pipeline:edit', 'cicd:pipeline:run', 'cicd:pipeline:delete'
+      ])
     })
-    
-    // TODO: 调试用 - 临时允许所有操作（上线前需删除）
-    // const canOperate = ref(true)
+
+    // 细粒度权限检查
+    const canCreatePipeline = computed(() => permissionStore.hasCICDPermission('cicd:pipeline:create'))
+    const canRunPipeline = computed(() => permissionStore.hasCICDPermission('cicd:pipeline:run'))
+    const canDeletePipeline = computed(() => permissionStore.hasCICDPermission('cicd:pipeline:delete'))
+    const canEditPipeline = computed(() => permissionStore.hasCICDPermission('cicd:pipeline:edit'))
 
     // 统计数据
     const runningCount = computed(() => 
@@ -777,8 +777,10 @@ export default {
         Message.info({ content: `正在启动流水线 "${pipeline.name}"...` })
         const response = await triggerPipeline(pipeline.id)
         if (response.code === 0) {
-          Message.success({ content: '流水线启动成功' })
-          loadPipelines()
+          Message.success({ content: '流水线启动成功，正在跳转到详情页...' })
+          // 发布成功后跳转到详情页，带 auto_select=approval 参数
+          // 构建完成后如果有审批阶段会自动弹出审批面板
+          router.push(`/cicd/pipelines/${pipeline.id}?auto_select=approval`)
         } else {
           throw new Error(response.msg || '启动失败')
         }
@@ -1043,6 +1045,10 @@ export default {
       filteredPipelines,
       paginatedPipelines,
       canOperate,
+      canCreatePipeline,
+      canRunPipeline,
+      canDeletePipeline,
+      canEditPipeline,
       jenkinsConfig,
       jenkinsConfigExpanded,
       loadPipelines,

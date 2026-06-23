@@ -339,7 +339,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import {
   getAuditLogs,
@@ -349,6 +349,14 @@ import {
   cleanupAuditLogs,
   exportAuditLogs
 } from '@/api/platform/audit'
+
+// Props支持（用于嵌入审计中心时按模块筛选）
+const props = defineProps({
+  filterModule: {
+    type: String,
+    default: ''
+  }
+})
 
 // ========== 状态 ==========
 const loading = ref(false)
@@ -365,10 +373,18 @@ const stats = ref({})
 // 筛选
 const filters = reactive({
   keyword: '',
-  module: '',
+  module: props.filterModule || '',
   action: '',
   status: '',
   username: ''
+})
+
+// 监听 prop 变化自动更新筛选
+watch(() => props.filterModule, (val) => {
+  if (val) {
+    filters.module = val
+    handleSearch()
+  }
 })
 
 // 详情弹窗

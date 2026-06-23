@@ -2142,6 +2142,41 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/approval/batch-action": {
+            "post": {
+                "description": "批量通过或拒绝审批申请",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Approval"
+                ],
+                "summary": "批量审批操作",
+                "parameters": [
+                    {
+                        "description": "批量操作参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.ApprovalBatchActionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/approval/create": {
             "post": {
                 "description": "创建部署审批申请",
@@ -3165,6 +3200,99 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/build-records": {
+            "get": {
+                "description": "分页查询所有流水线的构建运行记录，支持按状态、流水线ID、关键字筛选",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取全量构建记录（跨流水线）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码，默认1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认20",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态筛选(pending/running/success/failed/aborted)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "流水线ID筛选",
+                        "name": "pipeline_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回构建记录列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/build-records/export": {
+            "get": {
+                "description": "导出所有构建记录为 CSV 文件",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "导出构建记录为 CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "状态筛选",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "pipeline_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV文件",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/callback": {
             "post": {
                 "description": "Jenkins 构建完成后调用此接口通知平台更新状态",
@@ -3413,6 +3541,64 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "返回流水线详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/pipeline/discover": {
+            "get": {
+                "description": "根据集群ID、命名空间和Deployment名称，自动解析镜像仓库、容器名等信息，用于流水线创建时的\"从K8s导入\"功能",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "从K8s Deployment自动发现应用信息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集群ID",
+                        "name": "cluster_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "命名空间",
+                        "name": "namespace",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Deployment名称",
+                        "name": "deployment",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "返回自动发现的应用信息",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -17792,6 +17978,30 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ApprovalLevel": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "description": "审批级别显示名称（如\"测试负责人\"）",
+                    "type": "string"
+                },
+                "level": {
+                    "description": "审批级别（1=一级审批，2=二级审批...）",
+                    "type": "integer"
+                },
+                "role": {
+                    "description": "角色标识（如 test_lead / dev_lead / ops_lead / sre）",
+                    "type": "string"
+                },
+                "user_ids": {
+                    "description": "该级别审批人 ID 列表",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
         "models.AuditLog": {
             "type": "object",
             "properties": {
@@ -18358,6 +18568,25 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.ApprovalBatchActionRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "approve/reject",
+                    "type": "string"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "reason": {
+                    "description": "审批意见",
+                    "type": "string"
+                }
+            }
+        },
         "requests.ApprovalCreateRequest": {
             "type": "object",
             "properties": {
@@ -18826,8 +19055,15 @@ const docTemplate = `{
         "requests.EnvironmentCreateRequest": {
             "type": "object",
             "properties": {
+                "approval_levels": {
+                    "description": "多级审批配置",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApprovalLevel"
+                    }
+                },
                 "approval_user_ids": {
-                    "description": "审批人员ID列表",
+                    "description": "审批人员ID列表（兼容旧接口）",
                     "type": "array",
                     "items": {
                         "type": "integer"
@@ -18878,6 +19114,13 @@ const docTemplate = `{
         "requests.EnvironmentUpdateRequest": {
             "type": "object",
             "properties": {
+                "approval_levels": {
+                    "description": "多级审批配置",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApprovalLevel"
+                    }
+                },
                 "approval_user_ids": {
                     "type": "array",
                     "items": {

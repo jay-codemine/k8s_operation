@@ -18,13 +18,15 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 
 	// 1) 任意失败 => release Failed（CAS 防并发覆盖）
 	if st.Failed > 0 {
+		// 聚合失败任务的具体错误信息，返回给前端方便用户排查
+		failMsg := s.aggregateFailedTaskMessages(ctx, releaseID)
 		_, _ = s.dao.CicdReleaseUpdateStatusCAS(ctx, releaseID,
 			[]string{"Pending", "Queued", "Running"},
 			"Failed",
-			"one or more tasks failed",
+			failMsg,
 		)
 		// 发送部署失败通知
-		s.sendReleaseFinalizeNotification(ctx, releaseID, false, "部署失败：部分任务执行失败")
+		s.sendReleaseFinalizeNotification(ctx, releaseID, false, failMsg)
 		return
 	}
 
@@ -41,6 +43,37 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 	)
 	// 发送部署成功通知
 	s.sendReleaseFinalizeNotification(ctx, releaseID, true, "部署成功")
+}
+
+// aggregateFailedTaskMessages 聚合失败任务的错误信息，生成人类可读的失败原因
+func (s *Services) aggregateFailedTaskMessages(ctx context.Context, releaseID int64) string {
+	tasks, err := s.dao.CicdTasksByReleaseID(ctx, releaseID)
+	if err != nil {
+		return "部分任务执行失败"
+	}
+
+	var failedMsgs []string
+	for _, t := range tasks {
+		if t.Status == "Failed" && t.Message != "" {
+			failedMsgs = append(failedMsgs, t.Message)
+		}
+	}
+
+	if len(failedMsgs) == 0 {
+		return "部分任务执行失败"
+	}
+
+	// 如果只有一个失败任务，直接返回其消息
+	if len(failedMsgs) == 1 {
+		return failedMsgs[0]
+	}
+
+	// 多个失败任务，拼接并截断避免过长
+	result := strings.Join(failedMsgs, "; ")
+	if len(result) > 500 {
+		result = result[:500] + "..."
+	}
+	return fmt.Sprintf("%d个任务失败: %s", len(failedMsgs), result)
 }
 
 // sendReleaseFinalizeNotification 发送发布单完结通知（飞书/钉钉）

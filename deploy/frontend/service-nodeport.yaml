@@ -16,7 +16,7 @@ spec:
     - name: http
       port: 80
       targetPort: http
-      nodePort: 30081              # ← 可自定义端口（30000-32767）
+      nodePort: 30007             # ← 可自定义端口（30000-32767）
       protocol: TCP
   selector:
     app.kubernetes.io/name: k8soperation-web

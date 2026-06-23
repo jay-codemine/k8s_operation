@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
@@ -114,7 +115,7 @@ func (u *AuthController) Login(ctx *gin.Context) {
 		"auth_method": authMethod,
 	}
 
-	// ====== 存入 Session ======
+	// ====== 存入 Session（支持同一账户多人并发登录） ======
 	sessionInfo := models.LoginSessionInfo{
 		Username:  param.Username,
 		Token:     token,
@@ -128,8 +129,10 @@ func (u *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
+	// 使用 userID + 时间戳 作为 session key，确保同一账户多处登录不会互相覆盖
+	sessionKey := fmt.Sprintf("login:%d:%d", user.ID, time.Now().UnixNano())
 	session := sessions.Default(ctx)
-	session.Set(utils.EncodeMD5(user.Username), string(sessionBty))
+	session.Set(sessionKey, string(sessionBty))
 	if err := session.Save(); err != nil {
 		// Session 保存失败不中断登录（JWT 为主认证方式，Session 仅为辅助）
 		// Redis Cluster 模式下 gin-contrib/sessions 不支持 MOVED 重定向

@@ -1,9 +1,10 @@
 -- =====================================================
 -- K8s Platform 完整数据库初始化脚本（FULL）
--- 版本: 2.3.0
--- 日期: 2026-05-18
+-- 版本: 2.4.1
+-- 日期: 2026-06-24
 -- 说明: 一键创建数据库 + 全部 54 张表 + 默认种子数据
 --      已整合: 用户/RBAC/集群/CI-CD/制品/资源模板/镜像/IAM/应用商城/AI助手/监控/AIOps
+--      新增: CICD细粒度权限(21条) + 多级审批 + 审批策略 + test测试环境配置
 -- 数据库账号: root / 123456
 -- 使用方式（任选其一）:
 --   ⚠️ PowerShell 不支持 `<` 重定向，请用以下方式之一：
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS `sys_permission` (
   `scope` varchar(20) NOT NULL DEFAULT 'cluster' COMMENT '所属功能域:platform/cluster/cicd',
   `resource_type` varchar(50) NOT NULL COMMENT '模块标识',
   `action` varchar(30) NOT NULL COMMENT '操作类型:view,manage',
+  `tag` varchar(50) DEFAULT '' COMMENT '标签分组(前端分类展示)',
   `parent_id` bigint DEFAULT 0 COMMENT '父权限ID',
   `path` varchar(200) DEFAULT '' COMMENT '权限路径(树形展示用)',
   `sort_order` int DEFAULT 0 COMMENT '排序',
@@ -134,6 +136,11 @@ CREATE TABLE IF NOT EXISTS `sys_permission` (
 -- 【兼容存量集群】sys_permission 幂等补丁：若老库缺 scope 字段，自动补上
 SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_permission' AND column_name = 'scope');
 SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_permission` ADD COLUMN `scope` VARCHAR(20) NOT NULL DEFAULT ''cluster'' COMMENT ''所属功能域:platform/cluster/cicd'' AFTER `description`', 'SELECT ''scope exists''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 【兼容存量集群】sys_permission 幂等补丁：若老库缺 tag 字段，自动补上
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sys_permission' AND column_name = 'tag');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `sys_permission` ADD COLUMN `tag` VARCHAR(50) DEFAULT '''' COMMENT ''标签分组(前端分类展示)'' AFTER `action`', 'SELECT ''tag exists''');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =====================================================
@@ -339,6 +346,7 @@ CREATE TABLE IF NOT EXISTS `cicd_environment` (
   `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序',
   `require_approval` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要审批',
   `approval_users` json DEFAULT NULL COMMENT '审批人列表',
+  `approval_levels` json DEFAULT NULL COMMENT '多级审批级别配置(JSON数组)',
   `created_user_id` bigint NOT NULL DEFAULT 0 COMMENT '创建人',
   `created_at` bigint unsigned NOT NULL DEFAULT 0,
   `modified_at` bigint unsigned NOT NULL DEFAULT 0,
@@ -370,6 +378,9 @@ CREATE TABLE IF NOT EXISTS `cicd_approval` (
   `approve_time` bigint unsigned NOT NULL DEFAULT 0 COMMENT '审批时间',
   `expire_time` bigint unsigned NOT NULL DEFAULT 0 COMMENT '过期时间',
   `feishu_token` varchar(64) NOT NULL DEFAULT '' COMMENT '飞书审批回调Token',
+  `approval_level` int NOT NULL DEFAULT 1 COMMENT '当前审批级别(1=一级,2=二级...)',
+  `total_levels` int NOT NULL DEFAULT 1 COMMENT '总审批级数',
+  `level_label` varchar(64) NOT NULL DEFAULT '' COMMENT '当前级别显示名称',
   `created_at` bigint unsigned NOT NULL DEFAULT 0,
   `modified_at` bigint unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
@@ -427,6 +438,56 @@ SET @idx_exists := (
 SET @sql := IF(@idx_exists = 0,
     'ALTER TABLE `cicd_approval` ADD INDEX `idx_feishu_token` (`feishu_token`)',
     'SELECT ''index idx_feishu_token already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 【兼容存量集群】cicd_approval 多级审批字段补丁 (v2.4)
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND column_name = 'approval_level'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD COLUMN `approval_level` INT NOT NULL DEFAULT 1 COMMENT ''当前审批级别'' AFTER `feishu_token`',
+    'SELECT ''column approval_level already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND column_name = 'total_levels'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD COLUMN `total_levels` INT NOT NULL DEFAULT 1 COMMENT ''总审批级数'' AFTER `approval_level`',
+    'SELECT ''column total_levels already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_approval'
+      AND column_name = 'level_label'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_approval` ADD COLUMN `level_label` VARCHAR(64) NOT NULL DEFAULT '''' COMMENT ''当前级别显示名称'' AFTER `total_levels`',
+    'SELECT ''column level_label already exists, skip'' AS msg'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 【兼容存量集群】cicd_environment 多级审批策略字段补丁 (v2.4)
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_environment'
+      AND column_name = 'approval_levels'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE `cicd_environment` ADD COLUMN `approval_levels` JSON DEFAULT NULL COMMENT ''多级审批级别配置'' AFTER `approval_users`',
+    'SELECT ''column approval_levels already exists, skip'' AS msg'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
@@ -996,23 +1057,53 @@ INSERT IGNORE INTO `sys_role` (`id`, `name`, `display_name`, `description`, `rol
 -- =====================================================
 -- 初始化系统权限数据（v2: 按功能模块聚合，12条模块级权限）
 -- =====================================================
-INSERT IGNORE INTO `sys_permission` (`id`, `name`, `display_name`, `description`, `scope`, `resource_type`, `action`, `parent_id`, `path`, `sort_order`, `created_at`, `modified_at`) VALUES
+INSERT IGNORE INTO `sys_permission` (`id`, `name`, `display_name`, `description`, `scope`, `resource_type`, `action`, `tag`, `parent_id`, `path`, `sort_order`, `created_at`, `modified_at`) VALUES
 -- 🏛 平台域
-(1,  'platform:user',     '用户管理',   '创建/编辑/禁用用户，分配角色',           'platform', 'user',     'manage', 0, '/platform/user',     1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(2,  'platform:role',     '角色权限',   '管理角色、分配权限、集群授权',         'platform', 'role',     'manage', 0, '/platform/role',     2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(3,  'platform:settings', '系统设置',   '平台参数/告警配置/数据源管理',           'platform', 'settings', 'manage', 0, '/platform/settings', 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(4,  'platform:audit',    '审计日志',   '查看操作审计日志',                       'platform', 'audit',    'view',   0, '/platform/audit',    4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(1,  'platform:user',     '用户管理',   '创建/编辑/禁用用户，分配角色',           'platform', 'user',     'manage', '', 0, '/platform/user',     1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(2,  'platform:role',     '角色权限',   '管理角色、分配权限、集群授权',         'platform', 'role',     'manage', '', 0, '/platform/role',     2, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(3,  'platform:settings', '系统设置',   '平台参数/告警配置/数据源管理',           'platform', 'settings', 'manage', '', 0, '/platform/settings', 3, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(4,  'platform:audit',    '审计日志',   '查看操作审计日志',                       'platform', 'audit',    'view',   '', 0, '/platform/audit',    4, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
 -- ☸ 集群域
-(5,  'cluster:manage',    '集群管理',   '添加/编辑/删除K8s集群',                 'cluster',  'cluster',  'manage', 0, '/cluster/manage',    10, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(6,  'cluster:workload',  '工作负载',   'Deployment/Pod/DaemonSet/Job等生命周期管理', 'cluster',  'workload', 'manage', 0, '/cluster/workload',  11, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(7,  'cluster:network',   '服务与路由', 'Service/Ingress/NetworkPolicy',            'cluster',  'network',  'manage', 0, '/cluster/network',   12, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(8,  'cluster:config',    '配置管理',   'ConfigMap/Secret管理',                   'cluster',  'config',   'manage', 0, '/cluster/config',    13, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(9,  'cluster:storage',   '存储管理',   'PV/PVC/StorageClass管理',               'cluster',  'storage',  'manage', 0, '/cluster/storage',   14, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(10, 'cluster:node',      '节点管理',   '节点查看/隔离/驱逐/标签管理',               'cluster',  'node',     'manage', 0, '/cluster/node',      15, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(11, 'cluster:monitor',   '监控与日志', '监控总览/日志探索/告警查看/Web终端',       'cluster',  'monitor',  'manage', 0, '/cluster/monitor',   16, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(5,  'cluster:manage',    '集群管理',   '添加/编辑/删除K8s集群',                 'cluster',  'cluster',  'manage', '', 0, '/cluster/manage',    10, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(6,  'cluster:workload',  '工作负载',   'Deployment/Pod/DaemonSet/Job等生命周期管理', 'cluster',  'workload', 'manage', '', 0, '/cluster/workload',  11, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(7,  'cluster:network',   '服务与路由', 'Service/Ingress/NetworkPolicy',            'cluster',  'network',  'manage', '', 0, '/cluster/network',   12, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(8,  'cluster:config',    '配置管理',   'ConfigMap/Secret管理',                   'cluster',  'config',   'manage', '', 0, '/cluster/config',    13, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(9,  'cluster:storage',   '存储管理',   'PV/PVC/StorageClass管理',               'cluster',  'storage',  'manage', '', 0, '/cluster/storage',   14, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(10, 'cluster:node',      '节点管理',   '节点查看/隔离/驱逐/标签管理',               'cluster',  'node',     'manage', '', 0, '/cluster/node',      15, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(11, 'cluster:monitor',   '监控与日志', '监控总览/日志探索/告警查看/Web终端',       'cluster',  'monitor',  'manage', '', 0, '/cluster/monitor',   16, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
 -- 🚀 发布域
-(12, 'cicd:pipeline',     '流水线管理', '创建/编辑/触发/停止流水线，审批管理',     'cicd',     'pipeline', 'manage', 0, '/cicd/pipeline',     20, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-(13, 'cicd:artifact',     '制品与镜像', '制品库/镜像仓库/代码扫描/发布记录',       'cicd',     'artifact', 'manage', 0, '/cicd/artifact',     21, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+(12, 'cicd:pipeline',     '流水线管理', '创建/编辑/触发/停止流水线，审批管理',     'cicd',     'pipeline', 'manage', '流水线管理', 0, '/cicd/pipeline',     20, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+(13, 'cicd:artifact',     '制品与镜像', '制品库/镜像仓库/代码扫描/发布记录',       'cicd',     'artifact', 'manage', '制品与镜像', 0, '/cicd/artifact',     21, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+
+-- =====================================================
+-- 初始化 CICD 细粒度权限数据（v2.4: 21条细粒度权限，按标签分组）
+-- =====================================================
+INSERT IGNORE INTO `sys_permission` (`name`, `display_name`, `description`, `scope`, `resource_type`, `action`, `tag`, `parent_id`, `path`, `sort_order`, `created_at`, `modified_at`) VALUES
+-- 📦 流水线管理
+('cicd:pipeline:view',     '查看流水线',     '查看流水线列表和详情',     'cicd', 'pipeline', 'view',   '流水线管理', 0, '/cicd/pipeline/view',     100, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:pipeline:create',   '创建流水线',     '创建新的流水线配置',     'cicd', 'pipeline', 'create', '流水线管理', 0, '/cicd/pipeline/create',   101, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:pipeline:edit',     '编辑流水线',     '修改流水线配置参数',     'cicd', 'pipeline', 'update', '流水线管理', 0, '/cicd/pipeline/edit',     102, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:pipeline:delete',   '删除流水线',     '删除流水线配置',         'cicd', 'pipeline', 'delete', '流水线管理', 0, '/cicd/pipeline/delete',   103, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:pipeline:run',      '运行流水线',     '触发/运行流水线构建',     'cicd', 'pipeline', 'exec',   '流水线管理', 0, '/cicd/pipeline/run',      104, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- 🚀 构建与部署
+('cicd:build:view',        '查看构建记录',   '查看构建历史和日志',     'cicd', 'build',    'view',   '构建与部署', 0, '/cicd/build/view',        110, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:build:trigger',     '触发构建',       '手动触发代码构建',       'cicd', 'build',    'exec',   '构建与部署', 0, '/cicd/build/trigger',     111, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:build:cancel',      '取消构建',       '取消正在进行的构建',     'cicd', 'build',    'exec',   '构建与部署', 0, '/cicd/build/cancel',      112, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:deploy:dev',        '部署开发环境',     '部署到开发环境',       'cicd', 'deploy',   'exec',   '构建与部署', 0, '/cicd/deploy/dev',        113, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:deploy:test',       '部署测试环境',     '部署到测试环境',       'cicd', 'deploy',   'exec',   '构建与部署', 0, '/cicd/deploy/test',       114, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:deploy:prod',       '部署生产环境',     '部署到生产环境',       'cicd', 'deploy',   'exec',   '构建与部署', 0, '/cicd/deploy/prod',       115, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:deploy:rollback',   '回滚部署',       '回滚到上一版本',       'cicd', 'deploy',   'exec',   '构建与部署', 0, '/cicd/deploy/rollback',   116, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- 📦 制品与镜像
+('cicd:artifact:view',     '查看制品',       '查看制品库和镜像列表',   'cicd', 'artifact', 'view',   '制品与镜像', 0, '/cicd/artifact/view',     120, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:artifact:upload',   '上传制品',       '上传制品到制品库',     'cicd', 'artifact', 'create', '制品与镜像', 0, '/cicd/artifact/upload',   121, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:artifact:delete',   '删除制品',       '从制品库删除制品',     'cicd', 'artifact', 'delete', '制品与镜像', 0, '/cicd/artifact/delete',   122, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:image:manage',      '镜像管理',       '管理镜像仓库(推送/删除/清理)', 'cicd', 'image',    'manage', '制品与镜像', 0, '/cicd/image/manage',      123, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+-- ✅ 审批与管理
+('cicd:approval:view',     '查看审批',       '查看审批记录和详情',   'cicd', 'approval', 'view',   '审批与管理', 0, '/cicd/approval/view',     130, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:approval:action',   '执行审批',       '通过或拒绝审批申请',   'cicd', 'approval', 'exec',   '审批与管理', 0, '/cicd/approval/action',   131, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:approval:manage',   '管理审批策略',   '配置审批流程和审批人',   'cicd', 'approval', 'manage', '审批与管理', 0, '/cicd/approval/manage',   132, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:environment:manage','环境管理',       '创建/编辑/删除环境配置',   'cicd', 'environment','manage','审批与管理', 0, '/cicd/environment/manage', 133, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
+('cicd:template:manage',   '模板管理',       '管理流水线模板',       'cicd', 'template', 'manage', '审批与管理', 0, '/cicd/template/manage',   134, UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
 
 -- =====================================================
 -- 初始化角色权限关联 (v2: 基于三域 scope，模块级权限作为补充细控)
@@ -1044,6 +1135,33 @@ SELECT 5, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `name` IN ('cluster:w
 -- 观察者: 所有域的 view 类权限
 INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
 SELECT 6, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `action` = 'view';
+
+-- =====================================================
+-- CICD 细粒度权限角色分配（v2.4）
+-- 超级管理员(1) + 运维(3): 全部 CICD 权限（已通过上方 scope=cicd 全量分配覆盖）
+-- =====================================================
+
+-- 开发工程师(4): 查看+创建+编辑+运行流水线 + 构建查看+触发+取消 + 部署开发/测试 + 查看制品 + 查看审批
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 4, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `name` IN (
+  'cicd:pipeline:view', 'cicd:pipeline:create', 'cicd:pipeline:edit', 'cicd:pipeline:run',
+  'cicd:build:view', 'cicd:build:trigger', 'cicd:build:cancel',
+  'cicd:deploy:dev', 'cicd:deploy:test',
+  'cicd:artifact:view', 'cicd:approval:view'
+);
+
+-- 测试工程师(5): 查看+运行流水线 + 构建查看+触发 + 部署开发/测试 + 查看制品 + 查看审批
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 5, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `name` IN (
+  'cicd:pipeline:view', 'cicd:pipeline:run',
+  'cicd:build:view', 'cicd:build:trigger',
+  'cicd:deploy:dev', 'cicd:deploy:test',
+  'cicd:artifact:view', 'cicd:approval:view'
+);
+
+-- 观察者(6): 仅查看类权限
+INSERT IGNORE INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT 6, id, UNIX_TIMESTAMP() FROM `sys_permission` WHERE `scope` = 'cicd' AND `action` = 'view';
 
 -- =====================================================
 -- 【兼容存量集群】RBAC v2 存量数据回填
@@ -1085,6 +1203,11 @@ INSERT IGNORE INTO `user` (`id`, `username`, `password`, `role`, `status`, `crea
 INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`, `created_at`, `created_by`) VALUES
 (1, 1, UNIX_TIMESTAMP(), 0);
 
+-- ⚠️ 安全保护：确保 admin 用户始终拥有 super_admin 角色（防止意外自降权后无法恢复）
+-- 如果 sys_user_role 中 admin 的 super_admin 关联被删除，此语句会重新插入
+INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`, `created_at`, `created_by`)
+SELECT 1, id, UNIX_TIMESTAMP(), 0 FROM `sys_role` WHERE `role_type` = 'super_admin' AND `is_del` = 0 LIMIT 1;
+
 -- =====================================================
 -- 初始化平台设置
 -- =====================================================
@@ -1117,6 +1240,15 @@ INSERT IGNORE INTO `platform_settings` (`category`, `key`, `value`, `value_type`
 -- =====================================================
 INSERT IGNORE INTO `image_registry` (`name`, `type`, `url`, `description`, `is_default`, `status`, `created_at`, `modified_at`) VALUES
 ('Docker Hub', 'docker', 'https://registry-1.docker.io', 'Docker Hub 官方仓库', 1, 'unknown', UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+
+-- =====================================================
+-- 初始化审批策略环境配置 (dev/test/staging/prod)
+-- =====================================================
+INSERT IGNORE INTO `cicd_environment` (`name`, `display_name`, `description`, `cluster_id`, `namespace`, `color`, `sort_order`, `require_approval`, `approval_levels`, `created_at`, `modified_at`, `is_del`) VALUES
+('dev',     '开发环境', '开发编译调试用，无需审批',                                            0, 'dev',     '#52c41a', 1, 0, '[]', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0),
+('test',    '测试环境', '功能测试与集成测试环境，默认无需审批，管理员可按需开启',               0, 'test',    '#1677ff', 2, 0, '[]', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0),
+('staging', '预发环境', '上线前的最后验证环境，需测试负责人审批',                              0, 'staging', '#faad14', 3, 1, '[{"label":"测试负责人审批","approver_type":"role","approver_value":"tester"}]', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0),
+('prod',    '生产环境', '正式生产环境，需多级审批（运维经理+技术总监）',                     0, 'prod',    '#f5222d', 4, 1, '[{"label":"运维经理审批","approver_type":"role","approver_value":"devops"},{"label":"技术总监审批","approver_type":"role","approver_value":"platform_admin"}]', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0);
 
 -- =====================================================
 -- 初始化流水线模板数据

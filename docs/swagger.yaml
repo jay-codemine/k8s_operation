@@ -130,6 +130,23 @@ definitions:
     required:
     - id
     type: object
+  models.ApprovalLevel:
+    properties:
+      label:
+        description: 审批级别显示名称（如"测试负责人"）
+        type: string
+      level:
+        description: 审批级别（1=一级审批，2=二级审批...）
+        type: integer
+      role:
+        description: 角色标识（如 test_lead / dev_lead / ops_lead / sre）
+        type: string
+      user_ids:
+        description: 该级别审批人 ID 列表
+        items:
+          type: integer
+        type: array
+    type: object
   models.AuditLog:
     properties:
       action:
@@ -512,6 +529,19 @@ definitions:
         description: 审批意见
         type: string
     type: object
+  requests.ApprovalBatchActionRequest:
+    properties:
+      action:
+        description: approve/reject
+        type: string
+      ids:
+        items:
+          type: integer
+        type: array
+      reason:
+        description: 审批意见
+        type: string
+    type: object
   requests.ApprovalCreateRequest:
     properties:
       env_name:
@@ -828,8 +858,13 @@ definitions:
     type: object
   requests.EnvironmentCreateRequest:
     properties:
+      approval_levels:
+        description: 多级审批配置
+        items:
+          $ref: '#/definitions/models.ApprovalLevel'
+        type: array
       approval_user_ids:
-        description: 审批人员ID列表
+        description: 审批人员ID列表（兼容旧接口）
         items:
           type: integer
         type: array
@@ -865,6 +900,11 @@ definitions:
     type: object
   requests.EnvironmentUpdateRequest:
     properties:
+      approval_levels:
+        description: 多级审批配置
+        items:
+          $ref: '#/definitions/models.ApprovalLevel'
+        type: array
       approval_user_ids:
         items:
           type: integer
@@ -4455,6 +4495,29 @@ paths:
       summary: 审批操作
       tags:
       - CICD Approval
+  /api/v1/k8s/cicd/approval/batch-action:
+    post:
+      consumes:
+      - application/json
+      description: 批量通过或拒绝审批申请
+      parameters:
+      - description: 批量操作参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.ApprovalBatchActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作结果
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量审批操作
+      tags:
+      - CICD Approval
   /api/v1/k8s/cicd/approval/create:
     post:
       consumes:
@@ -5135,6 +5198,67 @@ paths:
       summary: 批量停止流水线
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/build-records:
+    get:
+      description: 分页查询所有流水线的构建运行记录，支持按状态、流水线ID、关键字筛选
+      parameters:
+      - description: 页码，默认1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认20
+        in: query
+        name: page_size
+        type: integer
+      - description: 状态筛选(pending/running/success/failed/aborted)
+        in: query
+        name: status
+        type: string
+      - description: 关键字搜索
+        in: query
+        name: keyword
+        type: string
+      - description: 流水线ID筛选
+        in: query
+        name: pipeline_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回构建记录列表
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取全量构建记录（跨流水线）
+      tags:
+      - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/build-records/export:
+    get:
+      description: 导出所有构建记录为 CSV 文件
+      parameters:
+      - description: 状态筛选
+        in: query
+        name: status
+        type: string
+      - description: 关键字
+        in: query
+        name: keyword
+        type: string
+      - description: 流水线ID
+        in: query
+        name: pipeline_id
+        type: integer
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: CSV文件
+          schema:
+            type: string
+      summary: 导出构建记录为 CSV
+      tags:
+      - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/callback:
     post:
       consumes:
@@ -5315,6 +5439,46 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取流水线详情
+      tags:
+      - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/discover:
+    get:
+      description: 根据集群ID、命名空间和Deployment名称，自动解析镜像仓库、容器名等信息，用于流水线创建时的"从K8s导入"功能
+      parameters:
+      - description: 集群ID
+        in: query
+        name: cluster_id
+        required: true
+        type: integer
+      - description: 命名空间
+        in: query
+        name: namespace
+        required: true
+        type: string
+      - description: Deployment名称
+        in: query
+        name: deployment
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回自动发现的应用信息
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 从K8s Deployment自动发现应用信息
       tags:
       - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/history:

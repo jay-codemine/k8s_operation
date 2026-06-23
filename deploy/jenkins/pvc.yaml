@@ -16,10 +16,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-data-pv
   resources:
     requests:
       storage: 20Gi
-  # storageClassName: ""  # 使用默认 StorageClass，按需修改
 ---
 # Go 模块缓存 → 绑定到静态 PV jenkins-go-cache-pv（见 pv.yaml）
 apiVersion: v1

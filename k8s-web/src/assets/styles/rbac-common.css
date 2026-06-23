@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #165DFF, #4080FF);
   border-radius: 12px;
   font-size: 24px;
   color: #fff;
@@ -84,7 +84,7 @@
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #6366f1;
+  border-color: #165DFF;
   box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
 }
 
@@ -125,7 +125,7 @@
   font-size: 20px;
 }
 
-.stat-card.primary .stat-icon { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+.stat-card.primary .stat-icon { background: rgba(22, 93, 255, 0.15); color: #4080FF; }
 .stat-card.success .stat-icon { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .stat-card.warning .stat-icon { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .stat-card.info .stat-icon { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
@@ -211,7 +211,7 @@
 }
 
 .rbac-search input:focus {
-  border-color: #6366f1;
+  border-color: #165DFF;
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
@@ -253,7 +253,7 @@
 }
 
 .rbac-filter select:focus {
-  border-color: #6366f1;
+  border-color: #165DFF;
 }
 
 .rbac-filter::after {
@@ -283,7 +283,7 @@
 }
 
 .rbac-btn-primary {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #165DFF, #4080FF);
   color: white;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
@@ -542,7 +542,7 @@
   background: #eff6ff;
   border-radius: 50%;
   font-size: 36px;
-  color: #6366f1;
+  color: #165DFF;
 }
 
 .rbac-empty-title {
@@ -697,7 +697,7 @@
 .rbac-form-group input:focus,
 .rbac-form-group select:focus,
 .rbac-form-group textarea:focus {
-  border-color: #6366f1;
+  border-color: #165DFF;
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
@@ -722,8 +722,8 @@
 .rbac-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(99, 102, 241, 0.2);
-  border-top-color: #6366f1;
+  border: 3px solid rgba(22, 93, 255, 0.15);
+  border-top-color: #165DFF;
   border-radius: 50%;
   animation: rbac-spin 0.8s linear infinite;
 }

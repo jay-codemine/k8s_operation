@@ -839,3 +839,20 @@ export const downloadBuildAgentByName = (name) => {
 export const getBuildAgentsByScope = (scope) => {
   return http.get(`${AGENT_BASE}/by-scope`, { params: { scope } })
 }
+
+// =======================
+// 从K8s自动发现应用信息
+// 对应后端路由: /api/v1/k8s/cicd/pipeline/discover
+// =======================
+
+/**
+ * 从 K8s Deployment 自动发现应用信息
+ * @param {Object} params
+ * @param {number} params.cluster_id - 集群ID
+ * @param {string} params.namespace - 命名空间
+ * @param {string} params.deployment - Deployment名称
+ * @returns {Promise} 返回包含容器、镜像仓库等自动填充信息
+ */
+export const discoverFromK8s = (params) => {
+  return http.get(`${PIPELINE_BASE}/discover`, { params })
+}

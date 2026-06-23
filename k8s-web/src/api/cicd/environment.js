@@ -29,6 +29,22 @@ export function deleteEnvironment(id) {
   return http.post(`${API_BASE}/k8s/cicd/environment/delete`, { id })
 }
 
+// ==================== 审批策略管理 ====================
+
+// 获取环境审批策略（通过环境详情接口获取 approval_levels）
+export function getApprovalPolicy(envId) {
+  return http.get(`${API_BASE}/k8s/cicd/environment/detail`, { params: { id: envId } })
+}
+
+// 更新环境审批策略（更新环境的 require_approval + approval_levels）
+export function updateApprovalPolicy(envId, requireApproval, approvalLevels) {
+  return http.post(`${API_BASE}/k8s/cicd/environment/update`, {
+    id: envId,
+    require_approval: requireApproval,
+    approval_levels: approvalLevels
+  })
+}
+
 // ==================== 审批流程 ====================
 
 // 获取审批列表
@@ -61,6 +77,11 @@ export function approvalAction(data) {
   return http.post(`${API_BASE}/k8s/cicd/approval/action`, data)
 }
 
+// 批量审批操作（通过/拒绝）
+export function approvalBatchAction(data) {
+  return http.post(`${API_BASE}/k8s/cicd/approval/batch-action`, data)
+}
+
 // 更新审批记录
 export function updateApproval(data) {
   return http.post(`${API_BASE}/k8s/cicd/approval/update`, data)
@@ -77,12 +98,15 @@ export default {
   createEnvironment,
   updateEnvironment,
   deleteEnvironment,
+  getApprovalPolicy,
+  updateApprovalPolicy,
   getApprovalList,
   getApprovalStats,
   getApprovalDetail,
   getPendingApprovals,
   createApproval,
   approvalAction,
+  approvalBatchAction,
   updateApproval,
   deleteApproval
 }

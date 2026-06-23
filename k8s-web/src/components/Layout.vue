@@ -38,16 +38,22 @@
 
           <div v-if="group.items && group.items.length > 0"
                :class="['group-content', { collapsed: group.collapsed }]">
-            <router-link
-              v-for="(item, itemIndex) in group.items"
-              :key="itemIndex"
-              :to="item.path"
-              class="nav-item"
-              active-class="nav-item-active"
-            >
-              <span class="nav-icon">📄</span>
-              <span class="nav-text">{{ item.label }}</span>
-            </router-link>
+            <template v-for="(item, itemIndex) in group.items" :key="itemIndex">
+              <!-- 分组标题（不可点击） -->
+              <div v-if="item.section" class="nav-section-label">
+                <span class="nav-section-text">{{ item.section }}</span>
+              </div>
+              <!-- 常规导航项 -->
+              <router-link
+                v-else
+                :to="item.path"
+                class="nav-item"
+                active-class="nav-item-active"
+              >
+                <span class="nav-icon">{{ item.icon || '📄' }}</span>
+                <span class="nav-text">{{ item.label }}</span>
+              </router-link>
+            </template>
           </div>
         </div>
       </nav>
@@ -144,7 +150,11 @@
       </header>
 
       <div class="page-content">
-        <router-view/>
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </div>
     </main>
 
@@ -231,19 +241,24 @@ const menuPermissions = {
   '/platform/settings': ['super_admin', 'platform_admin'],
   '/platform/appstore': ['super_admin', 'platform_admin', 'cluster_admin'],
   
-  // ==================== 用户与权限管理（精简后） ====================
+  // ==================== 平台管理（IAM 统一收口） ====================
+  '/admin/users': ['super_admin', 'platform_admin'],
+  '/admin/roles': ['super_admin', 'platform_admin'],
+  '/admin/identity': ['super_admin', 'platform_admin'],
+  '/admin/approvals': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
+  '/admin/audit': ['super_admin', 'platform_admin', 'cluster_admin'],
+  '/admin/service-accounts': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
+  '/admin/settings': ['super_admin', 'platform_admin'],
+  
+  // 兼容旧路径
   '/security/users': ['super_admin', 'platform_admin'],
   '/security/roles': ['super_admin', 'platform_admin'],
   '/security/authorization': ['super_admin', 'platform_admin', 'cluster_admin'],
   '/security/ldap': ['super_admin', 'platform_admin'],
   '/security/diagnosis': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
-  
-  // 兼容旧路径
   '/users': ['super_admin', 'platform_admin'],
   '/user-permissions': ['super_admin', 'platform_admin'],
   '/rbac': ['super_admin', 'platform_admin'],
-  
-  // ==================== 安全审计 ====================
   '/security/audit': ['super_admin', 'platform_admin', 'cluster_admin'],
   '/security/ai-approvals': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
   '/security/rbac/serviceaccounts': ['super_admin', 'platform_admin', 'cluster_admin', 'developer'],
@@ -255,7 +270,7 @@ const menuPermissions = {
   '/cicd/pipelines': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/releases': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/templates': ['super_admin', 'platform_admin'],
-  '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin'],
+  '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   
   // ==================== 监控中心 ====================
   '/monitoring': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
@@ -321,51 +336,44 @@ const menuGroupsConfig = reactive([
     match: ['/dashboard'],
     path: '/dashboard',
   },
-  // 平台
+  // 资源中心
   {
-    name: '平台',
-    icon: '🏷️',
+    name: '资源中心',
+    icon: '🖥️',
     count: 3,
     collapsed: true,
-    match: ['/dashboard', '/clusters', '/platform'],
+    match: ['/dashboard', '/clusters', '/platform/health', '/platform/aiops'],
     items: [
       { path: '/clusters', label: '集群管理' },
       { path: '/platform/health', label: '平台健康' },
       { path: '/platform/aiops', label: '智能运维' },
     ],
   },
-  // 安全（精简后的5个菜单，大厂风格）
-  {
-    name: '安全',
-    icon: '🛡️',
-    count: 5,
-    collapsed: true,
-    match: ['/users', '/security', '/rbac', '/user-permissions'],
-    items: [
-      { path: '/security/users', label: '用户管理' },
-      { path: '/security/roles', label: '角色管理' },
-      { path: '/security/authorization', label: '授权管理' },
-      { path: '/security/ldap', label: 'LDAP 认证' },
-      { path: '/security/audit', label: '审计日志' },
-      { path: '/security/ai-approvals', label: 'AI 审批管理' },
-      { path: '/security/diagnosis', label: '权限诊断' },
-      { path: '/security/rbac/serviceaccounts', label: 'ServiceAccount' },
-    ],
-  },
-  // CI/CD
+  // CI/CD（企业级四中心架构：应用中心 / 流水线(CI) / 发布中心(CD) / 规则中心(Policy)）
   {
     name: 'CI/CD',
     icon: '⚡',
-    count: 4,
+    count: 12,
     collapsed: true,
     match: ['/cicd'],
     items: [
-      { path: '/cicd/pipelines', label: '流水线管理' },
-      { path: '/cicd/releases', label: '发布管理' },
-      { path: '/cicd/approvals', label: '审批管理' },
-      { path: '/cicd/artifacts', label: '制品管理' },
-      { path: '/cicd/templates', label: '流水线模板' },
-      { path: '/cicd/agents', label: '构建探针' },
+      // ── 应用中心 ──
+      { section: '应用中心' },
+      { path: '/cicd/apps', label: '应用总览', icon: '🏠' },
+      // ── 流水线 (CI) ──
+      { section: '流水线 · CI' },
+      { path: '/cicd/pipelines', label: '流水线管理', icon: '⚙️' },
+      { path: '/cicd/build-records', label: '构建记录', icon: '📋' },
+      { path: '/cicd/artifacts', label: '制品库', icon: '📦' },
+      // ── 发布中心 (CD) ──
+      { section: '发布中心 · CD' },
+      { path: '/cicd/releases', label: '发布管理', icon: '🚀' },
+      { path: '/cicd/approvals', label: '审批工单', icon: '✅' },
+      // ── 规则中心 (Policy) ──
+      { section: '规则中心' },
+      { path: '/cicd/approval-policy', label: '审批策略', icon: '📐' },
+      { path: '/cicd/templates', label: '流水线模板', icon: '📝' },
+      { path: '/cicd/agents', label: '构建节点', icon: '🖥️' },
     ],
   },
   // 镜像管理
@@ -406,6 +414,23 @@ const menuGroupsConfig = reactive([
       { path: '/extensions/crd', label: 'CRD 资源管理' },
       { path: '/extensions/cr-instances', label: 'CR 实例管理' },
       { path: '/extensions/yaml-workbench', label: 'YAML 工作台' },
+    ],
+  },
+  // 平台管理（IAM 统一收口）
+  {
+    name: '平台管理',
+    icon: '⚙️',
+    count: 7,
+    collapsed: true,
+    match: ['/admin'],
+    items: [
+      { path: '/admin/users', label: '用户与组织' },
+      { path: '/admin/roles', label: '权限与角色' },
+      { path: '/admin/identity', label: '身份认证' },
+      { path: '/admin/approvals', label: '审批中心' },
+      { path: '/admin/audit', label: '审计中心' },
+      { path: '/admin/service-accounts', label: '服务账号' },
+      { path: '/admin/settings', label: '系统设置' },
     ],
   },
 ])
@@ -479,18 +504,18 @@ watch(
 .app-layout {
   display: flex;
   height: 100vh;
-  background-color: var(--bg-secondary, #f9fafb);
+  background-color: #f2f3f5;
 }
 
-/* ===== 侧边栏 - 现代紫蓝渐变 ===== */
+/* ===== 侧边栏 - 字节/Arco Pro 深色中性风格 ===== */
 .sidebar {
   width: 15rem;
-  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+  background: #1d2129;
   color: #ffffff;
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease;
-  box-shadow: 4px 0 20px rgba(30, 27, 75, 0.3);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
 }
 
 .sidebar.collapsed {
@@ -569,7 +594,7 @@ watch(
 
 .logo-version {
   font-size: 0.65rem;
-  color: #a5b4fc;
+  color: #86909c;
   font-weight: 500;
   margin-top: 2px;
 }
@@ -599,8 +624,8 @@ watch(
 }
 
 .group-header:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-left-color: #818cf8;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-left-color: #4080FF;
   padding-left: 1.25rem;
 }
 
@@ -639,7 +664,7 @@ watch(
 }
 
 .arrow.expanded::before {
-  border-color: #818cf8;
+  border-color: #4080FF;
   transform: rotate(45deg);
 }
 
@@ -648,7 +673,7 @@ watch(
   overflow: hidden;
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  max-height: 500px;
+  max-height: 800px;
   opacity: 1;
 }
 
@@ -657,6 +682,32 @@ watch(
   opacity: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* 分组标签（企业级导航分组头 - 大厂风格） */
+.nav-section-label {
+  padding: 0.75rem 1rem 0.375rem 1.5rem;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-section-label::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: linear-gradient(135deg, #165DFF, #14C9C9);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.nav-section-text {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .nav-item {
@@ -680,10 +731,10 @@ watch(
 }
 
 .nav-item-active {
-  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+  background: rgba(22, 93, 255, 0.15);
   color: #ffffff;
-  border-left-color: #ffffff;
-  box-shadow: 2px 0 12px rgba(99, 102, 241, 0.4);
+  border-left-color: #165DFF;
+  box-shadow: none;
 }
 
 /* ===== 底部固定区域（大厂风格） ===== */
@@ -717,8 +768,8 @@ watch(
 }
 
 .footer-item-active {
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.1));
-  color: #a5b4fc;
+  background: rgba(22, 93, 255, 0.12);
+  color: #4080FF;
 }
 
 .footer-icon {
@@ -740,7 +791,7 @@ watch(
 
 .footer-badge {
   padding: 0.125rem 0.375rem;
-  background: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
+  background: linear-gradient(135deg, #165DFF 0%, #14C9C9 100%);
   color: #fff;
   font-size: 0.625rem;
   font-weight: 600;
@@ -763,7 +814,7 @@ watch(
 .user-avatar {
   width: 2.25rem;
   height: 2.25rem;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #165DFF 0%, #4080FF 100%);
   border-radius: 0.5rem;
   display: flex;
   align-items: center;
@@ -910,7 +961,7 @@ watch(
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 16px 20px;
-  background: #f8fafc;
+  background: #f2f3f5;
 }
 
 /* ===== 响应式断点 ===== */
@@ -969,5 +1020,21 @@ watch(
     height: 3rem;
     padding: 0 1rem;
   }
+}
+
+/* 页面切换过渡动画（大厂风格柔和淡入） */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 </style>

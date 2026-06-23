@@ -22,9 +22,9 @@ data:
         - envVars:
             env:
               - key: "PLATFORM_CALLBACK_URL"
-                value: "http://host.docker.internal:38180/api/v1/k8s/cicd/pipeline/callback"
+                value: "http://k8soperation.k8soperation.svc:8080/api/v1/k8s/cicd/pipeline/callback"
               - key: "ARTIFACT_UPLOAD_URL"
-                value: "http://host.docker.internal:38180/api/v1/k8s/cicd/artifact/upload"
+                value: "http://k8soperation.k8soperation.svc:8080/api/v1/k8s/cicd/artifact/upload"
 
       securityRealm:
         local:

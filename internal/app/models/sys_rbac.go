@@ -148,6 +148,7 @@ type SysPermission struct {
 	Scope        string `gorm:"column:scope;size:20;default:'cluster'" json:"scope"` // 所属功能域：platform/cluster/cicd
 	ResourceType string `gorm:"column:resource_type;size:50" json:"resource_type"` // 模块标识
 	Action       string `gorm:"column:action;size:30" json:"action"`             // 操作类型（兼容旧字段）
+	Tag          string `gorm:"column:tag;size:50;default:''" json:"tag"`         // 标签分组（用于前端分类展示）
 	ParentID     int64  `gorm:"column:parent_id;default:0" json:"parent_id"`     // 父权限ID
 	Path         string `gorm:"column:path;size:200" json:"path"`               // 权限路径（用于树形展示）
 	SortOrder    int    `gorm:"column:sort_order;default:0" json:"sort_order"` // 排序
@@ -330,4 +331,29 @@ func IsSuperAdmin(db *gorm.DB, userID int64) bool {
 		Where("sys_user_role.user_id = ? AND sys_role.role_type = ? AND sys_role.is_del = 0", userID, RoleTypeSuperAdmin).
 		Count(&count)
 	return count > 0
+}
+
+// HasUserPermission 检查用户是否拥有指定的具体权限
+func HasUserPermission(db *gorm.DB, userID int64, permissionName string) bool {
+	if IsSuperAdmin(db, userID) {
+		return true
+	}
+	var count int64
+	db.Table("sys_role_permission").
+		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role_permission.role_id").
+		Joins("JOIN sys_permission ON sys_permission.id = sys_role_permission.permission_id").
+		Where("sys_user_role.user_id = ? AND sys_permission.name = ?", userID, permissionName).
+		Count(&count)
+	return count > 0
+}
+
+// GetUserPermissionNames 获取用户拥有的所有权限名称列表
+func GetUserPermissionNames(db *gorm.DB, userID int64) ([]string, error) {
+	var names []string
+	err := db.Table("sys_permission").
+		Joins("JOIN sys_role_permission ON sys_role_permission.permission_id = sys_permission.id").
+		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role_permission.role_id").
+		Where("sys_user_role.user_id = ?", userID).
+		Pluck("sys_permission.name", &names).Error
+	return names, err
 }

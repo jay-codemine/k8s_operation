@@ -36,7 +36,8 @@ data:
       Type: "${CACHE_TYPE}"
       Name: "${CACHE_NAME}"
       Address: "${REDIS_ADDRESS}"
-      Addresses: []
+      Addresses:
+        - redis-cluster.global.svc.cluster.local:6379
       Username: "${CACHE_USERNAME}"
       Password: "${REDIS_PASSWORD}"
       MaxConnect: "${CACHE_MAX_CONNECT}"
@@ -95,6 +96,8 @@ data:
       TriggerTimeout: 60
       CallbackURL: "http://k8soperation.k8soperation.svc:8080"   # K8s 内部 Service 地址
       PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（钉钉通知用）
+      DefaultBranch: "master"                                      # 默认 Git 分支
+      DefaultImageRegistry: "${DEFAULT_IMAGE_REGISTRY}"           # 默认镜像仓库前缀
       # 凭证 ID（对应 Jenkins Credentials 中的 ID）
       GitCredentialID: "${GIT_CREDENTIAL_ID}"
       RegistryCredentialID: "${REGISTRY_CREDENTIAL_ID}"
@@ -112,6 +115,31 @@ data:
       KubeConfigEncryptKey: "${KUBECONFIG_ENCRYPT_KEY}"
       PasswordBcryptCost: 10
       AutoEncryptLegacyData: true
+
+    Monitoring:
+      Enabled: false                        # 按需开启监控集成
+      PrometheusURL: ""                     # Prometheus 地址（为空时从数据源表读取）
+      QueryTimeout: 30
+
+    LDAP:
+      Enabled: false                        # 按需开启 LDAP 身份源
+      Host: "${LDAP_HOST}"
+      Port: 389
+      UseTLS: false
+      SkipVerify: false
+      BindDN: "${LDAP_BIND_DN}"
+      BindPassword: "${LDAP_BIND_PASSWORD}"
+      BaseDN: "${LDAP_BASE_DN}"
+      UserFilter: "(uid={0})"
+      GroupBaseDN: "${LDAP_GROUP_BASE_DN}"
+      GroupFilter: "(objectClass=groupOfNames)"
+      GroupAttr: "cn"
+      AttrUsername: "uid"
+      AttrEmail: "mail"
+      AttrPhone: "telephoneNumber"
+      SyncOnLogin: true
+      AutoCreate: true
+      LocalFallback: true
 
     AIAssistant:
       Enabled: false                        # 按需开启

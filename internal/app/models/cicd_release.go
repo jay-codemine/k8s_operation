@@ -1,13 +1,14 @@
 package models
 
 const (
-	CicdReleaseStatusPending   = "Pending"
-	CicdReleaseStatusQueued    = "Queued"
-	CicdReleaseStatusRunning   = "Running"
-	CicdReleaseStatusSucceeded = "Succeeded"
-	CicdReleaseStatusFailed    = "Failed"
-	CicdReleaseStatusCanceled  = "Canceled"
-	CicdReleaseStatusRollback  = "Rollback" // 已回滚
+	CicdReleaseStatusPending          = "Pending"
+	CicdReleaseStatusAwaitingApproval = "AwaitingApproval" // 等待审批
+	CicdReleaseStatusQueued           = "Queued"
+	CicdReleaseStatusRunning          = "Running"
+	CicdReleaseStatusSucceeded        = "Succeeded"
+	CicdReleaseStatusFailed           = "Failed"
+	CicdReleaseStatusCanceled         = "Canceled"
+	CicdReleaseStatusRollback         = "Rollback" // 已回滚
 )
 
 // CicdRelease 对应表：cicd_release

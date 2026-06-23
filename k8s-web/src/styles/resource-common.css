@@ -45,7 +45,7 @@
 
 .search-box input:focus {
   outline: none;
-  border-color: var(--brand-primary, #6366f1);
+  border-color: var(--brand-primary, #165DFF);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
@@ -62,7 +62,7 @@
 
 .filter-dropdown select:focus {
   outline: none;
-  border-color: var(--brand-primary, #6366f1);
+  border-color: var(--brand-primary, #165DFF);
 }
 
 .action-buttons {
@@ -82,7 +82,7 @@
 
 .auto-refresh-toggle input {
   cursor: pointer;
-  accent-color: var(--brand-primary, #6366f1);
+  accent-color: var(--brand-primary, #165DFF);
 }
 
 .refresh-indicator {
@@ -112,7 +112,7 @@
 }
 
 .btn-primary {
-  background: var(--gradient-primary, linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%));
+  background: var(--gradient-primary, linear-gradient(135deg, #165DFF 0%, #8b5cf6 100%));
   color: white;
   box-shadow: var(--shadow-primary, 0 4px 14px rgba(99, 102, 241, 0.4));
 }
@@ -130,8 +130,8 @@
 
 .btn-secondary:hover:not(:disabled) {
   background-color: var(--gray-200, #e5e7eb);
-  border-color: var(--brand-primary, #6366f1);
-  color: var(--brand-primary, #6366f1);
+  border-color: var(--brand-primary, #165DFF);
+  color: var(--brand-primary, #165DFF);
 }
 
 .btn-danger {
@@ -279,7 +279,7 @@
 .namespace-tag {
   display: inline-block;
   padding: 4px 10px;
-  background: var(--gradient-primary, linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%));
+  background: var(--gradient-primary, linear-gradient(135deg, #165DFF 0%, #8b5cf6 100%));
   color: white;
   border-radius: var(--radius-md, 8px);
   font-size: 12px;
@@ -327,7 +327,7 @@
   width: 40px;
   height: 40px;
   border: 4px solid rgba(99, 102, 241, 0.1);
-  border-top-color: var(--brand-primary, #6366f1);
+  border-top-color: var(--brand-primary, #165DFF);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: 16px;
@@ -403,7 +403,7 @@
 
 .close-btn:hover {
   background-color: rgba(99, 102, 241, 0.1);
-  color: var(--brand-primary, #6366f1);
+  color: var(--brand-primary, #165DFF);
 }
 
 .modal-body {
@@ -451,7 +451,7 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--brand-primary, #6366f1);
+  border-color: var(--brand-primary, #165DFF);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 

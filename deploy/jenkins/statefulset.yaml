@@ -28,23 +28,25 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
       initContainers:
-        # 安装必要插件（不指定版本号，自动安装最新兼容版本；blueocean 依赖树太大已移除）
-        - name: install-plugins
-          image: jenkins/jenkins:lts
+        # 修复 hostPath 目录权限（以 root 运行）
+        - name: fix-permissions
+          image: busybox:1.36
           command:
             - sh
             - -c
             - |
-              echo "[init] 开始自动安装插件（超时5分钟）..."
-              mkdir -p /var/jenkins_home/plugins
-              timeout 300 jenkins-plugin-cli --plugin-download-directory /var/jenkins_home/plugins --plugins kubernetes workflow-aggregator git configuration-as-code credentials-binding http_request pipeline-utility-steps junit sonar pipeline-stage-view timestamper ws-cleanup ansicolor && echo "[init] 插件安装完成" || echo "[init] 插件安装失败或超时，Jenkins 启动后可从 UI 手动安装"
+              chown -R 1000:1000 /var/jenkins_home
+              chmod -R 775 /var/jenkins_home
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
       containers:
         - name: jenkins
-          image: jenkins/jenkins:lts
-          imagePullPolicy: IfNotPresent
+          image: jenkins/jenkins:2.555.3-lts
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080

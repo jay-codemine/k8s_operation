@@ -1,10 +1,31 @@
 # ============================================================
-# Jenkins Cache PVs - 静态 hostPath PV（开发/本地环境）
-# 参考：deploy/backend/pv.yaml 的相同模式
-# 用途：为 4 个构建缓存 PVC 提前绑定存储，避免 WaitForFirstConsumer 导致 Pending
-#
-# 注意：jenkins-data PVC 由 standard StorageClass 动态供给，无需在此创建
+# Jenkins PVs - 静态 hostPath PV（单节点集群）
+# 包含：jenkins-data 主数据 + 4 个构建缓存
 # ============================================================
+
+# Jenkins 主数据 PV（/var/jenkins_home）
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-data-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""           # 静态绑定
+  claimRef:
+    namespace: devops
+    name: jenkins-data
+  hostPath:
+    path: /data/jenkins/home
+    type: DirectoryOrCreate
+---
+# Go 模块缓存 PV
 apiVersion: v1
 kind: PersistentVolume
 metadata:

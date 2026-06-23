@@ -16,6 +16,22 @@
         </div>
       </div>
       <div class="header-actions">
+        <!-- 从K8s导入按钮 -->
+        <button
+          v-if="!isEdit"
+          type="button"
+          class="btn-header-import"
+          @click="showK8sImportModal = true"
+          title="从K8s集群导入已有应用配置"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          从 K8s 导入
+        </button>
+        <!-- 保存按钮（编辑模式） -->
         <button
           v-if="isEdit"
           type="button"
@@ -37,9 +53,33 @@
       </div>
     </div>
 
+    <!-- 快速模板栏（顶部） -->
+    <div v-if="!isEdit" class="template-bar">
+      <div class="template-bar-content">
+        <div class="template-bar-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+          选择模板快速开始：
+        </div>
+        <div class="template-bar-buttons">
+          <button
+            v-for="tpl in quickTemplates"
+            :key="tpl.value"
+            :class="['template-btn', { active: pipelineData.language_type === tpl.value }]"
+            @click="applyQuickTemplate(tpl.value)"
+          >
+            <span class="tpl-dot" :style="{ backgroundColor: tpl.color }"></span>
+            <span class="tpl-name">{{ tpl.label }}</span>
+            <span v-if="tpl.badge" :class="['tpl-badge', tpl.badgeClass]">{{ tpl.badge }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="wizard-body">
-
-
       <!-- 左侧步骤导航 -->
       <div class="wizard-sidebar">
         <div class="steps-container">
@@ -60,7 +100,7 @@
           </div>
         </div>
 
-        <!-- 快速模板选择 -->
+        <!-- 快速模板选择（侧边栏保留） -->
         <div class="template-selector">
           <div class="template-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -68,7 +108,7 @@
               <line x1="3" y1="9" x2="21" y2="9"/>
               <line x1="9" y1="21" x2="9" y2="9"/>
             </svg>
-            快速模板
+            流水线模板
           </div>
           <select v-model="selectedTemplateId" @change="handleTemplateChange" class="template-select">
             <option value="">不使用模板</option>
@@ -79,10 +119,10 @@
         </div>
       </div>
 
-      <!-- 右侧表单内容 -->
+      <!-- 中间表单内容 -->
       <div class="wizard-content">
         <form @submit.prevent="submit">
-          <!-- Step 1: 应用信息（应用名 + 语言类型 + Git仓库 + 分支） -->
+          <!-- Step 1: 应用信息（基础信息 + 构建类型 + Git仓库 + 分支） -->
           <div v-show="currentStep === 0" class="step-panel">
             <div class="panel-header">
               <div class="panel-icon basic">
@@ -94,170 +134,225 @@
               </div>
               <div>
                 <h2>应用信息</h2>
-                <p>设置应用名称、语言类型和代码仓库</p>
+                <p>设置应用名称、代码仓库和构建类型</p>
               </div>
             </div>
-          
+                    
             <div class="form-card">
-              <!-- 应用名称 -->
-              <div class="form-group">
-                <label class="form-label">
-                  应用名称
-                  <span class="required">*</span>
-                </label>
-                <div class="input-wrapper">
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <!-- 应用基础信息区块 -->
+              <div class="form-section">
+                <div class="section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
                     <path d="M12 2L2 7l10 5 10-5-10-5z"/>
                     <path d="M2 17l10 5 10-5"/>
                     <path d="M2 12l10 5 10-5"/>
                   </svg>
-                  <input
-                    type="text"
-                    v-model="pipelineData.name"
-                    class="form-input with-icon"
-                    placeholder="例如：user-service 或 springboot-hello"
-                    required
-                    @blur="checkName"
-                  />
+                  应用基础信息
                 </div>
-                <div v-if="nameChecking" class="input-hint" style="color:#94a3b8">… 检查中</div>
-                <div v-else-if="nameAvailable === false" class="input-hint" style="color:#ef4444">❌ {{ nameCheckMsg }}</div>
-                <div v-else-if="nameAvailable === true" class="input-hint" style="color:#22c55e">✅ 名称可用</div>
-                <div v-else class="input-hint">建议使用小写字母和连字符，同时作为 K8s 工作负载名称</div>
-              </div>
           
-              <!-- 语言/框架类型 -->
-              <div class="form-group">
-                <label class="form-label">
-                  语言/框架类型
-                  <span class="required">*</span>
-                </label>
-                <div class="quick-lang-selector">
-                  <div
-                    v-for="opt in serviceTypeOptions"
-                    :key="opt.value"
-                    :class="['lang-chip', { selected: pipelineData.language_type === opt.value }]"
-                    @click="pipelineData.language_type = opt.value; selectedServiceType = opt.value"
-                  >
-                    <span class="lang-dot" :style="{ backgroundColor: opt.color }"></span>
-                    {{ opt.label }}
-                  </div>
-                </div>
-                <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
-              </div>
-          
-              <!-- Git 仓库地址 -->
-              <div class="form-group">
-                <label class="form-label">
-                  Git 仓库地址
-                  <span class="required">*</span>
-                </label>
-                <div class="input-with-action">
-                  <div class="input-wrapper flex-1">
+                <!-- 应用名称 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    应用名称
+                    <span class="required">*</span>
+                  </label>
+                  <div class="input-wrapper">
                     <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                    </svg>
-                    <input
-                      type="url"
-                      v-model="pipelineData.git_repo"
-                      class="form-input with-icon"
-                      placeholder="https://gitee.com/your-org/your-repo.git"
-                      required
-                      @blur="onRepoUrlChange"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    class="btn-fetch"
-                    @click="fetchBranches"
-                    :disabled="!pipelineData.git_repo || fetchingBranches"
-                    :title="fetchingBranches ? '获取中...' : '获取分支列表'"
-                  >
-                    <svg v-if="!fetchingBranches" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M23 4v6h-6"/>
-                      <path d="M1 20v-6h6"/>
-                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                    </svg>
-                    <span v-else class="loading-spinner-sm"></span>
-                    {{ fetchingBranches ? '' : '获取分支' }}
-                  </button>
-                </div>
-              </div>
-          
-              <!-- 分支 -->
-              <div class="form-group">
-                <label class="form-label">
-                  分支
-                  <span class="required">*</span>
-                  <span v-if="branches.length > 0" class="branch-count">（共 {{ branches.length }} 个分支）</span>
-                </label>
-                          
-                <!-- 有分支列表时显示下拉选择 -->
-                <div v-if="branches.length > 0" class="branch-selector">
-                  <div class="branch-search">
-                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="11" cy="11" r="8"/>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                      <path d="M2 17l10 5 10-5"/>
+                      <path d="M2 12l10 5 10-5"/>
                     </svg>
                     <input
                       type="text"
-                      v-model="branchSearch"
-                      class="branch-search-input"
-                      placeholder="搜索分支..."
+                      v-model="pipelineData.name"
+                      class="form-input with-icon"
+                      placeholder="例如：user-service 或 springboot-hello"
+                      required
+                      @blur="checkName"
                     />
                   </div>
-                  <div class="branch-list">
-                    <div
-                      v-for="branch in filteredBranches"
-                      :key="branch.name"
-                      :class="['branch-item', { selected: pipelineData.git_branch === branch.name, default: branch.isDefault }]"
-                      @click="selectBranch(branch.name)"
-                    >
-                      <div class="branch-info">
-                        <svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <line x1="6" y1="3" x2="6" y2="15"/>
-                          <circle cx="18" cy="6" r="3"/>
-                          <circle cx="6" cy="18" r="3"/>
-                          <path d="M18 9a9 9 0 0 1-9 9"/>
-                        </svg>
-                        <span class="branch-name">{{ branch.name }}</span>
-                        <span v-if="branch.isDefault" class="default-badge">default</span>
-                      </div>
-                      <div v-if="pipelineData.git_branch === branch.name" class="branch-check">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      </div>
+                  <div v-if="nameChecking" class="input-hint" style="color:#94a3b8">… 检查中</div>
+                  <div v-else-if="nameAvailable === false" class="input-hint" style="color:#ef4444">❌ {{ nameCheckMsg }}</div>
+                  <div v-else-if="nameAvailable === true" class="input-hint" style="color:#22c55e">✅ 名称可用</div>
+                  <div v-else class="input-hint">建议使用小写字母和连字符，同时作为 K8s 工作负载名称</div>
+                </div>
+                        
+                <!-- Git 仓库地址 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    Git 仓库地址
+                    <span class="required">*</span>
+                  </label>
+                  <div class="input-with-action">
+                    <div class="input-wrapper flex-1">
+                      <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                      </svg>
+                      <input
+                        type="url"
+                        v-model="pipelineData.git_repo"
+                        class="form-input with-icon"
+                        placeholder="https://gitee.com/your-org/your-repo.git"
+                        required
+                        @blur="onRepoUrlChange"
+                      />
                     </div>
-                    <div v-if="filteredBranches.length === 0" class="no-branches">
-                      没有找到匹配的分支
+                    <button
+                      type="button"
+                      class="btn-detect-repo"
+                      @click="detectRepo"
+                      :disabled="!pipelineData.git_repo || detectingRepo"
+                      :title="detectingRepo ? '检测中...' : '检测仓库信息'"
+                    >
+                      <svg v-if="!detectingRepo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                        <path d="M11 8v6M8 11h6"/>
+                      </svg>
+                      <span v-else class="loading-spinner-sm"></span>
+                      {{ detectingRepo ? '检测中' : '检测仓库' }}
+                    </button>
+                  </div>
+                            
+                  <!-- 仓库检测结果 -->
+                  <div v-if="repoDetectionResult" class="repo-detection-result">
+                    <div class="result-header">
+                      仓库检测结果
+                    </div>
+                    <div class="result-grid">
+                      <div class="result-item">
+                        <span class="result-label">仓库类型</span>
+                        <span class="result-value" :class="repoDetectionResult.repoType.toLowerCase()">{{ repoDetectionResult.repoType }}</span>
+                      </div>
+                      <div class="result-item">
+                        <span class="result-label">默认分支</span>
+                        <span class="result-value branch">{{ repoDetectionResult.defaultBranch }}</span>
+                      </div>
+                      <div class="result-item">
+                        <span class="result-label">语言</span>
+                        <span class="result-value language">{{ repoDetectionResult.language }}</span>
+                      </div>
+                      <div class="result-item">
+                        <span class="result-label">构建工具</span>
+                        <span class="result-value">{{ repoDetectionResult.buildTool }}</span>
+                      </div>
+                      <div class="result-item">
+                        <span class="result-label">Dockerfile</span>
+                        <span class="result-value" :class="repoDetectionResult.hasDockerfile ? 'found' : 'not-found'">
+                          {{ repoDetectionResult.hasDockerfile ? '✓ 已发现' : '✗ 未发现' }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-          
-                <!-- 没有分支列表时显示输入框 -->
-                <div v-else class="input-wrapper">
-                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="6" y1="3" x2="6" y2="15"/>
-                    <circle cx="18" cy="6" r="3"/>
-                    <circle cx="6" cy="18" r="3"/>
-                    <path d="M18 9a9 9 0 0 1-9 9"/>
-                  </svg>
-                  <input
-                    type="text"
-                    v-model="pipelineData.git_branch"
-                    class="form-input with-icon"
-                    placeholder="main"
-                    required
-                  />
-                </div>
-                <div class="input-hint">
-                  <span v-if="branches.length === 0">输入分支名称，或点击上方“获取分支”按鈕自动获取</span>
-                  <span v-else>已选择：<strong>{{ pipelineData.git_branch }}</strong></span>
+                        
+                <!-- 分支 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    代码分支
+                    <span class="required">*</span>
+                    <span v-if="branches.length > 0" class="branch-count">（共 {{ branches.length }} 个分支）</span>
+                  </label>
+                                        
+                  <!-- 有分支列表时显示下拉选择 -->
+                  <div v-if="branches.length > 0" class="branch-selector">
+                    <div class="branch-search">
+                      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                      <input
+                        type="text"
+                        v-model="branchSearch"
+                        class="branch-search-input"
+                        placeholder="搜索分支..."
+                      />
+                    </div>
+                    <div class="branch-list">
+                      <div
+                        v-for="branch in filteredBranches"
+                        :key="branch.name"
+                        :class="['branch-item', { selected: pipelineData.git_branch === branch.name, default: branch.isDefault }]"
+                        @click="selectBranch(branch.name)"
+                      >
+                        <div class="branch-info">
+                          <svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="6" y1="3" x2="6" y2="15"/>
+                            <circle cx="18" cy="6" r="3"/>
+                            <circle cx="6" cy="18" r="3"/>
+                            <path d="M18 9a9 9 0 0 1-9 9"/>
+                          </svg>
+                          <span class="branch-name">{{ branch.name }}</span>
+                          <span v-if="branch.isDefault" class="default-badge">default</span>
+                        </div>
+                        <div v-if="pipelineData.git_branch === branch.name" class="branch-check">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        </div>
+                      </div>
+                      <div v-if="filteredBranches.length === 0" class="no-branches">
+                        没有找到匹配的分支
+                      </div>
+                    </div>
+                  </div>
+                        
+                  <!-- 没有分支列表时显示输入框 -->
+                  <div v-else class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="6" y1="3" x2="6" y2="15"/>
+                      <circle cx="18" cy="6" r="3"/>
+                      <circle cx="6" cy="18" r="3"/>
+                      <path d="M18 9a9 9 0 0 1-9 9"/>
+                    </svg>
+                    <input
+                      type="text"
+                      v-model="pipelineData.git_branch"
+                      class="form-input with-icon"
+                      placeholder="main"
+                      required
+                    />
+                  </div>
+                  <div class="input-hint">
+                    <span v-if="branches.length === 0">输入分支名称，或点击上方"检测仓库"按钮自动获取</span>
+                    <span v-else>已选择：<strong>{{ pipelineData.git_branch }}</strong></span>
+                  </div>
                 </div>
               </div>
           
+              <!-- 构建类型区块 -->
+              <div class="form-section">
+                <div class="section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                    <polyline points="16 18 22 12 16 6"/>
+                    <polyline points="8 6 2 12 8 18"/>
+                  </svg>
+                  构建类型
+                </div>
+          
+                <!-- 语言/框架类型 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    语言/框架类型
+                    <span class="required">*</span>
+                  </label>
+                  <div class="quick-lang-selector">
+                    <div
+                      v-for="opt in serviceTypeOptions"
+                      :key="opt.value"
+                      :class="['lang-chip', { selected: pipelineData.language_type === opt.value }]"
+                      @click="pipelineData.language_type = opt.value; selectedServiceType = opt.value"
+                    >
+                      <span class="lang-dot" :style="{ backgroundColor: opt.color }"></span>
+                      {{ opt.label }}
+                      <span v-if="opt.badge" :class="['lang-badge', opt.badgeClass]">{{ opt.badge }}</span>
+                    </div>
+                  </div>
+                  <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
+                </div>
+              </div>
+                        
               <!-- 描述（可折叠） -->
               <div class="form-group">
                 <label class="form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" @click="showDescription = !showDescription">
@@ -377,8 +472,8 @@
                 <div class="input-hint">决定构建环境 JDK 版本（maven:3.9-eclipse-temurin-<strong>{{ pipelineData.java_version }}</strong>）和运行时基础镜像</div>
               </div>
 
-              <!-- SonarQube 代码质量扫描开关 -->
-              <div class="form-group">
+              <!-- SonarQube 代码质量扫描开关（仅管理员可见） -->
+              <div v-if="canApprove" class="form-group">
                 <div :class="['toggle-row', { highlight: pipelineData.language_type === 'java' }]">
                   <div class="toggle-info">
                     <label class="form-label">
@@ -622,8 +717,8 @@
                 </transition>
               </div>
 
-              <!-- 制品上传到平台制品库开关 -->
-              <div class="form-group">
+              <!-- 制品上传到平台制品库开关（仅管理员可见） -->
+              <div v-if="canApprove" class="form-group">
                 <div class="toggle-row">
                   <div class="toggle-info">
                     <label class="form-label">
@@ -667,11 +762,62 @@
                       type="text"
                       v-model="pipelineData.image_repo"
                       class="form-input with-icon"
-                      placeholder="harbor.example.com/project/app-name"
+                      :placeholder="defaultImageRegistry ? `${defaultImageRegistry}/应用名` : 'harbor.example.com/project/app-name'"
                       required
                     />
                   </div>
-                  <div class="input-hint">Jenkins 构建后将镜像推送到此地址，格式：registry/project/app</div>
+                  <div class="input-hint">{{ defaultImageRegistry ? `已配置默认前缀: ${defaultImageRegistry}，填写应用名后自动拼接` : 'Jenkins 构建后将镜像推送到此地址，格式：registry/project/app' }}</div>
+                </div>
+
+                <!-- 镜像标签 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                      <line x1="7" y1="7" x2="7.01" y2="7"/>
+                    </svg>
+                    镜像标签
+                    <span class="optional-badge">可选</span>
+                  </label>
+                  <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                      <line x1="7" y1="7" x2="7.01" y2="7"/>
+                    </svg>
+                    <input
+                      type="text"
+                      v-model="pipelineData.image_tag"
+                      class="form-input with-icon"
+                      placeholder="留空则自动生成，如 v0.1.1"
+                    />
+                  </div>
+                  <div class="input-hint">固定标签如 v0.1.1；留空则 Jenkins 自动生成 commit-timestamp 格式标签</div>
+                </div>
+
+                <!-- 镜像实时预览 -->
+                <div v-if="pipelineData.image_repo" class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    镜像预览
+                    <span class="preview-badge">实时生成</span>
+                  </label>
+                  <div class="image-preview-panel">
+                    <div class="preview-row">
+                      <span class="preview-label">最终镜像：</span>
+                      <div class="preview-image-full">
+                        <span class="image-registry">{{ imagePreview.registry }}</span><span class="image-path">/{{ imagePreview.project }}</span><span class="image-name">/{{ imagePreview.app }}</span><span class="image-tag">:{{ imagePreview.tag }}</span>
+                      </div>
+                    </div>
+                    <div class="preview-tags">
+                      <span class="tag-hint">标签规则：</span>
+                      <code v-if="pipelineData.image_tag">固定标签 → {{ pipelineData.image_tag }}</code>
+                      <code v-else>{{ pipelineData.git_branch || 'main' }} → {{ imagePreview.tag }}</code>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Dockerfile 构建策略 -->
@@ -756,7 +902,7 @@
                   <!-- 策略说明面板 -->
                   <div class="df-info-panel">
                     <div v-if="dockerfileMode === 'auto'" class="df-info-content">
-                      <div class="df-info-title">&#9889; 智能检测流程</div>
+                      <div class="df-info-title">&#9889; 智能检测流穨</div>
                       <div class="df-info-steps">
                         <div class="df-step"><span class="df-step-num">1</span>检查项目根目录是否存在 Dockerfile</div>
                         <div class="df-step"><span class="df-step-num">2</span>存在则直接使用项目 Dockerfile 构建镜像</div>
@@ -778,6 +924,41 @@
                       </div>
                     </div>
                   </div>
+                </div>
+                
+                <!-- Dockerfile 预览 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    Dockerfile 预览
+                    <button type="button" class="btn-view-dockerfile" @click="showDockerfilePreview = !showDockerfilePreview">
+                      {{ showDockerfilePreview ? '收起' : '查看' }}
+                    </button>
+                  </label>
+                                  
+                  <transition name="slide-fade">
+                    <div v-if="showDockerfilePreview" class="dockerfile-preview-panel">
+                      <div class="dockerfile-header">
+                        <div class="dockerfile-type">
+                          <span class="type-badge" :class="dockerfileMode">{{ dockerfileModeLabel }}</span>
+                          <span class="type-lang">{{ dockerfileLangLabel }}</span>
+                        </div>
+                        <button type="button" class="btn-copy-dockerfile" @click="copyDockerfile" title="复制 Dockerfile 内容">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                          {{ copiedDockerfile ? '已复制' : '复制' }}
+                        </button>
+                      </div>
+                      <div class="dockerfile-content">
+                        <pre><code>{{ dockerfileContent }}</code></pre>
+                      </div>
+                    </div>
+                  </transition>
                 </div>
 
                 <!-- Git 凭证 ID 已自动配置，仅保留跳过测试 -->
@@ -1103,8 +1284,8 @@
             </div>
 
             <div class="form-card">
-              <!-- 自动部署开关 -->
-              <div class="form-group">
+              <!-- 自动部署开关（仅管理员可见） -->
+              <div v-if="canApprove" class="form-group">
                 <div class="toggle-row">
                   <div class="toggle-info">
                     <label class="form-label">启用自动部署</label>
@@ -1119,7 +1300,45 @@
 
               <!-- 自动部署配置详情 -->
               <div v-if="pipelineData.auto_deploy" class="auto-deploy-config">
-                <!-- 部署环境/审批/告警 - 快速模式下隐藏，使用默认值(dev环境/无需审批) -->
+                <!-- 部署环境选择 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    部署环境
+                    <span class="required">*</span>
+                  </label>
+                  <div class="env-selector-inline">
+                    <div
+                      v-for="env in deployEnvOptions"
+                      :key="env.value"
+                      :class="['env-chip', { selected: pipelineData.deploy_env === env.value }]"
+                      @click="selectDeployEnv(env.value)"
+                    >
+                      <span class="env-dot" :style="{ backgroundColor: env.color }"></span>
+                      <span>{{ env.label }}</span>
+                    </div>
+                  </div>
+                  <div class="input-hint">预发环境和生产环境将自动开启审批流程</div>
+                </div>
+
+                <!-- 审批开关（仅管理员可见） -->
+                <div v-if="canApprove" class="form-group">
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <label class="form-label">发布审批</label>
+                      <p class="toggle-desc">开启后，构建成功需审批通过才能部署到 K8s</p>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" v-model="pipelineData.require_approval" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div v-if="pipelineData.require_approval" class="approval-hint">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>审批策略可在「CI/CD → 审批策略」中配置多级审批链</span>
+                  </div>
+                </div>
 
                 <!-- 目标集群选择 -->
                 <div class="form-group">
@@ -1225,7 +1444,28 @@
                   <div class="input-hint">将更新该工作负载的容器镜像</div>
                 </div>
 
-                <!-- 容器名称 - 快速模式隐藏，默认更新第一个容器 -->
+                <!-- 容器名称 - 默认与工作负载名称一致，可自定义修改 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                    Pod 容器名称
+                    <span class="optional-badge">可选</span>
+                  </label>
+                  <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                    <input
+                      type="text"
+                      v-model="pipelineData.target_container"
+                      class="form-input with-icon"
+                      :placeholder="pipelineData.target_workload_name || '默认与工作负载名称一致'"
+                    />
+                  </div>
+                  <div class="input-hint">部署时更新该容器的镜像，默认与工作负载名称一致，多容器 Pod 需指定</div>
+                </div>
 
                 <!-- 配置摘要 -->
                 <div class="config-summary">
@@ -1305,7 +1545,226 @@
           </div>
         </form>
       </div>
+
+      <!-- 右侧部署预览面板 -->
+      <div v-if="!isEdit && !showSuccessTopology" class="deploy-preview-panel">
+        <div class="preview-card">
+          <div class="preview-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            部署预览
+          </div>
+          <div class="preview-list">
+            <div class="preview-item">
+              <span class="preview-label">集群</span>
+              <span class="preview-value">{{ deployPreview.cluster }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">命名空间</span>
+              <span class="preview-value">{{ deployPreview.namespace }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">工作负载</span>
+              <span class="preview-value">{{ deployPreview.workload }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">副本数</span>
+              <span class="preview-value">{{ deployPreview.replicas }}</span>
+            </div>
+            <div class="preview-item highlight">
+              <span class="preview-label">即将发布镜像</span>
+              <div v-if="deployPreview.newImage" class="preview-image">{{ deployPreview.newImage }}</div>
+              <span v-else class="preview-value">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- 确认创建弹窗 -->
+    <transition name="slide-fade">
+      <div v-if="showConfirmStep" class="confirm-overlay" @click.self="backFromConfirm">
+        <div class="confirm-modal">
+          <div class="confirm-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            <h3>确认创建流水线</h3>
+          </div>
+          <div class="confirm-grid">
+            <div class="confirm-item">
+              <span class="confirm-label">应用名称</span>
+              <span class="confirm-value">{{ pipelineData.name }}</span>
+            </div>
+            <div class="confirm-item">
+              <span class="confirm-label">Git 仓库</span>
+              <span class="confirm-value">{{ pipelineData.git_repo }}</span>
+            </div>
+            <div class="confirm-item">
+              <span class="confirm-label">分支</span>
+              <span class="confirm-value">{{ pipelineData.git_branch }}</span>
+            </div>
+            <div class="confirm-item">
+              <span class="confirm-label">语言类型</span>
+              <span class="confirm-value">{{ serviceTypeOptions.find(o => o.value === pipelineData.language_type)?.label || pipelineData.language_type }}</span>
+            </div>
+            <div class="confirm-item">
+              <span class="confirm-label">镜像仓库</span>
+              <span class="confirm-value">{{ pipelineData.image_repo || '-' }}</span>
+            </div>
+            <div v-if="pipelineData.auto_deploy" class="confirm-item">
+              <span class="confirm-label">部署目标</span>
+              <span class="confirm-value">{{ getClusterName(pipelineData.target_cluster_id) }} / {{ pipelineData.target_namespace }} / {{ pipelineData.target_workload_name }}</span>
+            </div>
+          </div>
+          <div class="confirm-actions">
+            <button class="btn-confirm-back" @click="backFromConfirm">返回修改</button>
+            <button class="btn-confirm-submit" @click="submit" :disabled="submitting">
+              <span v-if="submitting" class="loading-spinner-sm"></span>
+              {{ submitting ? '创建中...' : '确认创建' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- K8s 导入弹窗 -->
+    <transition name="slide-fade">
+      <div v-if="showK8sImportModal" class="k8s-import-overlay" @click.self="showK8sImportModal = false">
+        <div class="k8s-import-modal">
+          <div class="k8s-import-header">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              从 K8s 导入
+            </h3>
+            <button class="k8s-import-close" @click="showK8sImportModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="k8s-import-form">
+            <div class="form-group">
+              <label class="form-label">集群</label>
+              <select v-model="k8sImportForm.cluster_id" @change="onK8sImportClusterChange" class="form-select">
+                <option :value="0">请选择集群</option>
+                <option v-for="c in k8sImportClusters" :key="c.id" :value="c.id">{{ c.cluster_name }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">命名空间</label>
+              <select v-model="k8sImportForm.namespace" @change="onK8sImportNamespaceChange" class="form-select" :disabled="!k8sImportForm.cluster_id">
+                <option value="">请选择命名空间</option>
+                <option v-for="ns in k8sImportNamespaces" :key="ns.name" :value="ns.name">{{ ns.name }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Deployment</label>
+              <select v-model="k8sImportForm.deployment" class="form-select" :disabled="!k8sImportForm.namespace">
+                <option value="">请选择 Deployment</option>
+                <option v-for="d in k8sImportDeployments" :key="d.name" :value="d.name">{{ d.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="k8s-import-actions">
+            <button class="btn-import-cancel" @click="showK8sImportModal = false">取消</button>
+            <button class="btn-import-submit" @click="importFromK8s" :disabled="importingFromK8s">
+              <span v-if="importingFromK8s" class="loading-spinner-sm"></span>
+              {{ importingFromK8s ? '导入中...' : '确认导入' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 创建成功拓扑页 -->
+    <transition name="slide-fade">
+      <div v-if="showSuccessTopology" class="success-topology">
+        <div class="topology-card">
+          <div class="topology-success-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h2>流水线创建成功！</h2>
+          <p>已自动配置完整的 CI/CD 流程</p>
+
+          <div v-if="createWarnings.length" class="topology-warnings">
+            <h4>⚠️ 注意事项</h4>
+            <ul>
+              <li v-for="(w, i) in createWarnings" :key="i">{{ w }}</li>
+            </ul>
+          </div>
+
+          <div class="topology-flow">
+            <div class="topology-node">
+              <div class="topology-node-icon git">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+              </div>
+              <span class="topology-node-label">Git 仓库</span>
+              <span class="topology-node-value">{{ pipelineData.git_repo ? pipelineData.git_repo.split('/').pop().replace('.git', '') : '-' }}</span>
+            </div>
+
+            <span class="topology-arrow">→</span>
+
+            <div class="topology-node">
+              <div class="topology-node-icon jenkins">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+              </div>
+              <span class="topology-node-label">Jenkins 构建</span>
+              <span class="topology-node-value">{{ serviceTypeOptions.find(o => o.value === pipelineData.language_type)?.label || '-' }}</span>
+            </div>
+
+            <span class="topology-arrow">→</span>
+
+            <div class="topology-node">
+              <div class="topology-node-icon registry">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                  <line x1="6" y1="6" x2="6.01" y2="6"/>
+                  <line x1="6" y1="18" x2="6.01" y2="18"/>
+                </svg>
+              </div>
+              <span class="topology-node-label">镜像仓库</span>
+              <span class="topology-node-value">{{ pipelineData.image_repo ? pipelineData.image_repo.split('/').pop() : '-' }}</span>
+            </div>
+
+            <span class="topology-arrow">→</span>
+
+            <div class="topology-node">
+              <div class="topology-node-icon k8s">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/>
+                  <path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <span class="topology-node-label">K8s 部署</span>
+              <span class="topology-node-value">{{ pipelineData.target_namespace || '-' }}</span>
+            </div>
+          </div>
+
+          <div class="topology-actions">
+            <button class="btn-topology-secondary" @click="goToPipelineList">返回列表</button>
+            <button class="btn-topology-primary" @click="viewPipelineDetail">查看流水线详情</button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -1319,10 +1778,12 @@ import {
   getPipelineTemplates,
   getGitBranches,
   getResourceTemplates,
-  validateResourceConfig
+  validateResourceConfig,
+  discoverFromK8s
 } from '@/api/cicd.js'
-import { checkPipelineName } from '@/api/platform/pipeline.js'
+import { checkPipelineName, getJenkinsConfig } from '@/api/platform/pipeline.js'
 import { getClusterList } from '@/api/cluster.js'
+import { getNamespaces } from '@/api/namespace.js'
 import namespaceApi from '@/api/cluster/config/namespace'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import statefulsetsApi from '@/api/cluster/workloads/statefulsets'
@@ -1423,13 +1884,109 @@ export default {
     
     // 服务类型选项（value 必须与后端 language_type 一致: go/java/frontend/python/custom）
     const serviceTypeOptions = ref([
-      { value: 'java', label: 'Java', color: '#f89820' },
-      { value: 'go', label: 'Go', color: '#00add8' },
+      { value: 'java', label: 'Java', color: '#f89820', badge: '推荐', badgeClass: 'rec' },
+      { value: 'go', label: 'Go', color: '#00add8', badge: '简单', badgeClass: 'easy' },
       { value: 'frontend', label: 'Node.js', color: '#339933' },
-      { value: 'python', label: 'Python', color: '#3776ab' },
+      { value: 'python', label: 'Python', color: '#3776ab', badge: '简单', badgeClass: 'easy' },
       { value: 'custom', label: '自定义', color: '#8c8c8c' }
     ])
     const selectedServiceType = ref('go')
+    
+    // 快速模板（顶部栏使用）
+    const quickTemplates = computed(() => serviceTypeOptions.value)
+    
+    // 仓库检测相关
+    const detectingRepo = ref(false)
+    const repoDetectionResult = ref(null)
+    
+    // Dockerfile 预览相关
+    const showDockerfilePreview = ref(false)
+    const copiedDockerfile = ref(false)
+    
+    // 镜像预览计算属性
+    const imagePreview = computed(() => {
+      if (!pipelineData.value.image_repo) {
+        return { registry: '', project: '', app: '', tag: '' }
+      }
+      
+      // 解析镜像仓库地址
+      const parts = pipelineData.value.image_repo.split('/')
+      let registry = ''
+      let project = ''
+      let app = ''
+      
+      if (parts.length >= 3) {
+        registry = parts[0]
+        project = parts[1]
+        app = parts[2]
+      } else if (parts.length === 2) {
+        registry = 'registry.hub.docker.com'
+        project = parts[0]
+        app = parts[1]
+      } else {
+        registry = 'registry.hub.docker.com'
+        project = 'library'
+        app = parts[0]
+      }
+      
+      // 生成镜像标签
+      let tag = ''
+      if (pipelineData.value.image_tag) {
+        tag = pipelineData.value.image_tag
+      } else {
+        const branch = pipelineData.value.git_branch || 'main'
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+        const shortHash = Math.random().toString(36).slice(2, 8)
+        tag = `${date}-${branch}-${shortHash}`
+      }
+      
+      return { registry, project, app, tag }
+    })
+    
+    // Dockerfile 模式标签
+    const dockerfileModeLabel = computed(() => {
+      const labels = { auto: '智能检测', project: '项目自带', platform: '平台生成' }
+      return labels[dockerfileMode.value] || '未知'
+    })
+    
+    // Dockerfile 内容生成
+    const dockerfileContent = computed(() => {
+      const lang = pipelineData.value.language_type
+      
+      // 项目自带模式
+      if (dockerfileMode.value === 'project') {
+        return `# 使用项目中的 Dockerfile: ${pipelineData.value.dockerfile_path || 'Dockerfile'}\n# 此文件由项目仓库提供，平台将直接使用它来构建镜像。\n# 请在项目中查看具体内容。`
+      }
+      
+      // 根据语言生成Dockerfile
+      const dockerfiles = {
+        java: `# 多阶段构建：Java Spring Boot 应用\n# 阶段1：构建\nFROM maven:3.9-eclipse-temurin-17 AS builder\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:go-offline -B\nCOPY src ./src\nRUN mvn clean package -DskipTests\n\n# 阶段2：运行\nFROM eclipse-temurin:17-jre-alpine\nWORKDIR /app\nCOPY --from=builder /app/target/*.jar app.jar\nRUN addgroup -S appgroup && adduser -S appuser -G appgroup\nUSER appuser\nEXPOSE 8080\nENV JAVA_OPTS="-Xms256m -Xmx512m -Djava.security.egd=file:/dev/./urandom"\nENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]`,
+        go: `# 多阶段构建：Go 应用\n# 阶段1：构建\nFROM golang:1.24-alpine AS builder\nWORKDIR /app\nCOPY go.mod go.sum ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 GOOS=linux go build -o /app/main .\n\n# 阶段2：运行\nFROM alpine:3.19\nWORKDIR /app\nCOPY --from=builder /app/main .\nRUN addgroup -S appgroup && adduser -S appuser -G appgroup\nUSER appuser\nEXPOSE 8080\nENTRYPOINT ["./main"]`,
+        frontend: `# Node.js 前端应用\n# 阶段1：构建\nFROM node:18-alpine AS builder\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\n# 阶段2：Nginx 运行\nFROM nginx:1.25-alpine\nCOPY --from=builder /app/dist /usr/share/nginx/html\nCOPY nginx.conf /etc/nginx/conf.d/default.conf\nEXPOSE 80\nCMD ["nginx", "-g", "daemon off;"]`,
+        python: `# Python 应用\nFROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nRUN addgroup --system appgroup && adduser --system --group appuser\nUSER appuser\nEXPOSE 8000\nCMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]`,
+        custom: `# 自定义应用\n# 请根据实际需求修改此 Dockerfile\nFROM ubuntu:22.04\nWORKDIR /app\nCOPY . .\nRUN echo "请添加构建命令"\nEXPOSE 8080\nCMD ["echo", "请替换为实际启动命令"]`
+      }
+      
+      return dockerfiles[lang] || dockerfiles.custom
+    })
+    
+    // 从 K8s 导入弹窗
+    const showK8sImportModal = ref(false)
+    const k8sImportForm = ref({ cluster_id: 0, namespace: '', deployment: '' })
+    const k8sImportClusters = ref([])
+    const k8sImportNamespaces = ref([])
+    const k8sImportDeployments = ref([])
+    const importingFromK8s = ref(false)
+
+    // 默认镜像仓库前缀（从 Jenkins 配置加载）
+    const defaultImageRegistry = ref('')
+    
+    // 确认步骤
+    const showConfirmStep = ref(false)
+    
+    // 创建成功拓扑
+    const showSuccessTopology = ref(false)
+    const createdPipelineId = ref(0)
     
     // Dockerfile 构建策略模式：'auto' | 'project' | 'platform'
     const dockerfileMode = ref('auto')
@@ -1513,6 +2070,7 @@ export default {
       language_type: 'go',  // 与 selectedServiceType 联动，后端据此自动推导 jenkins_job
       // 构建核心参数（独立字段，不混入 env_vars）
       image_repo: '',       // 镜像仓库地址（必填），如 harbor.example.com/project/app
+      image_tag: '',        // 镜像标签（可选），如 v0.1.1；留空则 Jenkins 自动生成
       java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
       skip_tests: false,    // 跳过单元测试
       dockerfile_path: '',  // Dockerfile 路径（空则自动生成）
@@ -1731,18 +2289,10 @@ export default {
       }
     }
 
-    // 生成模拟分支数据（后端接口未实现时使用）
+    // 生成默认分支列表（后端API未实现时显示空列表，不使用假数据）
     const generateMockBranches = (repoUrl) => {
-      // 根据仓库类型生成常见分支
-      const commonBranches = [
-        { name: 'main', isDefault: true },
-        { name: 'master', isDefault: false },
-        { name: 'develop', isDefault: false },
-        { name: 'release', isDefault: false },
-        { name: 'feature/new-feature', isDefault: false },
-        { name: 'hotfix/bug-fix', isDefault: false }
-      ]
-      return commonBranches
+      // 返回空列表，用户可手动输入分支名
+      return []
     }
 
     // 选择分支
@@ -1829,7 +2379,7 @@ export default {
         pipelineData.value.image_repo = existingImageRepo.value
       }
       // 重组 env_vars：默认推荐变量（排除 IMAGE_REPO 等已有独立字段的） + 用户自定义
-      const promotedKeys = ['IMAGE_REPO', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
       const newEnvVars = defaults
         .filter(d => !promotedKeys.includes(d.name))
         .map(d => ({ name: d.name, value: d.value }))
@@ -1902,7 +2452,7 @@ export default {
               const found = envArr.find(e => e.name === key)
               return found ? found.value : def
             }
-            const promotedKeys = ['IMAGE_REPO', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION']
+            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
             // 回显 Dockerfile 策略模式
             const savedDfPath = getEnv('DOCKERFILE_PATH', '')
@@ -1924,6 +2474,7 @@ export default {
               language_type: langType,
               // 构建核心参数（从 env_vars 提取到独立字段）
               image_repo: getEnv('IMAGE_REPO', ''),
+              image_tag: getEnv('IMAGE_TAG', ''),
               java_version: getEnv('JAVA_VERSION', '17'),
               skip_tests: getEnv('SKIP_TESTS', 'false') === 'true',
               dockerfile_path: getEnv('DOCKERFILE_PATH', ''),
@@ -2007,6 +2558,10 @@ export default {
         if (pipelineData.value.image_repo) {
           submitData.env_vars.push({ name: 'IMAGE_REPO', value: pipelineData.value.image_repo })
         }
+        // 注入 IMAGE_TAG（留空则 Jenkins 自动生成）
+        if (pipelineData.value.image_tag) {
+          submitData.env_vars.push({ name: 'IMAGE_TAG', value: pipelineData.value.image_tag })
+        }
         // 注入 JAVA_VERSION（仅 Java 项目）
         if (pipelineData.value.language_type === 'java') {
           submitData.env_vars.push({ name: 'JAVA_VERSION', value: pipelineData.value.java_version || '17' })
@@ -2054,6 +2609,7 @@ export default {
           else { envVars.push({ name: key, value: String(val) }) }
         }
         injectEnv('IMAGE_REPO', submitData.image_repo)
+        if (submitData.image_tag) injectEnv('IMAGE_TAG', submitData.image_tag)
         injectEnv('SKIP_TESTS', submitData.skip_tests ? 'true' : 'false')
         // Java 版本注入（仅 Java 项目）
         if (submitData.language_type === 'java') {
@@ -2107,6 +2663,7 @@ export default {
         // 注意：enable_artifact_upload 是后端独立字段，保留传递
         // 清理前端独立字段，后端不需要
         delete submitData.image_repo
+        delete submitData.image_tag
         delete submitData.skip_tests
         delete submitData.dockerfile_path
         delete submitData.git_credential_id
@@ -2127,15 +2684,24 @@ export default {
         }
 
         if (response.code === 0) {
-          if (!isEdit && response.data?.warnings?.length) {
-            const warnMsg = '应用创建成功！但有以下注意事项：\n\n' +
-              response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
-              '\n\n建议确认后再进行构建。'
-            alert(warnMsg)
+          if (!isEdit) {
+            // 新建成功：记录 ID 并显示拓扑页
+            createdPipelineId.value = response.data?.id || 0
+            if (response.data?.warnings?.length) {
+              createWarnings.value = response.data.warnings
+            }
+            showTopology()
           } else {
-            alert(isEdit ? '更新流水线成功' : '应用创建成功！')
+            if (response.data?.warnings?.length) {
+              const warnMsg = '更新成功！但有以下注意事项：\n\n' +
+                response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
+                '\n\n建议确认后再进行构建。'
+              alert(warnMsg)
+            } else {
+              alert('更新流水线成功')
+            }
+            router.push('/cicd/pipelines')
           }
-          router.push('/cicd/pipelines')
         } else {
           alert(response.msg || '操作失败')
         }
@@ -2165,7 +2731,8 @@ export default {
           // 快速模式：自动选择第一个集群（开发环境只有一个集群）
           if (!isEdit && clusters.value.length > 0 && !pipelineData.value.target_cluster_id) {
             pipelineData.value.target_cluster_id = clusters.value[0].id
-            loadNamespaces()
+            // 等待命名空间加载完成
+            await loadNamespaces()
           }
         }
       } catch (error) {
@@ -2184,7 +2751,7 @@ export default {
       
       loadingNamespaces.value = true
       try {
-        // 设置当前集群
+        // 设置当前集群（必须在 API 请求前完成，确保 X-Cluster-ID Header 正确注入）
         const cluster = clusters.value.find(c => c.id === pipelineData.value.target_cluster_id)
         if (cluster) {
           clusterStore.setCurrent(cluster)
@@ -2192,20 +2759,9 @@ export default {
         
         const res = await namespaceApi.list({ page: 1, limit: 1000 })
         if (res.code === 0 && res.data) {
-          let nsList = res.data.list || res.data || []
-          
-          // 权限过滤：只显示用户有权限访问的命名空间
-          if (!permissionStore.state.isSuperAdmin) {
-            const clusterId = pipelineData.value.target_cluster_id
-            const accessibleNs = permissionStore.getAccessibleNamespaces(clusterId)
-            if (accessibleNs.length > 0 && !accessibleNs.includes('*') && !accessibleNs.includes('__none__')) {
-              nsList = nsList.filter(ns => accessibleNs.includes(ns.name || ns.metadata?.name))
-            } else if (accessibleNs.includes('__none__')) {
-              nsList = []
-            }
-          }
-          
-          namespaces.value = nsList
+          // 直接展示所有命名空间，所有用户（开发、运维、管理员）都可以选择
+          // 部署权限由 K8s 和审批流程控制，前端不做限制
+          namespaces.value = res.data.list || res.data || []
         }
       } catch (error) {
         console.error('加载命名空间失败:', error)
@@ -2303,10 +2859,11 @@ export default {
     // 选择部署环境
     const selectDeployEnv = (env) => {
       pipelineData.value.deploy_env = env
-      // 生产环境默认需要审批
-      if (env === 'prod') {
+      // 预发环境和生产环境强制开启审批（与审批策略配置一致）
+      if (env === 'prod' || env === 'staging') {
         pipelineData.value.require_approval = true
       }
+      // dev/test 不强制重置，保留管理员的手动设置（管理员可自行决定开发/测试环境是否需要审批）
       // 切换环境后重新加载资源模板和校验
       selectedResourceTemplate.value = ''
       loadResourceTemplates()
@@ -2336,7 +2893,7 @@ export default {
       return option ? option.label : env
     }
 
-    // 快速模式：应用名称自动同步到工作负载名称（仅新建时）
+    // 快速模式：应用名称自动同步到工作负载名称 + 镜像地址（仅新建时）
     watch(() => pipelineData.value.name, (newName) => {
       if (!isEdit && newName) {
         // 自动填充工作负载名称（仅当用户未手动修改过时）
@@ -2344,12 +2901,327 @@ export default {
           pipelineData.value.target_workload_name = newName
           pipelineData.value._lastAutoName = newName
         }
+        // 自动拼接镜像仓库地址（仅当用户未手动修改过时）
+        if (defaultImageRegistry.value) {
+          const expectedOld = pipelineData.value._lastAutoImageRepo || ''
+          if (!pipelineData.value.image_repo || pipelineData.value.image_repo === expectedOld) {
+            const autoRepo = `${defaultImageRegistry.value}/${newName}`
+            pipelineData.value.image_repo = autoRepo
+            pipelineData.value._lastAutoImageRepo = autoRepo
+          }
+        }
+      }
+    })
+
+    // ==================== 新增功能方法 ====================
+
+    // 快速模板应用
+    const applyQuickTemplate = (type) => {
+      pipelineData.value.language_type = type
+      selectedServiceType.value = type
+      pipelineData.value.enable_sonar = (type === 'java')
+      selectedResourceTemplate.value = ''
+      loadResourceTemplates()
+
+      // 自动填充推荐环境变量
+      const defaults = languageEnvDefaults[type] || languageEnvDefaults.custom
+      const allDefaultKeys = new Set()
+      Object.values(languageEnvDefaults).forEach(arr => arr.forEach(d => allDefaultKeys.add(d.name)))
+      const userCustom = pipelineData.value.env_vars.filter(e => !allDefaultKeys.has(e.name))
+      const existingImageRepo = pipelineData.value.env_vars.find(e => e.name === 'IMAGE_REPO')
+      if (existingImageRepo && existingImageRepo.value && existingImageRepo.value !== 'harbor.example.com/project/app-name') {
+        pipelineData.value.image_repo = existingImageRepo.value
+      }
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
+      const newEnvVars = defaults.filter(d => !promotedKeys.includes(d.name)).map(d => ({ name: d.name, value: d.value }))
+      pipelineData.value.env_vars = [...newEnvVars, ...userCustom]
+    }
+
+    // 仓库检测（替代原来的获取分支）
+    const detectRepo = async () => {
+      const repoUrl = pipelineData.value.git_repo.trim()
+      if (!repoUrl) {
+        alert('请先输入 Git 仓库地址')
+        return
+      }
+
+      detectingRepo.value = true
+      repoDetectionResult.value = null
+
+      try {
+        // 调用分支获取接口
+        const response = await getGitBranches(repoUrl)
+        if (response.code === 0 && response.data) {
+          branches.value = response.data.branches || response.data || []
+          lastFetchedRepo.value = repoUrl
+
+          // 自动选择默认分支
+          if (!pipelineData.value.git_branch || !branches.value.find(b => b.name === pipelineData.value.git_branch)) {
+            const defaultBranch = branches.value.find(b => b.isDefault)
+            if (defaultBranch) {
+              pipelineData.value.git_branch = defaultBranch.name
+            } else if (branches.value.length > 0) {
+              const mainBranch = branches.value.find(b => b.name === 'main' || b.name === 'master')
+              pipelineData.value.git_branch = mainBranch ? mainBranch.name : branches.value[0].name
+            }
+          }
+
+          // 检测仓库类型
+          let repoType = 'Git'
+          if (repoUrl.includes('gitlab')) repoType = 'GitLab'
+          else if (repoUrl.includes('github')) repoType = 'GitHub'
+          else if (repoUrl.includes('gitee')) repoType = 'Gitee'
+          else if (repoUrl.includes('bitbucket')) repoType = 'Bitbucket'
+
+          // 检测语言和构建工具（根据仓库 URL 中的项目名推测）
+          const repoName = repoUrl.split('/').pop().replace('.git', '').toLowerCase()
+          let language = '未知'
+          let buildTool = '未知'
+
+          if (repoName.includes('spring') || repoName.includes('java')) {
+            language = 'Java'
+            buildTool = 'Maven'
+            pipelineData.value.language_type = 'java'
+            selectedServiceType.value = 'java'
+          } else if (repoName.includes('go') || repoName.includes('golang')) {
+            language = 'Go'
+            buildTool = 'Go Modules'
+            pipelineData.value.language_type = 'go'
+            selectedServiceType.value = 'go'
+          } else if (repoName.includes('node') || repoName.includes('vue') || repoName.includes('react') || repoName.includes('frontend')) {
+            language = 'Node.js'
+            buildTool = 'NPM'
+            pipelineData.value.language_type = 'frontend'
+            selectedServiceType.value = 'frontend'
+          } else if (repoName.includes('python') || repoName.includes('flask') || repoName.includes('django')) {
+            language = 'Python'
+            buildTool = 'pip'
+            pipelineData.value.language_type = 'python'
+            selectedServiceType.value = 'python'
+          }
+
+          // Dockerfile 检测结果（后端未实现检测时默认为未知）
+          const hasDockerfile = false
+
+          repoDetectionResult.value = {
+            repoType,
+            defaultBranch: pipelineData.value.git_branch,
+            language,
+            buildTool,
+            hasDockerfile
+          }
+        } else {
+          console.warn('获取分支失败，使用默认分支列表')
+          branches.value = generateMockBranches(repoUrl)
+          lastFetchedRepo.value = repoUrl
+
+          repoDetectionResult.value = {
+            repoType: repoUrl.includes('gitlab') ? 'GitLab' : repoUrl.includes('github') ? 'GitHub' : 'Git',
+            defaultBranch: 'main',
+            language: '未知',
+            buildTool: '未知',
+            hasDockerfile: false
+          }
+        }
+      } catch (error) {
+        console.error('检测仓库失败:', error)
+        branches.value = generateMockBranches(repoUrl)
+        lastFetchedRepo.value = repoUrl
+
+        repoDetectionResult.value = {
+          repoType: 'Git',
+          defaultBranch: 'main',
+          language: '未知',
+          buildTool: '未知',
+          hasDockerfile: false
+        }
+      } finally {
+        detectingRepo.value = false
+      }
+    }
+
+    // 复制 Dockerfile 内容
+    const copyDockerfile = () => {
+      navigator.clipboard.writeText(dockerfileContent.value).then(() => {
+        copiedDockerfile.value = true
+        setTimeout(() => {
+          copiedDockerfile.value = false
+        }, 2000)
+      }).catch(err => {
+        console.error('复制失败:', err)
+        alert('复制失败，请手动选择复制')
+      })
+    }
+
+    // 从 K8s 导入
+    const importFromK8s = async () => {
+      if (!k8sImportForm.value.cluster_id || !k8sImportForm.value.namespace || !k8sImportForm.value.deployment) {
+        alert('请选择集群、命名空间和 Deployment')
+        return
+      }
+
+      importingFromK8s.value = true
+      try {
+        // 调用 Discover API 获取完整信息
+        const res = await discoverFromK8s({
+          cluster_id: k8sImportForm.value.cluster_id,
+          namespace: k8sImportForm.value.namespace,
+          deployment: k8sImportForm.value.deployment
+        })
+
+        if (res.code === 0 && res.data) {
+          const data = res.data
+          // 自动填充流水线数据
+          pipelineData.value.name = data.deployment_name
+          pipelineData.value.target_cluster_id = k8sImportForm.value.cluster_id
+          pipelineData.value.target_namespace = data.namespace
+          pipelineData.value.target_workload_name = data.deployment_name
+          pipelineData.value.target_workload_kind = 'Deployment'
+          pipelineData.value.target_container = data.primary_container || data.deployment_name
+          pipelineData.value.image_repo = data.primary_image_repo || ''
+          pipelineData.value.image_tag = data.primary_image_tag || ''
+          pipelineData.value.auto_deploy = true
+
+          // 加载集群和命名空间数据（用于展示）
+          await loadClusters()
+          await loadNamespaces()
+          await loadWorkloads()
+
+          showK8sImportModal.value = false
+          alert('导入成功！已自动填充应用名称、集群、命名空间、工作负载和镜像仓库信息')
+        } else {
+          alert('发现失败：' + (res.msg || '未知错误'))
+        }
+      } catch (error) {
+        console.error('从 K8s 导入失败:', error)
+        alert('导入失败：' + (error.msg || error.message || '未知错误'))
+      } finally {
+        importingFromK8s.value = false
+      }
+    }
+
+    // 加载 K8s 导入所需的集群列表
+    const loadK8sImportClusters = async () => {
+      if (k8sImportClusters.value.length > 0) return
+      try {
+        const res = await getClusterList()
+        if (res.code === 0) {
+          k8sImportClusters.value = res.data.list || res.data || []
+        }
+      } catch (e) {
+        console.error('加载集群列表失败:', e)
+      }
+    }
+
+    // K8s 导入：集群变化
+    const onK8sImportClusterChange = async () => {
+      k8sImportForm.value.namespace = ''
+      k8sImportForm.value.deployment = ''
+      k8sImportNamespaces.value = []
+      k8sImportDeployments.value = []
+      if (k8sImportForm.value.cluster_id) {
+        try {
+          // 显式传递 cluster_id，不依赖全局 store
+          const res = await getNamespaces(k8sImportForm.value.cluster_id, { page: 1, limit: 1000 })
+          if (res.code === 0 && res.data) {
+            const list = res.data.list || res.data || []
+            k8sImportNamespaces.value = list
+          }
+        } catch (e) {
+          console.error('加载命名空间失败:', e)
+        }
+      }
+    }
+
+    // K8s 导入：命名空间变化
+    const onK8sImportNamespaceChange = async () => {
+      k8sImportForm.value.deployment = ''
+      k8sImportDeployments.value = []
+      if (k8sImportForm.value.namespace) {
+        try {
+          // 临时设置集群上下文，确保 X-Cluster-ID 正确
+          const cluster = k8sImportClusters.value.find(c => c.id === k8sImportForm.value.cluster_id)
+          if (cluster) {
+            clusterStore.setCurrent(cluster)
+          }
+          const res = await deploymentsApi.list({
+            namespace: k8sImportForm.value.namespace,
+            page: 1,
+            limit: 1000
+          })
+          if (res.code === 0) {
+            k8sImportDeployments.value = res.data.list || res.data || []
+          }
+        } catch (e) {
+          console.error('加载 Deployment 列表失败:', e)
+        }
+      }
+    }
+
+    // 确认创建
+    const goToConfirmStep = () => {
+      if (validateCurrentStep()) {
+        showConfirmStep.value = true
+      }
+    }
+
+    const backFromConfirm = () => {
+      showConfirmStep.value = false
+    }
+
+    // 创建成功拓扑
+    const showTopology = () => {
+      showConfirmStep.value = false
+      showSuccessTopology.value = true
+    }
+
+    const goToPipelineList = () => {
+      router.push('/cicd/pipelines')
+    }
+
+    const viewPipelineDetail = () => {
+      router.push(`/cicd/pipelines/${createdPipelineId.value}`)
+    }
+
+    // 部署预览 computed
+    const deployPreview = computed(() => {
+      const cluster = clusters.value.find(c => c.id === pipelineData.value.target_cluster_id)
+      const imageTag = pipelineData.value.git_branch ?
+        `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${pipelineData.value.git_branch}-${Math.random().toString(36).slice(2, 8)}` :
+        'latest'
+      const fullImage = pipelineData.value.image_repo ?
+        `${pipelineData.value.image_repo}:${imageTag}` : ''
+
+      return {
+        cluster: cluster?.cluster_name || '-',
+        namespace: pipelineData.value.target_namespace || '-',
+        workload: pipelineData.value.target_workload_name || '-',
+        replicas: pipelineData.value.deploy_config?.replicas || 1,
+        currentImage: '-',
+        newImage: fullImage,
+        env: pipelineData.value.deploy_env || 'dev'
+      }
+    })
+
+    // 切换到第3步（自动部署配置）时，若命名空间列表为空则重新加载（安全兼容）
+    watch(currentStep, (newStep) => {
+      if (newStep === 2 && namespaces.value.length === 0 && pipelineData.value.target_cluster_id) {
+        loadNamespaces()
       }
     })
 
     onMounted(async () => {
       loadTemplates()
-      loadClusters() // 加载集群列表并自动选择默认集群
+      await loadClusters() // 加载集群列表并自动选择默认集群 + 自动加载命名空间
+      // 加载默认镜像仓库前缀
+      try {
+        const configRes = await getJenkinsConfig()
+        if (configRes.code === 0 && configRes.data?.default_image_registry) {
+          defaultImageRegistry.value = configRes.data.default_image_registry
+        }
+      } catch (e) {
+        console.warn('加载 Jenkins 配置失败:', e)
+      }
       if (isEdit) {
         // 编辑模式：先加载流水线数据（含语言类型、环境），再按实际参数加载资源模板
         await loadPipelineData()
@@ -2388,10 +3260,12 @@ export default {
       canApprove,
       serviceTypeOptions,
       selectedServiceType,
+      quickTemplates,
       dockerfileMode,
       dockerfileLangLabel,
       templateFileMap,
       onServiceTypeChange,
+      applyQuickTemplate,
       onResourceTemplateChange,
       doValidateResource,
       // 自动部署相关
@@ -2424,6 +3298,36 @@ export default {
       nameAvailable,
       nameCheckMsg,
       checkName,
+      // 新增功能
+      detectingRepo,
+      repoDetectionResult,
+      detectRepo,
+      showDockerfilePreview,
+      copiedDockerfile,
+      dockerfileModeLabel,
+      dockerfileContent,
+      imagePreview,
+      copyDockerfile,
+      showK8sImportModal,
+      k8sImportForm,
+      k8sImportClusters,
+      k8sImportNamespaces,
+      k8sImportDeployments,
+      importingFromK8s,
+      importFromK8s,
+      loadK8sImportClusters,
+      onK8sImportClusterChange,
+      onK8sImportNamespaceChange,
+      defaultImageRegistry,
+      showConfirmStep,
+      goToConfirmStep,
+      backFromConfirm,
+      showSuccessTopology,
+      createdPipelineId,
+      showTopology,
+      goToPipelineList,
+      viewPipelineDetail,
+      deployPreview,
       // 方法
       nextStep,
       previousStep,
@@ -4012,6 +4916,23 @@ export default {
   border-radius: 50%;
 }
 
+.approval-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1e40af;
+}
+
+.approval-hint svg {
+  stroke: #3b82f6;
+}
+
 .service-type-selector {
   display: flex;
   gap: 10px;
@@ -5206,5 +6127,1030 @@ export default {
 .btn-quick-submit svg {
   width: 18px;
   height: 18px;
+}
+
+/* ==================== 新增样式：快速模板栏 ==================== */
+.template-bar {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.template-bar-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.template-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.template-bar-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+.template-bar-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.template-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.template-btn:hover {
+  border-color: #a0c4e8;
+  background: #f7fafc;
+  transform: translateY(-1px);
+}
+
+.template-btn.active {
+  border-color: #4299e1;
+  background: linear-gradient(135deg, #ebf8ff 0%, #f0f9ff 100%);
+  color: #2b6cb0;
+  box-shadow: 0 2px 8px rgba(66, 153, 225, 0.15);
+}
+
+.tpl-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tpl-name {
+  font-weight: 600;
+}
+
+.tpl-badge {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.tpl-badge.rec {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+}
+
+.tpl-badge.easy {
+  background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%);
+  color: white;
+}
+
+/* ==================== 新增样式：从 K8s 导入按钮 ==================== */
+.btn-header-import {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-header-import:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-header-import svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ==================== 新增样式：仓库检测按钮 ==================== */
+.btn-detect-repo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-detect-repo:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.btn-detect-repo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-detect-repo svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ==================== 新增样式：仓库检测结果 ==================== */
+.repo-detection-result {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #6ee7b7;
+  border-radius: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.repo-result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #065f46;
+  margin-bottom: 12px;
+}
+
+.repo-result-header svg {
+  width: 20px;
+  height: 20px;
+  stroke: #10b981;
+}
+
+.repo-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.repo-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+}
+
+.repo-result-label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.repo-result-value {
+  font-size: 13px;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.repo-result-value.success {
+  color: #059669;
+}
+
+.repo-result-value.warning {
+  color: #d97706;
+}
+
+/* ==================== 新增样式：表单分组区块 ==================== */
+.form-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.section-title svg {
+  stroke: #3b82f6;
+}
+
+/* ==================== 新增样式：镜像预览面板 ==================== */
+.image-preview-panel {
+  padding: 16px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.preview-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.preview-image-full {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 13px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.image-registry {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.image-path {
+  color: #059669;
+}
+
+.image-name {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.image-tag {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.preview-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.tag-hint {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.preview-tags code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  color: #1e40af;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.preview-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  margin-left: 8px;
+  letter-spacing: 0.5px;
+}
+
+.optional-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  margin-left: 8px;
+  letter-spacing: 0.3px;
+}
+
+/* ==================== 新增样式：Dockerfile 预览面板 ==================== */
+.btn-view-dockerfile {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-view-dockerfile:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.dockerfile-preview-panel {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.dockerfile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dockerfile-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-badge {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.type-badge.auto {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.type-badge.project {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.type-badge.platform {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+}
+
+.type-lang {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.btn-copy-dockerfile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-copy-dockerfile:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.btn-copy-dockerfile svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dockerfile-content {
+  padding: 16px;
+  background: #1e293b;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dockerfile-content pre {
+  margin: 0;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.dockerfile-content code {
+  font-family: inherit;
+}
+
+/* ==================== 新增样式：section 分割线 ==================== */
+.section-divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0 20px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.section-divider:first-child {
+  margin-top: 0;
+}
+
+.divider-text {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.3px;
+}
+
+/* ==================== 新增样式：语言标签 Badge ==================== */
+.lang-badge {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-left: 4px;
+}
+
+.lang-badge.rec {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+}
+
+.lang-badge.easy {
+  background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%);
+  color: white;
+}
+
+/* ==================== 新增样式：确认步骤 ==================== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.confirm-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.confirm-header svg {
+  width: 32px;
+  height: 32px;
+  color: #f59e0b;
+}
+
+.confirm-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.confirm-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.confirm-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid #4299e1;
+}
+
+.confirm-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.confirm-value {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-all;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+
+.btn-confirm-back {
+  padding: 10px 24px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-confirm-back:hover {
+  background: #e2e8f0;
+}
+
+.btn-confirm-submit {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-confirm-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.btn-confirm-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================== 新增样式：成功拓扑 ==================== */
+.success-topology {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.topology-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 800px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.topology-success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: popIn 0.4s ease;
+}
+
+.topology-success-icon svg {
+  width: 40px;
+  height: 40px;
+  color: white;
+}
+
+.topology-card h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.topology-card > p {
+  margin: 0 0 32px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.topology-warnings {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.topology-warnings h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.topology-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #a16207;
+}
+
+.topology-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 32px 0;
+  flex-wrap: wrap;
+}
+
+.topology-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 24px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  min-width: 120px;
+  transition: all 0.3s;
+}
+
+.topology-node:hover {
+  border-color: #a0c4e8;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+.topology-node-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topology-node-icon.git { background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%); color: white; }
+.topology-node-icon.jenkins { background: linear-gradient(135deg, #fc8181 0%, #f56565 100%); color: white; }
+.topology-node-icon.registry { background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%); color: white; }
+.topology-node-icon.k8s { background: linear-gradient(135deg, #68d391 0%, #48bb78 100%); color: white; }
+
+.topology-node-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.topology-node-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.topology-node-value {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.topology-arrow {
+  font-size: 24px;
+  color: #a0aec0;
+  font-weight: 300;
+}
+
+.topology-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.btn-topology-primary {
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-topology-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+}
+
+.btn-topology-secondary {
+  padding: 12px 32px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-topology-secondary:hover {
+  background: #e2e8f0;
+}
+
+/* ==================== 新增样式：K8s 导入弹窗 ==================== */
+.k8s-import-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.k8s-import-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.k8s-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.k8s-import-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.k8s-import-header h3 svg {
+  width: 24px;
+  height: 24px;
+  color: #667eea;
+}
+
+.k8s-import-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.k8s-import-close:hover {
+  background: #e2e8f0;
+}
+
+.k8s-import-close svg {
+  width: 18px;
+  height: 18px;
+  color: #64748b;
+}
+
+.k8s-import-form .form-group {
+  margin-bottom: 16px;
+}
+
+.k8s-import-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-import-cancel {
+  padding: 10px 24px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-import-cancel:hover {
+  background: #e2e8f0;
+}
+
+.btn-import-submit {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-import-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.btn-import-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================== 新增样式：部署预览面板 ==================== */
+.deploy-preview-panel {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.preview-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  position: sticky;
+  top: 24px;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.preview-title svg {
+  width: 20px;
+  height: 20px;
+  color: #4299e1;
+}
+
+.preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid #e2e8f0;
+}
+
+.preview-item.highlight {
+  background: linear-gradient(135deg, #ebf8ff 0%, #f0f9ff 100%);
+  border-left-color: #4299e1;
+}
+
+.preview-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-value {
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.preview-image {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  background: #1e293b;
+  color: #6ee7b7;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+  word-break: break-all;
+}
+
+/* 动画 */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+@keyframes popIn {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@media (max-width: 1200px) {
+  .deploy-preview-panel {
+    display: none;
+  }
 }
 </style>

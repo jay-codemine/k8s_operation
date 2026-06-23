@@ -2,6 +2,8 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 )
@@ -117,6 +119,23 @@ func (s *Services) RoleUserList(roleID int64) ([]*models.User, error) {
 
 // UserRoleAssign 分配用户角色
 func (s *Services) UserRoleAssign(req *requests.UserRoleAssignRequest, operatorID int64) error {
+	// 安全防护：如果操作者在修改自己的角色，确保不会移除最后一个管理员
+	if req.UserID == operatorID {
+		// 检查新角色列表中是否包含至少一个有 platform:admin 能力的角色
+		hasAdmin := false
+		for _, rid := range req.RoleIDs {
+			var role models.SysRole
+			if err := global.DB.Where("id = ? AND is_del = 0", rid).First(&role).Error; err == nil {
+				if role.RoleType == models.RoleTypeSuperAdmin || role.RoleType == models.RoleTypePlatformAdmin {
+					hasAdmin = true
+					break
+				}
+			}
+		}
+		if !hasAdmin {
+			return errors.New("不能移除自己的管理员权限，请让其他管理员修改你的角色")
+		}
+	}
 	return s.dao.UserRoleAssign(req.UserID, req.RoleIDs, operatorID)
 }
 
@@ -270,7 +289,8 @@ type UserWithRBACInfo struct {
 	IsSuperAdmin       bool                             `json:"is_super_admin"`
 	Roles              []*models.SysRole                `json:"roles"`
 	ClusterPermissions []*models.ClusterPermissionDetail `json:"cluster_permissions"`
-	Scopes             *UserScopes                      `json:"scopes"` // 三域有效权限级别
+	Scopes             *UserScopes                      `json:"scopes"`              // 三域有效权限级别
+	PermissionNames    []string                         `json:"permission_names"`    // 用户拥有的所有权限名称
 }
 
 // UserScopes 用户三域有效权限级别（取所有角色的最高值）
@@ -334,6 +354,7 @@ func (s *Services) GetUserWithRBACInfo(userID int64) (*UserWithRBACInfo, error) 
 		Roles:              roles,
 		ClusterPermissions: clusterPerms,
 		Scopes:             scopes,
+		PermissionNames:    s.getUserPermissionNames(userID, isSuperAdmin),
 	}, nil
 }
 
@@ -345,4 +366,16 @@ func (s *Services) GetUserAccessibleNamespaces(userID, clusterID int64) ([]strin
 	}
 
 	return s.dao.GetUserAccessibleNamespaces(userID, clusterID)
+}
+
+// getUserPermissionNames 获取用户拥有的所有权限名称
+func (s *Services) getUserPermissionNames(userID int64, isSuperAdmin bool) []string {
+	if isSuperAdmin {
+		// 超管返回所有权限
+		var names []string
+		global.DB.Model(&models.SysPermission{}).Pluck("name", &names)
+		return names
+	}
+	names, _ := models.GetUserPermissionNames(global.DB, userID)
+	return names
 }

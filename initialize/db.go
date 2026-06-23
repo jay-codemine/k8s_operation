@@ -78,6 +78,7 @@ func autoMigrateTables() error {
 		&models.AppStoreComponent{},
 		&models.CicdApproval{},
 		&models.CicdBuildAgent{},
+		&models.CicdEnvironment{},
 	); err != nil {
 		return fmt.Errorf("migrate base tables: %w", err)
 	}
@@ -181,6 +182,9 @@ func initDefaultData() error {
 	// RBAC v2: 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发）
 	backfillRBACScopes()
 
+	// ⚠️ 管理员角色自修复（防止admin自锁后无法恢复）
+	repairAdminRole()
+
 	// 初始化应用商城种子数据
 	svc := services.NewServices()
 	if err := svc.AppStoreSeed(ctx); err != nil {
@@ -194,6 +198,12 @@ func initDefaultData() error {
 
 	// 修复因终端编码导致的中文乱码（? 字符）告警规则
 	repairCorruptedAlertRules()
+
+	// CICD 细粒度权限种子数据
+	seedCICDPermissions()
+
+	// 默认部署环境种子数据
+	seedDefaultEnvironments()
 
 	return nil
 }
@@ -471,5 +481,214 @@ func backfillRBACScopes() {
 
 	if total > 0 {
 		log.Printf("[InitData] RBAC scope 回填完成，影响 %d 个角色", total)
+	}
+}
+
+// repairAdminRole 确保 admin 用户（user_id=1）始终拥有 super_admin 角色
+// 防止管理员意外自降权后无法恢复的情况
+func repairAdminRole() {
+	db := global.DB
+
+	// 检查 sys_user_role 表是否存在
+	var tableCount int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'sys_user_role'").Scan(&tableCount)
+	if tableCount == 0 {
+		return
+	}
+
+	// 检查 sys_role 中 role_type='super_admin' 的角色 ID
+	var superAdminRoleID int64
+	db.Raw("SELECT id FROM sys_role WHERE role_type = 'super_admin' AND is_del = 0 LIMIT 1").Scan(&superAdminRoleID)
+	if superAdminRoleID == 0 {
+		return // 超级管理员角色不存在，跳过
+	}
+
+	// 检查 admin 用户（id=1）是否已拥有 super_admin 角色
+	var hasAdmin int64
+	db.Raw("SELECT COUNT(*) FROM sys_user_role WHERE user_id = 1 AND role_id = ?", superAdminRoleID).Scan(&hasAdmin)
+	if hasAdmin > 0 {
+		return // 已有管理员角色，无需修复
+	}
+
+	// 修复：为 admin 用户追加 super_admin 角色（不删除已有角色，只追加）
+	now := time.Now().Unix()
+	result := db.Exec(
+		"INSERT IGNORE INTO sys_user_role (user_id, role_id, created_at, created_by) VALUES (1, ?, ?, 0)",
+		superAdminRoleID, now,
+	)
+	if result.RowsAffected > 0 {
+		log.Printf("[InitData] ⚠️ admin 用户角色已修复：补充 super_admin 角色 (role_id=%d)", superAdminRoleID)
+	}
+}
+
+// seedDefaultEnvironments 初始化默认部署环境（dev/staging/prod）
+// 幂等操作：已存在的环境不会重复插入
+func seedDefaultEnvironments() {
+	db := global.DB
+
+	// 检查 cicd_environment 表是否存在
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_environment'").Scan(&count)
+	if count == 0 {
+		return
+	}
+
+	// 检查是否已有环境数据
+	var existCount int64
+	db.Raw("SELECT COUNT(*) FROM cicd_environment WHERE is_del = 0").Scan(&existCount)
+	if existCount > 0 {
+		return // 已有环境数据，跳过
+	}
+
+	now := time.Now().Unix()
+
+	envs := []struct {
+		Name            string
+		DisplayName     string
+		Color           string
+		SortOrder       int
+		RequireApproval int
+		ApprovalLevels  string
+	}{
+		{"dev", "开发环境", "#52c41a", 1, 0, "[]"},
+		{"test", "测试环境", "#1677ff", 2, 0, "[]"},
+		{"staging", "预发环境", "#faad14", 3, 1, `[{"label":"测试负责人审批","approver_type":"role","approver_value":"tester"}]`},
+		{"prod", "生产环境", "#f5222d", 4, 1, `[{"label":"运维经理审批","approver_type":"role","approver_value":"devops"},{"label":"技术总监审批","approver_type":"role","approver_value":"platform_admin"}]`},
+	}
+
+	inserted := 0
+	for _, env := range envs {
+		var exists int64
+		db.Raw("SELECT COUNT(*) FROM cicd_environment WHERE name = ? AND is_del = 0", env.Name).Scan(&exists)
+		if exists > 0 {
+			continue
+		}
+		db.Exec(
+			"INSERT INTO cicd_environment (name, display_name, cluster_id, namespace, color, sort_order, require_approval, approval_levels, is_del, created_at, modified_at) VALUES (?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
+			env.Name, env.DisplayName, env.Name, env.Color, env.SortOrder, env.RequireApproval, env.ApprovalLevels, now, now,
+		)
+		inserted++
+	}
+
+	if inserted > 0 {
+		log.Printf("[InitData] 默认环境初始化完成，新增 %d 个环境（dev/test/staging/prod）", inserted)
+	}
+}
+
+// seedCICDPermissions 初始化 CICD 细粒度权限种子数据
+// 幂等操作：已存在的权限不会重复插入
+func seedCICDPermissions() {
+	db := global.DB
+
+	// 检查 sys_permission 表是否存在
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'sys_permission'").Scan(&count)
+	if count == 0 {
+		return
+	}
+
+	// 细粒度 CICD 权限定义（4个标签分组）
+	type permDef struct {
+		Name         string
+		DisplayName  string
+		Description  string
+		ResourceType string
+		Action       string
+		Tag          string
+		Path         string
+		SortOrder    int
+	}
+
+	perms := []permDef{
+		// 标签: 流水线管理
+		{"cicd:pipeline:view", "查看流水线", "查看流水线列表和详情", "pipeline", "view", "流水线管理", "/cicd/pipeline/view", 100},
+		{"cicd:pipeline:create", "创建流水线", "创建新的流水线配置", "pipeline", "create", "流水线管理", "/cicd/pipeline/create", 101},
+		{"cicd:pipeline:edit", "编辑流水线", "修改流水线配置参数", "pipeline", "update", "流水线管理", "/cicd/pipeline/edit", 102},
+		{"cicd:pipeline:delete", "删除流水线", "删除流水线配置", "pipeline", "delete", "流水线管理", "/cicd/pipeline/delete", 103},
+		{"cicd:pipeline:run", "运行流水线", "触发/运行流水线构建", "pipeline", "exec", "流水线管理", "/cicd/pipeline/run", 104},
+
+		// 标签: 构建与部署
+		{"cicd:build:view", "查看构建记录", "查看构建历史和日志", "build", "view", "构建与部署", "/cicd/build/view", 110},
+		{"cicd:build:trigger", "触发构建", "手动触发代码构建", "build", "exec", "构建与部署", "/cicd/build/trigger", 111},
+		{"cicd:build:cancel", "取消构建", "取消正在进行的构建", "build", "exec", "构建与部署", "/cicd/build/cancel", 112},
+		{"cicd:deploy:dev", "部署开发环境", "部署到开发环境", "deploy", "exec", "构建与部署", "/cicd/deploy/dev", 113},
+		{"cicd:deploy:test", "部署测试环境", "部署到测试环境", "deploy", "exec", "构建与部署", "/cicd/deploy/test", 114},
+		{"cicd:deploy:prod", "部署生产环境", "部署到生产环境", "deploy", "exec", "构建与部署", "/cicd/deploy/prod", 115},
+		{"cicd:deploy:rollback", "回滚部署", "回滚到上一版本", "deploy", "exec", "构建与部署", "/cicd/deploy/rollback", 116},
+
+		// 标签: 制品与镜像
+		{"cicd:artifact:view", "查看制品", "查看制品库和镜像列表", "artifact", "view", "制品与镜像", "/cicd/artifact/view", 120},
+		{"cicd:artifact:upload", "上传制品", "上传制品到制品库", "artifact", "create", "制品与镜像", "/cicd/artifact/upload", 121},
+		{"cicd:artifact:delete", "删除制品", "从制品库删除制品", "artifact", "delete", "制品与镜像", "/cicd/artifact/delete", 122},
+		{"cicd:image:manage", "镜像管理", "管理镜像仓库（推送/删除/清理）", "image", "manage", "制品与镜像", "/cicd/image/manage", 123},
+
+		// 标签: 审批与管理
+		{"cicd:approval:view", "查看审批", "查看审批记录和详情", "approval", "view", "审批与管理", "/cicd/approval/view", 130},
+		{"cicd:approval:action", "执行审批", "通过或拒绝审批申请", "approval", "exec", "审批与管理", "/cicd/approval/action", 131},
+		{"cicd:approval:manage", "管理审批策略", "配置审批流程和审批人", "approval", "manage", "审批与管理", "/cicd/approval/manage", 132},
+		{"cicd:environment:manage", "环境管理", "创建/编辑/删除环境配置", "environment", "manage", "审批与管理", "/cicd/environment/manage", 133},
+		{"cicd:template:manage", "模板管理", "管理流水线模板", "template", "manage", "审批与管理", "/cicd/template/manage", 134},
+	}
+
+	now := uint64(time.Now().Unix())
+	inserted := 0
+	for _, p := range perms {
+		// 幂等：已存在则跳过
+		var exists int64
+		db.Raw("SELECT COUNT(*) FROM sys_permission WHERE name = ?", p.Name).Scan(&exists)
+		if exists > 0 {
+			// 更新 tag 字段（存量数据可能没有 tag）
+			db.Exec("UPDATE sys_permission SET tag = ? WHERE name = ? AND (tag = '' OR tag IS NULL)", p.Tag, p.Name)
+			continue
+		}
+		db.Exec(
+			"INSERT INTO sys_permission (name, display_name, description, scope, resource_type, action, tag, parent_id, path, sort_order, created_at, modified_at) VALUES (?, ?, ?, 'cicd', ?, ?, ?, 0, ?, ?, ?, ?)",
+			p.Name, p.DisplayName, p.Description, p.ResourceType, p.Action, p.Tag, p.Path, p.SortOrder, now, now,
+		)
+		inserted++
+	}
+
+	// 为旧的粗粒度权限补充 tag
+	db.Exec("UPDATE sys_permission SET tag = '流水线管理' WHERE name = 'cicd:pipeline' AND (tag = '' OR tag IS NULL)")
+	db.Exec("UPDATE sys_permission SET tag = '制品与镜像' WHERE name = 'cicd:artifact' AND (tag = '' OR tag IS NULL)")
+
+	// 为超级管理员角色自动分配新权限
+	if inserted > 0 {
+		db.Exec(
+			"INSERT IGNORE INTO sys_role_permission (role_id, permission_id, created_at) SELECT 1, id, ? FROM sys_permission WHERE scope = 'cicd' AND id NOT IN (SELECT permission_id FROM sys_role_permission WHERE role_id = 1)",
+			now,
+		)
+		// 为 devops 角色分配所有 CICD 权限
+		db.Exec(
+			"INSERT IGNORE INTO sys_role_permission (role_id, permission_id, created_at) SELECT 3, id, ? FROM sys_permission WHERE scope = 'cicd' AND id NOT IN (SELECT permission_id FROM sys_role_permission WHERE role_id = 3)",
+			now,
+		)
+		// 为 developer 角色分配基础 CICD 权限（查看+运行+构建+部署开发/测试+查看制品）
+		devPerms := []string{
+			"cicd:pipeline:view", "cicd:pipeline:create", "cicd:pipeline:edit", "cicd:pipeline:run",
+			"cicd:build:view", "cicd:build:trigger", "cicd:build:cancel",
+			"cicd:deploy:dev", "cicd:deploy:test",
+			"cicd:artifact:view", "cicd:approval:view",
+		}
+		for _, pName := range devPerms {
+			db.Exec(
+				"INSERT IGNORE INTO sys_role_permission (role_id, permission_id, created_at) SELECT 4, id, ? FROM sys_permission WHERE name = ? AND id NOT IN (SELECT permission_id FROM sys_role_permission WHERE role_id = 4)",
+				now, pName,
+			)
+		}
+		// 为 tester 角色分配查看+部署测试权限
+		testerPerms := []string{
+			"cicd:pipeline:view", "cicd:pipeline:run",
+			"cicd:build:view", "cicd:build:trigger",
+			"cicd:deploy:dev", "cicd:deploy:test",
+			"cicd:artifact:view", "cicd:approval:view",
+		}
+		for _, pName := range testerPerms {
+			db.Exec(
+				"INSERT IGNORE INTO sys_role_permission (role_id, permission_id, created_at) SELECT 5, id, ? FROM sys_permission WHERE name = ? AND id NOT IN (SELECT permission_id FROM sys_role_permission WHERE role_id = 5)",
+				now, pName,
+			)
+		}
+		log.Printf("[InitData] CICD 细粒度权限初始化完成，新增 %d 条权限", inserted)
 	}
 }

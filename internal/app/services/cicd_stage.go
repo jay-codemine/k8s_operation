@@ -87,6 +87,15 @@ func (s *Services) getStageDefinitionsForPipeline(pipeline *models.CicdPipeline)
 	stages := make([]StageDefinition, len(DefaultStageDefinitions))
 	copy(stages, DefaultStageDefinitions)
 	
+	// 判断是否需要审批：pipeline 标志 OR 环境配置要求审批（双重保险）
+	needApproval := pipeline.RequireApproval
+	if !needApproval && pipeline.DeployEnv != "" {
+		env, err := s.dao.EnvironmentGetByName(context.Background(), pipeline.DeployEnv)
+		if err == nil && env != nil && env.RequireApproval {
+			needApproval = true
+		}
+	}
+	
 	// 根据流水线配置调整
 	for i := range stages {
 		switch stages[i].Type {
@@ -99,7 +108,7 @@ func (s *Services) getStageDefinitionsForPipeline(pipeline *models.CicdPipeline)
 		case models.StageTypeUploadArtifact:
 			stages[i].Enabled = pipeline.EnableArtifactUpload
 		case models.StageTypeApproval:
-			stages[i].Enabled = pipeline.RequireApproval
+			stages[i].Enabled = needApproval
 		case models.StageTypeDeploy:
 			stages[i].Enabled = pipeline.AutoDeploy
 		}
@@ -622,6 +631,24 @@ func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64
 				"status":       models.StageStatusPending,
 				"deploy_image": run.ImageURL,
 			})
+
+			// 审批通过后自动触发部署
+			global.Logger.Info("[流水线] 审批通过，自动触发部署",
+				zap.Int64("stage_id", stageID),
+				zap.Int64("deploy_stage_id", deployStage.ID),
+				zap.String("image", run.ImageURL),
+			)
+			go func() {
+				deployReq := &requests.StageDeployRequest{
+					StageID: deployStage.ID,
+				}
+				if err := s.ExecuteDeployStage(context.Background(), deployReq, userID); err != nil {
+					global.Logger.Error("[流水线] 自动触发部署失败",
+						zap.Int64("deploy_stage_id", deployStage.ID),
+						zap.Error(err),
+					)
+				}
+			}()
 		}
 	}
 

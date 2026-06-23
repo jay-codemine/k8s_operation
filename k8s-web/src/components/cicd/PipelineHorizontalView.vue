@@ -124,10 +124,20 @@
             <div class="error-content">{{ selectedStage.error_message }}</div>
           </div>
 
-          <!-- 操作按钮 -->
+          <!-- 操作按鈕 -->
           <div class="actions-section">
+            <!-- 审批等待提示（非管理员看到的禁用状态） -->
+            <div
+              v-if="selectedStage.type === 'approval' && selectedStage.status === 'waiting' && !props.canApprove"
+              class="approval-no-perm-tip"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:#f59e0b">
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+              </svg>
+              等待管理员审批
+            </div>
             <button 
-              v-if="selectedStage.type === 'approval' && selectedStage.status === 'waiting'"
+              v-if="selectedStage.type === 'approval' && selectedStage.status === 'waiting' && props.canApprove"
               class="action-btn approve"
               @click="$emit('approve', selectedStage.id, 'approve')"
             >
@@ -137,7 +147,7 @@
               通过审批
             </button>
             <button 
-              v-if="selectedStage.type === 'approval' && selectedStage.status === 'waiting'"
+              v-if="selectedStage.type === 'approval' && selectedStage.status === 'waiting' && props.canApprove"
               class="action-btn reject"
               @click="$emit('approve', selectedStage.id, 'reject')"
             >
@@ -196,7 +206,8 @@
 import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
-  stages: { type: Array, default: () => [] }
+  stages: { type: Array, default: () => [] },
+  canApprove: { type: Boolean, default: false }
 })
 
 defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs', 'rollback'])
@@ -700,6 +711,20 @@ watch(runningStage, (stage) => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 审批无权限提示 */
+.approval-no-perm-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
 }
 
 .action-btn {

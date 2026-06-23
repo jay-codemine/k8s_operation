@@ -145,6 +145,8 @@ type JenkinsSettingS struct {
 	CallbackURL    string `mapstructure:"CallbackURL"`    // 平台回调地址（后端 API）
 	PlatformURL    string `mapstructure:"PlatformURL"`    // 前端页面地址（用于通知链接）
 	DefaultBranch  string `mapstructure:"DefaultBranch"`  // 默认 Git 分支（未指定时使用，默认 master）
+	// 镜像仓库配置
+	DefaultImageRegistry string `mapstructure:"DefaultImageRegistry"` // 默认镜像仓库前缀，如 registry.cn-hangzhou.aliyuncs.com/k8s-gos
 	// 凭证 ID 配置（传给 Jenkins 模板，可自定义覆盖默认值）
 	GitCredentialID      string `mapstructure:"GitCredentialID"`      // Git 凭证 ID（默认 gitee-id）
 	RegistryCredentialID string `mapstructure:"RegistryCredentialID"` // 镜像仓库凭证 ID（默认 harbor-registry）

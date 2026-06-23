@@ -672,7 +672,7 @@ const loadData = async () => {
     if (!hasCluster) {
       clusterConnectionStatus.value = 'timeout'
       useMockData()
-      Message.warning({ content: '无可用集群或连接超时，显示示例数据', duration: 3000 })
+      Message.warning({ content: '无可用集群或连接超时，暂无数据', duration: 3000 })
       return
     }
     
@@ -708,16 +708,16 @@ const loadData = async () => {
   }
 }
 
-// 使用模拟数据
+// 无数据时显示真实零值（不使用虚假mock数据）
 const useMockData = () => {
-  clusterStats.value = { total: 3, active: 2, inactive: 1 }
-  nodeStats.value = { total: 5, ready: 4, notReady: 1 }
-  podStats.value = { total: 48, running: 42, pending: 3, failed: 3 }
-  namespaceStats.value = { total: 12, system: 4, user: 8 }
-  workloadStats.value = { deployments: 15, statefulsets: 6, daemonsets: 8, jobs: 12, cronjobs: 5 }
-  networkStats.value = { services: 24, ingresses: 8 }
-  storageStats.value = { pvs: 10, pvcs: 18, storageClasses: 3 }
-  configStats.value = { configmaps: 28, secrets: 15 }
+  clusterStats.value = { total: 0, active: 0, inactive: 0 }
+  nodeStats.value = { total: 0, ready: 0, notReady: 0 }
+  podStats.value = { total: 0, running: 0, pending: 0, failed: 0 }
+  namespaceStats.value = { total: 0, system: 0, user: 0 }
+  workloadStats.value = { deployments: 0, statefulsets: 0, daemonsets: 0, jobs: 0, cronjobs: 0 }
+  networkStats.value = { services: 0, ingresses: 0 }
+  storageStats.value = { pvs: 0, pvcs: 0, storageClasses: 0 }
+  configStats.value = { configmaps: 0, secrets: 0 }
 }
 
 // 加载集群统计
@@ -756,7 +756,7 @@ const loadNodeStats = async () => {
     }
   } catch (error) {
     console.error('加载节点数据失败:', error)
-    nodeStats.value = { total: 5, ready: 4, notReady: 1 }
+    nodeStats.value = { total: 0, ready: 0, notReady: 0 }
   }
 }
 
@@ -775,7 +775,7 @@ const loadPodStats = async () => {
     }
   } catch (error) {
     console.error('加载 Pod 数据失败:', error)
-    podStats.value = { total: 48, running: 42, pending: 3, failed: 3 }
+    podStats.value = { total: 0, running: 0, pending: 0, failed: 0 }
   }
 }
 
@@ -808,7 +808,7 @@ const loadNamespaceStats = async () => {
     }
   } catch (error) {
     console.error('加载命名空间数据失败:', error)
-    namespaceStats.value = { total: 12, system: 4, user: 8 }
+    namespaceStats.value = { total: 0, system: 0, user: 0 }
   }
 }
 

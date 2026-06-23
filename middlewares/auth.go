@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"github.com/gin-gonic/gin"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
@@ -90,4 +91,45 @@ func AuthJWTSkip() gin.HandlerFunc {
 		// 2.放行，继续执行后面的中间件 / handler
 		c.Next()
 	}
+}
+
+// RequireCICDPermission CICD 细粒度权限检查中间件
+// 使用方式: router.POST("/run", middlewares.RequireCICDPermission("cicd:pipeline:run"), ctrl.Run)
+func RequireCICDPermission(permissionName string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		userID := ctx.GetInt64("user_id")
+		if userID <= 0 {
+			rsp := response.NewResponse(ctx)
+			rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
+			ctx.Abort()
+			return
+		}
+
+		// 检查细粒度权限
+		if !models.HasUserPermission(global.DB, userID, permissionName) {
+			rsp := response.NewResponse(ctx)
+			rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
+			ctx.Abort()
+			return
+		}
+
+		ctx.Next()
+	}
+}
+
+// CheckCICDPermission 控制器内使用的权限检查帮助函数
+// 返回 true 表示有权限，false 表示无权限（已自动返回错误响应）
+func CheckCICDPermission(ctx *gin.Context, permissionName string) bool {
+	userID := ctx.GetInt64("user_id")
+	if userID <= 0 {
+		rsp := response.NewResponse(ctx)
+		rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
+		return false
+	}
+	if !models.HasUserPermission(global.DB, userID, permissionName) {
+		rsp := response.NewResponse(ctx)
+		rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
+		return false
+	}
+	return true
 }

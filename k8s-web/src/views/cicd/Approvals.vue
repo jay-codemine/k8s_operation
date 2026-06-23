@@ -77,9 +77,20 @@
         <div class="toolbar-left">
           <h3 class="panel-title">审批记录</h3>
           <span class="record-count">共 {{ filteredApprovals.length }} 条</span>
+          <!-- 批量操作按钮 -->
+          <template v-if="canApprove && selectedIds.length > 0">
+            <button class="btn-batch approve" @click="handleBatchAction('approve')" :disabled="batchLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>批量通过 ({{ selectedIds.length }})</span>
+            </button>
+            <button class="btn-batch reject" @click="handleBatchAction('reject')" :disabled="batchLoading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <span>批量拒绝 ({{ selectedIds.length }})</span>
+            </button>
+          </template>
         </div>
         <div class="toolbar-right">
-          <button class="btn-create" @click="openCreateModal">
+          <button class="btn-create" @click="openCreateModal" v-if="canApprove">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             <span>新增审批</span>
           </button>
@@ -121,6 +132,9 @@
         <table class="approval-table">
           <thead>
             <tr>
+              <th class="col-check" v-if="canApprove">
+                <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" title="全选/取消全选待审批" />
+              </th>
               <th class="col-id">ID</th>
               <th class="col-status">状态</th>
               <th class="col-pipeline">流水线</th>
@@ -134,6 +148,14 @@
           </thead>
           <tbody>
             <tr v-for="approval in paginatedApprovals" :key="approval.id" :class="[`row-${approval.status}`]">
+              <td class="col-check" v-if="canApprove">
+                <input
+                  v-if="approval.status === 'pending'"
+                  type="checkbox"
+                  :checked="selectedIds.includes(approval.id)"
+                  @change="toggleSelect(approval.id)"
+                />
+              </td>
               <td class="col-id">
                 <span class="id-badge">#{{ approval.id }}</span>
               </td>
@@ -180,7 +202,7 @@
                 <span v-else class="text-muted">-</span>
               </td>
               <td class="col-actions">
-                <template v-if="approval.status === 'pending'">
+                <template v-if="approval.status === 'pending' && canApprove">
                   <button class="action-btn approve" @click="handleApprove(approval)" :disabled="actionLoading" title="通过">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                   </button>
@@ -191,7 +213,8 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
                 </template>
-                <button class="action-btn delete" @click="handleDelete(approval)" :disabled="actionLoading" title="删除" v-if="approval.status !== 'approved'">
+                <span v-if="approval.status === 'pending' && !canApprove" class="text-muted">待审批</span>
+                <button class="action-btn delete" @click="handleDelete(approval)" :disabled="actionLoading" title="删除" v-if="approval.status !== 'approved' && canApprove">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
                 <span v-if="approval.status === 'approved' || (approval.status !== 'pending' && approval.status !== 'rejected' && approval.status !== 'expired')" class="reason-tip" :title="approval.approve_reason">
@@ -336,62 +359,13 @@
         </div>
       </Transition>
     </Teleport>
-
-    <!-- 新增/编辑审批弹窗 -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="showFormModal" class="modal-overlay" @click="closeFormModal">
-          <div class="modal-dialog" @click.stop>
-            <div class="modal-head create">
-              <div class="modal-head-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </div>
-              <h3>{{ isEditing ? '编辑审批记录' : '新增审批申请' }}</h3>
-              <button class="modal-close" @click="closeFormModal">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="modal-main">
-              <div class="form-field" v-if="!isEditing">
-                <label class="field-label">流水线 ID <span class="required">*</span></label>
-                <input v-model.number="formData.pipeline_id" type="number" class="field-input" placeholder="请输入流水线 ID" />
-              </div>
-              <div class="form-field">
-                <label class="field-label">目标环境 <span class="required">*</span></label>
-                <select v-model="formData.env_name" class="field-input">
-                  <option value="">请选择环境</option>
-                  <option value="dev">开发环境</option>
-                  <option value="staging">预发环境</option>
-                  <option value="prod">生产环境</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label class="field-label">部署镜像</label>
-                <input v-model="formData.image" type="text" class="field-input" placeholder="例如: registry.example.com/app:v1.0" />
-              </div>
-              <div class="form-field">
-                <label class="field-label">申请原因</label>
-                <textarea v-model="formData.request_reason" rows="3" class="field-textarea" placeholder="请输入审批申请原因..."></textarea>
-              </div>
-            </div>
-            <div class="modal-foot">
-              <button class="btn-cancel" @click="closeFormModal">取消</button>
-              <button class="btn-confirm create" @click="submitForm" :disabled="formLoading">
-                <svg v-if="formLoading" class="btn-spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
-                {{ formLoading ? '提交中...' : (isEditing ? '保存修改' : '提交申请') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getApprovalList, approvalAction, getApprovalStats, createApproval, updateApproval, deleteApproval } from '@/api/cicd/environment.js'
+import { getApprovalList, approvalAction, approvalBatchAction, getApprovalStats, createApproval, updateApproval, deleteApproval } from '@/api/cicd/environment.js'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 const { confirm: showConfirm } = useConfirmDialog()
@@ -405,6 +379,11 @@ const actionLoading = ref(false)
 const statusFilter = ref('')
 const pipelineIdFilter = ref(null)
 const searchQuery = ref('')
+const canApprove = ref(false) // 是否有审批权限（由后端返回）
+
+// 批量操作
+const selectedIds = ref([])
+const batchLoading = ref(false)
 
 // 分页
 const currentPage = ref(1)
@@ -525,6 +504,7 @@ const loadApprovals = async () => {
     ])
     if (listRes.code === 0) {
       approvals.value = listRes.data?.list || []
+      canApprove.value = listRes.data?.can_approve || false
     } else {
       console.error('加载审批列表失败:', listRes.msg)
     }
@@ -695,6 +675,75 @@ const handleDelete = async (approval) => {
     alert('删除失败，请重试')
   } finally {
     actionLoading.value = false
+  }
+}
+
+// ==================== 批量操作 ====================
+
+// 可批量操作的待审批记录（当前页中状态为pending且不是自己提交的）
+const selectablePending = computed(() => {
+  return paginatedApprovals.value.filter(a => a.status === 'pending')
+})
+
+const isAllSelected = computed(() => {
+  if (selectablePending.value.length === 0) return false
+  return selectablePending.value.every(a => selectedIds.value.includes(a.id))
+})
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = selectablePending.value.map(a => a.id)
+  }
+}
+
+const toggleSelect = (id) => {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx > -1) {
+    selectedIds.value.splice(idx, 1)
+  } else {
+    selectedIds.value.push(id)
+  }
+}
+
+const handleBatchAction = async (action) => {
+  if (selectedIds.value.length === 0) {
+    alert('请先勾选要操作的审批记录')
+    return
+  }
+  const actionLabel = action === 'approve' ? '批量通过' : '批量拒绝'
+  const ok = await showConfirm({
+    title: `确认${actionLabel}`,
+    content: `将对选中的 ${selectedIds.value.length} 条审批记录执行${actionLabel}操作`,
+    type: action === 'approve' ? 'success' : 'danger',
+    confirmText: actionLabel,
+    cancelText: '取消',
+  })
+  if (!ok) return
+
+  batchLoading.value = true
+  try {
+    const res = await approvalBatchAction({
+      ids: selectedIds.value,
+      action: action,
+      reason: `${actionLabel}操作`
+    })
+    if (res.code === 0) {
+      const data = res.data || {}
+      const msg = `${actionLabel}完成：成功 ${data.success || 0} 条` +
+        (data.failures && data.failures.length > 0 ? `，失败 ${data.failures.length} 条` : '')
+      alert(msg)
+      selectedIds.value = []
+      await loadApprovals()
+    } else {
+      alert(res.msg || '批量操作失败')
+    }
+  } catch (err) {
+    console.error('批量审批异常:', err)
+    alert('批量操作失败，请重试')
+  } finally {
+    batchLoading.value = false
   }
 }
 
@@ -946,6 +995,52 @@ watch(() => route.query, (q) => {
   background: transparent;
 }
 .search-input::placeholder { color: #cbd5e1; }
+
+/* ---- 批量操作按钮 ---- */
+.btn-batch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.2s;
+}
+.btn-batch svg { width: 14px; height: 14px; }
+.btn-batch.approve {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+.btn-batch.approve:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+.btn-batch.reject {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+.btn-batch.reject:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+.btn-batch:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ---- 复选框列 ---- */
+.col-check {
+  width: 40px;
+  text-align: center;
+}
+.col-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #4e7cf6;
+}
 
 /* ---- 表格 ---- */
 .approval-table-wrapper {

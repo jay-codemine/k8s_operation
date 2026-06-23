@@ -3,8 +3,11 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 )
@@ -29,10 +32,16 @@ func (s *Services) EnvironmentCreate(ctx context.Context, param *requests.Enviro
 		return 0, errors.New("环境名称已存在")
 	}
 
-	// 构造审批人员JSON
+	// 构造审批人员JSON（兼容旧接口）
 	var approvalUsers models.JSONMap
 	if len(param.ApprovalUserIDs) > 0 {
 		approvalUsers = models.JSONMap{"user_ids": param.ApprovalUserIDs}
+	}
+
+	// 多级审批配置
+	var approvalLevels models.ApprovalLevels
+	if len(param.ApprovalLevels) > 0 {
+		approvalLevels = models.ApprovalLevels(param.ApprovalLevels)
 	}
 
 	now := time.Now().Unix()
@@ -46,6 +55,7 @@ func (s *Services) EnvironmentCreate(ctx context.Context, param *requests.Enviro
 		SortOrder:       param.SortOrder,
 		RequireApproval: param.RequireApproval,
 		ApprovalUsers:   approvalUsers,
+		ApprovalLevels:  approvalLevels,
 		CreatedUserID:   userID,
 		CreatedAt:       uint64(now),
 		ModifiedAt:      uint64(now),
@@ -109,6 +119,10 @@ func (s *Services) EnvironmentUpdate(ctx context.Context, param *requests.Enviro
 		approvalUsers := models.JSONMap{"user_ids": param.ApprovalUserIDs}
 		env.ApprovalUsers = approvalUsers
 	}
+	// 更新多级审批配置（允许传空数组清除）
+	if param.ApprovalLevels != nil {
+		env.ApprovalLevels = models.ApprovalLevels(param.ApprovalLevels)
+	}
 
 	env.ModifiedAt = uint64(time.Now().Unix())
 
@@ -127,9 +141,19 @@ func (s *Services) ApprovalList(ctx context.Context, param *requests.ApprovalLis
 	return s.dao.ApprovalList(ctx, param.Page, param.PageSize, param.Status, param.PipelineID)
 }
 
+// ApprovalListByUser 获取指定用户提交的审批列表
+func (s *Services) ApprovalListByUser(ctx context.Context, userID int64, param *requests.ApprovalListRequest) ([]*models.ApprovalListItem, int64, error) {
+	return s.dao.ApprovalListByUser(ctx, userID, param.Page, param.PageSize, param.Status, param.PipelineID)
+}
+
 // ApprovalStats 获取审批统计
 func (s *Services) ApprovalStats(ctx context.Context) (map[string]int64, error) {
 	return s.dao.ApprovalStats(ctx)
+}
+
+// ApprovalStatsByUser 获取指定用户的审批统计
+func (s *Services) ApprovalStatsByUser(ctx context.Context, userID int64) (map[string]int64, error) {
+	return s.dao.ApprovalStatsByUser(ctx, userID)
 }
 
 // ApprovalDetail 获取审批详情
@@ -174,6 +198,11 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 		return errors.New("该审批已处理，无法重复操作")
 	}
 
+	// 权限分离：审批人不能审批自己提交的申请
+	if approval.RequestUserID == userID {
+		return errors.New("不能审批自己提交的申请，请联系其他审批人处理")
+	}
+
 	// 检查是否过期
 	if approval.ExpireTime > 0 && uint64(time.Now().Unix()) > approval.ExpireTime {
 		// 更新状态为已过期
@@ -196,7 +225,25 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 	// 同步更新关联的流水线审批阶段（cicd_pipeline_stage）
 	if approval.StageID > 0 {
 		if status == models.ApprovalStatusApproved {
-			// 通过：更新阶段审批状态，并启动后续部署阶段
+			// ====== 多级审批级联逻辑 ======
+			if approval.ApprovalLevel < approval.TotalLevels {
+				// 还有下一级，创建下一级审批
+				nextID, nextErr := s.CreateNextLevelApproval(ctx, approval)
+				if nextErr == nil && nextID > 0 {
+					// 发送下一级审批飞书通知
+					nextApproval, _ := s.dao.ApprovalGetByID(ctx, nextID)
+					if nextApproval != nil {
+						pipeline, _ := s.dao.PipelineGetByID(ctx, nextApproval.PipelineID)
+						run, _ := s.dao.PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
+						if pipeline != nil && run != nil {
+							s.NotifyFeishuApproval(ctx, pipeline, run, nextApproval)
+						}
+					}
+				}
+				return nil // 不触发部署，等待下一级审批
+			}
+
+			// 最后一级通过：更新阶段审批状态，并自动触发部署
 			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, userID, "approved", param.Reason)
 
 			// 获取阶段信息以启动部署阶段
@@ -211,6 +258,24 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 							"status":       models.StageStatusPending,
 							"deploy_image": run.ImageURL,
 						})
+
+						// ====== 审批通过后自动触发部署（核心修复） ======
+						global.Logger.Info("[审批] 审批通过，自动触发部署",
+							zap.Int64("approval_id", param.ID),
+							zap.Int64("deploy_stage_id", deployStage.ID),
+							zap.String("image", run.ImageURL),
+						)
+						go func() {
+							deployReq := &requests.StageDeployRequest{
+								StageID: deployStage.ID,
+							}
+							if err := s.ExecuteDeployStage(context.Background(), deployReq, userID); err != nil {
+								global.Logger.Error("[审批] 自动触发部署失败",
+									zap.Int64("deploy_stage_id", deployStage.ID),
+									zap.Error(err),
+								)
+							}
+						}()
 					}
 				}
 			}
@@ -236,6 +301,69 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 				}
 			}
 		}
+	} else if approval.ReleaseID > 0 {
+		// ====== 手动发布单多级审批逻辑 ======
+		if status == models.ApprovalStatusApproved {
+			// 多级审批级联：当前级未到最后一级，创建下一级审批
+			if approval.ApprovalLevel < approval.TotalLevels {
+				nextID, nextErr := s.CreateNextLevelApproval(ctx, approval)
+				if nextErr == nil && nextID > 0 {
+					global.Logger.Info("[审批] 发布单当前级审批通过，已创建下一级审批",
+						zap.Int64("release_id", approval.ReleaseID),
+						zap.Int("current_level", approval.ApprovalLevel),
+						zap.Int("total_levels", approval.TotalLevels),
+						zap.Int64("next_approval_id", nextID),
+					)
+				} else if nextErr != nil {
+					global.Logger.Error("[审批] 创建下一级审批失败",
+						zap.Int64("release_id", approval.ReleaseID),
+						zap.Error(nextErr),
+					)
+					return fmt.Errorf("创建下一级审批失败: %w", nextErr)
+				}
+				return nil // 不触发部署，等待下一级审批
+			}
+
+			// 最后一级审批通过：将发布单任务入队执行部署
+			tasks, tErr := s.dao.CicdTasksByReleaseID(ctx, approval.ReleaseID)
+			if tErr != nil || len(tasks) == 0 {
+				global.Logger.Error("[审批] 获取发布单任务失败",
+					zap.Int64("release_id", approval.ReleaseID),
+					zap.Error(tErr),
+				)
+				return fmt.Errorf("发布单任务不存在(release_id=%d)", approval.ReleaseID)
+			}
+			_, enqErr := s.releaseEnqueue(ctx, approval.ReleaseID, tasks)
+			if enqErr != nil {
+				global.Logger.Error("[审批] 发布单入队失败",
+					zap.Int64("release_id", approval.ReleaseID),
+					zap.Error(enqErr),
+				)
+				return fmt.Errorf("全部审批通过但入队失败: %w", enqErr)
+			}
+			global.Logger.Info("[审批] 发布单全部审批通过，已入队部署",
+				zap.Int64("release_id", approval.ReleaseID),
+				zap.Int64("approval_id", param.ID),
+				zap.Int("total_levels", approval.TotalLevels),
+			)
+		} else {
+			// 审批拒绝：将发布单标记为取消
+			reason := "审批被拒绝"
+			if param.Reason != "" {
+				reason = "审批拒绝: " + param.Reason
+			}
+			_, _ = s.dao.CicdReleaseUpdateStatusCAS(
+				ctx,
+				approval.ReleaseID,
+				[]string{models.CicdReleaseStatusAwaitingApproval, models.CicdReleaseStatusPending},
+				models.CicdReleaseStatusCanceled,
+				reason,
+			)
+			global.Logger.Info("[审批] 发布单审批拒绝，已取消",
+				zap.Int64("release_id", approval.ReleaseID),
+				zap.Int64("approval_id", param.ID),
+			)
+		}
 	}
 
 	return nil
@@ -245,6 +373,27 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 func (s *Services) ApprovalPendingList(ctx context.Context, userID int64) ([]*models.ApprovalListItem, int64, error) {
 	// TODO: 可以根据用户权限过滤
 	return s.dao.ApprovalList(ctx, 1, 100, models.ApprovalStatusPending, 0)
+}
+
+// ApprovalBatchAction 批量审批操作
+func (s *Services) ApprovalBatchAction(ctx context.Context, ids []int64, action string, reason string, userID int64) (int, []string) {
+	success := 0
+	var failures []string
+
+	for _, id := range ids {
+		param := &requests.ApprovalActionRequest{
+			ID:     id,
+			Action: action,
+			Reason: reason,
+		}
+		if err := s.ApprovalAction(ctx, param, userID); err != nil {
+			failures = append(failures, fmt.Sprintf("#%d: %s", id, err.Error()))
+		} else {
+			success++
+		}
+	}
+
+	return success, failures
 }
 
 // ApprovalUpdate 更新审批记录
@@ -296,36 +445,91 @@ func (s *Services) ApprovalDelete(ctx context.Context, id int64) error {
 }
 
 // CheckAndCreateApproval 检查是否需要审批，如果需要则创建审批记录
+// 支持多级审批：先创建第一级审批，通过后级联触发下一级
 func (s *Services) CheckAndCreateApproval(ctx context.Context, pipeline *models.CicdPipeline, image, digest string, userID int64) (bool, int64, error) {
-	// 如果不需要审批，直接返回
-	if !pipeline.RequireApproval {
+	// 判断是否需要审批：pipeline 标志 OR 环境配置（双重保险，防止前端漏设导致绕过审批）
+	needApproval := pipeline.RequireApproval
+
+	// 查询环境配置，获取审批策略
+	env, _ := s.dao.EnvironmentGetByName(ctx, pipeline.DeployEnv)
+
+	// 如果 pipeline 未开启审批，但环境配置要求审批，则强制开启
+	if !needApproval && env != nil && env.RequireApproval {
+		needApproval = true
+	}
+
+	if !needApproval {
 		return false, 0, nil
 	}
 
-	// 检查环境是否需要审批
-	if pipeline.DeployEnv == "prod" || pipeline.RequireApproval {
-		// 创建审批记录
-		now := time.Now().Unix()
-		approval := &models.CicdApproval{
-			PipelineID:    pipeline.ID,
-			EnvName:       pipeline.DeployEnv,
-			Image:         image,
-			ImageDigest:   digest,
-			Status:        models.ApprovalStatusPending,
-			RequestUserID: userID,
-			RequestReason: "构建成功，申请部署到" + pipeline.DeployEnv + "环境",
-			ExpireTime:    uint64(now + 86400*7),
-			CreatedAt:     uint64(now),
-			ModifiedAt:    uint64(now),
+	totalLevels := 1
+	levelLabel := "审批"
+	if env != nil && len(env.ApprovalLevels) > 0 {
+		totalLevels = len(env.ApprovalLevels)
+		if len(env.ApprovalLevels) > 0 {
+			levelLabel = env.ApprovalLevels[0].Label
 		}
-
-		id, err := s.dao.ApprovalCreate(ctx, approval)
-		if err != nil {
-			return true, 0, err
-		}
-
-		return true, id, nil
 	}
 
-	return false, 0, nil
+	// 创建第一级审批记录
+	now := time.Now().Unix()
+	approval := &models.CicdApproval{
+		PipelineID:    pipeline.ID,
+		EnvName:       pipeline.DeployEnv,
+		Image:         image,
+		ImageDigest:   digest,
+		Status:        models.ApprovalStatusPending,
+		RequestUserID: userID,
+		RequestReason: "构建成功，申请部署到" + pipeline.DeployEnv + "环境",
+		ExpireTime:    uint64(now + 86400*7),
+		ApprovalLevel: 1,
+		TotalLevels:   totalLevels,
+		LevelLabel:    levelLabel,
+		CreatedAt:     uint64(now),
+		ModifiedAt:    uint64(now),
+	}
+
+	id, err := s.dao.ApprovalCreate(ctx, approval)
+	if err != nil {
+		return true, 0, err
+	}
+
+	return true, id, nil
+}
+
+// CreateNextLevelApproval 创建下一级审批记录（当前级通过后调用）
+func (s *Services) CreateNextLevelApproval(ctx context.Context, prevApproval *models.CicdApproval) (int64, error) {
+	nextLevel := prevApproval.ApprovalLevel + 1
+	if nextLevel > prevApproval.TotalLevels {
+		return 0, nil // 已是最后一级，无需创建
+	}
+
+	// 查询环境配置获取下一级信息
+	env, _ := s.dao.EnvironmentGetByName(ctx, prevApproval.EnvName)
+	levelLabel := "审批"
+	if env != nil && len(env.ApprovalLevels) >= nextLevel {
+		levelLabel = env.ApprovalLevels[nextLevel-1].Label
+	}
+
+	now := time.Now().Unix()
+	approval := &models.CicdApproval{
+		PipelineID:    prevApproval.PipelineID,
+		PipelineRunID: prevApproval.PipelineRunID,
+		StageID:       prevApproval.StageID,
+		ReleaseID:     prevApproval.ReleaseID,
+		EnvName:       prevApproval.EnvName,
+		Image:         prevApproval.Image,
+		ImageDigest:   prevApproval.ImageDigest,
+		Status:        models.ApprovalStatusPending,
+		RequestUserID: prevApproval.RequestUserID,
+		RequestReason: prevApproval.RequestReason,
+		ExpireTime:    uint64(now + 86400*7),
+		ApprovalLevel: nextLevel,
+		TotalLevels:   prevApproval.TotalLevels,
+		LevelLabel:    levelLabel,
+		CreatedAt:     uint64(now),
+		ModifiedAt:    uint64(now),
+	}
+
+	return s.dao.ApprovalCreate(ctx, approval)
 }

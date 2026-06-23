@@ -3,9 +3,11 @@ package cicd
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
@@ -828,6 +830,119 @@ func (c *PipelineController) DeploySilenceStatus(ctx *gin.Context) {
 	})
 }
 
+// Discover godoc
+// @Summary 从K8s Deployment自动发现应用信息
+// @Description 根据集群ID、命名空间和Deployment名称，自动解析镜像仓库、容器名等信息，用于流水线创建时的"从K8s导入"功能
+// @Tags CICD Pipeline
+// @Produce json
+// @Param cluster_id query int true "集群ID"
+// @Param namespace query string true "命名空间"
+// @Param deployment query string true "Deployment名称"
+// @Success 200 {object} map[string]any "返回自动发现的应用信息"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "内部错误"
+// @Router /api/v1/k8s/cicd/pipeline/discover [get]
+func (c *PipelineController) Discover(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	// 参数校验
+	clusterIDStr := ctx.Query("cluster_id")
+	clusterID, err := strconv.ParseInt(clusterIDStr, 10, 64)
+	if err != nil || clusterID <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的集群ID"))
+		return
+	}
+
+	namespace := ctx.Query("namespace")
+	if namespace == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("命名空间不能为空"))
+		return
+	}
+
+	deploymentName := ctx.Query("deployment")
+	if deploymentName == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("Deployment名称不能为空"))
+		return
+	}
+
+	// 通过集群工厂获取客户端
+	svc := services.NewServices()
+	factory := services.NewClusterClientFactory(svc)
+
+	cli, err := factory.GetClient(ctx.Request.Context(), clusterID)
+	if err != nil {
+		global.Logger.Error("Discover: 获取集群客户端失败", zap.Int64("cluster_id", clusterID), zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails("集群连接失败: " + err.Error()))
+		return
+	}
+
+	// 获取 Deployment 详情
+	deploy, err := cli.Kube.AppsV1().Deployments(namespace).Get(ctx.Request.Context(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		global.Logger.Error("Discover: 获取Deployment失败",
+			zap.String("namespace", namespace),
+			zap.String("deployment", deploymentName),
+			zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails("获取Deployment失败: " + err.Error()))
+		return
+	}
+
+	// 解析容器信息
+	type ContainerInfo struct {
+		Name     string `json:"name"`
+		Image    string `json:"image"`
+		ImageRepo string `json:"image_repo"` // 不含 tag
+		ImageTag string `json:"image_tag"`
+	}
+
+	var containers []ContainerInfo
+	for _, c := range deploy.Spec.Template.Spec.Containers {
+		img := c.Image
+		imageRepo := img
+		imageTag := "latest"
+
+		// 解析 image:tag 格式
+		if idx := strings.LastIndex(img, ":"); idx > 0 {
+			// 确保不是端口号（如 registry:5000/repo）
+			afterColon := img[idx+1:]
+			if !strings.Contains(afterColon, "/") {
+				imageRepo = img[:idx]
+				imageTag = afterColon
+			}
+		}
+
+		containers = append(containers, ContainerInfo{
+			Name:      c.Name,
+			Image:     img,
+			ImageRepo: imageRepo,
+			ImageTag:  imageTag,
+		})
+	}
+
+	// 构建响应
+	result := gin.H{
+		"deployment_name": deploy.Name,
+		"namespace":       deploy.Namespace,
+		"containers":      containers,
+		"replicas":        0,
+		"labels":          deploy.Labels,
+	}
+
+	if deploy.Spec.Replicas != nil {
+		result["replicas"] = *deploy.Spec.Replicas
+	}
+
+	// 主容器信息（第一个容器）用于前端快速自动填充
+	if len(containers) > 0 {
+		result["primary_container"] = containers[0].Name
+		result["primary_image"] = containers[0].Image
+		result["primary_image_repo"] = containers[0].ImageRepo
+		result["primary_image_tag"] = containers[0].ImageTag
+	}
+
+	rsp.Success(result)
+}
+
 // JenkinsConfig godoc
 // @Summary 获取 Jenkins 配置信息
 // @Description 返回当前平台的 Jenkins 连接配置（脱敏），用于前端展示和诊断
@@ -855,6 +970,7 @@ func (c *PipelineController) JenkinsConfig(ctx *gin.Context) {
 		config["git_credential_id"] = global.JenkinsSetting.GitCredentialID
 		config["registry_credential_id"] = global.JenkinsSetting.RegistryCredentialID
 		config["hmac_credential_id"] = global.JenkinsSetting.HMACCredentialID
+		config["default_image_registry"] = global.JenkinsSetting.DefaultImageRegistry
 		// 回调完整地址（Jenkins Pod 实际访问的）
 		if global.JenkinsSetting.CallbackURL != "" {
 			config["full_callback_url"] = global.JenkinsSetting.CallbackURL + "/api/v1/k8s/cicd/pipeline/callback"
@@ -863,4 +979,87 @@ func (c *PipelineController) JenkinsConfig(ctx *gin.Context) {
 	}
 
 	rsp.Success(config)
+}
+
+// BuildRecords godoc
+// @Summary 获取全量构建记录（跨流水线）
+// @Description 分页查询所有流水线的构建运行记录，支持按状态、流水线ID、关键字筛选
+// @Tags CICD Pipeline
+// @Produce json
+// @Param page query int false "页码，默认1"
+// @Param page_size query int false "每页数量，默认20"
+// @Param status query string false "状态筛选(pending/running/success/failed/aborted)"
+// @Param keyword query string false "关键字搜索"
+// @Param pipeline_id query int false "流水线ID筛选"
+// @Success 200 {object} map[string]any "返回构建记录列表"
+// @Router /api/v1/k8s/cicd/pipeline/build-records [get]
+func (c *PipelineController) BuildRecords(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	status := ctx.Query("status")
+	keyword := ctx.Query("keyword")
+	pipelineID, _ := strconv.ParseInt(ctx.Query("pipeline_id"), 10, 64)
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	svc := services.NewServices()
+	list, total, err := svc.BuildRecordList(ctx.Request.Context(), page, pageSize, status, keyword, pipelineID)
+	if err != nil {
+		global.Logger.Error("BuildRecords error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorCicdBuildQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.SuccessList(list, total)
+}
+
+// ExportBuildRecords godoc
+// @Summary 导出构建记录为 CSV
+// @Description 导出所有构建记录为 CSV 文件
+// @Tags CICD Pipeline
+// @Produce text/csv
+// @Param status query string false "状态筛选"
+// @Param keyword query string false "关键字"
+// @Param pipeline_id query int false "流水线ID"
+// @Success 200 {string} string "CSV文件"
+// @Router /api/v1/k8s/cicd/pipeline/build-records/export [get]
+func (c *PipelineController) ExportBuildRecords(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	status := ctx.Query("status")
+	keyword := ctx.Query("keyword")
+	pipelineID, _ := strconv.ParseInt(ctx.Query("pipeline_id"), 10, 64)
+
+	svc := services.NewServices()
+	list, _, err := svc.BuildRecordList(ctx.Request.Context(), 1, 10000, status, keyword, pipelineID)
+	if err != nil {
+		global.Logger.Error("ExportBuildRecords error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorCicdBuildQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	// 生成 CSV
+	ctx.Header("Content-Type", "text/csv; charset=utf-8")
+	ctx.Header("Content-Disposition", "attachment; filename=build_records.csv")
+	ctx.Writer.WriteString("\xEF\xBB\xBF") // BOM for Excel
+	ctx.Writer.WriteString("ID,流水线ID,构建号,状态,触发方式,镜像,耗时(秒),开始时间,完成时间,错误信息\n")
+
+	for _, r := range list {
+		run := r.(map[string]interface{})
+		errMsg := ""
+		if em, ok := run["error_message"]; ok && em != nil {
+			errMsg = strings.ReplaceAll(fmt.Sprintf("%v", em), ",", "，")
+		}
+		ctx.Writer.WriteString(fmt.Sprintf("%v,%v,%v,%v,%v,%v,%v,%v,%v,%s\n",
+			run["id"], run["pipeline_id"], run["build_number"],
+			run["status"], run["trigger_type"], run["image_url"],
+			run["duration_sec"], run["started_at"], run["finished_at"], errMsg))
+	}
 }

@@ -1,5 +1,4 @@
-“<template>
-  ：
+<template>
   <div class="pipeline-detail-view">
     <!-- 顶部导航 -->
     <div class="breadcrumb">
@@ -445,6 +444,7 @@
             <PipelineHorizontalView
               :stages="pipelineStages"
               :pipeline-id="pipelineId"
+              :can-approve="canApprove"
               @approve="handleApproveStage"
               @deploy="handleDeployStage"
               @retry-deploy="handleRetryDeploy"
@@ -656,6 +656,15 @@
                     <p>该阶段需要人工审批确认才能继续部署</p>
                   </div>
                 </div>
+                <!-- 非管理员：显示等待提示，禁用操作 -->
+                <div v-if="!canApprove" class="approval-no-permission">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;flex-shrink:0;color:#f59e0b">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                  </svg>
+                  <span>此审批需要管理员处理，您没有审批权限</span>
+                </div>
+                <!-- 管理员：显示完整操作面板 -->
+                <template v-if="canApprove">
                 <div class="approval-options">
                   <label :class="['approval-option', { selected: approvalDecision === 'approve' }]" @click="approvalDecision = 'approve'">
                     <div class="option-radio"><span class="radio-inner"></span></div>
@@ -686,6 +695,7 @@
                     {{ approving ? '处理中...' : (approvalDecision === 'approve' ? '确认通过' : '确认拒绝') }}
                   </button>
                 </div>
+                </template>
               </div>
 
               <!-- 审批已通过 -->
@@ -1658,6 +1668,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import permissionStore from '@/stores/permission.js'
 import {
   getPipelineDetail,
   runPipeline,
@@ -1742,6 +1753,14 @@ export default {
     // 运行弹窗相关
     const showRunDialog = ref(false)
     const runSubmitting = ref(false)
+
+    // 审批权限：只有管理员角色才能操作审批按鈕
+    const canApprove = computed(() => {
+      if (permissionStore.state.isSuperAdmin) return true
+      const roleTypes = permissionStore.roleTypes?.value || []
+      const approvalRoles = ['super_admin', 'platform_admin', 'cluster_admin', 'sre']
+      return approvalRoles.some(role => roleTypes.includes(role))
+    })
 
     // 审批和部署操作相关
     const approving = ref(false)
@@ -2037,6 +2056,24 @@ export default {
               if (status === 'success' || status === 'SUCCESS') {
                 // 构建成功，显示绿色 ✓
                 Message.success({ content: `构建成功！${statusText}` })
+                
+                // 构建成功后自动跳转到审批阶段（如果有）
+                if (route.query.auto_select === 'approval') {
+                  await loadStages()
+                  const approvalStage = pipelineStages.value.find(s => s.type === 'approval' && (s.status === 'waiting' || s.status === 'pending'))
+                  if (approvalStage) {
+                    stageViewMode.value = 'vertical'
+                    selectedStage.value = approvalStage
+                    stageDetailExpanded.value = true
+                    highlightApproval.value = true
+                    Message.info({ content: '构建完成，请审批后继续部署', duration: 4000 })
+                    setTimeout(() => {
+                      const panel = document.querySelector('.stage-detail-panel')
+                      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }, 300)
+                    setTimeout(() => { highlightApproval.value = false }, 5000)
+                  }
+                }
               } else if (status === 'failed' || status === 'FAILURE') {
                 // 构建失败，显示红色 ✗ + 错误信息
                 const errorMsg = response.data.latest_run?.error_message || '构建失败'
@@ -3166,6 +3203,7 @@ export default {
       rollbackInProgress,
       submitApproval,
       approving,
+      canApprove,
       deploying,
       rollingBack,
       cancelling,
@@ -5840,6 +5878,20 @@ export default {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+/* 无权限提示条 */
+.approval-no-permission {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 4px;
 }
 
 .approval-icon {

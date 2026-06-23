@@ -8,8 +8,8 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
           </div>
           <div>
-            <h1 class="banner-title">发布管理</h1>
-            <p class="banner-desc">管理应用发布记录，支持回滚和重新部署</p>
+            <h1 class="banner-title">发布单中心</h1>
+            <p class="banner-desc">统一管理应用发布全生命周期：构建 → 审批 → 部署 → 回滚</p>
           </div>
         </div>
         <div class="banner-actions">
@@ -92,6 +92,14 @@
           <span class="record-badge">{{ total }} 条</span>
         </div>
         <div class="toolbar-right">
+          <div class="view-toggle">
+            <button :class="['toggle-btn', { active: releaseViewMode === 'card' }]" @click="releaseViewMode = 'card'" title="卡片视图">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
+            </button>
+            <button :class="['toggle-btn', { active: releaseViewMode === 'table' }]" @click="releaseViewMode = 'table'" title="表格视图">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></svg>
+            </button>
+          </div>
           <div class="search-box" :class="{ focused: searchFocused }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input v-model="searchKeyword" placeholder="搜索应用名、镜像..." @input="handleSearch" @focus="searchFocused = true" @blur="searchFocused = false" />
@@ -212,7 +220,102 @@
         </template>
       </div>
 
-      <!-- 表格 - Rancher 风格 -->
+      <!-- 卡片视图 - 大厂级发布单卡片（3层信息结构） -->
+      <div v-else-if="releaseViewMode === 'card'" class="release-cards-grid">
+        <div v-for="rel in releases" :key="rel.id" class="release-card" :class="[`card-${normalizeStatus(rel.status)}`, { selected: selectedIds.includes(rel.id) }]">
+          <!-- 卡片头部：应用 + 状态 -->
+          <div class="rc-header">
+            <div class="rc-check">
+              <input type="checkbox" class="row-checkbox" :checked="selectedIds.includes(rel.id)" @change="toggleSelect(rel.id)" />
+            </div>
+            <div class="rc-app-info">
+              <div class="rc-avatar" :class="normalizeStatus(rel.status)">
+                {{ (rel.app_name || rel.name || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="rc-app-meta">
+                <span class="rc-app-name">{{ rel.app_name || rel.name || '-' }}</span>
+                <span class="rc-app-id">#{{ rel.id }}</span>
+              </div>
+            </div>
+            <span class="rc-status-badge" :class="normalizeStatus(rel.status)">
+              <span class="rc-status-dot"></span>
+              {{ statusText(rel.status) }}
+            </span>
+          </div>
+
+          <!-- Tier 1: 基础信息（谁发的 / 环境 / 策略） -->
+          <div class="rc-tier">
+            <div class="rc-field">
+              <span class="rc-label">环境</span>
+              <span class="rc-value ns">{{ rel.namespace || 'default' }}</span>
+            </div>
+            <div class="rc-field">
+              <span class="rc-label">策略</span>
+              <span class="rc-value">{{ strategyText(rel.strategy) || '滚动更新' }}</span>
+            </div>
+            <div class="rc-field">
+              <span class="rc-label">时间</span>
+              <span class="rc-value">{{ formatDate(rel.created_at) }}</span>
+            </div>
+          </div>
+
+          <!-- Tier 2: 构建信息（镜像 / tag） -->
+          <div class="rc-tier">
+            <div class="rc-field full">
+              <span class="rc-label">镜像</span>
+              <code class="rc-image" :title="getFullImage(rel)">{{ formatImage(rel) }}</code>
+            </div>
+          </div>
+
+          <!-- Tier 3: 部署信息（K8s目标） -->
+          <div class="rc-tier">
+            <div class="rc-field">
+              <span class="rc-label">工作负载</span>
+              <code class="rc-workload">{{ rel.workload_kind || 'Deployment' }}/{{ rel.workload_name || '-' }}</code>
+            </div>
+            <div class="rc-field" v-if="rel.container_name">
+              <span class="rc-label">容器</span>
+              <span class="rc-value">{{ rel.container_name }}</span>
+            </div>
+          </div>
+
+          <!-- 失败原因 -->
+          <div v-if="rel.message && (rel.status === 'Failed' || rel.status === 'Canceled')" class="rc-error">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>{{ rel.message.length > 80 ? rel.message.slice(0, 80) + '...' : rel.message }}</span>
+          </div>
+
+          <!-- 卡片操作栏 -->
+          <div class="rc-actions">
+            <button class="rc-act-btn" @click="viewRelease(rel)" title="查看详情">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              详情
+            </button>
+            <button v-if="normalizeStatus(rel.status) === 'success' || normalizeStatus(rel.status) === 'failed'" class="rc-act-btn primary" @click="retryRelease(rel)" title="重新发布">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              重发
+            </button>
+            <button v-if="normalizeStatus(rel.status) === 'success'" class="rc-act-btn warning" @click="rollbackRelease(rel)" title="回滚">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              回滚
+            </button>
+            <button v-if="normalizeStatus(rel.status) === 'deploying'" class="rc-act-btn danger" @click="cancelRelease(rel)" title="取消">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              取消
+            </button>
+            <button v-if="canEdit(rel.status)" class="rc-act-btn" @click="editRelease(rel)" title="编辑">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              编辑
+            </button>
+            <button v-if="canDelete(rel.status)" class="rc-act-btn danger-text" @click="deleteRelease(rel)" title="删除">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              删除
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 表格视图 - Rancher 风格 -->
       <div v-else class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -247,10 +350,15 @@
                 </div>
               </td>
               <td>
-                <span class="status-pill" :class="normalizeStatus(rel.status)">
-                  <span class="status-dot"></span>
-                  {{ statusText(rel.status) }}
-                </span>
+                <div class="status-cell">
+                  <span class="status-pill" :class="normalizeStatus(rel.status)">
+                    <span class="status-dot"></span>
+                    {{ statusText(rel.status) }}
+                  </span>
+                  <span v-if="rel.message && (rel.status === 'Failed' || rel.status === 'Canceled')" class="fail-reason" :title="rel.message">
+                    {{ rel.message.length > 40 ? rel.message.slice(0, 40) + '...' : rel.message }}
+                  </span>
+                </div>
               </td>
               <td>
                 <div class="workload-cell">
@@ -578,6 +686,7 @@ export default {
     const searchKeyword = ref('')
     const searchFocused = ref(false)
     const statusFilter = ref('')
+    const releaseViewMode = ref('card') // 默认卡片视图
     const currentPage = ref(1)
     const pageSizeRef = ref(10)
     const total = ref(0)
@@ -615,7 +724,7 @@ export default {
     const statsData = ref({ total: 0, deploying: 0, success: 0, failed: 0, rollback: 0 })
 
     const normalizeStatus = (status) => {
-      const map = { Pending: 'pending', Queued: 'deploying', Running: 'deploying', Succeeded: 'success', Failed: 'failed', Canceled: 'failed', Rollback: 'rollback' }
+      const map = { Pending: 'pending', AwaitingApproval: 'awaiting', Queued: 'deploying', Running: 'deploying', Succeeded: 'success', Failed: 'failed', Canceled: 'failed', Rollback: 'rollback' }
       return map[status] || status
     }
 
@@ -676,7 +785,7 @@ export default {
           const s = res.data.stats
           statsData.value = {
             total: s.total || 0,
-            deploying: (s.Running || 0) + (s.Queued || 0) + (s.Pending || 0),
+            deploying: (s.Running || 0) + (s.Queued || 0) + (s.Pending || 0) + (s.AwaitingApproval || 0),
             success: s.Succeeded || 0,
             failed: (s.Failed || 0) + (s.Canceled || 0),
             rollback: s.Rollback || 0
@@ -807,10 +916,11 @@ export default {
         }
         const r = await createRelease(payload)
         if (r.code === 0) {
-          Message.success({ content: '发布创建成功' }); showCreateDialog.value = false
+          Message.success({ content: '发布单已创建，正在跳转审批界面...' }); showCreateDialog.value = false
           createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' }
           selectedPipelineInfo.value = null
-          loadAll()
+          // 创建发布后直接跳转审批工单页面
+          router.push('/cicd/approvals')
         } else { throw new Error(r.msg || '创建失败') }
       } catch (e) { Message.error({ content: e.message || '创建发布单失败' }) }
       finally { creating.value = false }
@@ -1002,7 +1112,7 @@ export default {
     watch(currentPage, () => { loadReleases() })
 
     const statusText = (status) => {
-      const map = { deploying: '部署中', success: '发布成功', failed: '发布失败', rollback: '已回滚', pending: '等待中', Pending: '等待中', Queued: '排队中', Running: '部署中', Succeeded: '发布成功', Failed: '发布失败', Canceled: '已取消', Rollback: '已回滚' }
+      const map = { deploying: '部署中', success: '发布成功', failed: '发布失败', rollback: '已回滚', pending: '等待中', Pending: '等待中', AwaitingApproval: '待审批', Queued: '排队中', Running: '部署中', Succeeded: '发布成功', Failed: '发布失败', Canceled: '已取消', Rollback: '已回滚', awaiting: '待审批' }
       return map[status] || status
     }
     const strategyText = (s) => ({ rolling: '滚动更新', recreate: '重建', canary: '金丝雀', bluegreen: '蓝绿部署' })[s] || s
@@ -1036,7 +1146,7 @@ export default {
     onMounted(() => { loadAll(); loadPipelines(); loadClusters() })
 
     return {
-      loading, releases, searchKeyword, searchFocused, statusFilter, currentPage, totalPages, total,
+      loading, releases, searchKeyword, searchFocused, statusFilter, releaseViewMode, currentPage, totalPages, total,
       statsData, setFilter, pipelines, clusters, showCreateDialog, creating, createForm, handleCreate,
       selectedPipelineInfo, onPipelineSelect,
       showEditDialog, editing, editForm, editRelease, handleEdit, canEdit, canDelete, deleteRelease,
@@ -1350,6 +1460,17 @@ export default {
 .status-pill.rollback .status-dot { background: #8b5cf6; }
 .status-pill.pending { background: #f8fafc; color: #64748b; }
 .status-pill.pending .status-dot { background: #cbd5e1; }
+.status-pill.awaiting { background: #fff7ed; color: #c2410c; }
+.status-pill.awaiting .status-dot { background: #f97316; box-shadow: 0 0 6px rgba(249,115,22,0.4); animation: pulse 2s infinite; }
+
+.status-cell { display: flex; flex-direction: column; gap: 4px; }
+.fail-reason {
+  font-size: 11px; color: #dc2626; line-height: 1.4;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; cursor: help;
+  background: #fef2f2; padding: 2px 8px; border-radius: 4px;
+  border-left: 2px solid #ef4444;
+}
 
 .workload-cell { display: flex; flex-direction: column; gap: 4px; }
 .workload-tag { font-size: 12px; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; color: #475569; font-family: 'SF Mono','Fira Code',monospace; }
@@ -1546,12 +1667,151 @@ export default {
 
 @media (max-width: 1200px) {
   .metrics-row { grid-template-columns: repeat(3, 1fr); }
+  .release-cards-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
   .metrics-row { grid-template-columns: repeat(2, 1fr); }
+  .release-cards-grid { grid-template-columns: 1fr; }
   .page-banner { padding: 20px; }
   .content-area { padding: 16px 20px; }
   .toolbar { flex-direction: column; gap: 12px; align-items: stretch; }
   .table-wrapper { overflow-x: auto; }
 }
+
+/* ---- View Toggle ---- */
+.view-toggle { display: flex; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; margin-right: 8px; }
+.toggle-btn {
+  padding: 6px 10px; border: none; background: #fff; cursor: pointer;
+  display: flex; align-items: center; transition: all 0.15s;
+}
+.toggle-btn svg { width: 15px; height: 15px; color: #94a3b8; }
+.toggle-btn.active { background: #f1f5f9; }
+.toggle-btn.active svg { color: #4e7cf6; }
+.toggle-btn + .toggle-btn { border-left: 1px solid #e2e8f0; }
+
+/* ---- Release Cards Grid ---- */
+.release-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.release-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
+  transition: all 0.25s;
+}
+.release-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+.release-card.selected { border-color: #4e7cf6; box-shadow: 0 0 0 2px rgba(78,124,246,0.15); }
+.release-card.card-deploying { border-left: 3px solid #f59e0b; }
+.release-card.card-success   { border-left: 3px solid #10b981; }
+.release-card.card-failed    { border-left: 3px solid #ef4444; }
+.release-card.card-rollback  { border-left: 3px solid #8b5cf6; }
+.release-card.card-pending   { border-left: 3px solid #cbd5e1; }
+.release-card.card-awaiting  { border-left: 3px solid #f97316; }
+
+/* Card Header */
+.rc-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px 10px;
+}
+.rc-check { flex-shrink: 0; }
+.rc-app-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.rc-avatar {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.rc-avatar.deploying { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.rc-avatar.success   { background: linear-gradient(135deg, #10b981, #059669); }
+.rc-avatar.failed    { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.rc-avatar.rollback  { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.rc-avatar.pending   { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.rc-avatar.awaiting  { background: linear-gradient(135deg, #f97316, #ea580c); }
+
+.rc-app-meta { min-width: 0; }
+.rc-app-name {
+  display: block; font-size: 14px; font-weight: 600; color: #1e293b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rc-app-id { font-size: 11px; color: #94a3b8; }
+
+.rc-status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; flex-shrink: 0;
+}
+.rc-status-badge.deploying { background: #fffbeb; color: #d97706; }
+.rc-status-badge.success { background: #ecfdf5; color: #059669; }
+.rc-status-badge.failed { background: #fef2f2; color: #dc2626; }
+.rc-status-badge.rollback { background: #f5f3ff; color: #7c3aed; }
+.rc-status-badge.pending { background: #f8fafc; color: #64748b; }
+.rc-status-badge.awaiting { background: #fff7ed; color: #c2410c; }
+.rc-status-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+.rc-status-badge.deploying .rc-status-dot,
+.rc-status-badge.awaiting .rc-status-dot { animation: pulse 1.5s infinite; }
+
+/* Card Tiers */
+.rc-tier {
+  display: flex; flex-wrap: wrap; gap: 8px 16px;
+  padding: 8px 14px;
+  border-top: 1px solid #f8fafc;
+}
+.rc-field { display: flex; flex-direction: column; gap: 2px; }
+.rc-field.full { flex: 1; min-width: 0; }
+.rc-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+.rc-value { font-size: 12px; color: #475569; }
+.rc-value.ns {
+  background: #eff6ff; color: #2563eb; padding: 1px 6px;
+  border-radius: 4px; font-size: 11px; font-family: 'SF Mono', monospace;
+}
+.rc-image {
+  font-size: 11px; background: #f8fafc; padding: 3px 8px; border-radius: 4px;
+  color: #475569; font-family: 'SF Mono', monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block;
+}
+.rc-workload {
+  font-size: 11px; background: #f1f5f9; padding: 2px 6px;
+  border-radius: 4px; color: #475569; font-family: 'SF Mono', monospace;
+}
+
+/* Error Banner */
+.rc-error {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin: 0 14px; padding: 8px 10px;
+  background: #fef2f2; border-radius: 6px;
+  border-left: 2px solid #ef4444;
+}
+.rc-error svg { width: 14px; height: 14px; color: #ef4444; flex-shrink: 0; margin-top: 1px; }
+.rc-error span { font-size: 11px; color: #dc2626; line-height: 1.4; word-break: break-all; }
+
+/* Card Actions */
+.rc-actions {
+  display: flex; border-top: 1px solid #f8fafc;
+  margin-top: 8px;
+}
+.rc-act-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 9px 4px; border: none; background: transparent;
+  cursor: pointer; font-size: 11px; color: #64748b; transition: all 0.15s;
+}
+.rc-act-btn:hover { background: #f8fafc; color: #334155; }
+.rc-act-btn.primary { color: #4e7cf6; font-weight: 600; }
+.rc-act-btn.primary:hover { background: #f0f5ff; }
+.rc-act-btn.warning { color: #f59e0b; }
+.rc-act-btn.warning:hover { background: #fffbeb; }
+.rc-act-btn.danger { color: #ef4444; }
+.rc-act-btn.danger:hover { background: #fef2f2; }
+.rc-act-btn.danger-text { color: #94a3b8; }
+.rc-act-btn.danger-text:hover { background: #fef2f2; color: #ef4444; }
+.rc-act-btn svg { width: 13px; height: 13px; }
+.rc-act-btn + .rc-act-btn { border-left: 1px solid #f8fafc; }
 </style>

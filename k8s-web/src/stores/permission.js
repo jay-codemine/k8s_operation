@@ -68,6 +68,35 @@ export const RESOURCES = {
   ARTIFACT: 'artifact'
 }
 
+/** CICD 细粒度权限常量 */
+export const CICD_PERMISSIONS = {
+  // 流水线管理
+  PIPELINE_VIEW: 'cicd:pipeline:view',
+  PIPELINE_CREATE: 'cicd:pipeline:create',
+  PIPELINE_EDIT: 'cicd:pipeline:edit',
+  PIPELINE_DELETE: 'cicd:pipeline:delete',
+  PIPELINE_RUN: 'cicd:pipeline:run',
+  // 构建与部署
+  BUILD_VIEW: 'cicd:build:view',
+  BUILD_TRIGGER: 'cicd:build:trigger',
+  BUILD_CANCEL: 'cicd:build:cancel',
+  DEPLOY_DEV: 'cicd:deploy:dev',
+  DEPLOY_TEST: 'cicd:deploy:test',
+  DEPLOY_PROD: 'cicd:deploy:prod',
+  DEPLOY_ROLLBACK: 'cicd:deploy:rollback',
+  // 制品与镜像
+  ARTIFACT_VIEW: 'cicd:artifact:view',
+  ARTIFACT_UPLOAD: 'cicd:artifact:upload',
+  ARTIFACT_DELETE: 'cicd:artifact:delete',
+  IMAGE_MANAGE: 'cicd:image:manage',
+  // 审批与管理
+  APPROVAL_VIEW: 'cicd:approval:view',
+  APPROVAL_ACTION: 'cicd:approval:action',
+  APPROVAL_MANAGE: 'cicd:approval:manage',
+  ENVIRONMENT_MANAGE: 'cicd:environment:manage',
+  TEMPLATE_MANAGE: 'cicd:template:manage'
+}
+
 /**
  * 路由权限配置（scope + minLevel）
  * 未列入的路由默认允许访问
@@ -88,6 +117,15 @@ export const ROUTE_SCOPES = {
   '/security/rbac/roles': { scope: 'cluster', minLevel: 'read' },
   '/security/rbac/rolebindings': { scope: 'cluster', minLevel: 'write' },
   '/security/rbac/permission-check': { scope: 'cluster', minLevel: 'read' },
+  // ⭐ 平台管理（/admin/*）
+  '/admin/users': { scope: 'platform', minLevel: 'admin' },
+  '/admin/roles': { scope: 'platform', minLevel: 'admin' },
+  '/admin/identity': { scope: 'platform', minLevel: 'admin' },
+  '/admin/approvals': { scope: 'platform', minLevel: 'read' },
+  '/admin/audit': { scope: 'platform', minLevel: 'read' },
+  '/admin/service-accounts': { scope: 'cluster', minLevel: 'read' },
+  '/admin/settings': { scope: 'platform', minLevel: 'admin' },
+
   // 兼容旧路径
   '/users': { scope: 'platform', minLevel: 'admin' },
   '/rbac': { scope: 'platform', minLevel: 'admin' },
@@ -102,7 +140,7 @@ export const ROUTE_SCOPES = {
   '/cicd/pipelines/create': { scope: 'cicd', minLevel: 'write' },
   '/cicd/releases': { scope: 'cicd', minLevel: 'read' },
   '/cicd/templates': { scope: 'cicd', minLevel: 'admin' },
-  '/cicd/approvals': { scope: 'cicd', minLevel: 'admin' },
+  '/cicd/approvals': { scope: 'cicd', minLevel: 'read' },
   '/cicd/artifacts': { scope: 'cicd', minLevel: 'read' },
   '/cicd/agents': { scope: 'cicd', minLevel: 'admin' },
   '/images/repositories': { scope: 'cicd', minLevel: 'admin' },
@@ -140,7 +178,10 @@ const state = reactive({
   accessibleClusterIds: [],
 
   // 权限定义列表
-  permissions: []
+  permissions: [],
+
+  // ⭐ 用户拥有的细粒度权限名称列表
+  permissionNames: []
 })
 
 // ==================== 计算属性 ====================
@@ -313,6 +354,7 @@ async function loadPermissions(force = false) {
     state.isSuperAdmin = data.is_super_admin || false
     state.roles = data.roles || []
     state.permissions = data.permissions || []
+    state.permissionNames = data.permission_names || []
 
     // ⭐ 解析三域 scope（后端 v2 接口返回 scopes 对象）
     if (data.scopes) {
@@ -410,6 +452,7 @@ function clearPermissions() {
   state.clusterPermissions = {}
   state.accessibleClusterIds = []
   state.permissions = []
+  state.permissionNames = []
 }
 
 /**
@@ -494,6 +537,24 @@ export const permissionStore = {
   getAccessibleNamespaces,
   hasPermission,
   filterNamespaces,
+
+  /**
+   * ⭐ 检查用户是否拥有指定的细粒度权限
+   * @param {string} permName - 权限名称，如 'cicd:pipeline:run'
+   */
+  hasCICDPermission(permName) {
+    if (state.isSuperAdmin) return true
+    return state.permissionNames.includes(permName)
+  },
+
+  /**
+   * 批量检查是否拥有任一权限
+   * @param {string[]} permNames - 权限名称数组
+   */
+  hasAnyCICDPermission(permNames) {
+    if (state.isSuperAdmin) return true
+    return permNames.some(p => state.permissionNames.includes(p))
+  },
 
   // 状态管理
   loadPermissions,

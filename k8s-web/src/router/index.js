@@ -57,20 +57,29 @@ const router = createRouter({
         { path: 'platform/appstore/install/:id', component: () => import('@/views/platform/appstore/AppInstallDetail.vue') },
         { path: 'platform/settings', component: () => import('@/views/platform/settings/PlatformSettings.vue') },
         
-        // 安全和 RBAC（精简后的5个模块）
-        { path: 'security/users', component: () => import('@/views/security/UserManagement.vue') },
-        { path: 'security/roles', component: () => import('@/views/security/RoleManagement.vue') },
-        { path: 'security/authorization', component: () => import('@/views/security/AuthorizationManagement.vue') },
-        { path: 'security/audit', component: () => import('@/views/security/audit/AuditLog.vue') },
-        { path: 'security/ai-approvals', component: () => import('@/views/security/AIApprovals.vue') },
-        { path: 'security/diagnosis', component: () => import('@/views/security/rbac/PermissionCheck.vue') },
-        { path: 'security/ldap', component: () => import('@/views/security/LDAPSettings.vue') },
+        // 安全和 RBAC（兼容旧路径，已迁移至 /admin/*）
+        { path: 'security/users', redirect: '/admin/users' },
+        { path: 'security/roles', redirect: '/admin/roles' },
+        { path: 'security/authorization', redirect: '/admin/roles' },
+        { path: 'security/audit', redirect: '/admin/audit' },
+        { path: 'security/ai-approvals', redirect: '/admin/approvals' },
+        { path: 'security/diagnosis', redirect: '/admin/roles' },
+        { path: 'security/ldap', redirect: '/admin/identity' },
         
         // 兼容旧路径
-        { path: 'security/rbac/serviceaccounts', component: () => import('@/views/security/rbac/ServiceAccounts.vue') },
+        { path: 'security/rbac/serviceaccounts', redirect: '/admin/service-accounts' },
         { path: 'security/rbac/roles', component: () => import('@/views/security/rbac/Roles.vue') },
         { path: 'security/rbac/rolebindings', component: () => import('@/views/security/rbac/RoleBindings.vue') },
-        { path: 'security/rbac/permission-check', component: () => import('@/views/security/rbac/PermissionCheck.vue') },
+        { path: 'security/rbac/permission-check', redirect: '/admin/roles' },
+
+        // ⭐ 平台管理（IAM 统一收口）
+        { path: 'admin/users', component: () => import('@/views/security/UserManagement.vue') },
+        { path: 'admin/roles', component: () => import('@/views/admin/PermissionRoles.vue') },
+        { path: 'admin/identity', component: () => import('@/views/admin/IdentitySource.vue') },
+        { path: 'admin/approvals', component: () => import('@/views/admin/ApprovalCenter.vue') },
+        { path: 'admin/audit', component: () => import('@/views/admin/AuditCenter.vue') },
+        { path: 'admin/service-accounts', component: () => import('@/views/admin/ServiceAccountCenter.vue') },
+        { path: 'admin/settings', component: () => import('@/views/platform/settings/PlatformSettings.vue') },
 
         // ✅ 集群级：所有 k8s 功能都放这里
         {
@@ -111,16 +120,21 @@ const router = createRouter({
         {path: 'rbac', component: () => import('@/views/platform/RBACPermissions.vue')},
         {path: 'user-permissions', component: () => import('@/views/platform/UserPermissions.vue')},
 
+        // CICD 应用中心（统一应用视图）
+        {path: 'cicd/apps', component: () => import('@/views/cicd/AppCenter.vue')},
         // CICD 流水线
         {path: 'cicd/pipelines', component: () => import('@/views/cicd/Pipelines.vue')},
         {path: 'cicd/pipelines/create', component: () => import('@/views/cicd/PipelineCreate.vue')},
         {path: 'cicd/pipelines/:id', component: () => import('@/views/cicd/PipelineDetail.vue')},
         {path: 'cicd/pipelines/:id/edit', component: () => import('@/views/cicd/PipelineCreate.vue')},
+        {path: 'cicd/build-records', component: () => import('@/views/cicd/BuildRecords.vue')},
         {path: 'cicd/templates', component: () => import('@/views/cicd/PipelineTemplates.vue')},
         // CICD 发布管理
         {path: 'cicd/releases', component: () => import('@/views/cicd/Releases.vue')},
         // CICD 审批管理
         {path: 'cicd/approvals', component: () => import('@/views/cicd/Approvals.vue')},
+        // CICD 审批策略设置
+        {path: 'cicd/approval-policy', component: () => import('@/views/cicd/ApprovalPolicy.vue')},
         // CICD 制品库管理
         {path: 'cicd/artifacts', component: () => import('@/views/cicd/Artifacts.vue')},
         // CICD 构建探针管理

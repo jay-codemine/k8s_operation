@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
@@ -193,15 +194,32 @@ func (c *ApprovalController) List(ctx *gin.Context) {
 		return
 	}
 
+	userID := ctx.GetInt64("user_id")
 	svc := services.NewServices()
-	list, total, err := svc.ApprovalList(ctx.Request.Context(), param)
+
+	// 权限判断：有 cicd:approval:action 权限的是审批人，可看全部；否则只能看自己提交的
+	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
+
+	var list []*models.ApprovalListItem
+	var total int64
+	var err error
+
+	if canViewAll {
+		list, total, err = svc.ApprovalList(ctx.Request.Context(), param)
+	} else {
+		list, total, err = svc.ApprovalListByUser(ctx.Request.Context(), userID, param)
+	}
 	if err != nil {
 		global.Logger.Error("ApprovalList error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
 
-	rsp.SuccessList(list, total)
+	rsp.Success(gin.H{
+		"list":         list,
+		"total":        total,
+		"can_approve":  canViewAll,
+	})
 }
 
 // Detail godoc
@@ -298,6 +316,40 @@ func (c *ApprovalController) Action(ctx *gin.Context) {
 	rsp.Success(gin.H{"message": message})
 }
 
+// BatchAction godoc
+// @Summary 批量审批操作
+// @Description 批量通过或拒绝审批申请
+// @Tags CICD Approval
+// @Accept json
+// @Produce json
+// @Param body body requests.ApprovalBatchActionRequest true "批量操作参数"
+// @Success 200 {object} map[string]any "操作结果"
+// @Router /api/v1/k8s/cicd/approval/batch-action [post]
+func (c *ApprovalController) BatchAction(ctx *gin.Context) {
+	param := &requests.ApprovalBatchActionRequest{}
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidApprovalBatchActionRequest); !ok {
+		return
+	}
+
+	if len(param.IDs) == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("审批ID列表不能为空"))
+		return
+	}
+
+	userID := ctx.GetInt64("user_id")
+
+	svc := services.NewServices()
+	success, failures := svc.ApprovalBatchAction(ctx.Request.Context(), param.IDs, param.Action, param.Reason, userID)
+
+	rsp.Success(gin.H{
+		"success":  success,
+		"failures": failures,
+		"total":    len(param.IDs),
+	})
+}
+
 // Update godoc
 // @Summary 更新审批记录
 // @Description 更新待审批记录的字段信息
@@ -389,8 +441,19 @@ func (c *ApprovalController) Pending(ctx *gin.Context) {
 func (c *ApprovalController) Stats(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
+	userID := ctx.GetInt64("user_id")
 	svc := services.NewServices()
-	stats, err := svc.ApprovalStats(ctx.Request.Context())
+
+	// 权限判断：有审批操作权限的看全局统计，否则只看自己的
+	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
+
+	var stats map[string]int64
+	var err error
+	if canViewAll {
+		stats, err = svc.ApprovalStats(ctx.Request.Context())
+	} else {
+		stats, err = svc.ApprovalStatsByUser(ctx.Request.Context(), userID)
+	}
 	if err != nil {
 		global.Logger.Error("ApprovalStats error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

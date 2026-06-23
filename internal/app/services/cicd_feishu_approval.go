@@ -126,7 +126,26 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 	// 同步更新关联的流水线审批阶段
 	if approval.StageID > 0 {
 		if status == models.ApprovalStatusApproved {
-			// 通过：更新阶段审批状态，启动后续部署
+			// ====== 多级审批级联逻辑 ======
+			if approval.ApprovalLevel < approval.TotalLevels {
+				// 还有下一级，创建下一级审批
+				nextID, nextErr := s.CreateNextLevelApproval(ctx, approval)
+				if nextErr == nil && nextID > 0 {
+					nextApproval, _ := s.dao.ApprovalGetByID(ctx, nextID)
+					if nextApproval != nil {
+						pipeline, _ := s.dao.PipelineGetByID(ctx, nextApproval.PipelineID)
+						run, _ := s.dao.PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
+						if pipeline != nil && run != nil {
+							s.NotifyFeishuApproval(ctx, pipeline, run, nextApproval)
+						}
+					}
+				}
+				// 发送当前级通过结果通知
+				go s.notifyFeishuApprovalResult(ctx, approval, req.Action, req.Reason)
+				return nil // 不触发部署，等待下一级
+			}
+
+			// 最后一级通过：更新阶段审批状态，启动部署
 			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, approveUserID, "approved", req.Reason)
 
 			// 启动部署阶段
@@ -140,7 +159,7 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 							"status":       models.StageStatusPending,
 							"deploy_image": run.ImageURL,
 						})
-						global.Logger.Info("[飞书审批] 审批通过，部署阶段已就绪",
+						global.Logger.Info("[飞书审批] 全部审批通过，部署阶段已就绪",
 							zap.Int64("deploy_stage_id", deployStage.ID),
 							zap.String("image", run.ImageURL),
 						)
@@ -188,6 +207,12 @@ func (s *Services) buildFeishuApprovalCard(pipeline *models.CicdPipeline, run *m
 	rejectURL := fmt.Sprintf("%s/api/v1/k8s/cicd/approval/feishu-callback?token=%s&action=reject", callbackURL, token)
 
 	// 飞书交互卡片 (Interactive Card)
+	// 构建审批级别信息
+	levelInfo := ""
+	if approval.TotalLevels > 1 {
+		levelInfo = fmt.Sprintf(" (%d/%d: %s)", approval.ApprovalLevel, approval.TotalLevels, approval.LevelLabel)
+	}
+
 	card := map[string]interface{}{
 		"msg_type": "interactive",
 		"card": map[string]interface{}{
@@ -197,7 +222,7 @@ func (s *Services) buildFeishuApprovalCard(pipeline *models.CicdPipeline, run *m
 			"header": map[string]interface{}{
 				"title": map[string]interface{}{
 					"tag":     "plain_text",
-					"content": fmt.Sprintf("🔔 发布审批 - %s", pipeline.Name),
+					"content": fmt.Sprintf("🔔 发布审批%s - %s", levelInfo, pipeline.Name),
 				},
 				"template": "orange",
 			},

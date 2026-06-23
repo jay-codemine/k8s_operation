@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
+	"go.uber.org/zap"
+	"k8soperation/global"
 	"k8soperation/internal/app/builder"
 	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/infra"
@@ -132,46 +134,110 @@ func (s *Services) CicdReleaseCreate(
 		return 0, err
 	}
 
-	// 入队：逐个 task 写入 Redis Stream
+	// ====== 强制审批：所有手动创建的发布单必须经过审批 ======
+	// 查询环境配置，继承多级审批策略
+	totalLevels := 1
+	levelLabel := "发布审批"
+
+	// 优先按 namespace 查环境，找不到再按 name 查
+	env, envErr := s.dao.EnvironmentGetByNamespace(ctx, req.Namespace)
+	if envErr != nil {
+		env, _ = s.dao.EnvironmentGetByName(ctx, req.Namespace)
+	}
+	if env != nil && len(env.ApprovalLevels) > 0 {
+		totalLevels = len(env.ApprovalLevels)
+		levelLabel = env.ApprovalLevels[0].Label
+	}
+
+	// 构造完整镜像地址
+	fullImage := imageRepo
+	if imageTag != "" {
+		fullImage = imageRepo + ":" + imageTag
+	}
+
+	// 创建第一级审批记录
+	approval := &models.CicdApproval{
+		PipelineID:    req.PipelineID,
+		ReleaseID:     rel.ID,
+		EnvName:       req.Namespace, // 用命名空间标识环境
+		Status:        models.ApprovalStatusPending,
+		Image:         fullImage,
+		ImageDigest:   imageDigest,
+		RequestUserID: userID,
+		RequestReason: fmt.Sprintf("手动创建发布: %s → %s/%s", req.AppName, req.Namespace, req.WorkloadName),
+		ExpireTime:    uint64(time.Now().Unix() + 86400*7), // 7天过期
+		ApprovalLevel: 1,
+		TotalLevels:   totalLevels,
+		LevelLabel:    levelLabel,
+		CreatedAt:     uint64(time.Now().Unix()),
+		ModifiedAt:    uint64(time.Now().Unix()),
+	}
+	approvalID, err := s.dao.ApprovalCreate(ctx, approval)
+	if err != nil {
+		global.Logger.Error("[发布] 创建审批记录失败", zap.Error(err))
+		// 审批失败不降级，直接报错阻断（不允许自动发布）
+		_, _ = s.dao.CicdReleaseUpdateStatusCAS(ctx, rel.ID,
+			[]string{models.CicdReleaseStatusPending},
+			models.CicdReleaseStatusFailed,
+			"创建审批记录失败，发布已阻断",
+		)
+		return 0, fmt.Errorf("创建审批记录失败: %w", err)
+	}
+
+	// 更新发布单状态为「等待审批」
+	_, _ = s.dao.CicdReleaseUpdateStatusCAS(
+		ctx,
+		rel.ID,
+		[]string{models.CicdReleaseStatusPending},
+		models.CicdReleaseStatusAwaitingApproval,
+		fmt.Sprintf("等待审批(approval_id=%d, levels=%d)", approvalID, totalLevels),
+	)
+
+	global.Logger.Info("[发布] 已创建发布单，等待多级审批",
+		zap.Int64("release_id", rel.ID),
+		zap.Int64("approval_id", approvalID),
+		zap.Int("total_levels", totalLevels),
+		zap.String("app_name", req.AppName),
+	)
+
+	return rel.ID, nil
+}
+
+// releaseEnqueue 将发布单的 tasks 入队 Redis Stream 执行部署
+func (s *Services) releaseEnqueue(ctx context.Context, releaseID int64, tasks []*models.CicdReleaseTask) (int64, error) {
 	enqueued := 0
 	for _, t := range tasks {
 		if _, err := s.stream.XAdd(ctx, infra.CicdDeployStream, map[string]any{
 			"task_id":    t.ID,
-			"release_id": rel.ID,
+			"release_id": releaseID,
 		}); err != nil {
-
-			// 1) Release 标 Failed（CAS，避免并发覆盖终态）
 			_, _ = s.dao.CicdReleaseUpdateStatusCAS(
 				ctx,
-				rel.ID,
-				[]string{"Pending", "Queued"},
+				releaseID,
+				[]string{"Pending", "Queued", models.CicdReleaseStatusAwaitingApproval},
 				"Failed",
 				fmt.Sprintf("enqueue failed after %d/%d", enqueued, len(tasks)),
 			)
-
-			// 2) 止血：把仍未执行的任务（Pending/Queued）批量标 Failed，避免悬挂
 			_ = s.dao.CicdTasksFailByRelease(
 				ctx,
-				rel.ID,
+				releaseID,
 				fmt.Sprintf("enqueue failed after %d/%d", enqueued, len(tasks)),
 			)
-
 			return 0, err
 		}
-
 		enqueued++
 	}
 
-	// 全部入队成功：Release 标 Queued（CAS）
+	// 全部入队成功：Release 标 Queued
 	_, _ = s.dao.CicdReleaseUpdateStatusCAS(
 		ctx,
-		rel.ID,
-		[]string{"Pending"},
+		releaseID,
+		[]string{"Pending", models.CicdReleaseStatusAwaitingApproval},
 		"Queued",
 		"enqueued",
 	)
 
-	return rel.ID, nil
+	return releaseID, nil
 }
 
 // CicdReleaseDetail 获取发布单详情
@@ -207,8 +273,9 @@ func (s *Services) CicdReleaseUpdate(ctx context.Context, req *requests.CicdRele
 		return fmt.Errorf("发布单不存在: %w", err)
 	}
 
-	// 检查状态：仅 Pending/Failed/Canceled 可编辑
+	// 检查状态：仅 Pending/AwaitingApproval/Failed/Canceled 可编辑
 	if rel.Status != models.CicdReleaseStatusPending &&
+		rel.Status != models.CicdReleaseStatusAwaitingApproval &&
 		rel.Status != models.CicdReleaseStatusFailed &&
 		rel.Status != models.CicdReleaseStatusCanceled {
 		return fmt.Errorf("发布单当前状态为 %s，无法编辑", rel.Status)
@@ -306,7 +373,7 @@ func (s *Services) CicdReleaseCancel(ctx context.Context, releaseID int64, userI
 		}, nil
 	}
 
-	// 4. 其他状态（Pending/Queued），直接取消
+	// 4. 其他状态（Pending/Queued/AwaitingApproval），直接取消
 	ok, err := s.dao.CicdReleaseCancel(ctx, releaseID)
 	if err != nil {
 		return nil, fmt.Errorf("取消发布单失败: %w", err)

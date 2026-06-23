@@ -902,6 +902,51 @@ func (s *Services) PipelineHistory(ctx context.Context, req *requests.PipelineHi
 	return list, total, nil
 }
 
+// BuildRecordList 获取全量构建记录（跨流水线），返回包含流水线名称的富化数据
+func (s *Services) BuildRecordList(ctx context.Context, page, pageSize int, status, keyword string, pipelineID int64) ([]interface{}, int64, error) {
+	list, total, err := s.dao.PipelineRunListAll(ctx, page, pageSize, status, keyword, pipelineID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 批量查询流水线名称缓存
+	pipelineNames := make(map[int64]string)
+	for _, run := range list {
+		if _, ok := pipelineNames[run.PipelineID]; !ok {
+			pipelineNames[run.PipelineID] = ""
+		}
+	}
+	for pid := range pipelineNames {
+		if p, err := s.dao.PipelineGetByID(ctx, pid); err == nil {
+			pipelineNames[pid] = p.Name
+		}
+	}
+
+	// 转换为富化结果
+	result := make([]interface{}, 0, len(list))
+	for _, run := range list {
+		result = append(result, map[string]interface{}{
+			"id":              run.ID,
+			"pipeline_id":     run.PipelineID,
+			"pipeline_name":   pipelineNames[run.PipelineID],
+			"build_number":    run.BuildNumber,
+			"status":          run.Status,
+			"trigger_type":    run.TriggerType,
+			"trigger_user_id": run.TriggerUserID,
+			"git_branch":      run.GitBranch,
+			"image_url":       run.ImageURL,
+			"image_digest":    run.ImageDigest,
+			"duration_sec":    run.DurationSec,
+			"started_at":      run.StartedAt,
+			"finished_at":     run.FinishedAt,
+			"created_at":      run.CreatedAt,
+			"error_message":   run.ErrorMessage,
+		})
+	}
+
+	return result, total, nil
+}
+
 // PipelineCallbackResult 回调处理结果（返回给 Jenkins）
 type PipelineCallbackResult struct {
 	Success       bool   `json:"success"`
@@ -1501,6 +1546,13 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 	}
 
 	now := uint64(time.Now().Unix())
+
+	// 构建发布单消息：失败时使用具体错误信息，成功时使用通用描述
+	releaseMessage := fmt.Sprintf("流水线自动同步: %s #%d", pipeline.Name, run.BuildNumber)
+	if runStatus == models.PipelineRunStatusFailed && run.ErrorMessage != "" {
+		releaseMessage = run.ErrorMessage
+	}
+
 	release := &models.CicdRelease{
 		AppName:       pipeline.Name,
 		Namespace:     namespace,
@@ -1510,7 +1562,7 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 		Strategy:      "rolling",
 		TimeoutSec:    300,
 		Status:        releaseStatus,
-		Message:       fmt.Sprintf("流水线自动同步: %s #%d", pipeline.Name, run.BuildNumber),
+		Message:       releaseMessage,
 		CreatedUserID: run.TriggerUserID,
 		RequestID:     fmt.Sprintf("pipeline-sync-%d", run.ID),
 		BuildID:       run.ID,
@@ -1541,11 +1593,16 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 				targetImage = targetImage[:idx] + "@" + imageDigest
 			}
 		}
+		// 任务消息：失败时记录具体原因，方便排查
+		taskMessage := "流水线同步"
+		if runStatus == models.PipelineRunStatusFailed && run.ErrorMessage != "" {
+			taskMessage = run.ErrorMessage
+		}
 		task := &models.CicdReleaseTask{
 			ReleaseID:   release.ID,
 			ClusterID:   pipeline.TargetClusterID,
 			Status:      releaseStatus,
-			Message:     "流水线同步",
+			Message:     taskMessage,
 			TargetImage: targetImage,
 			StartedAt:   now,
 			FinishedAt:  now,

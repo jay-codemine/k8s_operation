@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // PlatformHealthService 平台健康检查服务
@@ -431,7 +432,9 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 }
 
 // getClusterNodeSummary 获取单个集群的节点概览
-func (s *PlatformHealthService) getClusterNodeSummary(ctx context.Context, client *kubernetes.Clientset) NodeSummary {
+// 优先使用 metrics-server 获取真实 CPU/内存使用率（与 kubectl top nodes 一致）
+// 如果 metrics-server 不可用，回退到 Pod Requests 估算
+func (s *PlatformHealthService) getClusterNodeSummaryWithMetrics(ctx context.Context, client *kubernetes.Clientset, metricsClient *metricsclient.Clientset) NodeSummary {
 	summary := NodeSummary{}
 	if client == nil {
 		return summary
@@ -442,7 +445,7 @@ func (s *PlatformHealthService) getClusterNodeSummary(ctx context.Context, clien
 		return summary
 	}
 
-	var totalCPU, usedCPU, totalMem, usedMem, totalPods, usedPods int64
+	var totalCPU, totalMem, totalPods, usedPods int64
 
 	for _, node := range nodes.Items {
 		summary.Total++
@@ -474,28 +477,65 @@ func (s *PlatformHealthService) getClusterNodeSummary(ctx context.Context, clien
 		totalPods += node.Status.Allocatable.Pods().Value()
 	}
 
-	pods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{FieldSelector: "status.phase=Running"})
-	if err == nil {
-		usedPods = int64(len(pods.Items))
-		for _, pod := range pods.Items {
-			for _, container := range pod.Spec.Containers {
-				usedCPU += container.Resources.Requests.Cpu().MilliValue()
-				usedMem += container.Resources.Requests.Memory().Value()
+	// 优先使用 metrics-server 获取真实使用率（与 kubectl top nodes 一致）
+	metricsUsed := false
+	if metricsClient != nil {
+		nodeMetrics, mErr := metricsClient.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+		if mErr == nil && len(nodeMetrics.Items) > 0 {
+			var usedCPU, usedMem int64
+			for _, nm := range nodeMetrics.Items {
+				if cpu := nm.Usage.Cpu(); cpu != nil {
+					usedCPU += cpu.MilliValue()
+				}
+				if mem := nm.Usage.Memory(); mem != nil {
+					usedMem += mem.Value()
+				}
 			}
+			if totalCPU > 0 {
+				summary.CPUUsage = float64(usedCPU) / float64(totalCPU) * 100
+			}
+			if totalMem > 0 {
+				summary.MemoryUsage = float64(usedMem) / float64(totalMem) * 100
+			}
+			metricsUsed = true
 		}
 	}
 
-	if totalCPU > 0 {
-		summary.CPUUsage = float64(usedCPU) / float64(totalCPU) * 100
+	// 回退：如果 metrics-server 不可用，使用 Pod Requests 估算
+	if !metricsUsed {
+		var usedCPU, usedMem int64
+		pods, pErr := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{FieldSelector: "status.phase=Running"})
+		if pErr == nil {
+			for _, pod := range pods.Items {
+				for _, container := range pod.Spec.Containers {
+					usedCPU += container.Resources.Requests.Cpu().MilliValue()
+					usedMem += container.Resources.Requests.Memory().Value()
+				}
+			}
+		}
+		if totalCPU > 0 {
+			summary.CPUUsage = float64(usedCPU) / float64(totalCPU) * 100
+		}
+		if totalMem > 0 {
+			summary.MemoryUsage = float64(usedMem) / float64(totalMem) * 100
+		}
 	}
-	if totalMem > 0 {
-		summary.MemoryUsage = float64(usedMem) / float64(totalMem) * 100
+
+	// Pod 使用率始终从实际 Running Pod 数量计算
+	pods, pErr := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{FieldSelector: "status.phase=Running"})
+	if pErr == nil {
+		usedPods = int64(len(pods.Items))
 	}
 	if totalPods > 0 {
 		summary.PodUsage = float64(usedPods) / float64(totalPods) * 100
 	}
 
 	return summary
+}
+
+// getClusterNodeSummary 兼容旧接口（无 metrics client 时回退到 requests 估算）
+func (s *PlatformHealthService) getClusterNodeSummary(ctx context.Context, client *kubernetes.Clientset) NodeSummary {
+	return s.getClusterNodeSummaryWithMetrics(ctx, client, nil)
 }
 
 // getClusterWorkloadSummary 获取单个集群的工作负载概览
@@ -678,19 +718,27 @@ func (s *PlatformHealthService) getClusterEventSummary(ctx context.Context, clie
 }
 
 // getNodeSummary 获取节点概览 (汇总所有集群)
+// 优先使用 metrics-server 获取真实使用率（与 kubectl top nodes 一致）
 func (s *PlatformHealthService) getNodeSummary(ctx context.Context) NodeSummary {
 	summary := NodeSummary{}
 
-	// 获取所有在线集群的客户端
-	clients := s.getAllK8sClients(ctx)
-	if len(clients) == 0 {
+	// 获取所有在线集群的完整客户端（包含 metrics client）
+	fullClients := s.getAllK8sFullClients(ctx)
+	if len(fullClients) == 0 {
 		return summary
 	}
 
-	var totalCPU, usedCPU, totalMem, usedMem, totalPods, usedPods int64
+	var totalCPU, totalMem, totalPods, usedPods int64
+	var metricsUsedCPU, metricsUsedMem int64
+	metricsAvailable := false
 
 	// 遍历所有集群汇总数据
-	for _, client := range clients {
+	for _, fc := range fullClients {
+		if fc.Kube == nil {
+			continue
+		}
+		client := fc.Kube
+
 		nodes, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			global.Logger.Warn("获取集群节点列表失败", zap.Error(err))
@@ -730,28 +778,67 @@ func (s *PlatformHealthService) getNodeSummary(ctx context.Context) NodeSummary 
 			totalPods += node.Status.Allocatable.Pods().Value()
 		}
 
-		// 获取实际使用量 (从 pods 统计)
-		pods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		// 优先使用 metrics-server 获取真实使用量
+		if fc.Metrics != nil {
+			nodeMetrics, mErr := fc.Metrics.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+			if mErr == nil && len(nodeMetrics.Items) > 0 {
+				for _, nm := range nodeMetrics.Items {
+					if cpu := nm.Usage.Cpu(); cpu != nil {
+						metricsUsedCPU += cpu.MilliValue()
+					}
+					if mem := nm.Usage.Memory(); mem != nil {
+						metricsUsedMem += mem.Value()
+					}
+				}
+				metricsAvailable = true
+			}
+		}
+
+		// Pod 数量统计
+		pods, pErr := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 			FieldSelector: "status.phase=Running",
 		})
-		if err == nil {
+		if pErr == nil {
 			usedPods += int64(len(pods.Items))
-			for _, pod := range pods.Items {
-				for _, container := range pod.Spec.Containers {
-					usedCPU += container.Resources.Requests.Cpu().MilliValue()
-					usedMem += container.Resources.Requests.Memory().Value()
-				}
-			}
 		}
 	}
 
 	// 计算使用率
-	if totalCPU > 0 {
-		summary.CPUUsage = float64(usedCPU) / float64(totalCPU) * 100
+	if metricsAvailable {
+		// 使用 metrics-server 真实数据
+		if totalCPU > 0 {
+			summary.CPUUsage = float64(metricsUsedCPU) / float64(totalCPU) * 100
+		}
+		if totalMem > 0 {
+			summary.MemoryUsage = float64(metricsUsedMem) / float64(totalMem) * 100
+		}
+	} else {
+		// 回退：使用 Pod Requests 估算
+		var usedCPU, usedMem int64
+		for _, fc := range fullClients {
+			if fc.Kube == nil {
+				continue
+			}
+			pods, pErr := fc.Kube.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+				FieldSelector: "status.phase=Running",
+			})
+			if pErr == nil {
+				for _, pod := range pods.Items {
+					for _, container := range pod.Spec.Containers {
+						usedCPU += container.Resources.Requests.Cpu().MilliValue()
+						usedMem += container.Resources.Requests.Memory().Value()
+					}
+				}
+			}
+		}
+		if totalCPU > 0 {
+			summary.CPUUsage = float64(usedCPU) / float64(totalCPU) * 100
+		}
+		if totalMem > 0 {
+			summary.MemoryUsage = float64(usedMem) / float64(totalMem) * 100
+		}
 	}
-	if totalMem > 0 {
-		summary.MemoryUsage = float64(usedMem) / float64(totalMem) * 100
-	}
+
 	if totalPods > 0 {
 		summary.PodUsage = float64(usedPods) / float64(totalPods) * 100
 	}
@@ -956,6 +1043,34 @@ func (s *PlatformHealthService) getAllK8sClients(ctx context.Context) []*kuberne
 	// 如果没有从数据库获取到，回退到全局管理集群客户端
 	if len(clients) == 0 && global.ManagementKubeClient != nil {
 		clients = append(clients, global.ManagementKubeClient)
+	}
+
+	return clients
+}
+
+// getAllK8sFullClients 获取所有在线集群的完整客户端（包含 metrics client）
+func (s *PlatformHealthService) getAllK8sFullClients(ctx context.Context) []*K8sClients {
+	var clients []*K8sClients
+
+	if s.factory != nil && global.DB != nil {
+		var clusterIDs []int64
+		global.DB.Table("kube_cluster").
+			Where("is_del = 0 AND status = ?", 0).
+			Pluck("id", &clusterIDs)
+
+		for _, clusterID := range clusterIDs {
+			if c, err := s.factory.GetClient(ctx, clusterID); err == nil && c != nil && c.Kube != nil {
+				clients = append(clients, c)
+			}
+		}
+	}
+
+	// 回退到全局管理集群
+	if len(clients) == 0 && global.ManagementKubeClient != nil {
+		clients = append(clients, &K8sClients{
+			Kube:    global.ManagementKubeClient,
+			Metrics: global.MetricsClient,
+		})
 	}
 
 	return clients

@@ -3,6 +3,7 @@ package requests
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/thedevsaddam/govalidator"
+	"k8soperation/internal/app/models"
 	"k8soperation/pkg/valid"
 )
 
@@ -10,15 +11,16 @@ import (
 
 // EnvironmentCreateRequest 创建环境请求
 type EnvironmentCreateRequest struct {
-	Name            string   `json:"name" valid:"name"`                 // 环境名称(dev/staging/prod)
-	DisplayName     string   `json:"display_name" valid:"display_name"` // 显示名称
-	Description     string   `json:"description"`                       // 描述
-	ClusterID       int64    `json:"cluster_id" valid:"cluster_id"`     // 关联集群ID
-	Namespace       string   `json:"namespace"`                         // 默认命名空间
-	Color           string   `json:"color"`                             // 环境颜色标识
-	SortOrder       int      `json:"sort_order"`                        // 排序
-	RequireApproval bool     `json:"require_approval"`                  // 是否需要审批
-	ApprovalUserIDs []int64  `json:"approval_user_ids"`                 // 审批人员ID列表
+	Name            string                 `json:"name" valid:"name"`                 // 环境名称(dev/staging/prod)
+	DisplayName     string                 `json:"display_name" valid:"display_name"` // 显示名称
+	Description     string                 `json:"description"`                       // 描述
+	ClusterID       int64                  `json:"cluster_id" valid:"cluster_id"`     // 关联集群ID
+	Namespace       string                 `json:"namespace"`                         // 默认命名空间
+	Color           string                 `json:"color"`                             // 环境颜色标识
+	SortOrder       int                    `json:"sort_order"`                        // 排序
+	RequireApproval bool                   `json:"require_approval"`                  // 是否需要审批
+	ApprovalUserIDs []int64                `json:"approval_user_ids"`                 // 审批人员ID列表（兼容旧接口）
+	ApprovalLevels  []models.ApprovalLevel `json:"approval_levels"`                   // 多级审批配置
 }
 
 func ValidEnvironmentCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -37,16 +39,17 @@ func ValidEnvironmentCreateRequest(data interface{}, ctx *gin.Context) map[strin
 
 // EnvironmentUpdateRequest 更新环境请求
 type EnvironmentUpdateRequest struct {
-	ID              int64    `json:"id" valid:"id"`
-	Name            string   `json:"name"`
-	DisplayName     string   `json:"display_name"`
-	Description     string   `json:"description"`
-	ClusterID       *int64   `json:"cluster_id"`
-	Namespace       string   `json:"namespace"`
-	Color           string   `json:"color"`
-	SortOrder       *int     `json:"sort_order"`
-	RequireApproval *bool    `json:"require_approval"`
-	ApprovalUserIDs []int64  `json:"approval_user_ids"`
+	ID              int64                  `json:"id" valid:"id"`
+	Name            string                 `json:"name"`
+	DisplayName     string                 `json:"display_name"`
+	Description     string                 `json:"description"`
+	ClusterID       *int64                 `json:"cluster_id"`
+	Namespace       string                 `json:"namespace"`
+	Color           string                 `json:"color"`
+	SortOrder       *int                   `json:"sort_order"`
+	RequireApproval *bool                  `json:"require_approval"`
+	ApprovalUserIDs []int64                `json:"approval_user_ids"`
+	ApprovalLevels  []models.ApprovalLevel `json:"approval_levels"` // 多级审批配置
 }
 
 func ValidEnvironmentUpdateRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -182,6 +185,25 @@ func ValidApprovalDeleteRequest(data interface{}, ctx *gin.Context) map[string][
 	}
 	messages := govalidator.MapData{
 		"id": []string{"required:审批ID不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ApprovalBatchActionRequest 批量审批操作请求
+type ApprovalBatchActionRequest struct {
+	IDs    []int64 `json:"ids" valid:"ids"`
+	Action string  `json:"action" valid:"action"` // approve/reject
+	Reason string  `json:"reason"`                // 审批意见
+}
+
+func ValidApprovalBatchActionRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids":    []string{"required"},
+		"action": []string{"required", "in:approve,reject"},
+	}
+	messages := govalidator.MapData{
+		"ids":    []string{"required:审批ID列表不能为空"},
+		"action": []string{"required:操作类型不能为空", "in:操作类型无效，可选值: approve, reject"},
 	}
 	return valid.ValidateOptions(data, rules, messages)
 }

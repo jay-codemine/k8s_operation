@@ -406,8 +406,8 @@ const handleSubmit = async () => {
 
 <style scoped>
 :root {
-  --primary-color: #6366f1;
-  --secondary-color: #8b5cf6;
+  --primary-color: #165DFF;
+  --secondary-color: #4080FF;
 }
 
 .login-container {
@@ -418,20 +418,18 @@ const handleSubmit = async () => {
   min-height: 100dvh;
   padding: 24px;
   overflow-y: auto;
-  background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, .25), transparent 42%),
-  radial-gradient(circle at 80% 80%, rgba(139, 92, 246, .18), transparent 46%),
-  linear-gradient(135deg, #0f0a1e 0%, #1e1b4b 40%, #0f0a1e 100%);
+  background: linear-gradient(135deg, #1d2129 0%, #2a3042 50%, #1d2129 100%);
 }
 
 .login-box {
   width: 100%;
   max-width: 420px;
   padding: 40px 36px;
-  background: rgba(255, 255, 255, .08);
+  background: rgba(255, 255, 255, .06);
   backdrop-filter: blur(16px);
-  border-radius: 20px;
-  border: 1px solid rgba(139, 92, 246, .25);
-  box-shadow: 0 20px 60px rgba(99, 102, 241, .2);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
 }
 
 .login-header {
@@ -518,14 +516,14 @@ const handleSubmit = async () => {
 }
 
 .forgot-password {
-  color: #818cf8;
+  color: #4080FF;
   text-decoration: none;
   font-size: 14px;
   transition: color 0.3s ease;
 }
 
 .forgot-password:hover {
-  color: #a5b4fc;
+  color: #6aa1ff;
   text-decoration: underline;
 }
 
@@ -546,17 +544,17 @@ const handleSubmit = async () => {
   transition: all 0.3s ease;
   flex: 1;
   font-size: 15px;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 14px rgba(22, 93, 255, 0.3);
 }
 
 .login-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--secondary-color), #7c3aed);
+  background: linear-gradient(135deg, var(--secondary-color), #165DFF);
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 8px 25px rgba(22, 93, 255, 0.4);
 }
 
 .login-btn:disabled {
-  background: linear-gradient(135deg, #a5b4fc, #818cf8);
+  background: linear-gradient(135deg, #4080FF, #6aa1ff);
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -565,9 +563,9 @@ const handleSubmit = async () => {
 .register-btn {
   padding: 14px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, .08);
-  color: #a5b4fc;
-  border: 1px solid rgba(165, 180, 252, .35);
+  background: rgba(255, 255, 255, .06);
+  color: #c9cdd4;
+  border: 1px solid rgba(255, 255, 255, .2);
   cursor: pointer;
   transition: all 0.3s ease;
   flex: 1;
@@ -575,16 +573,16 @@ const handleSubmit = async () => {
 }
 
 .register-btn:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.15);
-  color: #c4b5fd;
-  border-color: rgba(165, 180, 252, .6);
+  background: rgba(22, 93, 255, 0.1);
+  color: #4080FF;
+  border-color: rgba(64, 128, 255, .4);
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 20px rgba(22, 93, 255, 0.15);
 }
 
 .register-btn:disabled {
-  background: rgba(255, 255, 255, .05);
-  color: #818cf8;
+  background: rgba(255, 255, 255, .04);
+  color: #86909c;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -625,10 +623,10 @@ const handleSubmit = async () => {
   width: 100%;
   max-width: 440px;
   padding: 18px 18px 16px;
-  background: rgba(30, 27, 75, .95);
-  border: 1px solid rgba(139, 92, 246, .25);
+  background: rgba(29, 33, 41, .95);
+  border: 1px solid rgba(255, 255, 255, .1);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(99, 102, 241, .25);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
 }
 
 .modal-header {
@@ -709,10 +707,10 @@ const handleSubmit = async () => {
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(22, 93, 255, 0.1);
+  border: 1px solid rgba(22, 93, 255, 0.25);
   border-radius: 10px;
-  color: #a5b4fc;
+  color: #4080FF;
   font-size: 13px;
 }
 </style>

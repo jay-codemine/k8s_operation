@@ -1,24 +1,24 @@
 /**
  * K8s Operation Platform - Global Theme Variables
- * Version: 3.0 (Modern Edition)
+ * Version: 4.0 (Enterprise Edition)
  * 
- * 现代化配色方案 - 参考 Vercel / Linear / Stripe 设计语言
+ * 企业级配色方案 - 对齐 Arco Design Pro / 字节跳动设计体系
  */
 
 :root {
   /* ========================================
-     品牌色系 - 科技紫蓝渐变
+     品牌色系 - Arco Blue 企业蓝
   ======================================== */
-  --brand-primary: #6366f1;      /* Indigo 主色 */
-  --brand-primary-light: #818cf8;
-  --brand-primary-dark: #4f46e5;
-  --brand-secondary: #8b5cf6;    /* Violet 辅助色 */
+  --brand-primary: #165DFF;      /* Arco Blue 主色 */
+  --brand-primary-light: #4080FF;
+  --brand-primary-dark: #0E42D2;
+  --brand-secondary: #14C9C9;    /* 青色辅助色 */
   
   /* 渐变色 */
-  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  --gradient-primary-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  --gradient-accent: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
-  --gradient-warm: linear-gradient(135deg, #f472b6 0%, #fb923c 100%);
+  --gradient-primary: linear-gradient(135deg, #165DFF 0%, #4080FF 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #0E42D2 0%, #165DFF 100%);
+  --gradient-accent: linear-gradient(135deg, #14C9C9 0%, #165DFF 100%);
+  --gradient-warm: linear-gradient(135deg, #F77234 0%, #FADC19 100%);
   
   /* ========================================
      语义色 - 功能色彩
@@ -69,13 +69,13 @@
      背景色
   ======================================== */
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f4f6;
+  --bg-secondary: #f2f3f5;
+  --bg-tertiary: #e5e6eb;
   --bg-elevated: #ffffff;
-  --bg-overlay: rgba(17, 24, 39, 0.6);
-  --bg-sidebar: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
-  --bg-sidebar-item-hover: rgba(255, 255, 255, 0.1);
-  --bg-sidebar-item-active: rgba(99, 102, 241, 0.3);
+  --bg-overlay: rgba(29, 33, 41, 0.6);
+  --bg-sidebar: #1d2129;
+  --bg-sidebar-item-hover: rgba(255, 255, 255, 0.08);
+  --bg-sidebar-item-active: rgba(22, 93, 255, 0.15);
   
   /* ========================================
      文字色
@@ -85,8 +85,8 @@
   --text-tertiary: #6b7280;
   --text-muted: #9ca3af;
   --text-inverse: #ffffff;
-  --text-link: #6366f1;
-  --text-link-hover: #4f46e5;
+  --text-link: #165DFF;
+  --text-link-hover: #0E42D2;
   
   /* ========================================
      边框色
@@ -94,7 +94,7 @@
   --border-light: #e5e7eb;
   --border-default: #d1d5db;
   --border-dark: #9ca3af;
-  --border-focus: #6366f1;
+  --border-focus: #165DFF;
   
   /* ========================================
      阴影系统
@@ -107,11 +107,11 @@
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   
   /* 品牌色阴影 */
-  --shadow-primary: 0 4px 14px rgba(99, 102, 241, 0.4);
-  --shadow-success: 0 4px 14px rgba(16, 185, 129, 0.4);
-  --shadow-warning: 0 4px 14px rgba(245, 158, 11, 0.4);
-  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.4);
-  --shadow-info: 0 4px 14px rgba(59, 130, 246, 0.4);
+  --shadow-primary: 0 4px 14px rgba(22, 93, 255, 0.25);
+  --shadow-success: 0 4px 14px rgba(16, 185, 129, 0.25);
+  --shadow-warning: 0 4px 14px rgba(245, 158, 11, 0.25);
+  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.25);
+  --shadow-info: 0 4px 14px rgba(59, 130, 246, 0.25);
   
   /* ========================================
      圆角系统
