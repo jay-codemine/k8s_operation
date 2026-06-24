@@ -57,8 +57,8 @@ spec:
 
       containers:
         - name: k8soperation
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-be:v13.9
-          imagePullPolicy: IfNotPresent
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-be:v14.1
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
