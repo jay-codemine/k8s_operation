@@ -47,7 +47,32 @@ func (c *CicdReleaseController) Create(ctx *gin.Context) {
 		rsp.ToErrorResponse(errorcode.ErrorCicdReleaseCreateFail.WithDetails(err.Error()))
 		return
 	}
-	rsp.Success(gin.H{"release_id": id})
+
+	result := gin.H{"release_id": id}
+
+	// 创建发布单后自动触发流水线构建（如果关联了 pipeline_id）
+	if param.PipelineID > 0 {
+		runReq := &requests.PipelineRunRequest{ID: param.PipelineID}
+		run, runErr := svc.PipelineRun(ctx.Request.Context(), runReq, userID)
+		if runErr != nil {
+			global.Logger.Warn("[发布] 创建发布单后自动触发构建失败",
+				zap.Int64("release_id", id),
+				zap.Int64("pipeline_id", param.PipelineID),
+				zap.Error(runErr),
+			)
+			result["auto_build_error"] = runErr.Error()
+		} else if run != nil {
+			result["run_id"] = run.ID
+			result["message"] = "发布单创建成功并已自动触发构建"
+			global.Logger.Info("[发布] 创建发布单后自动触发构建成功",
+				zap.Int64("release_id", id),
+				zap.Int64("pipeline_id", param.PipelineID),
+				zap.Int64("run_id", run.ID),
+			)
+		}
+	}
+
+	rsp.Success(result)
 }
 
 // Detail godoc

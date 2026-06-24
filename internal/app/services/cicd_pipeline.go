@@ -2096,14 +2096,9 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	setDefault(params, "REGISTRY_CREDENTIAL_ID", registryCredID)
 	setDefault(params, "HMAC_CREDENTIAL_ID", hmacCredID)
 
-	// SonarQube 代码质量扫描（根据流水线配置注入，所有语言统一）
-	if pipeline.EnableSonar {
-		setDefault(params, "ENABLE_SONAR", "true")
-		setDefault(params, "SONAR_QUALITY_GATE", "true")
-	} else {
-		setDefault(params, "ENABLE_SONAR", "false")
-		setDefault(params, "SONAR_QUALITY_GATE", "false")
-	}
+	// SonarQube 代码质量扫描（暂时强制关闭，待 SonarQube 服务部署后再启用）
+	setDefault(params, "ENABLE_SONAR", "false")
+	setDefault(params, "SONAR_QUALITY_GATE", "false")
 
 	// 制品上传（根据流水线配置注入，所有语言统一）
 	if pipeline.EnableArtifactUpload {
