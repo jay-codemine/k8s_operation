@@ -40,7 +40,7 @@ RUN npm run build
 
 
 # ======================== Stage 2: 运行阶段 ========================
-FROM docker.m.daocloud.io/library/nginx:1.27-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/nginx:alpine
 
 LABEL maintainer="K8sOperation Team"
 LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
@@ -56,7 +56,7 @@ RUN <<'NGINX_CONF' cat > /etc/nginx/conf.d/default.conf
 
 # 后端 API 上游（通过环境变量注入或默认值）
 upstream backend {
-    server k8soperation.k8soperation.svc.cluster.local:8080;
+    server k8soperation.k8soperation.svc:8080;
 }
 
 server {
