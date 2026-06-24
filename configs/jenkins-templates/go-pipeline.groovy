@@ -468,18 +468,13 @@ spec:
 
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
 
-                        // 优先级：1) 参数指定路径 → 2) 项目自带 Dockerfile → 3) 自动生成
-                        def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
-                        if (!dockerfile || forceGenerate) {
-                            if (fileExists('Dockerfile')) {
-                                dockerfile = 'Dockerfile'
-                                echo "[Build Image] 检测到项目自带 Dockerfile，优先使用"
-                            } else {
-                                dockerfile = '.Dockerfile.runtime'
-                                writeFile file: dockerfile, text: """\
+                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
+                            dockerfile = '.Dockerfile.runtime'
+                            writeFile file: dockerfile, text: """\
 FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata wget && \
-    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+RUN apk add --no-cache ca-certificates tzdata wget && \\
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \\
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
 RUN mkdir -p /app/storage/logs /app/configs
@@ -488,12 +483,11 @@ RUN chmod +x /app/${appName} && chown -R app:app /app
 USER app
 ENV GIN_MODE=release
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
     CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
 ENTRYPOINT ["/app/${appName}"]
 """
-                                echo "[Build Image] ${forceGenerate ? '强制' : '项目无 Dockerfile，'}已自动生成纯运行时 Dockerfile"
-                            }
+                            echo "[Build Image] 平台统一生成 Dockerfile"
                         }
 
                         // 配置镜像仓库认证

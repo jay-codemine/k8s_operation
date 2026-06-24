@@ -543,18 +543,14 @@ SETTINGS_EOF
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def javaVersion = params.JAVA_VERSION ?: '17'
 
-                        def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
-                        if (!dockerfile || forceGenerate) {
-                            if (fileExists('Dockerfile')) {
-                                dockerfile = 'Dockerfile'
-                                echo "[Build Image] 检测到项目自带 Dockerfile，优先使用"
-                            } else {
-                                dockerfile = '.Dockerfile.runtime'
-                                def agentCopyLines = env.AGENT_DOCKER_COPY_LINES ?: ''
-                                def agentEnvLines = env.AGENT_ENV_LINES ?: ''
-                                def agentJavaOpts = env.AGENT_JAVA_OPTS?.trim() ?: ''
+                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
+                            dockerfile = '.Dockerfile.runtime'
+                            def agentCopyLines = env.AGENT_DOCKER_COPY_LINES ?: ''
+                            def agentEnvLines = env.AGENT_ENV_LINES ?: ''
+                            def agentJavaOpts = env.AGENT_JAVA_OPTS?.trim() ?: ''
 
-                                def otelOptsValue = agentJavaOpts ? """\
+                            def otelOptsValue = agentJavaOpts ? """\
 ${agentJavaOpts} \
 -Dotel.service.name=java-app \
 -Dotel.traces.exporter=otlp \
@@ -562,7 +558,7 @@ ${agentJavaOpts} \
 -Dotel.logs.exporter=none \
 -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
 
-                                def dockerfileContent = """\
+                            def dockerfileContent = """\
 FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${javaVersion}-jre-alpine
 ENV TZ=Asia/Shanghai
 WORKDIR /app
@@ -580,13 +576,12 @@ ${agentEnvLines}${otelOptsValue ? "ENV OTEL_OPTS=\"${otelOptsValue}\"\n" : ''}EN
 -Djava.security.egd=file:/dev/./urandom"
 ENTRYPOINT ["sh", "-c", "exec java \$OTEL_OPTS \$JAVA_OPTS -jar /app/app.jar"]
 """
-                                sh """
+                            sh """
 cat > ${dockerfile} << 'DOCKERFILE_EOF'
 ${dockerfileContent}
 DOCKERFILE_EOF
 """
-                                echo "[Build Image] 自动生成 Dockerfile（注入 ${agentCopyLines.count('COPY')} 个探针）"
-                            }
+                            echo "[Build Image] 平台统一生成 Dockerfile（注入 ${agentCopyLines.count('COPY')} 个探针）"
                         }
 
                         // 配置镜像仓库认证（writeFile 避免 shell 特殊字符 + sandbox 限制）

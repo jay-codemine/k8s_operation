@@ -831,41 +831,7 @@
                   </label>
                   <div class="dockerfile-mode-selector">
                     <div
-                      :class="['df-mode-card', { active: dockerfileMode === 'auto' }]"
-                      @click="dockerfileMode = 'auto'"
-                    >
-                      <div class="df-mode-icon auto">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <circle cx="11" cy="11" r="8"/>
-                          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                      </div>
-                      <div class="df-mode-info">
-                        <div class="df-mode-title">智能检测<span class="df-badge recommend">推荐</span></div>
-                        <div class="df-mode-desc">自动检测项目 Dockerfile，未找到则平台生成</div>
-                      </div>
-                      <div class="df-mode-check" v-if="dockerfileMode === 'auto'">&#10003;</div>
-                    </div>
-
-                    <div
-                      :class="['df-mode-card', { active: dockerfileMode === 'project' }]"
-                      @click="dockerfileMode = 'project'"
-                    >
-                      <div class="df-mode-icon project">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                        </svg>
-                      </div>
-                      <div class="df-mode-info">
-                        <div class="df-mode-title">项目自带</div>
-                        <div class="df-mode-desc">使用仓库中已定义的 Dockerfile</div>
-                      </div>
-                      <div class="df-mode-check" v-if="dockerfileMode === 'project'">&#10003;</div>
-                    </div>
-
-                    <div
-                      :class="['df-mode-card', { active: dockerfileMode === 'platform' }]"
-                      @click="dockerfileMode = 'platform'"
+                      :class="['df-mode-card', 'active']"
                     >
                       <div class="df-mode-icon platform">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -875,52 +841,21 @@
                         </svg>
                       </div>
                       <div class="df-mode-info">
-                        <div class="df-mode-title">平台生成</div>
-                        <div class="df-mode-desc">忽略项目文件，由平台生成最优 Dockerfile</div>
+                        <div class="df-mode-title">平台统一生成<span class="df-badge recommend">推荐</span></div>
+                        <div class="df-mode-desc">由平台生成生产级最优 Dockerfile，忽略项目自带文件</div>
                       </div>
-                      <div class="df-mode-check" v-if="dockerfileMode === 'platform'">&#10003;</div>
+                      <div class="df-mode-check">&#10003;</div>
                     </div>
-                  </div>
-
-                  <!-- 项目自带模式：路径输入 -->
-                  <div v-if="dockerfileMode === 'project'" class="df-path-input">
-                    <div class="input-wrapper">
-                      <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                      <input
-                        type="text"
-                        v-model="pipelineData.dockerfile_path"
-                        class="form-input with-icon"
-                        placeholder="Dockerfile"
-                      />
-                    </div>
-                    <div class="input-hint">相对于项目根目录的路径，例如 Dockerfile、docker/Dockerfile.prod</div>
                   </div>
 
                   <!-- 策略说明面板 -->
                   <div class="df-info-panel">
-                    <div v-if="dockerfileMode === 'auto'" class="df-info-content">
-                      <div class="df-info-title">&#9889; 智能检测流穨</div>
+                    <div class="df-info-content">
+                      <div class="df-info-title">&#129302; 平台统一生成说明</div>
                       <div class="df-info-steps">
-                        <div class="df-step"><span class="df-step-num">1</span>检查项目根目录是否存在 Dockerfile</div>
-                        <div class="df-step"><span class="df-step-num">2</span>存在则直接使用项目 Dockerfile 构建镜像</div>
-                        <div class="df-step"><span class="df-step-num">3</span>不存在则根据 {{ dockerfileLangLabel }} 自动生成纯运行时 Dockerfile</div>
-                      </div>
-                    </div>
-                    <div v-else-if="dockerfileMode === 'project'" class="df-info-content">
-                      <div class="df-info-title">&#128193; 项目 Dockerfile 说明</div>
-                      <div class="df-info-text">
-                        直接使用项目仓库中的 Dockerfile，适合已自定义好构建逻辑的项目。
-                        <br/>Jenkins 编译产物（如 <code>target/*.jar</code>、<code>bin/</code>）在同一工作目录，Dockerfile 可直接 COPY。
-                      </div>
-                    </div>
-                    <div v-else class="df-info-content">
-                      <div class="df-info-title">&#129302; 平台生成说明</div>
-                      <div class="df-info-text">
-                        平台根据 <strong>{{ dockerfileLangLabel }}</strong> 语言类型，自动生成生产级纯运行时 Dockerfile：
-                        <br/>&#8226; 阿里云镜像源加速 &#8226; 非 root 用户 &#8226; 最小化镜像层 &#8226; 生产 JVM / Runtime 参数
+                        <div class="df-step"><span class="df-step-num">1</span>平台根据 {{ dockerfileLangLabel }} 语言类型自动生成生产级 Dockerfile</div>
+                        <div class="df-step"><span class="df-step-num">2</span>自动注入「构建探针管理」中已启用的 Agent（如 SkyWalking / OpenTelemetry）</div>
+                        <div class="df-step"><span class="df-step-num">3</span>阿里云镜像源加速 &bull; 非 root 用户 &bull; 最小化镜像层 &bull; 生产级 JVM 参数</div>
                       </div>
                     </div>
                   </div>
@@ -1945,19 +1880,14 @@ export default {
     
     // Dockerfile 模式标签
     const dockerfileModeLabel = computed(() => {
-      const labels = { auto: '智能检测', project: '项目自带', platform: '平台生成' }
-      return labels[dockerfileMode.value] || '未知'
+      return '平台统一生成'
     })
     
     // Dockerfile 内容生成
     const dockerfileContent = computed(() => {
       const lang = pipelineData.value.language_type
       
-      // 项目自带模式
-      if (dockerfileMode.value === 'project') {
-        return `# 使用项目中的 Dockerfile: ${pipelineData.value.dockerfile_path || 'Dockerfile'}\n# 此文件由项目仓库提供，平台将直接使用它来构建镜像。\n# 请在项目中查看具体内容。`
-      }
-      
+      // 统一使用平台生成的 Dockerfile
       // 根据语言生成Dockerfile
       const dockerfiles = {
         java: `# 多阶段构建：Java Spring Boot 应用\n# 阶段1：构建\nFROM maven:3.9-eclipse-temurin-17 AS builder\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:go-offline -B\nCOPY src ./src\nRUN mvn clean package -DskipTests\n\n# 阶段2：运行\nFROM eclipse-temurin:17-jre-alpine\nWORKDIR /app\nCOPY --from=builder /app/target/*.jar app.jar\nRUN addgroup -S appgroup && adduser -S appuser -G appgroup\nUSER appuser\nEXPOSE 8080\nENV JAVA_OPTS="-Xms256m -Xmx512m -Djava.security.egd=file:/dev/./urandom"\nENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]`,
@@ -1988,8 +1918,8 @@ export default {
     const showSuccessTopology = ref(false)
     const createdPipelineId = ref(0)
     
-    // Dockerfile 构建策略模式：'auto' | 'project' | 'platform'
-    const dockerfileMode = ref('auto')
+    // Dockerfile 构建策略模式：统一使用平台生成
+    const dockerfileMode = ref('platform')
     
     // 语言类型显示名称（用于 Dockerfile 策略面板）
     const dockerfileLangLabel = computed(() => {
@@ -2454,15 +2384,8 @@ export default {
             }
             const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
-            // 回显 Dockerfile 策略模式
-            const savedDfPath = getEnv('DOCKERFILE_PATH', '')
-            if (savedDfPath === '__PLATFORM_GENERATE__') {
-              dockerfileMode.value = 'platform'
-            } else if (savedDfPath) {
-              dockerfileMode.value = 'project'
-            } else {
-              dockerfileMode.value = 'auto'
-            }
+            // 回显 Dockerfile 策略模式（统一使用平台生成）
+            dockerfileMode.value = 'platform'
             selectedServiceType.value = langType
             pipelineData.value = {
               name: data.name || '',
@@ -2615,16 +2538,8 @@ export default {
         if (submitData.language_type === 'java') {
           injectEnv('JAVA_VERSION', submitData.java_version || '17')
         }
-        // Dockerfile 策略映射：
-        //   auto     → 空（Jenkins 智能检测项目 Dockerfile → 回退平台生成）
-        //   project  → 用户指定的路径，默认 'Dockerfile'
-        //   platform → '__PLATFORM_GENERATE__'  强制平台生成
-        if (dockerfileMode.value === 'project') {
-          injectEnv('DOCKERFILE_PATH', submitData.dockerfile_path || 'Dockerfile')
-        } else if (dockerfileMode.value === 'platform') {
-          injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
-        }
-        // auto 模式不发送 DOCKERFILE_PATH，由 Jenkins 智能检测
+        // Dockerfile 策略：统一使用平台生成
+        injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
         if (submitData.git_credential_id) injectEnv('GIT_CREDENTIAL_ID', submitData.git_credential_id)
 
         // SonarQube 开关同步

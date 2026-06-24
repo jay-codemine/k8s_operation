@@ -6,25 +6,24 @@
 #   - 仅接收平台 mvn package 产出的 JAR
 #   - 使用 JRE 而非 JDK，镜像更小
 #   - 生产级 JVM 参数调优
-#   - 内置 OpenTelemetry Java Agent（可观测性）
+#   - 探针注入由流水线 Prepare Build Agents 阶段自动完成
 #
 # 配合流水线使用：
 #   Jenkins Package 阶段产出 target/*.jar
-#   流水线 Prepare OTEL Agent 阶段准备 opentelemetry-javaagent.jar
-#   Build Image 阶段执行 nerdctl build
+#   Prepare Build Agents 阶段从平台拉取已启用的探针（如 OTEL/SkyWalking）
+#   Build & Push Image 阶段自动生成包含探针的 Dockerfile
 #
-# OTEL Agent JAR 管理策略（由流水线统一管理，Dockerfile 仅做 COPY）：
-#   全自动模式：流水线从平台「构建探针管理」自动拉取所有已启用 Agent
-#   降级模式：项目自带 opentelemetry-javaagent.jar 或从 Maven 下载
-#   流水线会将 agent jar 统一放到 .agents/{name}/ 目录
+# 探针管理说明：
+#   本模板为「无探针基础版」，构建时不依赖任何外部 Agent JAR
+#   流水线会根据平台「构建探针管理」配置自动注入探针 COPY/ENV
+#   如平台 API 不可用，则跳过探针注入，镜像可正常运行
 #
 # 基础镜像说明：
-#   使用华为云镜像源，国内拉取更快
-#   swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/eclipse-temurin:17-jre-alpine
+#   使用阿里云镜像源，国内拉取更快
 # ============================================
 
 ARG JAVA_VERSION=17
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/eclipse-temurin:${JAVA_VERSION}-jre-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${JAVA_VERSION}-jre-alpine
 
 ENV TZ=Asia/Shanghai
 WORKDIR /app
@@ -35,9 +34,12 @@ RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 # 创建日志目录并授权
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
 
-# 复制 OpenTelemetry Java Agent（由流水线 Prepare Build Agents 阶段准备到 .agents/ 目录）
-# 注意：若使用平台自动生成模式，此 COPY 行会被动态替换为所有已启用探针
-COPY .agents/opentelemetry-javaagent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
+# ==== 探针注入占位 ====
+# 以下由流水线 Build & Push Image 阶段动态注入（平台可用时）：
+#   COPY .agents/opentelemetry-javaagent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
+#   ENV OTEL_OPTS="-javaagent:/app/opentelemetry-javaagent.jar ..."
+# 如需配置探针，请在平台「构建探针管理」中上传并启用，流水线会自动注入
+# ========================
 
 # 复制 JAR（由流水线 Package 阶段产出）
 COPY target/*.jar /app/app.jar
@@ -47,18 +49,11 @@ USER appuser
 
 EXPOSE 8080
 
-# OpenTelemetry Agent 配置（通过环境变量控制，部署时可覆盖）
-# - service.name: 服务名称（部署时通过 K8s env 覆盖为实际服务名）
-# - traces.exporter: 链路导出协议，默认 otlp
-# - metrics/logs.exporter: 默认关闭，按需开启
-# - endpoint: OTel Collector 地址（部署时覆盖为集群内实际地址）
-ENV OTEL_OPTS="\
--javaagent:/app/opentelemetry-javaagent.jar \
--Dotel.service.name=java-app \
--Dotel.traces.exporter=otlp \
--Dotel.metrics.exporter=none \
--Dotel.logs.exporter=none \
--Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318"
+# 探针环境变量（默认为空，流水线动态生成 Dockerfile 时会注入实际值）
+# 部署时也可通过 K8s env 覆盖，例如：
+#   OTEL_OPTS: "-javaagent:/app/opentelemetry-javaagent.jar -Dotel.service.name=my-service"
+#   JAVA_TOOL_OPTIONS: "-javaagent:/app/skywalking-agent.jar"
+ENV OTEL_OPTS=""
 
 # 生产级 JVM 参数（可通过环境变量 JAVA_OPTS 覆盖）
 # - MaxRAMPercentage: 容器内存自适应，比固定 -Xmx 更适合 K8s

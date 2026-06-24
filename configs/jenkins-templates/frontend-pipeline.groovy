@@ -283,13 +283,10 @@ spec:
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
 
-                        def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
-                        if (!dockerfile || forceGenerate) {
-                            if (fileExists('Dockerfile')) {
-                                dockerfile = 'Dockerfile'
-                            } else {
-                                dockerfile = '.Dockerfile.runtime'
-                                writeFile file: dockerfile, text: """\
+                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
+                            dockerfile = '.Dockerfile.runtime'
+                            writeFile file: dockerfile, text: """\
 FROM nginx:1.25-alpine
 RUN apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
@@ -300,7 +297,6 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://localhost/health || exit 1
 CMD ["nginx", "-g", "daemon off;"]
 """
-                            }
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]

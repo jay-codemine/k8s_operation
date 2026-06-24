@@ -276,18 +276,15 @@ spec:
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def pythonVersion = params.PYTHON_VERSION ?: '3.11'
 
-                        def forceGenerate = (dockerfile == '__PLATFORM_GENERATE__')
-                        if (!dockerfile || forceGenerate) {
-                            if (fileExists('Dockerfile')) {
-                                dockerfile = 'Dockerfile'
-                            } else {
-                                dockerfile = '.Dockerfile.runtime'
-                                writeFile file: dockerfile, text: """\
+                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
+                            dockerfile = '.Dockerfile.runtime'
+                            writeFile file: dockerfile, text: """\
 FROM python:${pythonVersion}-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=Asia/Shanghai
 ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_NO_CACHE_DIR=1
-RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata && \
-    ln -snf /usr/share/zoneinfo/\$TZ /etc/localtime && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata && \\
+    ln -snf /usr/share/zoneinfo/\$TZ /etc/localtime && \\
     apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r app && useradd -r -g app app
 WORKDIR /app
@@ -300,7 +297,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD curl -f http://localhost:8000/health || exit 1
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
-                            }
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]

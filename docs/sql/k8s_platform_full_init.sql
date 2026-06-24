@@ -251,7 +251,7 @@ CREATE TABLE IF NOT EXISTS `cicd_pipeline` (
   `deleted_at` bigint unsigned NOT NULL DEFAULT 0,
   `is_del` tinyint unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_name` (`name`),
+  UNIQUE KEY `idx_pipeline_name_del` (`name`, `deleted_at`),
   KEY `idx_project_id` (`project_id`),
   KEY `idx_jenkins_job` (`jenkins_job`),
   KEY `idx_status` (`status`),
@@ -2185,6 +2185,39 @@ INSERT IGNORE INTO monitor_datasource
 VALUES
 ('Prometheus-默认', 'prometheus', 'http://prometheus.monitoring.svc:9090', '集群默认 Prometheus 数据源',  'proxy', 'none', 1, 1, 30, 15, 'unknown', 1, @now-86400*30, @now-86400*30),
 ('Loki-默认',       'loki',       'http://loki.monitoring.svc:3100',      '集群默认 Loki 日志数据源',    'proxy', 'none', 0, 1, 30, 15, 'unknown', 1, @now-86400*30, @now-86400*30);
+
+-- =====================================================
+-- 【兼容存量】cicd_pipeline 唯一索引迁移：单列 idx_name → 复合 idx_pipeline_name_del
+-- 目的：软删除后允许重建同名流水线（活跃记录 deleted_at=0 保证唯一）
+-- =====================================================
+SET @idx_old_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_pipeline'
+      AND index_name = 'idx_name'
+);
+SET @sql := IF(@idx_old_exists > 0,
+    'ALTER TABLE `cicd_pipeline` DROP INDEX `idx_name`, ADD UNIQUE KEY `idx_pipeline_name_del` (`name`, `deleted_at`)',
+    'SELECT ''idx_name not found, skip migration'' AS msg'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 如果旧表已有 idx_pipeline_name_del 则跳过（GORM AutoMigrate 可能已创建）
+SET @idx_new_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'cicd_pipeline'
+      AND index_name = 'idx_pipeline_name_del'
+);
+SET @sql2 := IF(@idx_new_exists = 0,
+    'ALTER TABLE `cicd_pipeline` ADD UNIQUE KEY `idx_pipeline_name_del` (`name`, `deleted_at`)',
+    'SELECT ''idx_pipeline_name_del already exists, skip'' AS msg'
+);
+PREPARE stmt2 FROM @sql2;
+EXECUTE stmt2;
+DEALLOCATE PREPARE stmt2;
 
 -- =====================================================
 -- 完成（仅输出关键信息）
