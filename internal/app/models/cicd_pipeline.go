@@ -419,6 +419,9 @@ type PipelineListItem struct {
 	LastRunStatus   string `json:"last_run_status"`
 	LastRunTime     uint64 `json:"last_run_time"`
 	LastBuildNumber int    `json:"last_build_number"`
+	AutoDeploy      bool   `json:"auto_deploy"`
+	RequireApproval bool   `json:"require_approval"`
+	LastDeployStatus string `json:"last_deploy_status"`
 	CreatedAt       uint64 `json:"created_at"`
 }
 
@@ -436,6 +439,9 @@ func (p *CicdPipeline) ToPipelineListItem() *PipelineListItem {
 		LastRunStatus:   p.LastRunStatus,
 		LastRunTime:     p.LastRunTime,
 		LastBuildNumber: p.LastBuildNumber,
+		AutoDeploy:      p.AutoDeploy,
+		RequireApproval: p.RequireApproval,
+		LastDeployStatus: p.LastDeployStatus,
 		CreatedAt:       p.CreatedAt,
 	}
 }

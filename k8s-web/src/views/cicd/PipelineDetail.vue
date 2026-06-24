@@ -51,8 +51,8 @@
           <div class="last-run-row">
             <div class="last-run-info">
               <span class="run-label">上次运行</span>
-              <span :class="['run-status-badge', `status-${pipeline.last_run_status}`]">
-                {{ runStatusText(pipeline.last_run_status) }}
+              <span :class="['run-status-badge', `status-${effectiveRunStatus}`]">
+                {{ runStatusText(effectiveRunStatus) }}
               </span>
               <span class="run-time">{{ formatDate(pipeline.last_run_time) }}</span>
             </div>
@@ -194,17 +194,17 @@
             <h3 class="section-title">最近运行状态</h3>
             <div class="status-cards">
               <div class="status-card">
-                <div class="card-icon" :class="`status-${pipeline.last_run_status}`">
-                  <svg v-if="pipeline.last_run_status === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <div class="card-icon" :class="`status-${effectiveRunStatus}`">
+                  <svg v-if="effectiveRunStatus === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                     <polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
-                  <svg v-else-if="pipeline.last_run_status === 'failed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg v-else-if="effectiveRunStatus === 'failed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <line x1="15" y1="9" x2="9" y2="15"/>
                     <line x1="9" y1="9" x2="15" y2="15"/>
                   </svg>
-                  <svg v-else-if="pipeline.last_run_status === 'running'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg v-else-if="effectiveRunStatus === 'running' || effectiveRunStatus === 'publishing'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
@@ -216,7 +216,7 @@
                 </div>
                 <div class="card-content">
                   <span class="card-label">运行状态</span>
-                  <span class="card-value">{{ runStatusText(pipeline.last_run_status) }}</span>
+                  <span class="card-value">{{ runStatusText(effectiveRunStatus) }}</span>
                 </div>
               </div>
               <div class="status-card">
@@ -1833,6 +1833,27 @@ export default {
       return pipelineStages.value.some(stage => stage.status === 'running' || stage.status === 'deploying')
     })
 
+    // 有效运行状态：只要最后一个部署阶段未完成，就显示「发布中」
+    // 核心逻辑：构建成功 ≠ 发布完成，审批/部署未结束前都属于发布流程中
+    const effectiveRunStatus = computed(() => {
+      const rawStatus = pipeline.value.last_run_status
+      // 只有构建成功时才需要判断后续阶段
+      if (rawStatus !== 'success') return rawStatus
+      // 检查是否存在部署/审批阶段且尚未全部完成
+      const stages = pipelineStages.value
+      if (!stages || stages.length === 0) return rawStatus
+      // 找到最后一个部署阶段
+      const deployStages = stages.filter(s => (s.type || s.stage_type) === 'deploy')
+      const approvalStages = stages.filter(s => (s.type || s.stage_type) === 'approval')
+      // 如果没有部署/审批阶段，直接返回原状态
+      if (deployStages.length === 0 && approvalStages.length === 0) return rawStatus
+      // 检查最后一个部署阶段是否已完成
+      const lastDeploy = deployStages[deployStages.length - 1]
+      if (lastDeploy && lastDeploy.status === 'success') return 'success'
+      // 部署阶段未完成（pending/deploying/waiting等），显示发布中
+      return 'publishing'
+    })
+
     // 当前运行中的阶段（包括 running 和 deploying）
     const currentRunningStage = computed(() => {
       return pipelineStages.value.find(stage => stage.status === 'running' || stage.status === 'deploying')
@@ -2920,7 +2941,7 @@ export default {
     }
 
     const runStatusText = (status) => {
-      const map = { success: '成功', failed: '失败', running: '运行中', pending: '等待中', aborted: '已中止', '': '未运行' }
+      const map = { success: '成功', failed: '失败', running: '运行中', pending: '等待中', aborted: '已中止', publishing: '发布中', '': '未运行' }
       return map[status] || status
     }
 
@@ -3169,6 +3190,7 @@ export default {
       failedStages,
       hasRunningStage,
       currentRunningStage,
+      effectiveRunStatus,
       getConnectorStatus,
       getStageStatusCount,
       loadPipeline,
@@ -3449,6 +3471,17 @@ export default {
   color: #64748b;
 }
 
+.run-status-badge.status-publishing {
+  background: #dbeafe;
+  color: #2563eb;
+  animation: pulse-publishing 1.5s infinite;
+}
+
+@keyframes pulse-publishing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .run-time {
   font-size: 13px;
   color: #94a3b8;
@@ -3596,6 +3629,7 @@ export default {
 .card-icon.status-success { background: #d1fae5; color: #059669; }
 .card-icon.status-failed { background: #fee2e2; color: #dc2626; }
 .card-icon.status-running { background: #fef3c7; color: #d97706; }
+.card-icon.status-publishing { background: #dbeafe; color: #2563eb; }
 .card-icon.neutral { background: #e2e8f0; color: #64748b; }
 
 .card-content {

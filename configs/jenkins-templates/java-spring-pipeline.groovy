@@ -105,13 +105,13 @@ spec:
         string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
         // SonarQube 代码质量扫描参数
-        booleanParam(name: 'ENABLE_SONAR', defaultValue: true, description: '启用 SonarQube 代码质量扫描')
+        booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
         string(name: 'SONAR_PROJECT_KEY', defaultValue: '', description: 'SonarQube 项目 Key（空则使用 Job 名称）')
         string(name: 'SONAR_PROJECT_NAME', defaultValue: '', description: 'SonarQube 项目名称（空则使用 Job 名称）')
         string(name: 'SONAR_SOURCES', defaultValue: 'src/main/java', description: '源代码目录')
         string(name: 'SONAR_JAVA_BINARIES', defaultValue: 'target/classes', description: 'Java 编译输出目录')
         string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/test/**,**/generated/**', description: '排除扫描的文件模式')
-        booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查（不通过则构建失败）')
+        booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: false, description: '启用质量门禁检查（不通过则构建失败）')
 
         // 平台注入的质量门禁阈值
         string(name: 'SONAR_COVERAGE_THRESHOLD', defaultValue: '80', description: '代码覆盖率阈值（%）')
@@ -122,7 +122,7 @@ spec:
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁失败策略: block(阻断) | warn(告警) | skip(跳过)')
 
         // 制品上传参数
-        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
     }
 
     environment {

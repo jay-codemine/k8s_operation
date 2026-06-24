@@ -310,8 +310,8 @@
               </span>
             </td>
             <td>
-              <span :class="['run-status-tag', `status-${pipeline.lastRunStatus}`]">
-                {{ runStatusText(pipeline.lastRunStatus) }}
+              <span :class="['run-status-tag', `status-${getEffectiveRunStatus(pipeline)}`]">
+                {{ runStatusText(getEffectiveRunStatus(pipeline)) }}
               </span>
             </td>
             <td>
@@ -460,8 +460,8 @@
           <div class="status-info">
             <div class="status-row">
               <span class="label">上次运行</span>
-              <span :class="['run-status-tag', `status-${pipeline.lastRunStatus}`]">
-                {{ runStatusText(pipeline.lastRunStatus) }}
+              <span :class="['run-status-tag', `status-${getEffectiveRunStatus(pipeline)}`]">
+                {{ runStatusText(getEffectiveRunStatus(pipeline)) }}
               </span>
             </div>
             <div class="status-row">
@@ -751,7 +751,10 @@ export default {
             lastRunTime: item.last_run_time ? new Date(item.last_run_time * 1000).toISOString() : null,
             gitRepo: item.git_repo,
             branch: item.git_branch,
-            jenkinsJob: item.jenkins_job
+            jenkinsJob: item.jenkins_job,
+            autoDeploy: item.auto_deploy || false,
+            requireApproval: item.require_approval || false,
+            lastDeployStatus: item.last_deploy_status || ''
           }))
           total.value = response.data?.total || 0
         } else {
@@ -995,9 +998,23 @@ export default {
         running: '运行中',
         pending: '等待中',
         aborted: '已中止',
+        publishing: '发布中',
         '': '未运行'
       }
       return map[status] || status
+    }
+
+    // 有效运行状态：构建成功但部署未完成时显示「发布中」
+    const getEffectiveRunStatus = (pipeline) => {
+      const rawStatus = pipeline.lastRunStatus
+      if (rawStatus !== 'success') return rawStatus
+      // 有部署/审批阶段且最后部署未成功 → 发布中
+      if (pipeline.autoDeploy || pipeline.requireApproval) {
+        if (pipeline.lastDeployStatus !== 'success') {
+          return 'publishing'
+        }
+      }
+      return rawStatus
     }
 
     // 监听
@@ -1069,7 +1086,8 @@ export default {
       goToPage,
       formatDate,
       formatRepoUrl,
-      runStatusText
+      runStatusText,
+      getEffectiveRunStatus
     }
   }
 }
@@ -2086,7 +2104,13 @@ export default {
 .run-status-tag.status-running { background: #fef3c7; color: #d97706; }
 .run-status-tag.status-pending { background: #f1f5f9; color: #64748b; }
 .run-status-tag.status-aborted { background: #f1f5f9; color: #64748b; }
+.run-status-tag.status-publishing { background: #dbeafe; color: #2563eb; animation: pulse-publishing 1.5s infinite; }
 .run-status-tag.status- { background: #f1f5f9; color: #94a3b8; }
+
+@keyframes pulse-publishing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
 
 /* 阶段进度 */
 .stages-progress {
