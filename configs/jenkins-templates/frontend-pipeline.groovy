@@ -23,9 +23,12 @@ metadata:
   labels:
     jenkins-build: frontend
 spec:
+  imagePullSecrets:
+  - name: aliyun-registry
   containers:
   - name: node
-    image: node:18-alpine
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/node:18-alpine
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -43,7 +46,8 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -55,6 +59,9 @@ spec:
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+  - name: jnlp
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: npm-cache
     persistentVolumeClaim:

@@ -29,9 +29,12 @@ metadata:
     jenkins-build: java
     java-version: "${params.JAVA_VERSION ?: '17'}"
 spec:
+  imagePullSecrets:
+  - name: aliyun-registry
   containers:
   - name: maven
-    image: maven:3.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/maven:3.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -49,7 +52,8 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -61,6 +65,9 @@ spec:
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+  - name: jnlp
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: maven-cache
     persistentVolumeClaim:

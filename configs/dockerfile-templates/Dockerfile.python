@@ -17,7 +17,7 @@
 # ============================================
 
 ARG PYTHON_VERSION=3.11
-FROM python:${PYTHON_VERSION}-slim
+FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/python:${PYTHON_VERSION}-slim
 
 # 环境变量
 ENV PYTHONDONTWRITEBYTECODE=1

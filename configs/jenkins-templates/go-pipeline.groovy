@@ -27,9 +27,12 @@ metadata:
   labels:
     jenkins-build: go
 spec:
+  imagePullSecrets:
+  - name: aliyun-registry
   containers:
   - name: golang
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/golang:1.24
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -54,6 +57,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -65,6 +69,9 @@ spec:
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+  - name: jnlp
+    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: go-cache
     persistentVolumeClaim:
