@@ -777,10 +777,9 @@ export default {
         Message.info({ content: `正在启动流水线 "${pipeline.name}"...` })
         const response = await triggerPipeline(pipeline.id)
         if (response.code === 0) {
-          Message.success({ content: '流水线启动成功，正在跳转到详情页...' })
-          // 发布成功后跳转到详情页，带 auto_select=approval 参数
-          // 构建完成后如果有审批阶段会自动弹出审批面板
-          router.push(`/cicd/pipelines/${pipeline.id}?auto_select=approval`)
+          Message.success({ content: '流水线启动成功，正在跳转到构建界面...' })
+          // 发布成功后跳转到详情页执行阶段 Tab，实时查看构建进度
+          router.push(`/cicd/pipelines/${pipeline.id}?tab=stages`)
         } else {
           throw new Error(response.msg || '启动失败')
         }

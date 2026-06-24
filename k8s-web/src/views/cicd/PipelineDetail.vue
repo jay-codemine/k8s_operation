@@ -2261,8 +2261,9 @@ export default {
           // 刷新状态并开始轮询
           await loadPipeline()
           await loadStages()
-          // 自动切换到日志 Tab
-          activeTab.value = 'logs'
+          // 自动切换到执行阶段 Tab，让用户实时看到各阶段进度
+          activeTab.value = 'stages'
+          // 同时后台加载日志备用
           loadLogs(true)
         } else {
           throw new Error(response.msg)

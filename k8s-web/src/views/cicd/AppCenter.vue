@@ -378,8 +378,8 @@ export default {
         Message.info({ content: `正在启动 "${app.name}" 发布...` })
         const res = await triggerPipeline(app.id)
         if (res.code === 0) {
-          Message.success({ content: '发布启动成功' })
-          router.push(`/cicd/pipelines/${app.id}?auto_select=approval`)
+          Message.success({ content: '发布启动成功，正在跳转构建界面...' })
+          router.push(`/cicd/pipelines/${app.id}?tab=stages`)
         } else {
           throw new Error(res.msg || '启动失败')
         }

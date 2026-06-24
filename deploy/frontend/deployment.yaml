@@ -30,7 +30,7 @@ spec:
         - name: aliyun-registry
       containers:
         - name: devops-fe
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v13.9
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v14.9
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

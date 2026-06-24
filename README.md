@@ -1333,6 +1333,19 @@ k8soperation → 提供 HTTP API/Web 后台
 
 ------
 
+## 📋 版本更新日志
+
+### v15.0 (2025-06-24)
+
+**前端体验优化 & 部署更新**
+
+- ✨ **构建跳转优化**：点击「发布」或触发构建后，自动跳转到「执行阶段」界面，实时查看各阶段进度
+- 🔧 **统一导航策略**：AppCenter、Pipelines、PipelineDetail、PipelineCreate、Releases 五个组件统一跳转 `?tab=stages`
+- 🐛 **修复审批页白屏**：更新前端部署镜像至 v14.9，修复 `/cicd/approvals` 页面白屏问题
+- 📦 **前端镜像**：`registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v14.9`
+
+------
+
 ## ⭐ Star / Watch / Fork
 
 如果本项目对你有帮助，非常欢迎：

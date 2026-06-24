@@ -2692,6 +2692,7 @@ export default {
             }
             showTopology()
           } else {
+            // 编辑模式：保存成功后跳转到流水线详情的执行阶段页
             if (response.data?.warnings?.length) {
               const warnMsg = '更新成功！但有以下注意事项：\n\n' +
                 response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
@@ -2700,7 +2701,7 @@ export default {
             } else {
               alert('更新流水线成功')
             }
-            router.push('/cicd/pipelines')
+            router.push(`/cicd/pipelines/${pipelineId}?tab=stages`)
           }
         } else {
           alert(response.msg || '操作失败')
