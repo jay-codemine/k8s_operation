@@ -33,7 +33,7 @@ spec:
   - name: aliyun-registry
   containers:
   - name: maven
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/maven:3.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9.9-eclipse-temurin-17-noble
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -52,7 +52,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/gcr.io/kaniko-project/executor:debug
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -66,7 +66,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: jnlp
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk17
     imagePullPolicy: Always
   volumes:
   - name: maven-cache

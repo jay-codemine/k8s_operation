@@ -17,7 +17,7 @@
 # ============================================
 
 ARG PYTHON_VERSION=3.11
-FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/python:${PYTHON_VERSION}-slim
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/python:${PYTHON_VERSION}-slim
 
 # 环境变量
 ENV PYTHONDONTWRITEBYTECODE=1

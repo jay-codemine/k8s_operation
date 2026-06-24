@@ -19,12 +19,12 @@
 #   流水线会将 agent jar 统一放到 .agents/{name}/ 目录
 #
 # 基础镜像说明：
-#   使用阿里云镜像源，国内拉取更快
-#   registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:17-jre-alpine
+#   使用华为云镜像源，国内拉取更快
+#   swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/eclipse-temurin:17-jre-alpine
 # ============================================
 
 ARG JAVA_VERSION=17
-FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${JAVA_VERSION}-jre-alpine
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/eclipse-temurin:${JAVA_VERSION}-jre-alpine
 
 ENV TZ=Asia/Shanghai
 WORKDIR /app

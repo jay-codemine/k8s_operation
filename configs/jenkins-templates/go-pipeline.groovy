@@ -31,7 +31,7 @@ spec:
   - name: aliyun-registry
   containers:
   - name: golang
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/golang:1.24
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:1.24.6-bullseye
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -56,7 +56,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/gcr.io/kaniko-project/executor:debug
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -70,7 +70,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: jnlp
-    image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk17
     imagePullPolicy: Always
   volumes:
   - name: go-cache
