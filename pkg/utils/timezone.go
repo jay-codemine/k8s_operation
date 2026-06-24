@@ -5,14 +5,22 @@ import (
 	"time"
 )
 
-// TimenowInTimezone 获取当前时间，支持时区
 // TimenowInTimezone 返回指定时区的当前时间
 // 函数会从全局配置中获取时区设置，并返回该时区的当前时间
+// 如果配置为空或加载失败，默认使用 Asia/Shanghai (UTC+8)
 // 返回值: time.Time - 指定时区的当前时间
 func TimenowInTimezone() time.Time {
-	// 从全局配置中加载时区设置
-	// global.AppSetting.TIMEZONE 应该包含时区名称，如 "Asia/Shanghai"
-	chinaTimezone, _ := time.LoadLocation(global.AppSetting.TIMEZONE)
-	// 获取当前时间并转换为指定时区的时间
-	return time.Now().In(chinaTimezone)
+	tz := ""
+	if global.AppSetting != nil {
+		tz = global.AppSetting.TIMEZONE
+	}
+	if tz == "" {
+		tz = "Asia/Shanghai"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil || loc == nil {
+		// 兜底：硬编码 UTC+8，避免 panic
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	return time.Now().In(loc)
 }

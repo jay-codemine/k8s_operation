@@ -5,6 +5,8 @@ node_modules/
 bin/
 dist/
 build/
+k8soperation
+output/
 *.exe
 *.dll
 *.so
