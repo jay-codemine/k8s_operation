@@ -32,7 +32,7 @@ spec:
   containers:
   - name: golang
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/golang:1.24
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
       requests:
@@ -57,7 +57,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
       requests:
@@ -71,7 +71,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: jnlp
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
   volumes:
   - name: go-cache
     persistentVolumeClaim:

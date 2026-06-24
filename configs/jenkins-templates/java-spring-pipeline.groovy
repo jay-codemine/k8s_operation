@@ -34,7 +34,7 @@ spec:
   containers:
   - name: maven
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/maven:3.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
       requests:
@@ -53,7 +53,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/kaniko-executor:debug
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
       requests:
@@ -67,7 +67,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: jnlp
     image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/inbound-agent:latest
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
   volumes:
   - name: maven-cache
     persistentVolumeClaim:
