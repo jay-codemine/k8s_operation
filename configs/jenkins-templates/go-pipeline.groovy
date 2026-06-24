@@ -27,8 +27,6 @@ metadata:
   labels:
     jenkins-build: go
 spec:
-  imagePullSecrets:
-  - name: aliyun-registry
   containers:
   - name: golang
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:1.24.6-bullseye

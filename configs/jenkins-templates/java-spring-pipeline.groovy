@@ -29,8 +29,6 @@ metadata:
     jenkins-build: java
     java-version: "${params.JAVA_VERSION ?: '17'}"
 spec:
-  imagePullSecrets:
-  - name: aliyun-registry
   containers:
   - name: maven
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9.9-eclipse-temurin-17-noble

@@ -23,8 +23,6 @@ metadata:
   labels:
     jenkins-build: frontend
 spec:
-  imagePullSecrets:
-  - name: aliyun-registry
   containers:
   - name: node
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/node:18-alpine3.18

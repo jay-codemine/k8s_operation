@@ -23,8 +23,6 @@ metadata:
   labels:
     jenkins-build: python
 spec:
-  imagePullSecrets:
-  - name: aliyun-registry
   containers:
   - name: python
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/python:3.11-slim
