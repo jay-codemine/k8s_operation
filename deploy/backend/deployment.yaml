@@ -57,7 +57,7 @@ spec:
 
       containers:
         - name: k8soperation
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-be:v13.7
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-be:v13.9
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -248,6 +248,12 @@ spec:
                 secretKeyRef:
                   name: k8soperation-secret
                   key: FEISHU_SECRET
+                  optional: true
+            - name: DEFAULT_IMAGE_REGISTRY
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: DEFAULT_IMAGE_REGISTRY
                   optional: true
 
           # ==================== 健康检查探针 ====================

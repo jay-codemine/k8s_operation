@@ -94,6 +94,7 @@ spec:
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
         choice(name: 'JAVA_VERSION', choices: ['17', '21', '11', '8'], description: 'Java 版本（同时决定构建 JDK 和运行时镜像：8/11/17/21）')
         string(name: 'MAVEN_GOALS', defaultValue: 'clean package -DskipTests -B', description: 'Maven 构建命令')
+        string(name: 'BUILD_DIR', defaultValue: '', description: '构建目录（pom.xml 所在路径，留空则自动检测。支持：根目录、子目录如 backend/、多模块如 services/user-service/）')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
         string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
         string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
@@ -227,18 +228,78 @@ SETTINGS_EOF
                         sh 'java -version 2>&1 | head -1'
                         sh 'mvn --version | head -2'
 
-                        sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
+                        // ==================== 智能检测 pom.xml 位置 ====================
+                        def buildDir = params.BUILD_DIR?.trim()
+                        if (buildDir) {
+                            // 用户手动指定了构建目录
+                            def pomPath = "${buildDir}/pom.xml"
+                            if (!fileExists(pomPath)) {
+                                def allPoms = sh(script: "find . -name pom.xml -not -path '*/target/*' -not -path '*/.m2/*' | sort", returnStdout: true).trim()
+                                error("BUILD_DIR='${buildDir}' 下找不到 pom.xml\n项目中检测到的 pom.xml:\n${allPoms}\n请修改 BUILD_DIR 为正确路径")
+                            }
+                            echo "[Build] 使用用户指定目录: ${buildDir}"
+                        } else {
+                            // 自动检测 pom.xml 位置
+                            if (fileExists('pom.xml')) {
+                                buildDir = '.'
+                                echo '[Build] ✅ 根目录找到 pom.xml'
+                            } else {
+                                // 搜索整个项目中的 pom.xml（不限深度，排除编译产物和缓存目录）
+                                def pomSearch = sh(script: "find . -name pom.xml -not -path '*/target/*' -not -path '*/.m2/*' -not -path '*/node_modules/*' | sort", returnStdout: true).trim()
+                                if (!pomSearch) {
+                                    error("项目中未找到任何 pom.xml，请确认 Git 仓库和分支是否正确，或在流水线配置中设置 BUILD_DIR")
+                                }
+                                def pomList = pomSearch.split('\n').collect { it.trim() }.findAll { it }
+                                echo "[Build] 检测到 ${pomList.size()} 个 pom.xml:\n${pomSearch}"
+
+                                if (pomList.size() == 1) {
+                                    buildDir = pomList[0].replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
+                                } else {
+                                    // 多个 pom.xml：优先找包含 spring-boot-maven-plugin 的（可运行模块）
+                                    def bootPom = ''
+                                    for (pom in pomList) {
+                                        def hasBootPlugin = sh(script: "grep -l 'spring-boot-maven-plugin' '${pom}' 2>/dev/null || true", returnStdout: true).trim()
+                                        if (hasBootPlugin) { bootPom = pom; break }
+                                    }
+                                    if (bootPom) {
+                                        buildDir = bootPom.replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
+                                        echo "[Build] ✅ 自动检测到 Spring Boot 模块: ${buildDir}"
+                                    } else {
+                                        // 取最浅层级的 pom.xml
+                                        buildDir = pomList[0].replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
+                                        echo "[Build] 使用最浅层级 pom.xml 所在目录: ${buildDir}"
+                                    }
+                                }
+                            }
+                        }
+                        env.BUILD_DIR = buildDir
+                        echo "[Build] 最终构建目录: ${buildDir}"
+
+                        // ==================== 执行 Maven 构建 ====================
+                        if (buildDir == '.') {
+                            sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
+                        } else {
+                            sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS} -f ${buildDir}/pom.xml"
+                        }
                         archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
 
-                        // 验证 JAR 产出
-                        def jarFile = sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                        // ==================== 智能查找 JAR 产出 ====================
+                        def searchBase = (buildDir == '.') ? 'target' : "${buildDir}/target"
+                        def jarFile = sh(script: "find ${searchBase} -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' 2>/dev/null | head -1", returnStdout: true).trim()
+
+                        if (!jarFile) {
+                            // 多模块项目：递归搜索所有 target 目录
+                            echo "[Build] 在 ${searchBase} 未直接找到 JAR，尝试递归搜索..."
+                            jarFile = sh(script: "find . -path '*/target/*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -path '*/.m2/*' -type f | sort -t/ -k3 | head -1", returnStdout: true).trim()
+                        }
+
                         if (jarFile) {
                             def jarSize = sh(script: "stat -c%s ${jarFile} 2>/dev/null || stat -f%z ${jarFile}", returnStdout: true).trim()
                             echo "[Compile & Package] ✅ 产出: ${jarFile} (${jarSize} bytes)"
                             env.JAR_FILE = jarFile
                         } else {
-                            error("Maven package 未产出 JAR 文件，请检查 pom.xml 配置")
-                        }
+                            sh "echo '=== 诊断信息 ===' && find . -path '*/target/*.jar' -type f 2>/dev/null || echo '无任何 JAR 文件'"
+                            error("Maven 构建未产出 JAR 文件。构建目录: ${buildDir}\n建议: 1.确认pom.xml有<packaging>jar 2.多模块项目请设置BUILD_DIR为可运行模块路径 3.本地mvn package验证")                        }
                     }
                 }
             }
@@ -357,7 +418,7 @@ SETTINGS_EOF
                 echo "=== 上传制品到平台制品库 ==="
                 container('maven') {
                     script {
-                        def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
+                        def jarFile = env.JAR_FILE ?: sh(script: "find . -path '*/target/*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -path '*/.m2/*' -type f | head -1", returnStdout: true).trim()
                         if (!jarFile) { error("[制品上传] 未找到 JAR 文件") }
 
                         def gzPath = "${jarFile}.gz"
@@ -471,8 +532,8 @@ SETTINGS_EOF
                 echo "=== Kaniko 构建并推送镜像（无需 Docker daemon） ==="
                 container('kaniko') {
                     script {
-                        def jarFile = env.JAR_FILE ?: sh(script: "find target -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1", returnStdout: true).trim()
-                        if (!jarFile) { error("target/ 下未找到 JAR 文件") }
+                        def jarFile = env.JAR_FILE ?: sh(script: "find . -path '*/target/*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -path '*/.m2/*' -type f | head -1", returnStdout: true).trim()
+                        if (!jarFile) { error("未找到 JAR 文件，请确认 Maven 构建是否成功") }
 
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def javaVersion = params.JAVA_VERSION ?: '17'
@@ -502,7 +563,7 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
-${agentCopyLines}COPY target/*.jar /app/app.jar
+${agentCopyLines}COPY ${jarFile} /app/app.jar
 USER appuser
 EXPOSE 8080
 ${agentEnvLines}${otelOptsValue ? "ENV OTEL_OPTS=\"${otelOptsValue}\"\n" : ''}ENV JAVA_OPTS="\\

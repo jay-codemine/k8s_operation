@@ -2055,6 +2055,7 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 		setDefault(params, "JAVA_VERSION", "17")
 		setDefault(params, "MAVEN_GOALS", "clean package -DskipTests -B")
 		setDefault(params, "SKIP_TESTS", "false")
+		setDefault(params, "BUILD_DIR", "") // 空=自动检测 pom.xml 位置
 		// Java 特有 SonarQube 参数
 		setDefault(params, "SONAR_SOURCES", "src/main/java")
 		setDefault(params, "SONAR_JAVA_BINARIES", "target/classes")
