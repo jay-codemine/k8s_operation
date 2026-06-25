@@ -3285,6 +3285,35 @@
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/build-stats": {
+            "get": {
+                "description": "返回构建成功率、平均时长、今日/本周构建数、近N天趋势",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Pipeline"
+                ],
+                "summary": "获取构建统计数据",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "趋势天数，默认7",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/callback": {
             "post": {
                 "description": "Jenkins 构建完成后调用此接口通知平台更新状态",
@@ -4368,6 +4397,71 @@
                 }
             }
         },
+        "/api/v1/k8s/cicd/release/history": {
+            "get": {
+                "description": "支持时间范围、命名空间、应用名筛选的发布历史查询",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "应用发布历史查询（增强版）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "应用名称",
+                        "name": "app_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "命名空间",
+                        "name": "namespace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "开始时间戳",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束时间戳",
+                        "name": "end_time",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/release/list": {
             "get": {
                 "produces": [
@@ -4492,6 +4586,27 @@
                     "CICD Release"
                 ],
                 "summary": "获取发布单统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/release/stats-enhanced": {
+            "get": {
+                "description": "返回今日/本周发布数、成功率、状态分布",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Release"
+                ],
+                "summary": "增强版发布统计",
                 "responses": {
                     "200": {
                         "description": "OK",

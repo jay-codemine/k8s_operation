@@ -459,14 +459,13 @@
                 </label>
                 <div class="java-version-selector">
                   <div
-                    v-for="ver in ['17', '21', '11', '8']"
+                    v-for="ver in ['17', '11']"
                     :key="ver"
                     :class="['java-ver-chip', { selected: pipelineData.java_version === ver }]"
                     @click="pipelineData.java_version = ver"
                   >
                     <span class="ver-number">{{ ver }}</span>
                     <span v-if="ver === '17'" class="ver-badge">推荐</span>
-                    <span v-if="ver === '21'" class="ver-badge new">LTS</span>
                   </div>
                 </div>
                 <div class="input-hint">决定构建环境 JDK 版本（maven:3.9-eclipse-temurin-<strong>{{ pipelineData.java_version }}</strong>）和运行时基础镜像</div>

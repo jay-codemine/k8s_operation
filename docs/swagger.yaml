@@ -5259,6 +5259,25 @@ paths:
       summary: 导出构建记录为 CSV
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/build-stats:
+    get:
+      description: 返回构建成功率、平均时长、今日/本周构建数、近N天趋势
+      parameters:
+      - description: 趋势天数，默认7
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取构建统计数据
+      tags:
+      - CICD Pipeline
   /api/v1/k8s/cicd/pipeline/callback:
     post:
       consumes:
@@ -5986,6 +6005,49 @@ paths:
       summary: 获取发布单详情
       tags:
       - CICD Release
+  /api/v1/k8s/cicd/release/history:
+    get:
+      description: 支持时间范围、命名空间、应用名筛选的发布历史查询
+      parameters:
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 应用名称
+        in: query
+        name: app_name
+        type: string
+      - description: 命名空间
+        in: query
+        name: namespace
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 开始时间戳
+        in: query
+        name: start_time
+        type: integer
+      - description: 结束时间戳
+        in: query
+        name: end_time
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 应用发布历史查询（增强版）
+      tags:
+      - CICD Release
   /api/v1/k8s/cicd/release/list:
     get:
       parameters:
@@ -6072,6 +6134,20 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取发布单统计
+      tags:
+      - CICD Release
+  /api/v1/k8s/cicd/release/stats-enhanced:
+    get:
+      description: 返回今日/本周发布数、成功率、状态分布
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 增强版发布统计
       tags:
       - CICD Release
   /api/v1/k8s/cicd/release/sync-from-pipeline:

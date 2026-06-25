@@ -92,6 +92,11 @@
           <span class="record-badge">{{ total }} 条</span>
         </div>
         <div class="toolbar-right">
+          <button class="filter-toggle-btn" :class="{ active: showFilterPanel }" @click="showFilterPanel = !showFilterPanel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span>筛选</span>
+            <span v-if="activeFilterCount > 0" class="filter-count">{{ activeFilterCount }}</span>
+          </button>
           <div class="view-toggle">
             <button :class="['toggle-btn', { active: releaseViewMode === 'card' }]" @click="releaseViewMode = 'card'" title="卡片视图">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
@@ -109,6 +114,65 @@
           </div>
         </div>
       </div>
+
+      <!-- 高级筛选面板 -->
+      <transition name="filter-slide">
+        <div v-if="showFilterPanel" class="filter-panel">
+          <div class="filter-row">
+            <div class="filter-item">
+              <label class="filter-label">应用</label>
+              <select v-model="filterApp" class="filter-select" @change="applyFilters">
+                <option value="">全部应用</option>
+                <option v-for="p in pipelines" :key="p.id" :value="p.name">{{ p.name }}</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label class="filter-label">状态</label>
+              <select v-model="filterStatus" class="filter-select" @change="applyFilters">
+                <option value="">全部状态</option>
+                <option value="Pending">等待中</option>
+                <option value="AwaitingApproval">待审批</option>
+                <option value="Running">部署中</option>
+                <option value="Succeeded">发布成功</option>
+                <option value="Failed">发布失败</option>
+                <option value="Rollback">已回滚</option>
+                <option value="Canceled">已取消</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label class="filter-label">命名空间</label>
+              <select v-model="filterNamespace" class="filter-select" @change="applyFilters">
+                <option value="">全部命名空间</option>
+                <option v-for="ns in namespaceOptions" :key="ns" :value="ns">{{ ns }}</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label class="filter-label">时间范围</label>
+              <select v-model="filterTimeRange" class="filter-select" @change="applyFilters">
+                <option value="">全部时间</option>
+                <option value="1h">最近 1 小时</option>
+                <option value="24h">最近 24 小时</option>
+                <option value="7d">最近 7 天</option>
+                <option value="30d">最近 30 天</option>
+                <option value="90d">最近 90 天</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label class="filter-label">发布人</label>
+              <select v-model="filterCreator" class="filter-select" @change="applyFilters">
+                <option value="">全部</option>
+                <option v-for="u in creatorOptions" :key="u" :value="u">{{ u }}</option>
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="filter-reset-btn" @click="resetFilters" :disabled="activeFilterCount === 0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1.5 14.5a2 2 0 0 1-2 1.5H8.5a2 2 0 0 1-2-1.5L5 6"/></svg>
+                重置
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
 
       <!-- 批量操作工具栏（全宽醒目） -->
       <transition name="batch-slide">
@@ -324,10 +388,13 @@
                 <input type="checkbox" class="row-checkbox" :checked="isAllSelected" :indeterminate.prop="isIndeterminate" @change="toggleAll" />
               </th>
               <th>应用</th>
+              <th>版本号</th>
               <th>状态</th>
+              <th>命名空间</th>
+              <th>集群</th>
               <th>工作负载</th>
               <th>镜像</th>
-              <th>命名空间</th>
+              <th>发布人</th>
               <th>策略</th>
               <th>时间</th>
               <th>操作</th>
@@ -350,6 +417,10 @@
                 </div>
               </td>
               <td>
+                <code class="version-tag" v-if="rel.image_tag">{{ rel.image_tag }}</code>
+                <span v-else class="text-muted">-</span>
+              </td>
+              <td>
                 <div class="status-cell">
                   <span class="status-pill" :class="normalizeStatus(rel.status)">
                     <span class="status-dot"></span>
@@ -360,6 +431,8 @@
                   </span>
                 </div>
               </td>
+              <td><span class="ns-badge">{{ rel.namespace || 'default' }}</span></td>
+              <td><span class="cluster-badge" v-if="rel.cluster_name || rel.cluster_id">{{ rel.cluster_name || `cluster-${rel.cluster_id}` }}</span><span v-else class="text-muted">-</span></td>
               <td>
                 <div class="workload-cell">
                   <code class="workload-tag">{{ rel.workload_kind || 'Deployment' }}/{{ rel.workload_name || '-' }}</code>
@@ -369,7 +442,13 @@
               <td>
                 <code class="image-code" :title="getFullImage(rel)">{{ formatImage(rel) }}</code>
               </td>
-              <td><span class="ns-badge">{{ rel.namespace || 'default' }}</span></td>
+              <td>
+                <div class="creator-cell" v-if="rel.creator || rel.created_by">
+                  <span class="creator-avatar">{{ (rel.creator || rel.created_by || '?').charAt(0).toUpperCase() }}</span>
+                  <span class="creator-name">{{ rel.creator || rel.created_by || '-' }}</span>
+                </div>
+                <span v-else class="text-muted">系统</span>
+              </td>
               <td><span class="strategy-tag" v-if="rel.strategy">{{ strategyText(rel.strategy) }}</span><span v-else class="text-muted">-</span></td>
               <td><span class="time-text">{{ formatDate(rel.created_at) }}</span></td>
               <td>
@@ -473,12 +552,17 @@
               <!-- 应用配置预览 -->
               <div v-if="selectedPipelineInfo" class="pipeline-inherit-hint">
                 <div class="hint-title">📦 部署目标：</div>
-                <div class="hint-items">
+                <div class="hint-items" v-if="selectedPipelineInfo.namespace || selectedPipelineInfo.workload || selectedPipelineInfo.image_repo">
+                  <span v-if="selectedPipelineInfo.image_repo">镜像仓库: <b>{{ selectedPipelineInfo.image_repo }}</b></span>
                   <span v-if="selectedPipelineInfo.namespace">命名空间: <b>{{ selectedPipelineInfo.namespace }}</b></span>
                   <span v-if="selectedPipelineInfo.workload">工作负载: <b>{{ selectedPipelineInfo.workload }}</b></span>
-                  <span v-if="selectedPipelineInfo.image_repo">镜像仓库: <b>{{ selectedPipelineInfo.image_repo }}</b></span>
+                  <span v-if="selectedPipelineInfo.container">容器: <b>{{ selectedPipelineInfo.container }}</b></span>
                 </div>
-                <div class="hint-note">只需填写版本号即可发布</div>
+                <div class="hint-items hint-warning" v-else>
+                  <span>⚠️ 该应用尚未配置部署目标（命名空间/工作负载/镜像仓库），发布后将仅触发构建</span>
+                  <a class="hint-link" @click="showCreateDialog = false; $router.push(`/cicd/pipelines/${createForm.pipeline_id}?tab=settings`)">去配置 →</a>
+                </div>
+                <div class="hint-note" v-if="selectedPipelineInfo.namespace || selectedPipelineInfo.workload || selectedPipelineInfo.image_repo">只需填写版本号即可发布</div>
               </div>
               <div class="field">
                 <label>版本号 / 镜像标签 <span class="required">*</span></label>
@@ -692,6 +776,46 @@ export default {
     const total = ref(0)
     const jumpPage = ref(1)
 
+    // 高级筛选
+    const showFilterPanel = ref(false)
+    const filterApp = ref('')
+    const filterStatus = ref('')
+    const filterNamespace = ref('')
+    const filterTimeRange = ref('')
+    const filterCreator = ref('')
+
+    // 筛选选项（从已加载数据中动态提取）
+    const namespaceOptions = computed(() => {
+      const nsSet = new Set(releases.value.map(r => r.namespace).filter(Boolean))
+      return [...nsSet].sort()
+    })
+    const creatorOptions = computed(() => {
+      const cSet = new Set(releases.value.map(r => r.creator || r.created_by).filter(Boolean))
+      return [...cSet].sort()
+    })
+    const activeFilterCount = computed(() => {
+      let count = 0
+      if (filterApp.value) count++
+      if (filterStatus.value) count++
+      if (filterNamespace.value) count++
+      if (filterTimeRange.value) count++
+      if (filterCreator.value) count++
+      return count
+    })
+    const applyFilters = () => {
+      currentPage.value = 1
+      loadReleases()
+    }
+    const resetFilters = () => {
+      filterApp.value = ''
+      filterStatus.value = ''
+      filterNamespace.value = ''
+      filterTimeRange.value = ''
+      filterCreator.value = ''
+      currentPage.value = 1
+      loadReleases()
+    }
+
     // 批量选择
     const selectedIds = ref([])
     const batchLoading = ref(false)
@@ -801,8 +925,19 @@ export default {
       loading.value = true
       try {
         const statusMap = { deploying: 'Running', success: 'Succeeded', failed: 'Failed', rollback: 'Rollback', pending: 'Pending' }
-        const backendStatus = statusFilter.value ? statusMap[statusFilter.value] : undefined
-        const response = await getReleases({ page: currentPage.value, page_size: pageSizeRef.value, keyword: searchKeyword.value || undefined, status: backendStatus })
+        // 优先使用高级筛选面板的状态，其次使用顶部卡片的状态筛选
+        const backendStatus = filterStatus.value || (statusFilter.value ? statusMap[statusFilter.value] : undefined)
+        const params = {
+          page: currentPage.value,
+          page_size: pageSizeRef.value,
+          keyword: searchKeyword.value || undefined,
+          status: backendStatus || undefined,
+          app_name: filterApp.value || undefined,
+          namespace: filterNamespace.value || undefined,
+          creator: filterCreator.value || undefined,
+          time_range: filterTimeRange.value || undefined
+        }
+        const response = await getReleases(params)
         if (response.code === 0) {
           releases.value = response.data?.list || []
           total.value = response.data?.total || 0
@@ -1160,7 +1295,9 @@ export default {
       visiblePages, goToPage, jumpPage, jumpToPage, pageSizeRef, onPageSizeChange,
       selectedIds, batchLoading, isAllSelected, isIndeterminate, toggleAll, toggleSelect,
       handleBatchRetry, handleBatchRollback, handleBatchCancel,
-      syncing, syncFromPipeline
+      syncing, syncFromPipeline,
+      showFilterPanel, filterApp, filterStatus, filterNamespace, filterTimeRange, filterCreator,
+      namespaceOptions, creatorOptions, activeFilterCount, applyFilters, resetFilters
     }
   }
 }
@@ -1325,6 +1462,55 @@ export default {
 .clear-btn:hover { color: #ef4444; }
 .clear-btn svg { width: 14px; height: 14px; }
 
+/* ---- Filter Toggle Button ---- */
+.filter-toggle-btn {
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  font-size: 13px; color: #475569; cursor: pointer; transition: all 0.2s; font-weight: 500;
+}
+.filter-toggle-btn:hover { border-color: #4e7cf6; color: #4e7cf6; background: #f8faff; }
+.filter-toggle-btn.active { border-color: #4e7cf6; color: #4e7cf6; background: #eef2ff; }
+.filter-toggle-btn svg { width: 14px; height: 14px; }
+.filter-count {
+  background: #4e7cf6; color: #fff; font-size: 10px; font-weight: 700;
+  width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+}
+
+/* ---- Filter Panel (Advanced) ---- */
+.filter-panel {
+  background: #fff; border: 1px solid #e5e9f2; border-radius: 10px;
+  padding: 16px 20px; margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.02);
+}
+.filter-row {
+  display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+}
+.filter-item { display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1; }
+.filter-label {
+  font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.filter-select {
+  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 7px;
+  font-size: 13px; color: #334155; background: #f8fafc; cursor: pointer;
+  transition: all 0.2s; outline: none; appearance: auto;
+}
+.filter-select:hover { border-color: #94a3b8; }
+.filter-select:focus { border-color: #4e7cf6; box-shadow: 0 0 0 3px rgba(78,124,246,0.1); background: #fff; }
+.filter-actions { display: flex; align-items: flex-end; }
+.filter-reset-btn {
+  display: flex; align-items: center; gap: 5px; padding: 8px 14px;
+  border: 1px solid #e2e8f0; border-radius: 7px; background: #fff;
+  font-size: 12px; color: #64748b; cursor: pointer; transition: all 0.2s;
+}
+.filter-reset-btn:hover:not(:disabled) { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+.filter-reset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.filter-reset-btn svg { width: 13px; height: 13px; }
+
+/* Filter slide transition */
+.filter-slide-enter-active, .filter-slide-leave-active { transition: all 0.25s ease; }
+.filter-slide-enter-from, .filter-slide-leave-to { opacity: 0; transform: translateY(-8px); max-height: 0; margin-bottom: 0; padding: 0; overflow: hidden; }
+.filter-slide-enter-to, .filter-slide-leave-from { max-height: 200px; }
+
 /* ---- Batch Toolbar (Full-width prominent) ---- */
 .batch-toolbar {
   display: flex;
@@ -1484,6 +1670,24 @@ export default {
 .strategy-tag { font-size: 11px; background: #f1f5f9; color: #64748b; padding: 3px 8px; border-radius: 5px; }
 .time-text { font-size: 12px; color: #64748b; white-space: nowrap; }
 .text-muted { color: #cbd5e1; }
+
+/* ---- New columns: version / cluster / creator ---- */
+.version-tag {
+  font-size: 12px; background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #065f46;
+  padding: 3px 10px; border-radius: 5px; font-family: 'SF Mono','Fira Code',monospace;
+  font-weight: 600; border: 1px solid #a7f3d0;
+}
+.cluster-badge {
+  font-size: 11px; background: #fdf4ff; color: #86198f; padding: 3px 8px;
+  border-radius: 5px; font-weight: 600; border: 1px solid #f0abfc;
+}
+.creator-cell { display: flex; align-items: center; gap: 6px; }
+.creator-avatar {
+  width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4338ca;
+}
+.creator-name { font-size: 12px; color: #475569; font-weight: 500; }
 
 .actions-cell { display: flex; gap: 4px; }
 .act-btn {
@@ -1667,6 +1871,27 @@ export default {
   color: #6b7280;
   margin-top: 8px;
   font-style: italic;
+}
+.pipeline-inherit-hint .hint-items.hint-warning {
+  flex-direction: column;
+  gap: 6px;
+}
+.pipeline-inherit-hint .hint-items.hint-warning span {
+  background: rgba(245, 158, 11, 0.1);
+  color: #92400e;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.pipeline-inherit-hint .hint-link {
+  font-size: 12px;
+  color: #4e7cf6;
+  cursor: pointer;
+  text-decoration: underline;
+  font-weight: 500;
+}
+.pipeline-inherit-hint .hint-link:hover {
+  color: #3b63d4;
 }
 
 @media (max-width: 1200px) {

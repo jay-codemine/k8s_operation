@@ -134,16 +134,37 @@ func (s *Services) CicdReleaseCreate(
 		return 0, err
 	}
 
-	// ====== 强制审批：所有手动创建的发布单必须经过审批 ======
-	// 查询环境配置，继承多级审批策略
-	totalLevels := 1
-	levelLabel := "发布审批"
-
+	// ====== 审批判断：根据环境配置决定是否需要审批 ======
 	// 优先按 namespace 查环境，找不到再按 name 查
 	env, envErr := s.dao.EnvironmentGetByNamespace(ctx, req.Namespace)
 	if envErr != nil {
 		env, _ = s.dao.EnvironmentGetByName(ctx, req.Namespace)
 	}
+
+	// 判断是否需要审批：环境配置 RequireApproval=true 时才走审批
+	needApproval := true // 默认需要审批（找不到环境配置时保守处理）
+	if env != nil {
+		needApproval = env.RequireApproval
+	}
+
+	// 不需要审批：直接入队部署
+	if !needApproval {
+		global.Logger.Info("[发布] 环境无需审批，直接入队部署",
+			zap.Int64("release_id", rel.ID),
+			zap.String("namespace", req.Namespace),
+			zap.String("app_name", req.AppName),
+		)
+		_, enqErr := s.releaseEnqueue(ctx, rel.ID, tasks)
+		if enqErr != nil {
+			global.Logger.Error("[发布] 直接入队失败", zap.Error(enqErr))
+			return 0, fmt.Errorf("发布入队失败: %w", enqErr)
+		}
+		return rel.ID, nil
+	}
+
+	// 需要审批：查询多级审批策略
+	totalLevels := 1
+	levelLabel := "发布审批"
 	if env != nil && len(env.ApprovalLevels) > 0 {
 		totalLevels = len(env.ApprovalLevels)
 		levelLabel = env.ApprovalLevels[0].Label
