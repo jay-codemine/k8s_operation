@@ -25,7 +25,7 @@
 # ============================================
 
 ARG JAVA_VERSION=17
-FROM eclipse-temurin:${JAVA_VERSION}-jre-jammy
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/eclipse-temurin:${JAVA_VERSION}-jre-jammy
 
 ENV TZ=Asia/Shanghai
 WORKDIR /app

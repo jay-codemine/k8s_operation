@@ -601,7 +601,7 @@ ${agentJavaOpts} \
 -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
 
                             def dockerfileContent = """\
-FROM eclipse-temurin:${javaVersion}-jre-jammy
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/eclipse-temurin:${javaVersion}-jre-jammy
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && rm -rf /var/lib/apt/lists/*
