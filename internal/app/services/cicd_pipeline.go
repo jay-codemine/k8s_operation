@@ -1105,15 +1105,17 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	run.DurationSec = req.Duration
 	run.ErrorMessage = errMsg
 
-	// ==================== 发送钉钉通知 ====================
+	// ==================== 发送通知 ====================
 	// 如果构建成功且需要审批，发送审批提醒（包含构建成功信息）
-	// 如果构建成功且配置了自动部署，不发送构建结果通知（避免与部署通知重复）
+	// 如果构建成功且配置了自动部署，暂不发送构建结果通知（等部署完成后发更丰富的通知）
 	// 其他情况发送构建结果通知
+	skipBuildNotify := false
 	if runStatus == models.PipelineRunStatusSuccess && pipeline.RequireApproval {
 		go s.NotifyApprovalRequired(ctx, pipeline, run)
 	} else if runStatus == models.PipelineRunStatusSuccess && pipeline.AutoDeploy {
-		// 自动部署场景：部署完成后会发送更丰富的部署通知，跳过构建结果通知
-		global.Logger.Info("[回调] 自动部署已启用，跳过构建成功通知",
+		// 自动部署场景：先标记跳过，部署真正启动后才不发；若部署未能启动则补发
+		skipBuildNotify = true
+		global.Logger.Info("[回调] 自动部署已启用，暂缓构建成功通知",
 			zap.Int64("pipeline_id", pipeline.ID),
 		)
 	} else {
@@ -1136,6 +1138,19 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 		result.Namespace = deployResult.Namespace
 		result.Deployment = deployResult.Deployment
 		result.Image = deployResult.Image
+
+		// 如果自动部署未能实际启动（配置不完整/集群不可达），补发构建结果通知
+		// 避免用户完全收不到通知
+		if skipBuildNotify && !deployResult.DeployEnabled {
+			global.Logger.Info("[回调] 自动部署未启动，补发构建成功通知",
+				zap.Int64("pipeline_id", pipeline.ID),
+				zap.String("reason", deployResult.DeployMessage),
+			)
+			go s.NotifyBuildResult(ctx, pipeline, run, true)
+		}
+	} else if skipBuildNotify {
+		// AutoDeploy=true 但没有镜像地址，也补发通知
+		go s.NotifyBuildResult(ctx, pipeline, run, true)
 	}
 
 	// ==================== 自动同步发布记录 ====================
@@ -2124,6 +2139,13 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	// SonarQube 代码质量扫描（暂时强制关闭，待 SonarQube 服务部署后再启用）
 	setDefault(params, "ENABLE_SONAR", "false")
 	setDefault(params, "SONAR_QUALITY_GATE", "false")
+
+	// 并发构建限制：从 config.yaml 读取，传入 Jenkins 模板动态设置 throttleJobProperty
+	maxConcurrent := 10 // 默认值
+	if global.JenkinsSetting != nil && global.JenkinsSetting.MaxConcurrentBuilds > 0 {
+		maxConcurrent = global.JenkinsSetting.MaxConcurrentBuilds
+	}
+	setDefault(params, "MAX_CONCURRENT_BUILDS", fmt.Sprintf("%d", maxConcurrent))
 
 	// 制品上传（根据流水线配置注入，所有语言统一）
 	if pipeline.EnableArtifactUpload {

@@ -76,7 +76,7 @@ spec:
 
     options {
         timeout(time: 30, unit: 'MINUTES')
-        disableConcurrentBuilds()
+        // 并发限制由平台 config.yaml 的 MaxConcurrentBuilds 控制，通过参数动态注入
         buildDiscarder(logRotator(numToKeepStr: '20'))
         skipDefaultCheckout(true)
     }
@@ -112,6 +112,9 @@ spec:
         string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '重复率阈值')
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁策略: block | warn | skip')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传')
+
+        // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
+        string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
     }
 
     environment {
@@ -126,6 +129,17 @@ spec:
                 deleteDir()
                 sh 'rm -rf .git 2>/dev/null || true'
                 script {
+                    // 动态设置并发限制（从平台 config.yaml 的 MaxConcurrentBuilds 注入，需 Throttle Concurrent Builds 插件）
+                    def maxConcurrent = (params.MAX_CONCURRENT_BUILDS ?: '10').toInteger()
+                    properties([
+                        [$class: 'ThrottleJobProperty',
+                         maxConcurrentPerNode: 0,
+                         maxConcurrentTotal: maxConcurrent,
+                         categories: [],
+                         throttleEnabled: true,
+                         throttleOption: 'project'
+                        ]
+                    ])
                     def expectedType = 'python'
                     def actualType = params.LANGUAGE_TYPE?.trim()
                     if (actualType && actualType != expectedType) {

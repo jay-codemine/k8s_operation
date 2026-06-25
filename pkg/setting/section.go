@@ -155,6 +155,7 @@ type JenkinsSettingS struct {
 	HMACSecret   string `mapstructure:"HMACSecret"`   // HMAC 签名密钥（用于验证回调请求）
 	PollInterval int    `mapstructure:"PollInterval"` // 轮询间隔(秒)，默认15
 	MaxBuildTime int    `mapstructure:"MaxBuildTime"` // 最大构建时间(分钟)，超时判定失败，默认30
+	MaxConcurrentBuilds int `mapstructure:"MaxConcurrentBuilds"` // 每个 Job 最大并发构建数，默认10
 	// 通知配置
 	EnableDingTalk  bool   `mapstructure:"EnableDingTalk"`  // 是否启用钉钉通知
 	DingTalkWebhook string `mapstructure:"DingTalkWebhook"` // 钉钉机器人 Webhook URL

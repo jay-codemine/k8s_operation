@@ -31,7 +31,7 @@ metadata:
 spec:
   containers:
   - name: maven
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9.9-eclipse-temurin-17-noble
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}-noble
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -78,7 +78,7 @@ spec:
 
     options {
         timeout(time: 45, unit: 'MINUTES')
-        disableConcurrentBuilds()
+        // 并发限制由平台 config.yaml 的 MaxConcurrentBuilds 控制，通过参数动态注入
         buildDiscarder(logRotator(numToKeepStr: '20'))
         skipDefaultCheckout(true)
     }
@@ -123,6 +123,9 @@ spec:
 
         // 制品上传参数
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: false, description: '启用制品上传到平台制品库')
+
+        // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
+        string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
     }
 
     environment {
@@ -134,6 +137,19 @@ spec:
 
         stage('Clean Workspace') {
             steps {
+                script {
+                    // 动态设置并发限制（从平台 config.yaml 的 MaxConcurrentBuilds 注入，需 Throttle Concurrent Builds 插件）
+                    def maxConcurrent = (params.MAX_CONCURRENT_BUILDS ?: '10').toInteger()
+                    properties([
+                        [$class: 'ThrottleJobProperty',
+                         maxConcurrentPerNode: 0,
+                         maxConcurrentTotal: maxConcurrent,
+                         categories: [],
+                         throttleEnabled: true,
+                         throttleOption: 'project'
+                        ]
+                    ])
+                }
                 sh '''
                     rm -rf .git 2>/dev/null || true
                     find . -mindepth 1 -maxdepth 1 ! -name ".m2" -exec rm -rf {} + 2>/dev/null || true
@@ -585,10 +601,11 @@ ${agentJavaOpts} \
 -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
 
                             def dockerfileContent = """\
-FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${javaVersion}-jre-alpine
+FROM eclipse-temurin:${javaVersion}-jre-jammy
 ENV TZ=Asia/Shanghai
 WORKDIR /app
-RUN addgroup -S appgroup && adduser -S -G appgroup appuser
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app appuser
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
 ${agentCopyLines}COPY ${jarFile} /app/app.jar
 USER appuser

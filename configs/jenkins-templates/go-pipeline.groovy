@@ -82,7 +82,7 @@ spec:
 
     options {
         timeout(time: 30, unit: 'MINUTES')
-        disableConcurrentBuilds()
+        // 并发限制由平台 config.yaml 的 MaxConcurrentBuilds 控制，通过参数动态注入
         buildDiscarder(logRotator(numToKeepStr: '20'))
         skipDefaultCheckout(true)
     }
@@ -127,6 +127,9 @@ spec:
 
         // 制品上传参数
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
+
+        // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
+        string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
     }
 
     environment {
@@ -142,6 +145,17 @@ spec:
                 deleteDir()
 
                 script {
+                    // 动态设置并发限制（从平台 config.yaml 的 MaxConcurrentBuilds 注入，需 Throttle Concurrent Builds 插件）
+                    def maxConcurrent = (params.MAX_CONCURRENT_BUILDS ?: '10').toInteger()
+                    properties([
+                        [$class: 'ThrottleJobProperty',
+                         maxConcurrentPerNode: 0,
+                         maxConcurrentTotal: maxConcurrent,
+                         categories: [],
+                         throttleEnabled: true,
+                         throttleOption: 'project'
+                        ]
+                    ])
                     // 语言类型交叉校验：防止自定义 Job 配错脚本
                     def expectedType = 'go'
                     def actualType = params.LANGUAGE_TYPE?.trim()
