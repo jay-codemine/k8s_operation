@@ -185,3 +185,104 @@ func (d *Dao) CicdReleaseUpdateImage(ctx context.Context, releaseID int64, image
 		Where("id = ? AND is_del = 0", releaseID).
 		Updates(updates).Error
 }
+
+// ==================== 发布历史增强 ====================
+
+// CicdReleaseHistory 应用发布历史查询（增强版）支持时间范围、环境筛选
+func (d *Dao) CicdReleaseHistory(ctx context.Context, appName, namespace, status string, startTime, endTime int64, page, pageSize int) ([]*models.CicdRelease, int64, error) {
+	var list []*models.CicdRelease
+	var total int64
+
+	query := d.db.WithContext(ctx).Model(&models.CicdRelease{}).Where("is_del = 0")
+
+	if appName != "" {
+		query = query.Where("app_name LIKE ?", "%"+appName+"%")
+	}
+	if namespace != "" {
+		query = query.Where("namespace = ?", namespace)
+	}
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if startTime > 0 {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where("created_at <= ?", endTime)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return list, total, nil
+}
+
+// ReleaseStatsEnhanced 发布统计增强（包含平均发布时间、今日发布数等）
+type ReleaseStatsEnhanced struct {
+	Total       int64              `json:"total"`
+	ByStatus    map[string]int64   `json:"by_status"`
+	TodayCount  int64              `json:"today_count"`
+	WeekCount   int64              `json:"week_count"`
+	SuccessRate float64            `json:"success_rate"`
+}
+
+// CicdReleaseStatsEnhanced 获取增强版发布统计
+func (d *Dao) CicdReleaseStatsEnhanced(ctx context.Context) (*ReleaseStatsEnhanced, error) {
+	stats := &ReleaseStatsEnhanced{
+		ByStatus: make(map[string]int64),
+	}
+
+	// 按状态统计
+	type statusCount struct {
+		Status string `gorm:"column:status"`
+		Cnt    int64  `gorm:"column:cnt"`
+	}
+	var rows []statusCount
+	err := d.db.WithContext(ctx).
+		Model(&models.CicdRelease{}).
+		Select("status, COUNT(*) AS cnt").
+		Where("is_del = 0").
+		Group("status").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	var successCount int64
+	var terminalCount int64
+	for _, r := range rows {
+		stats.Total += r.Cnt
+		stats.ByStatus[r.Status] = r.Cnt
+		if r.Status == models.CicdReleaseStatusSucceeded {
+			successCount = r.Cnt
+		}
+		if r.Status == models.CicdReleaseStatusSucceeded || r.Status == models.CicdReleaseStatusFailed {
+			terminalCount += r.Cnt
+		}
+	}
+	if terminalCount > 0 {
+		stats.SuccessRate = float64(successCount) / float64(terminalCount) * 100
+	}
+
+	// 今日发布数
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	d.db.WithContext(ctx).
+		Model(&models.CicdRelease{}).
+		Where("is_del = 0 AND created_at >= ?", todayStart.Unix()).
+		Count(&stats.TodayCount)
+
+	// 本周发布数
+	weekStart := todayStart.AddDate(0, 0, -int(now.Weekday()))
+	d.db.WithContext(ctx).
+		Model(&models.CicdRelease{}).
+		Where("is_del = 0 AND created_at >= ?", weekStart.Unix()).
+		Count(&stats.WeekCount)
+
+	return stats, nil
+}

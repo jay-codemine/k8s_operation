@@ -265,6 +265,22 @@ func (s *Services) CicdReleaseStats(ctx context.Context) (map[string]int64, erro
 	return s.dao.CicdReleaseStats(ctx)
 }
 
+// CicdReleaseHistory 应用发布历史查询（增强版）
+func (s *Services) CicdReleaseHistory(ctx context.Context, appName, namespace, status string, startTime, endTime int64, page, pageSize int) ([]*models.CicdRelease, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	return s.dao.CicdReleaseHistory(ctx, appName, namespace, status, startTime, endTime, page, pageSize)
+}
+
+// CicdReleaseStatsEnhanced 增强版发布统计
+func (s *Services) CicdReleaseStatsEnhanced(ctx context.Context) (*dao.ReleaseStatsEnhanced, error) {
+	return s.dao.CicdReleaseStatsEnhanced(ctx)
+}
+
 // CicdReleaseUpdate 编辑发布单（仅 Pending/Failed/Canceled 状态可编辑）
 func (s *Services) CicdReleaseUpdate(ctx context.Context, req *requests.CicdReleaseUpdateRequest) error {
 	// 先查询发布单是否存在

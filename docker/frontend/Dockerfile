@@ -139,7 +139,7 @@ RUN <<'SCRIPT' cat > /docker-entrypoint.d/90-backend-url.sh
 # 用法：docker run -e API_BACKEND_URL=http://10.0.0.1:8080 ...
 if [ -n "$API_BACKEND_URL" ]; then
     echo "Configuring backend URL: $API_BACKEND_URL"
-    sed -i "s|server k8soperation.k8soperation.svc.cluster.local:8080;|server ${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
+    sed -i "s|server k8soperation.k8soperation.svc:8080;|server ${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
 fi
 SCRIPT
 RUN chmod +x /docker-entrypoint.d/90-backend-url.sh

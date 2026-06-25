@@ -947,6 +947,31 @@ func (s *Services) BuildRecordList(ctx context.Context, page, pageSize int, stat
 	return result, total, nil
 }
 
+// BuildStats 获取构建统计数据（总数、成功率、平均时长、趋势）
+func (s *Services) BuildStats(ctx context.Context, days int) (map[string]interface{}, error) {
+	if days < 1 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+
+	stats, err := s.dao.PipelineRunBuildStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("查询构建统计失败: %w", err)
+	}
+
+	trend, err := s.dao.PipelineRunBuildTrend(ctx, days)
+	if err != nil {
+		return nil, fmt.Errorf("查询构建趋势失败: %w", err)
+	}
+
+	return map[string]interface{}{
+		"stats": stats,
+		"trend": trend,
+	}, nil
+}
+
 // PipelineCallbackResult 回调处理结果（返回给 Jenkins）
 type PipelineCallbackResult struct {
 	Success       bool   `json:"success"`

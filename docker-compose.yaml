@@ -59,7 +59,7 @@ services:
     container_name: k8sop-backend
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/backend/Dockerfile
     restart: always
     depends_on:
       mysql:
@@ -90,7 +90,7 @@ services:
     container_name: k8sop-frontend
     build:
       context: ./k8s-web
-      dockerfile: Dockerfile
+      dockerfile: ../docker/frontend/Dockerfile
     restart: always
     depends_on:
       backend:

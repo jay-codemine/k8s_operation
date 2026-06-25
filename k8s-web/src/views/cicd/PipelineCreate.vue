@@ -896,6 +896,30 @@
                   </transition>
                 </div>
 
+                <!-- 构建目录（仅 Java 多模块项目时显示） -->
+                <div v-if="pipelineData.language_type === 'java'" class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    构建目录
+                    <span class="optional-badge">可选</span>
+                    <span class="env-tag" style="background:#fa8c16;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">多模块</span>
+                  </label>
+                  <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <input
+                      type="text"
+                      v-model="pipelineData.build_dir"
+                      class="form-input with-icon"
+                      placeholder="留空则自动检测，如 foxess-writer"
+                    />
+                  </div>
+                  <div class="input-hint">多模块 Maven 项目必填：指定包含 spring-boot-maven-plugin 的子模块目录名，避免构建产物选错模块</div>
+                </div>
+
                 <!-- Git 凭证 ID 已自动配置，仅保留跳过测试 -->
                 <div class="form-row">
                   <div class="form-group half">
@@ -2002,6 +2026,7 @@ export default {
       image_repo: '',       // 镜像仓库地址（必填），如 harbor.example.com/project/app
       image_tag: '',        // 镜像标签（可选），如 v0.1.1；留空则 Jenkins 自动生成
       java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
+      build_dir: '',          // 构建目录（多模块 Maven 项目指定子模块目录，仅 Java 生效）
       skip_tests: false,    // 跳过单元测试
       dockerfile_path: '',  // Dockerfile 路径（空则自动生成）
       git_credential_id: '',  // Jenkins 中配置的 Git 凭证 ID
@@ -2309,7 +2334,7 @@ export default {
         pipelineData.value.image_repo = existingImageRepo.value
       }
       // 重组 env_vars：默认推荐变量（排除 IMAGE_REPO 等已有独立字段的） + 用户自定义
-      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR']
       const newEnvVars = defaults
         .filter(d => !promotedKeys.includes(d.name))
         .map(d => ({ name: d.name, value: d.value }))
@@ -2382,7 +2407,7 @@ export default {
               const found = envArr.find(e => e.name === key)
               return found ? found.value : def
             }
-            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION']
+            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION', 'BUILD_DIR']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
             // 回显 Dockerfile 策略模式（统一使用平台生成）
             dockerfileMode.value = 'platform'
@@ -2399,6 +2424,7 @@ export default {
               image_repo: getEnv('IMAGE_REPO', ''),
               image_tag: getEnv('IMAGE_TAG', ''),
               java_version: getEnv('JAVA_VERSION', '17'),
+              build_dir: getEnv('BUILD_DIR', ''),
               skip_tests: getEnv('SKIP_TESTS', 'false') === 'true',
               dockerfile_path: getEnv('DOCKERFILE_PATH', ''),
               git_credential_id: getEnv('GIT_CREDENTIAL_ID', 'gitee-id'),
@@ -2488,6 +2514,10 @@ export default {
         // 注入 JAVA_VERSION（仅 Java 项目）
         if (pipelineData.value.language_type === 'java') {
           submitData.env_vars.push({ name: 'JAVA_VERSION', value: pipelineData.value.java_version || '17' })
+          // 注入 BUILD_DIR（多模块 Maven 项目）
+          if (pipelineData.value.build_dir) {
+            submitData.env_vars.push({ name: 'BUILD_DIR', value: pipelineData.value.build_dir })
+          }
         }
         const response = await createPipeline(submitData)
         if (response.code === 0) {
@@ -2537,6 +2567,10 @@ export default {
         // Java 版本注入（仅 Java 项目）
         if (submitData.language_type === 'java') {
           injectEnv('JAVA_VERSION', submitData.java_version || '17')
+          // BUILD_DIR 注入（多模块 Maven 项目指定子模块）
+          if (submitData.build_dir) {
+            injectEnv('BUILD_DIR', submitData.build_dir)
+          }
         }
         // Dockerfile 策略：统一使用平台生成
         injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
@@ -2583,6 +2617,7 @@ export default {
         delete submitData.dockerfile_path
         delete submitData.git_credential_id
         delete submitData.java_version
+        delete submitData.build_dir
 
         // 确保容器名称有值（自动部署时必须）
         if (submitData.auto_deploy && !submitData.target_container && submitData.target_workload_name) {
@@ -2848,7 +2883,7 @@ export default {
       if (existingImageRepo && existingImageRepo.value && existingImageRepo.value !== 'harbor.example.com/project/app-name') {
         pipelineData.value.image_repo = existingImageRepo.value
       }
-      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR']
       const newEnvVars = defaults.filter(d => !promotedKeys.includes(d.name)).map(d => ({ name: d.name, value: d.value }))
       pipelineData.value.env_vars = [...newEnvVars, ...userCustom]
     }

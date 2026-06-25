@@ -56,6 +56,7 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		pipeline.GET("/history", r.pipelineCtrl.History)   // 获取运行历史
 		pipeline.GET("/build-records", r.pipelineCtrl.BuildRecords) // 获取全量构建记录（跨流水线）
 		pipeline.GET("/build-records/export", r.pipelineCtrl.ExportBuildRecords) // 导出构建记录CSV
+		pipeline.GET("/build-stats", r.pipelineCtrl.BuildStats)       // 构建统计数据（成功率/趋势/平均时长）
 		pipeline.GET("/template-verify", r.pipelineCtrl.TemplateVerify)     // 模板化发布验证
 		pipeline.GET("/template-simulate", r.pipelineCtrl.TemplateSimulate) // 模拟模板化发布流程
 		pipeline.GET("/sonar-report", r.pipelineCtrl.SonarReport)          // SonarQube 代码质量报告
@@ -84,6 +85,8 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		release.POST("/batch-rollback", r.releaseCtrl.BatchRollback) // 批量回滚
 		release.POST("/batch-cancel", r.releaseCtrl.BatchCancel)     // 批量取消
 		release.POST("/sync-from-pipeline", r.releaseCtrl.SyncFromPipeline) // 同步流水线记录
+		release.GET("/history", r.releaseCtrl.History)                       // 发布历史查询（增强版）
+		release.GET("/stats-enhanced", r.releaseCtrl.StatsEnhanced)           // 增强版发布统计
 	}
 
 	// ==================== 回调接口 ====================

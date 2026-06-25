@@ -194,6 +194,14 @@ export const getPipelineById = getPipelineDetail
 export const triggerPipeline = runPipeline
 export const cancelPipeline = stopPipeline
 
+/**
+ * 获取构建统计数据（成功率、平均时长、趋势）
+ * @param {number} days - 趋势天数，默认7
+ */
+export const getBuildStats = (days = 7) => {
+  return http.get(`${BASE_URL}/build-stats`, { params: { days } })
+}
+
 // ==================== 流水线阶段 API ====================
 
 const STAGE_URL = '/api/v1/k8s/cicd/stage'

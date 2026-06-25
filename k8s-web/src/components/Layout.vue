@@ -166,6 +166,7 @@
 <script setup>
 import {computed, ref, reactive, watch, onMounted, onUnmounted} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
+import {Message} from '@arco-design/web-vue'
 import {logout} from '@/api/auth'
 import permissionStore from '@/stores/permission'
 import AiAssistant from '@/components/AiAssistant.vue'
@@ -184,7 +185,7 @@ const username = computed(() => {
     try {
       const user = JSON.parse(userStr)
       return user.username || 'Admin'
-    } catch (e) {
+    } catch {
       return 'Admin'
     }
   }
@@ -216,8 +217,10 @@ const clearLocalAuth = () => {
 const handleLogout = async () => {
   try {
     await logout()
+    Message.success({ content: '退出成功', duration: 1500 })
   } catch (e) {
-    console.error('logout failed', e)
+    // 即使后端失败，前端也正常退出（JWT 无法服务端失效）
+    console.warn('logout api failed, clearing local auth anyway', e)
   } finally {
     clearLocalAuth()
     router.replace('/login')
@@ -368,6 +371,7 @@ const menuGroupsConfig = reactive([
       // ── 发布中心 (CD) ──
       { section: '发布中心 · CD' },
       { path: '/cicd/releases', label: '发布管理', icon: '🚀' },
+      { path: '/cicd/release-history', label: '发布历史', icon: '📅' },
       { path: '/cicd/approvals', label: '审批工单', icon: '✅' },
       // ── 规则中心 (Policy) ──
       { section: '规则中心' },

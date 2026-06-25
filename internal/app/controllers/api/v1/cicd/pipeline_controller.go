@@ -1063,3 +1063,27 @@ func (c *PipelineController) ExportBuildRecords(ctx *gin.Context) {
 			run["duration_sec"], run["started_at"], run["finished_at"], errMsg))
 	}
 }
+
+// BuildStats godoc
+// @Summary 获取构建统计数据
+// @Description 返回构建成功率、平均时长、今日/本周构建数、近N天趋势
+// @Tags CICD Pipeline
+// @Produce json
+// @Param days query int false "趋势天数，默认7"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/pipeline/build-stats [get]
+func (c *PipelineController) BuildStats(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
+
+	svc := services.NewServices()
+	result, err := svc.BuildStats(ctx.Request.Context(), days)
+	if err != nil {
+		global.Logger.Error("BuildStats error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorCicdBuildQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(result)
+}

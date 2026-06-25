@@ -523,3 +523,60 @@ func (c *CicdReleaseController) SyncFromPipeline(ctx *gin.Context) {
 		"synced":  synced,
 	})
 }
+
+// History godoc
+// @Summary 应用发布历史查询（增强版）
+// @Description 支持时间范围、命名空间、应用名筛选的发布历史查询
+// @Tags CICD Release
+// @Produce json
+// @Param page query int false "页码"
+// @Param page_size query int false "每页数量"
+// @Param app_name query string false "应用名称"
+// @Param namespace query string false "命名空间"
+// @Param status query string false "状态"
+// @Param start_time query int false "开始时间戳"
+// @Param end_time query int false "结束时间戳"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/history [get]
+func (c *CicdReleaseController) History(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	appName := ctx.Query("app_name")
+	namespace := ctx.Query("namespace")
+	status := ctx.Query("status")
+	startTime, _ := strconv.ParseInt(ctx.Query("start_time"), 10, 64)
+	endTime, _ := strconv.ParseInt(ctx.Query("end_time"), 10, 64)
+
+	svc := services.NewServices()
+	list, total, err := svc.CicdReleaseHistory(ctx.Request.Context(), appName, namespace, status, startTime, endTime, page, pageSize)
+	if err != nil {
+		global.Logger.Error("CicdReleaseHistory error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorCicdReleaseQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.SuccessList(list, total)
+}
+
+// StatsEnhanced godoc
+// @Summary 增强版发布统计
+// @Description 返回今日/本周发布数、成功率、状态分布
+// @Tags CICD Release
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/cicd/release/stats-enhanced [get]
+func (c *CicdReleaseController) StatsEnhanced(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	svc := services.NewServices()
+	stats, err := svc.CicdReleaseStatsEnhanced(ctx.Request.Context())
+	if err != nil {
+		global.Logger.Error("CicdReleaseStatsEnhanced error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorCicdReleaseQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(stats)
+}

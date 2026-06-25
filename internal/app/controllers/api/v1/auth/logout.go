@@ -35,11 +35,10 @@ func (a *AuthController) Logout(ctx *gin.Context) {
 	})
 
 	if err := sess.Save(); err != nil {
-		global.Logger.Error("logout failed", zap.String("sid", sessionID), zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError, gin.H{"msg": "退出失败"})
-		return
+		// JWT 模式下 session 清理属于尽力而为，不阻断退出流程
+		global.Logger.Warn("logout session save failed (non-blocking)", zap.String("sid", sessionID), zap.Error(err))
 	}
 
-	global.Logger.Info("logout success" /*, zap.String("sid", sessionID)*/)
-	ctx.JSON(http.StatusOK, gin.H{"msg": "退出成功"})
+	global.Logger.Info("logout success", zap.String("sid", sessionID))
+	ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "退出成功"})
 }

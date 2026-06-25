@@ -908,3 +908,109 @@ func (d *Dao) ApprovalExistsByStageID(ctx context.Context, stageID int64) (bool,
 		Count(&count).Error
 	return count > 0, err
 }
+
+// ==================== 构建统计 ====================
+
+// BuildStatsResult 构建统计结果
+type BuildStatsResult struct {
+	TotalBuilds    int64   `json:"total_builds"`
+	SuccessBuilds  int64   `json:"success_builds"`
+	FailedBuilds   int64   `json:"failed_builds"`
+	RunningBuilds  int64   `json:"running_builds"`
+	AvgDuration    float64 `json:"avg_duration"`
+	SuccessRate    float64 `json:"success_rate"`
+	TodayBuilds    int64   `json:"today_builds"`
+	WeekBuilds     int64   `json:"week_builds"`
+}
+
+// PipelineRunBuildStats 获取构建统计数据
+func (d *Dao) PipelineRunBuildStats(ctx context.Context) (*BuildStatsResult, error) {
+	stats := &BuildStatsResult{}
+
+	// 总数 & 各状态统计
+	type statusCount struct {
+		Status string `gorm:"column:status"`
+		Cnt    int64  `gorm:"column:cnt"`
+	}
+	var rows []statusCount
+	err := d.db.WithContext(ctx).
+		Model(&models.CicdPipelineRun{}).
+		Select("status, COUNT(*) AS cnt").
+		Group("status").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		stats.TotalBuilds += r.Cnt
+		switch r.Status {
+		case models.PipelineRunStatusSuccess:
+			stats.SuccessBuilds = r.Cnt
+		case models.PipelineRunStatusFailed:
+			stats.FailedBuilds = r.Cnt
+		case models.PipelineRunStatusRunning, models.PipelineRunStatusPending:
+			stats.RunningBuilds += r.Cnt
+		}
+	}
+	if stats.TotalBuilds > 0 {
+		stats.SuccessRate = float64(stats.SuccessBuilds) / float64(stats.TotalBuilds) * 100
+	}
+
+	// 平均构建时长（仅计算已完成且 duration > 0 的记录）
+	var avgDur struct {
+		Avg float64 `gorm:"column:avg_dur"`
+	}
+	d.db.WithContext(ctx).
+		Model(&models.CicdPipelineRun{}).
+		Select("AVG(duration_sec) AS avg_dur").
+		Where("status IN (?, ?) AND duration_sec > 0", models.PipelineRunStatusSuccess, models.PipelineRunStatusFailed).
+		Scan(&avgDur)
+	stats.AvgDuration = avgDur.Avg
+
+	// 今日构建数
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	d.db.WithContext(ctx).
+		Model(&models.CicdPipelineRun{}).
+		Where("created_at >= ?", todayStart.Unix()).
+		Count(&stats.TodayBuilds)
+
+	// 本周构建数
+	weekStart := todayStart.AddDate(0, 0, -int(now.Weekday()))
+	d.db.WithContext(ctx).
+		Model(&models.CicdPipelineRun{}).
+		Where("created_at >= ?", weekStart.Unix()).
+		Count(&stats.WeekBuilds)
+
+	return stats, nil
+}
+
+// BuildTrendItem 构建趋势项
+type BuildTrendItem struct {
+	Date    string `json:"date" gorm:"column:date"`
+	Success int64  `json:"success" gorm:"column:success"`
+	Failed  int64  `json:"failed" gorm:"column:failed"`
+	Total   int64  `json:"total" gorm:"column:total"`
+}
+
+// PipelineRunBuildTrend 获取最近N天的构建趋势
+func (d *Dao) PipelineRunBuildTrend(ctx context.Context, days int) ([]BuildTrendItem, error) {
+	now := time.Now()
+	startTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -days+1)
+
+	var results []BuildTrendItem
+	err := d.db.WithContext(ctx).
+		Model(&models.CicdPipelineRun{}).
+		Select(`FROM_UNIXTIME(created_at, '%Y-%m-%d') AS date,
+			SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+			SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+			COUNT(*) AS total`).
+		Where("created_at >= ?", startTime.Unix()).
+		Group("date").
+		Order("date ASC").
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}

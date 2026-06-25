@@ -281,9 +281,25 @@ SETTINGS_EOF
                         echo "[Build] 最终构建目录: ${buildDir}"
 
                         // ==================== 执行 Maven 构建 ====================
+                        // 多模块项目智能检测：如果根目录有父 pom 且包含 <modules>，
+                        // 则使用 -pl <module> -am 从根 pom 构建（自动解析兄弟模块依赖）
+                        def isMultiModule = false
+                        if (buildDir != '.' && fileExists('pom.xml')) {
+                            def hasModules = sh(script: "grep -c '<modules>' pom.xml 2>/dev/null || echo 0", returnStdout: true).trim()
+                            if (hasModules.toInteger() > 0) {
+                                isMultiModule = true
+                                echo "[Build] 检测到多模块项目，使用 -pl ${buildDir} -am 从根 POM 构建"
+                            }
+                        }
+                        env.IS_MULTI_MODULE = isMultiModule.toString()
+
                         if (buildDir == '.') {
                             sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
+                        } else if (isMultiModule) {
+                            // 多模块：从根 pom 构建，-pl 指定目标模块，-am 自动构建其依赖模块
+                            sh "mvn package -pl ${buildDir} -am -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
                         } else {
+                            // 独立子项目：直接指定 pom.xml
                             sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS} -f ${buildDir}/pom.xml"
                         }
                         archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
@@ -319,7 +335,17 @@ SETTINGS_EOF
             steps {
                 echo "=== 单元测试 ==="
                 container('maven') {
-                    sh "mvn test -B -T 1C -s ${env.MVN_SETTINGS} -Dsurefire.useFile=false"
+                    script {
+                        def buildDir = env.BUILD_DIR ?: '.'
+                        def isMultiModule = (env.IS_MULTI_MODULE == 'true')
+                        if (buildDir == '.') {
+                            sh "mvn test -B -T 1C -s ${env.MVN_SETTINGS} -Dsurefire.useFile=false"
+                        } else if (isMultiModule) {
+                            sh "mvn test -pl ${buildDir} -am -B -T 1C -s ${env.MVN_SETTINGS} -Dsurefire.useFile=false"
+                        } else {
+                            sh "mvn test -B -T 1C -s ${env.MVN_SETTINGS} -f ${buildDir}/pom.xml -Dsurefire.useFile=false"
+                        }
+                    }
                 }
             }
             post {

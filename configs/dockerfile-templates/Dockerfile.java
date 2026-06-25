@@ -19,17 +19,25 @@
 #   如平台 API 不可用，则跳过探针注入，镜像可正常运行
 #
 # 基础镜像说明：
-#   使用阿里云镜像源，国内拉取更快
+#   使用 eclipse-temurin jammy (Ubuntu 22.04) 基底，自带 glibc
+#   兼容 snappy-java / Netty / RocksDB 等所有原生库
+#   支持 JAVA_VERSION: 11, 17, 21
 # ============================================
 
 ARG JAVA_VERSION=17
-FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/java:${JAVA_VERSION}-jre-alpine
+FROM eclipse-temurin:${JAVA_VERSION}-jre-jammy
 
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 
-# 创建非 root 用户（Alpine 写法）
-RUN addgroup -S appgroup && adduser -S -G appgroup appuser
+# 安装时区配置 + 基础诊断工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata curl && \
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 用户（Debian/Ubuntu 写法）
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app appuser
 
 # 创建日志目录并授权
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app

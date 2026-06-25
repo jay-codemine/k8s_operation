@@ -131,6 +131,7 @@ const router = createRouter({
         {path: 'cicd/templates', component: () => import('@/views/cicd/PipelineTemplates.vue')},
         // CICD 发布管理
         {path: 'cicd/releases', component: () => import('@/views/cicd/Releases.vue')},
+        {path: 'cicd/release-history', component: () => import('@/views/cicd/ReleaseHistory.vue')},
         // CICD 审批管理
         {path: 'cicd/approvals', component: () => import('@/views/cicd/Approvals.vue')},
         // CICD 审批策略设置

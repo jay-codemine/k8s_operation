@@ -228,6 +228,28 @@ export const syncReleasesFromPipeline = () => {
 }
 
 /**
+ * 获取发布历史（增强版）
+ * @param {Object} params - 查询参数
+ * @param {number} params.page - 页码
+ * @param {number} params.page_size - 每页数量
+ * @param {string} params.app_name - 应用名称
+ * @param {string} params.namespace - 命名空间
+ * @param {string} params.status - 状态筛选
+ * @param {number} params.start_time - 开始时间戳
+ * @param {number} params.end_time - 结束时间戳
+ */
+export const getReleaseHistory = (params = {}) => {
+  return http.get(`${RELEASE_BASE}/history`, { params })
+}
+
+/**
+ * 获取增强版发布统计
+ */
+export const getReleaseStatsEnhanced = () => {
+  return http.get(`${RELEASE_BASE}/stats-enhanced`)
+}
+
+/**
  * 获取发布单下的任务列表
  * @param {number} id - 发布单ID
  */
