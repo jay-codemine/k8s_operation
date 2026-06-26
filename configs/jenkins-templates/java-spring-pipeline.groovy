@@ -36,14 +36,14 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '500m'
-        memory: '1Gi'
+        cpu: '1'
+        memory: '2Gi'
       limits:
-        cpu: '2'
-        memory: '4Gi'
+        cpu: '4'
+        memory: '8Gi'
     env:
     - name: MAVEN_OPTS
-      value: '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
+      value: '-Xmx4096m -Xms1024m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
     volumeMounts:
     - name: maven-cache
       mountPath: /root/.m2/repository
@@ -295,23 +295,6 @@ spec:
 
                         sh 'java -version 2>&1 | head -1'
                         sh 'mvn --version | head -2'
-
-                        // JDK 16+ 需要 --add-opens 解除模块封装（Lombok/MapStruct 等注解处理器需要访问 jdk.compiler 内部类）
-                        def javaVer = (params.JAVA_VERSION ?: '17').toInteger()
-                        if (javaVer >= 16) {
-                            def addOpens = [
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED',
-                                '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED'
-                            ].join(' ')
-                            env.MAVEN_OPTS = (env.MAVEN_OPTS ?: '') + ' ' + addOpens
-                            echo "[Maven] JDK ${javaVer} 已注入 --add-opens（Lombok/注解处理器兼容）"
-                        }
 
                         // ==================== 智能检测 pom.xml 位置 ====================
                         def buildDir = params.BUILD_DIR?.trim()
