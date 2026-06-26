@@ -24,18 +24,11 @@ spec:
         app.kubernetes.io/component: master
     spec:
       serviceAccountName: jenkins
-      # 固定调度到 test-0 节点（hostPath PV 数据在该节点）
-      nodeSelector:
-        kubernetes.io/hostname: test-0
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
       initContainers:
-        # 1. 修复 hostPath 目录权限（以 root 运行）
+        # 修复 hostPath 目录权限（以 root 运行）
         - name: fix-permissions
           image: busybox:1.36
           command:
@@ -50,40 +43,6 @@ spec:
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
-        # 2. 预装必需插件（PVC 丢失时自动恢复，已有则跳过）
-        - name: install-plugins
-          image: jenkins/jenkins:2.555.3-lts
-          command:
-            - sh
-            - -c
-            - |
-              # 如果插件目录已有内容（>5个文件），说明 PVC 数据完好，跳过安装
-              PLUGIN_COUNT=$(ls /var/jenkins_home/plugins/*.jpi 2>/dev/null | wc -l)
-              if [ "$PLUGIN_COUNT" -gt 5 ]; then
-                echo "[init] 检测到 $PLUGIN_COUNT 个已安装插件，跳过预装"
-                exit 0
-              fi
-              echo "[init] 插件目录为空，开始预装核心插件..."
-              jenkins-plugin-cli --verbose --plugins \
-                configuration-as-code \
-                kubernetes \
-                workflow-aggregator \
-                pipeline-utility-steps \
-                pipeline-stage-view \
-                git \
-                credentials-binding \
-                http_request \
-                throttle-concurrents \
-                sonar \
-                junit \
-                antisamy-markup-formatter \
-                matrix-auth
-              echo "[init] 插件预装完成"
-          volumeMounts:
-            - name: jenkins-data
-              mountPath: /var/jenkins_home
-          securityContext:
-            runAsUser: 1000
       containers:
         - name: jenkins
           image: jenkins/jenkins:2.555.3-lts
@@ -136,6 +95,16 @@ spec:
                 secretKeyRef:
                   name: jenkins-secret
                   key: gitee-password
+            - name: MAVEN_REPO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: maven-repo-username
+            - name: MAVEN_REPO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: maven-repo-password
           resources:
             requests:
               cpu: "1"
