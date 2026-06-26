@@ -883,6 +883,10 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 		err = s.updateStatefulSetImage(ctx, client.Kube, namespace, workloadName, container, image, &logs)
 	case "DaemonSet":
 		err = s.updateDaemonSetImage(ctx, client.Kube, namespace, workloadName, container, image, &logs)
+	case "CronJob":
+		err = s.updateCronJobImage(ctx, client.Kube, namespace, workloadName, container, image, &logs)
+	case "Job":
+		err = s.updateJobImage(ctx, client.Kube, namespace, workloadName, container, image, &logs)
 	default:
 		err = fmt.Errorf("不支持的工作负载类型: %s", workloadKind)
 	}
@@ -934,6 +938,26 @@ func (s *Services) getCurrentImage(ctx context.Context, client kubernetes.Interf
 			return ""
 		}
 		for _, c := range ds.Spec.Template.Spec.Containers {
+			if c.Name == container {
+				return c.Image
+			}
+		}
+	case "CronJob":
+		cj, err := client.BatchV1().CronJobs(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+		if err != nil {
+			return ""
+		}
+		for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+			if c.Name == container {
+				return c.Image
+			}
+		}
+	case "Job":
+		job, err := client.BatchV1().Jobs(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+		if err != nil {
+			return ""
+		}
+		for _, c := range job.Spec.Template.Spec.Containers {
 			if c.Name == container {
 				return c.Image
 			}
@@ -1351,6 +1375,102 @@ func (s *Services) waitDaemonSetRollout(ctx context.Context, client kubernetes.I
 	}
 
 	return fmt.Errorf("DaemonSet Rollout 超时（%v）", timeout)
+}
+
+// updateCronJobImage 更新 CronJob 镜像
+func (s *Services) updateCronJobImage(ctx context.Context, client kubernetes.Interface, namespace, name, container, image string, logs *strings.Builder) error {
+	logs.WriteString(fmt.Sprintf("[INFO] 正在更新 CronJob %s/%s 的镜像...\n", namespace, name))
+
+	if container == "" {
+		return fmt.Errorf("容器名称未配置，请在流水线配置中设置目标容器")
+	}
+
+	// 1. 获取 CronJob
+	cj, err := client.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("获取 CronJob 失败: %v", err)
+	}
+
+	// 2. 验证容器名称是否存在
+	containerFound := false
+	for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+		if c.Name == container {
+			containerFound = true
+			break
+		}
+	}
+	if !containerFound {
+		availableContainers := make([]string, 0)
+		for _, c := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+			availableContainers = append(availableContainers, c.Name)
+		}
+		return fmt.Errorf("容器 '%s' 不存在于 CronJob %s/%s，可用容器: %v", container, namespace, name, availableContainers)
+	}
+
+	// 3. Patch 更新镜像
+	patchData := fmt.Sprintf(`{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}}}`, container, image)
+	_, err = client.BatchV1().CronJobs(namespace).Patch(
+		ctx,
+		name,
+		types.StrategicMergePatchType,
+		[]byte(patchData),
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("镜像更新失败: %v", err)
+	}
+
+	logs.WriteString(fmt.Sprintf("[INFO] 容器 %s 的新镜像: %s\n", container, image))
+	logs.WriteString("[INFO] CronJob 镜像更新完成，下次调度将使用新镜像\n")
+	return nil
+}
+
+// updateJobImage 更新 Job 镜像
+func (s *Services) updateJobImage(ctx context.Context, client kubernetes.Interface, namespace, name, container, image string, logs *strings.Builder) error {
+	logs.WriteString(fmt.Sprintf("[INFO] 正在更新 Job %s/%s 的镜像...\n", namespace, name))
+
+	if container == "" {
+		return fmt.Errorf("容器名称未配置，请在流水线配置中设置目标容器")
+	}
+
+	// 1. 获取 Job
+	job, err := client.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("获取 Job 失败: %v", err)
+	}
+
+	// 2. 验证容器名称是否存在
+	containerFound := false
+	for _, c := range job.Spec.Template.Spec.Containers {
+		if c.Name == container {
+			containerFound = true
+			break
+		}
+	}
+	if !containerFound {
+		availableContainers := make([]string, 0)
+		for _, c := range job.Spec.Template.Spec.Containers {
+			availableContainers = append(availableContainers, c.Name)
+		}
+		return fmt.Errorf("容器 '%s' 不存在于 Job %s/%s，可用容器: %v", container, namespace, name, availableContainers)
+	}
+
+	// 3. Patch 更新镜像
+	patchData := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, container, image)
+	_, err = client.BatchV1().Jobs(namespace).Patch(
+		ctx,
+		name,
+		types.StrategicMergePatchType,
+		[]byte(patchData),
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("镜像更新失败: %v", err)
+	}
+
+	logs.WriteString(fmt.Sprintf("[INFO] 容器 %s 的新镜像: %s\n", container, image))
+	logs.WriteString("[INFO] Job 镜像更新完成\n")
+	return nil
 }
 
 // finishDeployStage 完成部署阶段

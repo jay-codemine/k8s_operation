@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -56,6 +57,10 @@ func (e *CicdTaskExecutor) Execute(ctx context.Context, task *models.CicdRelease
 		return e.executeStatefulSet(ctx, cli.Kube, task, release)
 	case "DaemonSet":
 		return e.executeDaemonSet(ctx, cli.Kube, task, release)
+	case "CronJob":
+		return e.executeCronJob(ctx, cli.Kube, task, release)
+	case "Job":
+		return e.executeJob(ctx, cli.Kube, task, release)
 	default:
 		result.Message = fmt.Sprintf("不支持的工作负载类型: %s", release.WorkloadKind)
 		return result
@@ -293,6 +298,91 @@ func (e *CicdTaskExecutor) waitDaemonSetRollout(ctx context.Context, kube kubern
 			}
 		}
 	}
+}
+
+// executeCronJob 执行 CronJob 镜像更新
+func (e *CicdTaskExecutor) executeCronJob(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
+	result := &CicdExecuteResult{}
+
+	// 1. 获取当前 CronJob
+	cj, err := kube.BatchV1().CronJobs(release.Namespace).Get(ctx, release.WorkloadName, metav1.GetOptions{})
+	if err != nil {
+		result.Message = fmt.Sprintf("获取CronJob失败: %v", err)
+		return result
+	}
+
+	// 2. 保存原镜像
+	result.PrevImage = e.getContainerImage(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, release.ContainerName)
+
+	// 3. Patch 更新镜像（CronJob 的容器在 spec.jobTemplate.spec.template.spec.containers 中）
+	patchData := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"jobTemplate": map[string]interface{}{
+				"spec": map[string]interface{}{
+					"template": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"containers": []map[string]interface{}{
+								{"name": release.ContainerName, "image": task.TargetImage},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	patchBytes, _ := json.Marshal(patchData)
+	_, err = kube.BatchV1().CronJobs(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	if err != nil {
+		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
+		return result
+	}
+
+	global.Logger.Info("patched cronjob image",
+		zap.String("namespace", release.Namespace),
+		zap.String("cronjob", release.WorkloadName),
+		zap.String("container", release.ContainerName),
+		zap.String("prev_image", result.PrevImage),
+		zap.String("target_image", task.TargetImage))
+
+	// CronJob 不需要等待 Rollout，更新模板后下次调度会使用新镜像
+	result.Success = true
+	result.Message = "CronJob 镜像更新成功，下次调度将使用新镜像"
+	return result
+}
+
+// executeJob 执行 Job 镜像更新
+func (e *CicdTaskExecutor) executeJob(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
+	result := &CicdExecuteResult{}
+
+	// 1. 获取当前 Job
+	job, err := kube.BatchV1().Jobs(release.Namespace).Get(ctx, release.WorkloadName, metav1.GetOptions{})
+	if err != nil {
+		result.Message = fmt.Sprintf("获取Job失败: %v", err)
+		return result
+	}
+
+	// 2. 保存原镜像
+	result.PrevImage = e.getContainerImage(job.Spec.Template.Spec.Containers, release.ContainerName)
+
+	// 3. Patch 更新镜像
+	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, release.ContainerName, task.TargetImage)
+	_, err = kube.BatchV1().Jobs(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	if err != nil {
+		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
+		return result
+	}
+
+	global.Logger.Info("patched job image",
+		zap.String("namespace", release.Namespace),
+		zap.String("job", release.WorkloadName),
+		zap.String("container", release.ContainerName),
+		zap.String("prev_image", result.PrevImage),
+		zap.String("target_image", task.TargetImage))
+
+	// Job 不需要等待 Rollout，更新镜像后新的 Pod 会使用新镜像
+	result.Success = true
+	result.Message = "Job 镜像更新成功"
+	return result
 }
 
 // getContainerImage 获取容器镜像

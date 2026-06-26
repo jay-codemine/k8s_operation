@@ -107,10 +107,10 @@ func NewKubeJobListRequest() *KubeJobListRequest { return &KubeJobListRequest{} 
 
 type KubeJobListRequest struct {
 	KubeCommonRequest
-	Page          int    `json:"page" valid:"page"`
-	Limit         int    `json:"limit" valid:"limit"`
-	CronJob       string `json:"cronjob" valid:"cronjob"`               // 按 CronJob 名称筛选
-	LabelSelector string `json:"label_selector" valid:"label_selector"` // 标签选择器 (k8s label selector 格式)
+	Page          int    `json:"page" form:"page" valid:"page"`
+	Limit         int    `json:"limit" form:"limit" valid:"limit"`
+	CronJob       string `json:"cronjob" form:"cronjob" valid:"cronjob"`               // 按 CronJob 名称筛选
+	LabelSelector string `json:"label_selector" form:"label_selector" valid:"label_selector"` // 标签选择器 (k8s label selector 格式)
 }
 
 func ValidKubeJobListRequest(data interface{}, ctx *gin.Context) map[string][]string {

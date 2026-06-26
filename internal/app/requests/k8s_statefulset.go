@@ -125,8 +125,8 @@ func NewKubeStatefulSetListRequest() *KubeStatefulSetListRequest {
 
 type KubeStatefulSetListRequest struct {
 	KubeCommonRequest
-	Page  int `json:"page" valid:"page"`   // 页码
-	Limit int `json:"limit" valid:"limit"` // 每页条数
+	Page  int `json:"page" form:"page" valid:"page"`   // 页码
+	Limit int `json:"limit" form:"limit" valid:"limit"` // 每页条数
 }
 
 func ValidKubeStatefulSetListRequest(data interface{}, ctx *gin.Context) map[string][]string {

@@ -1764,6 +1764,9 @@ import namespaceApi from '@/api/cluster/config/namespace'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import statefulsetsApi from '@/api/cluster/workloads/statefulsets'
 import daemonsetsApi from '@/api/cluster/workloads/daemonsets'
+import cronjobsApi from '@/api/cluster/workloads/cronjobs'
+import jobsApi from '@/api/cluster/workloads/jobs'
+import podsApi from '@/api/cluster/workloads/pods'
 import { useClusterStore } from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
 
@@ -1996,7 +1999,10 @@ export default {
     const workloadKindOptions = ref([
       { value: 'Deployment', label: 'Deployment', description: '无状态应用' },
       { value: 'StatefulSet', label: 'StatefulSet', description: '有状态应用' },
-      { value: 'DaemonSet', label: 'DaemonSet', description: '守护进程' }
+      { value: 'DaemonSet', label: 'DaemonSet', description: '守护进程' },
+      { value: 'CronJob', label: 'CronJob', description: '定时任务' },
+      { value: 'Job', label: 'Job', description: '一次性任务' },
+      { value: 'Pod', label: 'Pod', description: '独立 Pod' }
     ])
 
     // ==================== 语言类型 → 推荐环境变量默认值映射 ====================
@@ -2763,6 +2769,15 @@ export default {
             break
           case 'DaemonSet':
             res = await daemonsetsApi.list({ namespace: ns, page: 1, limit: 1000 })
+            break
+          case 'CronJob':
+            res = await cronjobsApi.list({ namespace: ns, page: 1, limit: 1000 })
+            break
+          case 'Job':
+            res = await jobsApi.list({ namespace: ns, page: 1, limit: 1000 })
+            break
+          case 'Pod':
+            res = await podsApi.list({ namespace: ns, page: 1, limit: 1000 })
             break
           default:
             res = await deploymentsApi.list({ namespace: ns, page: 1, limit: 1000 })
