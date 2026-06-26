@@ -919,6 +919,31 @@
                   <div class="input-hint">多模块 Maven 项目必填：指定包含 spring-boot-maven-plugin 的子模块目录名，避免构建产物选错模块</div>
                 </div>
 
+                <!-- 私有 Maven 仓库地址 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                      <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                    私有 Maven 仓库
+                    <span class="optional-badge">可选</span>
+                  </label>
+                  <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                    <input
+                      type="text"
+                      v-model="pipelineData.maven_private_repo_url"
+                      class="form-input with-icon"
+                      placeholder="留空则仅使用阿里云公共仓库，如 https://nexus.example.com/repository/maven-releases/"
+                    />
+                  </div>
+                  <div class="input-hint">拉取公司内部依赖包时必填（Nexus/GitLab Maven Registry 等），需在 Jenkins 配置名为 maven-private-repo 的 Username/Password 凭证</div>
+                </div>
+
                 <!-- Git 凭证 ID 已自动配置，仅保留跳过测试 -->
                 <div class="form-row">
                   <div class="form-group half">
@@ -2050,6 +2075,7 @@ export default {
       image_tag: '',        // 镜像标签（可选），如 v0.1.1；留空则 Jenkins 自动生成
       java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
       build_dir: '',          // 构建目录（多模块 Maven 项目指定子模块目录，仅 Java 生效）
+      maven_private_repo_url: '', // 私有 Maven 仓库地址（用于拉取公司内部依赖包）
       skip_tests: false,    // 跳过单元测试
       dockerfile_path: '',  // Dockerfile 路径（空则自动生成）
       git_credential_id: '',  // Jenkins 中配置的 Git 凭证 ID
@@ -2357,7 +2383,7 @@ export default {
         pipelineData.value.image_repo = existingImageRepo.value
       }
       // 重组 env_vars：默认推荐变量（排除 IMAGE_REPO 等已有独立字段的） + 用户自定义
-      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
       const newEnvVars = defaults
         .filter(d => !promotedKeys.includes(d.name))
         .map(d => ({ name: d.name, value: d.value }))
@@ -2430,7 +2456,7 @@ export default {
               const found = envArr.find(e => e.name === key)
               return found ? found.value : def
             }
-            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION', 'BUILD_DIR']
+            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
             // 回显 Dockerfile 策略模式（统一使用平台生成）
             dockerfileMode.value = 'platform'
@@ -2448,6 +2474,7 @@ export default {
               image_tag: getEnv('IMAGE_TAG', ''),
               java_version: getEnv('JAVA_VERSION', '17'),
               build_dir: getEnv('BUILD_DIR', ''),
+              maven_private_repo_url: getEnv('MAVEN_PRIVATE_REPO_URL', ''),
               skip_tests: getEnv('SKIP_TESTS', 'false') === 'true',
               dockerfile_path: getEnv('DOCKERFILE_PATH', ''),
               git_credential_id: getEnv('GIT_CREDENTIAL_ID', 'gitee-id'),
@@ -2541,6 +2568,10 @@ export default {
           if (pipelineData.value.build_dir) {
             submitData.env_vars.push({ name: 'BUILD_DIR', value: pipelineData.value.build_dir })
           }
+          // 注入私有 Maven 仓库地址
+          if (pipelineData.value.maven_private_repo_url) {
+            submitData.env_vars.push({ name: 'MAVEN_PRIVATE_REPO_URL', value: pipelineData.value.maven_private_repo_url })
+          }
         }
         const response = await createPipeline(submitData)
         if (response.code === 0) {
@@ -2594,6 +2625,10 @@ export default {
           if (submitData.build_dir) {
             injectEnv('BUILD_DIR', submitData.build_dir)
           }
+          // 私有 Maven 仓库地址注入
+          if (submitData.maven_private_repo_url) {
+            injectEnv('MAVEN_PRIVATE_REPO_URL', submitData.maven_private_repo_url)
+          }
         }
         // Dockerfile 策略：统一使用平台生成
         injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
@@ -2641,6 +2676,7 @@ export default {
         delete submitData.git_credential_id
         delete submitData.java_version
         delete submitData.build_dir
+        delete submitData.maven_private_repo_url
 
         // 确保容器名称有值（自动部署时必须）
         if (submitData.auto_deploy && !submitData.target_container && submitData.target_workload_name) {
@@ -2915,7 +2951,7 @@ export default {
       if (existingImageRepo && existingImageRepo.value && existingImageRepo.value !== 'harbor.example.com/project/app-name') {
         pipelineData.value.image_repo = existingImageRepo.value
       }
-      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
       const newEnvVars = defaults.filter(d => !promotedKeys.includes(d.name)).map(d => ({ name: d.name, value: d.value }))
       pipelineData.value.env_vars = [...newEnvVars, ...userCustom]
     }

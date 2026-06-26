@@ -104,6 +104,10 @@ spec:
         string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
         string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
+        // 私有 Maven 仓库配置（用于拉取公司内部依赖包）
+        string(name: 'MAVEN_PRIVATE_REPO_URL', defaultValue: '', description: '私有 Maven 仓库地址（如 Nexus/GitLab Maven Registry，留空则仅使用阿里云公共仓库）')
+        string(name: 'MAVEN_PRIVATE_REPO_CREDENTIAL_ID', defaultValue: 'maven-private-repo', description: '私有 Maven 仓库凭证ID（Username/Password 类型）')
+
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
         string(name: 'SONAR_PROJECT_KEY', defaultValue: '', description: 'SonarQube 项目 Key（空则使用 Job 名称）')
@@ -226,12 +230,53 @@ spec:
                 echo "=== Maven 编译 & 打包 ==="
                 container('maven') {
                     script {
-                        // 生成阿里云 Maven 镜像 settings.xml（直接用 sh 写入，避免 JNLP 权限问题）
+                        // 生成 Maven settings.xml（支持阿里云公共镜像 + 可选私有仓库）
                         def settingsFile = "${env.WORKSPACE}/.m2/settings.xml"
-                        sh """
-                            mkdir -p ${env.WORKSPACE}/.m2
-                            cat > ${env.WORKSPACE}/.m2/settings.xml << 'SETTINGS_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
+                        def privateRepoUrl = params.MAVEN_PRIVATE_REPO_URL?.trim() ?: ''
+                        def settingsContent = ''
+
+                        if (privateRepoUrl) {
+                            // 获取私有仓库凭证并生成含私有仓库的 settings.xml
+                            def privateCred = params.MAVEN_PRIVATE_REPO_CREDENTIAL_ID ?: 'maven-private-repo'
+                            withCredentials([usernamePassword(credentialsId: privateCred, usernameVariable: 'MVN_REPO_USER', passwordVariable: 'MVN_REPO_PASS')]) {
+                                settingsContent = """<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+  <servers>
+    <server>
+      <id>private-repo</id>
+      <username>${env.MVN_REPO_USER}</username>
+      <password>${env.MVN_REPO_PASS}</password>
+    </server>
+  </servers>
+  <mirrors>
+    <mirror>
+      <id>aliyun</id>
+      <name>Aliyun Maven Mirror</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+  <profiles>
+    <profile>
+      <id>private-repo</id>
+      <repositories>
+        <repository>
+          <id>private-repo</id>
+          <url>${privateRepoUrl}</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
+  <activeProfiles>
+    <activeProfile>private-repo</activeProfile>
+  </activeProfiles>
+</settings>"""
+                            }
+                            echo "[Maven] 已配置私有仓库: ${privateRepoUrl}"
+                        } else {
+                            settingsContent = """<?xml version="1.0" encoding="UTF-8"?>
 <settings>
   <mirrors>
     <mirror>
@@ -241,9 +286,11 @@ spec:
       <mirrorOf>central</mirrorOf>
     </mirror>
   </mirrors>
-</settings>
-SETTINGS_EOF
-                        """
+</settings>"""
+                        }
+
+                        sh "mkdir -p ${env.WORKSPACE}/.m2"
+                        writeFile file: settingsFile, text: settingsContent
                         env.MVN_SETTINGS = settingsFile
 
                         sh 'java -version 2>&1 | head -1'

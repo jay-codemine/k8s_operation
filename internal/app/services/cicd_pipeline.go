@@ -2096,6 +2096,9 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 		setDefault(params, "MAVEN_GOALS", "clean package -DskipTests -B")
 		setDefault(params, "SKIP_TESTS", "false")
 		setDefault(params, "BUILD_DIR", "") // 空=自动检测 pom.xml 位置
+		// 私有 Maven 仓库（用于拉取公司内部依赖包，如 Nexus/GitLab Maven Registry）
+		setDefault(params, "MAVEN_PRIVATE_REPO_URL", "")           // 空=仅使用阿里云公共仓库
+		setDefault(params, "MAVEN_PRIVATE_REPO_CREDENTIAL_ID", "") // 空=使用默认 'maven-private-repo'
 		// Java 特有 SonarQube 参数
 		setDefault(params, "SONAR_SOURCES", "src/main/java")
 		setDefault(params, "SONAR_JAVA_BINARIES", "target/classes")
