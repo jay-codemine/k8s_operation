@@ -1359,7 +1359,25 @@
                   </div>
                 </div>
 
-                <!-- 工作负载类型 - 快速模式默认Deployment，隐藏选择器 -->
+                <!-- 工作负载类型 -->
+                <div class="form-group">
+                  <label class="form-label">
+                    工作负载类型
+                    <span class="required">*</span>
+                  </label>
+                  <div class="workload-kind-selector">
+                    <div
+                      v-for="opt in workloadKindOptions"
+                      :key="opt.value"
+                      class="kind-card"
+                      :class="{ selected: pipelineData.target_workload_kind === opt.value }"
+                      @click="selectWorkloadKind(opt.value)"
+                    >
+                      <span class="kind-name">{{ opt.label }}</span>
+                      <span class="kind-desc">{{ opt.description }}</span>
+                    </div>
+                  </div>
+                </div>
 
                 <!-- 工作负载名称 -->
                 <div class="form-group">
