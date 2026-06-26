@@ -88,7 +88,7 @@ data:
                   id: "maven-private-repo"
                   username: "${MAVEN_REPO_USERNAME}"
                   password: "${MAVEN_REPO_PASSWORD}"
-                  description: "Maven private repository credentials"
+                  description: "maven公共仓库"
 
     # 必装插件
     unclassified:
