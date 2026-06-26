@@ -289,7 +289,7 @@ spec:
 </settings>"""
                         }
 
-                        sh "mkdir -p ${env.WORKSPACE}/.m2"
+                        sh "mkdir -p ${env.WORKSPACE}/.m2 && chmod 777 ${env.WORKSPACE}/.m2"
                         writeFile file: settingsFile, text: settingsContent
                         env.MVN_SETTINGS = settingsFile
 
