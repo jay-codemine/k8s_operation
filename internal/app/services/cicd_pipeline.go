@@ -2091,6 +2091,10 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	case models.LanguageTypeGo:
 		setDefault(params, "GO_VERSION", "1.24")
 		setDefault(params, "SKIP_TESTS", "false")
+		// 通用扩展参数（支持私有依赖库、自定义构建）
+		setDefault(params, "EXTRA_REPOS", "")              // 额外依赖仓库（格式: url|path;url|path）
+		setDefault(params, "BINARY_NAME", "")              // 自定义二进制名（空=自动检测）
+		setDefault(params, "USE_PROJECT_DOCKERFILE", "false") // 使用项目自带 Dockerfile
 	case models.LanguageTypeJava:
 		setDefault(params, "JAVA_VERSION", "17")
 		setDefault(params, "MAVEN_GOALS", "clean package -DskipTests -B")

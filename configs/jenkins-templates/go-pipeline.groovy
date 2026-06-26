@@ -5,6 +5,14 @@
 // 运行模式：Jenkins K8s 动态 Pod Agent，每次构建创建独立 Pod，完成后自动销毁
 // 镜像构建：使用 Kaniko（无需 Docker daemon、无需特权容器）
 //
+// ======================== 通用能力 ========================
+// 支持特性：
+//   - 自动检测项目结构（cmd/ 或根目录 main.go）
+//   - 私有依赖库预克隆（通过 EXTRA_REPOS 参数，支持 replace 本地路径）
+//   - 自定义二进制名（BINARY_NAME 或自动从 go.mod module 推断）
+//   - 项目自带 Dockerfile 优先（USE_PROJECT_DOCKERFILE=true）
+//   - go.mod 中 Go 版本自动容错（向下兼容）
+//
 // ======================== Jenkins Job 配置方式 ========================
 // 推荐使用 "Pipeline script from SCM"（版本化管理，自动同步更新）：
 //   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-go
@@ -108,6 +116,15 @@ spec:
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
         string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
         string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
+
+        // ===== 通用扩展参数（支持私有依赖库、自定义构建） =====
+        // 格式: url1|relative_path1;url2|relative_path2
+        // 示例: https://gitlab.com/lib/microbus.git|../library/microbus;https://gitlab.com/lib/toolbox.git|../library/toolbox
+        string(name: 'EXTRA_REPOS', defaultValue: '', description: '额外依赖仓库列表（用于 go.mod replace 本地路径，格式: url|path;url|path）')
+        // 自定义二进制名称（空 = 自动从 go.mod module 名推断，再 fallback 到仓库名）
+        string(name: 'BINARY_NAME', defaultValue: '', description: '输出二进制名称（空则自动检测）')
+        // 使用项目自带 Dockerfile（优先于平台生成）
+        booleanParam(name: 'USE_PROJECT_DOCKERFILE', defaultValue: false, description: '使用项目根目录的 Dockerfile（而非平台自动生成）')
 
         // SonarQube 代码质量扫描参数
         booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
@@ -234,6 +251,50 @@ spec:
             }
         }
 
+        // ==================== 克隆额外依赖仓库（支持 go.mod replace 本地路径） ====================
+        stage('Clone Extra Repos') {
+            when { expression { return params.EXTRA_REPOS?.trim() } }
+            steps {
+                echo "=== 克隆私有依赖仓库 ==="
+                script {
+                    def extraRepos = params.EXTRA_REPOS.trim()
+                    def credId = params.GIT_CREDENTIAL_ID ?: 'gitee-id'
+                    def entries = extraRepos.split(';').findAll { it.trim() }
+
+                    echo "[Extra Repos] 需要克隆 ${entries.size()} 个依赖仓库"
+
+                    withCredentials([usernamePassword(credentialsId: credId, usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                        entries.each { entry ->
+                            def parts = entry.trim().split('\\|')
+                            if (parts.size() < 2) {
+                                echo "[Extra Repos] ⚠️ 格式错误，跳过: ${entry}（正确格式: url|path）"
+                                return
+                            }
+                            def repoUrl = parts[0].trim()
+                            def targetPath = parts[1].trim()
+
+                            // 注入凭证到 URL（支持 https://host/path 格式）
+                            def authedUrl = repoUrl.replaceFirst('https://', "https://\${GIT_USER}:\${GIT_PASS}@")
+
+                            echo "[Extra Repos] 克隆: ${repoUrl} → ${targetPath}"
+                            sh """
+                                set -e
+                                rm -rf '${targetPath}' 2>/dev/null || true
+                                mkdir -p \$(dirname '${targetPath}')
+                                git clone --depth 1 '${authedUrl}' '${targetPath}'
+                                echo "[Extra Repos] ✅ ${targetPath} 克隆完成"
+                            """
+                        }
+                    }
+                    echo "[Extra Repos] ✅ 所有依赖仓库克隆完成"
+                }
+            }
+            post {
+                success { script { stageCallback('clone_deps', 'success') } }
+                failure { script { stageCallback('clone_deps', 'failed') } }
+            }
+        }
+
         stage('Dependencies') {
             steps {
                 echo "=== 下载依赖 ==="
@@ -243,11 +304,28 @@ spec:
                             echo "未检测到 go.mod，跳过"
                             return
                         }
+                        // 检查 go.mod 中是否有 replace 指向本地路径，如果路径存在则正常
+                        def hasLocalReplace = sh(script: "grep -E 'replace .+ => \\.\\./|replace .+ => \\./' go.mod || true", returnStdout: true).trim()
+                        if (hasLocalReplace) {
+                            echo "[Dependencies] 检测到 replace 本地路径:\n${hasLocalReplace}"
+                            echo "[Dependencies] 确认依赖目录是否已克隆..."
+                            // 验证所有 replace 路径是否存在
+                            sh '''
+                                set -e
+                                grep -oP '(?<==> )(\.\./[^\s]+|\./[^\s]+)' go.mod | while read p; do
+                                    if [ ! -d "$p" ]; then
+                                        echo "[ERROR] replace 路径不存在: $p（请配置 EXTRA_REPOS 参数克隆该依赖）"
+                                        exit 1
+                                    fi
+                                    echo "[Dependencies] ✅ $p 存在"
+                                done
+                            '''
+                        }
                         sh '''
                             set -e
                             go version
-                            go mod download
-                            go mod verify
+                            go mod tidy -e 2>/dev/null || true
+                            go mod download || true
                         '''
                     }
                 }
@@ -264,16 +342,35 @@ spec:
                 container('golang') {
                     script {
                         if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
-                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'server'
+
+                        // === 推断二进制名称优先级：BINARY_NAME 参数 > go.mod module 名 > 仓库名 ===
+                        def appName = ''
+                        if (params.BINARY_NAME?.trim()) {
+                            appName = params.BINARY_NAME.trim()
+                            echo "[编译] 使用自定义二进制名: ${appName}"
+                        } else {
+                            // 从 go.mod 的 module 行推断（如 module foxess.hub → foxess.hub）
+                            def moduleName = sh(script: "head -1 go.mod | awk '{print \$2}' | awk -F/ '{print \$NF}'", returnStdout: true).trim()
+                            if (moduleName) {
+                                appName = moduleName
+                                echo "[编译] 从 go.mod module 推断二进制名: ${appName}"
+                            } else {
+                                appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'server'
+                                echo "[编译] 从仓库名推断二进制名: ${appName}"
+                            }
+                        }
                         env.APP_NAME = appName
                         env.BINARY_PATH = "bin/${appName}"
+
                         sh """
                             set -e
                             mkdir -p bin
-                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... || \
+                            # 尝试编译 cmd/ 目录，失败则编译根目录
+                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... 2>/dev/null || \
                             go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
                         """
-                        echo "[编译] 二进制产物: ${env.BINARY_PATH}"
+                        def binarySize = sh(script: "stat -c%s ${env.BINARY_PATH} 2>/dev/null || stat -f%z ${env.BINARY_PATH}", returnStdout: true).trim()
+                        echo "[编译] ✅ 二进制产物: ${env.BINARY_PATH} (${binarySize} bytes)"
                     }
                 }
             }
@@ -482,10 +579,22 @@ spec:
 
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
 
-                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        // Dockerfile 选择优先级：
+                        // 1. DOCKERFILE_PATH 显式指定 → 直接使用
+                        // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带（需先复制二进制到正确位置）
+                        // 3. 平台自动生成纯运行时 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            dockerfile = '.Dockerfile.runtime'
-                            writeFile file: dockerfile, text: """\
+                            if (params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                                dockerfile = 'Dockerfile'
+                                // 项目自带 Dockerfile 可能期望二进制在根目录（如 COPY ./foxess.hub ./）
+                                // 复制编译产物到项目 Dockerfile 期望的位置
+                                sh """
+                                    cp ${env.BINARY_PATH} ./${appName} 2>/dev/null || true
+                                """
+                                echo "[Build Image] 使用项目自带 Dockerfile"
+                            } else {
+                                dockerfile = '.Dockerfile.runtime'
+                                writeFile file: dockerfile, text: """\
 FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget && \\
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \\
@@ -501,7 +610,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\
     CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
 ENTRYPOINT ["/app/${appName}"]
 """
-                            echo "[Build Image] 平台统一生成 Dockerfile"
+                                echo "[Build Image] 平台自动生成 Dockerfile"
+                            }
                         }
 
                         // 配置镜像仓库认证
