@@ -36,14 +36,14 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '1'
-        memory: '2Gi'
+        cpu: '500m'
+        memory: '1Gi'
       limits:
-        cpu: '4'
-        memory: '8Gi'
+        cpu: '2'
+        memory: '4Gi'
     env:
     - name: MAVEN_OPTS
-      value: '-Xmx4096m -Xms1024m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
+      value: '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
     volumeMounts:
     - name: maven-cache
       mountPath: /root/.m2/repository
