@@ -297,14 +297,86 @@ spec:
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
 
-                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        // 统一使用平台生成的生产级 Dockerfile（Gzip + 缓存 + 安全头 + API 代理 + WebSocket）
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
                             dockerfile = '.Dockerfile.runtime'
+
+                            // 生产级 Nginx 配置
+                            writeFile file: 'nginx-app.conf', text: """\
+upstream backend {
+    server 127.0.0.1:8080;
+}
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip 压缩
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/javascript application/json application/javascript application/xml image/svg+xml;
+
+    # 静态资源缓存（30天 + immutable）
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # API 反向代理 + WebSocket 支持
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        client_max_body_size 200m;
+    }
+
+    # 健康检查端点
+    location /health {
+        access_log off;
+        return 200 "ok";
+        add_header Content-Type text/plain;
+    }
+
+    # SPA History 模式 fallback
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # 安全响应头
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}
+"""
+
+                            // 运行时后端地址注入脚本（通过 API_BACKEND_URL 环境变量动态配置）
+                            writeFile file: 'backend-url-entrypoint.sh', text: """\
+#!/bin/sh
+if [ -n "\$API_BACKEND_URL" ]; then
+    echo "Configuring backend URL: \$API_BACKEND_URL"
+    sed -i "s|server 127.0.0.1:8080;|server \${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
+fi
+"""
+
                             writeFile file: dockerfile, text: """\
 FROM nginx:1.25-alpine
 RUN apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
-RUN echo 'server { listen 80; server_name _; root /usr/share/nginx/html; index index.html; location / { try_files \$uri \$uri/ /index.html; } location /health { access_log off; return 200 ok; } }' > /etc/nginx/conf.d/default.conf
+COPY nginx-app.conf /etc/nginx/conf.d/default.conf
+COPY backend-url-entrypoint.sh /docker-entrypoint.d/90-backend-url.sh
+RUN chmod +x /docker-entrypoint.d/90-backend-url.sh
 RUN chown -R nginx:nginx /usr/share/nginx/html && chown -R nginx:nginx /var/cache/nginx && touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
 USER nginx
 EXPOSE 80
