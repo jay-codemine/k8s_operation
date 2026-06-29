@@ -412,12 +412,14 @@ func (d *Dao) PipelineRunMarkTimeout(ctx context.Context, maxAgeMinutes int) (in
 }
 
 // PipelineUpdateDeployInfo 更新流水线最新部署信息
-func (d *Dao) PipelineUpdateDeployInfo(ctx context.Context, id int64, image, digest string, deployTime uint64, status string) error {
+// version 为 K8s 集群中的当前版本号（Deployment 的 ReplicaSet revision / StatefulSet/DaemonSet 的 ControllerRevision revision）
+func (d *Dao) PipelineUpdateDeployInfo(ctx context.Context, id int64, image, digest string, deployTime uint64, status, version string) error {
 	return d.PipelineUpdate(ctx, id, map[string]interface{}{
-		"last_deploy_image":  image,
-		"last_deploy_digest": digest,
-		"last_deploy_time":   deployTime,
-		"last_deploy_status": status,
+		"last_deploy_image":   image,
+		"last_deploy_digest":  digest,
+		"last_deploy_time":    deployTime,
+		"last_deploy_status":  status,
+		"last_deploy_version": version,
 	})
 }
 

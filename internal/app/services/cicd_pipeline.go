@@ -1876,7 +1876,7 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.Error(err),
 		)
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "failed")
+		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "failed", "")
 		// 更新 deploy stage 为失败
 		if deployStageID > 0 {
 			_ = s.dao.StageUpdate(ctx, deployStageID, map[string]interface{}{
@@ -1896,7 +1896,8 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.String("image", image),
 		)
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "success")
+		version := s.getCurrentWorkloadRevision(ctx, kubeClient, workloadKind, pipeline.TargetNamespace, pipeline.TargetWorkloadName)
+		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "success", version)
 		// 更新 deploy stage 为成功
 		if deployStageID > 0 {
 			_ = s.dao.StageUpdate(ctx, deployStageID, map[string]interface{}{
@@ -2091,6 +2092,125 @@ func (s *Services) waitAutoDeployDaemonSetRollout(ctx context.Context, client ku
 	}
 
 	return nil, fmt.Errorf("DaemonSet Rollout 超时（%v），请检查 Pod 状态", timeout)
+}
+
+// getCurrentWorkloadRevision 获取工作负载在 K8s 集群中的当前版本号
+// Deployment: 返回最新 ReplicaSet 的 revision（如 "5"）
+// StatefulSet/DaemonSet: 返回最新 ControllerRevision 的 revision（如 "3"）
+func (s *Services) getCurrentWorkloadRevision(ctx context.Context, client kubernetes.Interface, workloadKind, namespace, workloadName string) string {
+	switch workloadKind {
+	case "Deployment", "":
+		return s.getDeploymentCurrentRevision(ctx, client, namespace, workloadName)
+	case "StatefulSet":
+		return s.getStatefulSetCurrentRevision(ctx, client, namespace, workloadName)
+	case "DaemonSet":
+		return s.getDaemonSetCurrentRevision(ctx, client, namespace, workloadName)
+	default:
+		return ""
+	}
+}
+
+// getDeploymentCurrentRevision 获取 Deployment 当前版本号（最新 ReplicaSet 的 revision）
+func (s *Services) getDeploymentCurrentRevision(ctx context.Context, client kubernetes.Interface, namespace, workloadName string) string {
+	deploy, err := client.AppsV1().Deployments(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	selector := metav1.FormatLabelSelector(deploy.Spec.Selector)
+	rsList, err := client.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return ""
+	}
+	var maxRevision int64
+	for _, rs := range rsList.Items {
+		isOwned := false
+		for _, owner := range rs.OwnerReferences {
+			if owner.UID == deploy.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+		rev := int64(0)
+		if revStr, ok := rs.Annotations["deployment.kubernetes.io/revision"]; ok {
+			fmt.Sscanf(revStr, "%d", &rev)
+		}
+		if rev > maxRevision {
+			maxRevision = rev
+		}
+	}
+	if maxRevision > 0 {
+		return fmt.Sprintf("%d", maxRevision)
+	}
+	return ""
+}
+
+// getStatefulSetCurrentRevision 获取 StatefulSet 当前版本号（最新 ControllerRevision 的 revision）
+func (s *Services) getStatefulSetCurrentRevision(ctx context.Context, client kubernetes.Interface, namespace, workloadName string) string {
+	sts, err := client.AppsV1().StatefulSets(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	selector := metav1.FormatLabelSelector(sts.Spec.Selector)
+	crList, err := client.AppsV1().ControllerRevisions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return ""
+	}
+	var maxRevision int64
+	for _, cr := range crList.Items {
+		isOwned := false
+		for _, owner := range cr.OwnerReferences {
+			if owner.UID == sts.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+		if cr.Revision > maxRevision {
+			maxRevision = cr.Revision
+		}
+	}
+	if maxRevision > 0 {
+		return fmt.Sprintf("%d", maxRevision)
+	}
+	return ""
+}
+
+// getDaemonSetCurrentRevision 获取 DaemonSet 当前版本号（最新 ControllerRevision 的 revision）
+func (s *Services) getDaemonSetCurrentRevision(ctx context.Context, client kubernetes.Interface, namespace, workloadName string) string {
+	ds, err := client.AppsV1().DaemonSets(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	selector := metav1.FormatLabelSelector(ds.Spec.Selector)
+	crList, err := client.AppsV1().ControllerRevisions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return ""
+	}
+	var maxRevision int64
+	for _, cr := range crList.Items {
+		isOwned := false
+		for _, owner := range cr.OwnerReferences {
+			if owner.UID == ds.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+		if cr.Revision > maxRevision {
+			maxRevision = cr.Revision
+		}
+	}
+	if maxRevision > 0 {
+		return fmt.Sprintf("%d", maxRevision)
+	}
+	return ""
 }
 
 // autoDeployWithLegacyConfig 兼容旧的 DeployConfig JSON 配置

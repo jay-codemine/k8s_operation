@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -857,7 +858,7 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 		errMsg := fmt.Sprintf("初始化集群客户端失败: %v", err)
 		logs.WriteString(fmt.Sprintf("[ERROR] %s\n", errMsg))
 		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
-		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, "")
+		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, "", "")
 		return
 	}
 
@@ -895,7 +896,7 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 		errMsg := fmt.Sprintf("更新镜像失败: %v", err)
 		logs.WriteString(fmt.Sprintf("[ERROR] %s\n", errMsg))
 		s.ReleaseDeploySilence(ctx, silenceRuleID, false)
-		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, oldImage)
+		s.finishDeployStage(ctx, stageID, run, models.StageStatusFailed, errMsg, logs.String(), startTime, oldImage, "")
 		return
 	}
 
@@ -906,7 +907,8 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 	}
 
 	logs.WriteString(fmt.Sprintf("\n[%s] 部署完成\n", time.Now().Format("2006-01-02 15:04:05")))
-	s.finishDeployStage(ctx, stageID, run, models.StageStatusSuccess, "", logs.String(), startTime, oldImage)
+	deployVersion := s.getCurrentWorkloadRevision(ctx, client.Kube, workloadKind, namespace, workloadName)
+	s.finishDeployStage(ctx, stageID, run, models.StageStatusSuccess, "", logs.String(), startTime, oldImage, deployVersion)
 }
 
 // getCurrentImage 获取工作负载当前镜像
@@ -1474,7 +1476,7 @@ func (s *Services) updateJobImage(ctx context.Context, client kubernetes.Interfa
 }
 
 // finishDeployStage 完成部署阶段
-func (s *Services) finishDeployStage(ctx context.Context, stageID int64, run *models.CicdPipelineRun, status, errMsg, logs string, startTime time.Time, oldImage string) {
+func (s *Services) finishDeployStage(ctx context.Context, stageID int64, run *models.CicdPipelineRun, status, errMsg, logs string, startTime time.Time, oldImage, version string) {
 	duration := int(time.Since(startTime).Seconds())
 	
 	// 更新阶段状态
@@ -1512,7 +1514,7 @@ func (s *Services) finishDeployStage(ctx context.Context, stageID int64, run *mo
 
 	// 如果成功，更新流水线部署信息
 	if status == models.StageStatusSuccess && stage != nil {
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(time.Now().Unix()), "success")
+		_ = s.dao.PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(time.Now().Unix()), "success", version)
 	}
 
 	// 发送钉钉通知（异步）
@@ -2022,6 +2024,7 @@ func (s *Services) validateTargetRS(ctx context.Context, client *K8sClients, nam
 }
 
 // rollbackDeployment 回滚 Deployment 到上一个版本
+// 修复：使用与 RollbackDeployStage 一致的正确版本查找逻辑
 func (s *Services) rollbackDeployment(ctx context.Context, stage *models.CicdPipelineStage) (string, error) {
 	// 初始化 K8s 客户端
 	client, err := s.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: uint32(stage.DeployClusterID)})
@@ -2050,31 +2053,45 @@ func (s *Services) rollbackDeployment(ctx context.Context, stage *models.CicdPip
 	}
 
 	// 找到上一个版本（按 revision 排序）
-	var targetRS string
+	// 修复：正确跟踪当前最大版本和第二大版本的 RS 名称（与 RollbackDeployStage 逻辑一致）
 	var maxRevision, secondRevision int64
+	var currentRSName, previousRSName string
+
 	for _, rs := range rsList.Items {
+		isOwned := false
 		for _, owner := range rs.OwnerReferences {
 			if owner.UID == deploy.UID {
-				rev := int64(0)
-				if revStr, ok := rs.Annotations["deployment.kubernetes.io/revision"]; ok {
-					fmt.Sscanf(revStr, "%d", &rev)
-				}
-				if rev > maxRevision {
-					secondRevision = maxRevision
-					targetRS = rs.Name
-					maxRevision = rev
-				} else if rev > secondRevision {
-					secondRevision = rev
-					targetRS = rs.Name
-				}
+				isOwned = true
 				break
 			}
 		}
+		if !isOwned {
+			continue
+		}
+
+		rev := int64(0)
+		if revStr, ok := rs.Annotations["deployment.kubernetes.io/revision"]; ok {
+			fmt.Sscanf(revStr, "%d", &rev)
+		}
+
+		if rev > maxRevision {
+			// 找到新的最大版本，将之前的最大版本降为第二大
+			secondRevision = maxRevision
+			previousRSName = currentRSName
+			maxRevision = rev
+			currentRSName = rs.Name
+		} else if rev > secondRevision {
+			// 找到新的第二大版本
+			secondRevision = rev
+			previousRSName = rs.Name
+		}
 	}
 
-	if targetRS == "" {
+	if previousRSName == "" {
 		return "", errors.New("找不到可回滚的版本")
 	}
+
+	targetRS := previousRSName
 
 	// 获取目标 ReplicaSet 的模板
 	var targetRSObj *appv1.ReplicaSet
@@ -2105,7 +2122,8 @@ func (s *Services) rollbackDeployment(ctx context.Context, stage *models.CicdPip
 	return targetRS, nil
 }
 
-// GetDeploymentHistory 获取 Deployment 的历史版本列表
+// GetDeploymentHistory 获取工作负载的历史版本列表
+// 支持 Deployment（ReplicaSet）、StatefulSet/DaemonSet（ControllerRevision）
 func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*DeploymentRevision, error) {
 	stage, err := s.dao.StageGetByID(ctx, stageID)
 	if err != nil {
@@ -2114,6 +2132,21 @@ func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*
 
 	if stage.StageType != models.StageTypeDeploy {
 		return nil, errors.New("该阶段不是部署阶段")
+	}
+
+	// 确定工作负载类型：优先从流水线配置获取，回退到阶段记录
+	workloadKind := stage.DeployWorkloadKind
+	if workloadKind == "" {
+		run, runErr := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+		if runErr == nil && run != nil {
+			pipeline, pipeErr := s.dao.PipelineGetByID(ctx, run.PipelineID)
+			if pipeErr == nil && pipeline != nil {
+				workloadKind = pipeline.TargetWorkloadKind
+			}
+		}
+	}
+	if workloadKind == "" {
+		workloadKind = "Deployment"
 	}
 
 	// 初始化 K8s 客户端
@@ -2125,23 +2158,31 @@ func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*
 	namespace := stage.DeployNamespace
 	workloadName := stage.DeployWorkloadName
 
-	// 获取 Deployment
+	switch workloadKind {
+	case "StatefulSet":
+		return s.getStatefulSetHistory(ctx, client, namespace, workloadName)
+	case "DaemonSet":
+		return s.getDaemonSetHistory(ctx, client, namespace, workloadName)
+	default:
+		return s.getDeploymentHistory(ctx, client, namespace, workloadName)
+	}
+}
+
+// getDeploymentHistory 获取 Deployment 的历史版本列表（通过 ReplicaSet）
+func (s *Services) getDeploymentHistory(ctx context.Context, client *K8sClients, namespace, workloadName string) ([]*DeploymentRevision, error) {
 	deploy, err := client.Kube.AppsV1().Deployments(namespace).Get(ctx, workloadName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("获取 Deployment 失败: %w", err)
 	}
 
-	// 获取关联的 ReplicaSet
 	selector := metav1.FormatLabelSelector(deploy.Spec.Selector)
 	rsList, err := client.Kube.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, fmt.Errorf("获取 ReplicaSet 列表失败: %w", err)
 	}
 
-	// 构建历史版本列表
 	revisions := make([]*DeploymentRevision, 0, len(rsList.Items))
 	for _, rs := range rsList.Items {
-		// 检查是否是该 Deployment 的 ReplicaSet
 		isOwned := false
 		for _, owner := range rs.OwnerReferences {
 			if owner.UID == deploy.UID {
@@ -2153,28 +2194,147 @@ func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*
 			continue
 		}
 
-		// 提取版本信息
 		revision := int64(0)
 		if revStr, ok := rs.Annotations["deployment.kubernetes.io/revision"]; ok {
 			fmt.Sscanf(revStr, "%d", &revision)
 		}
 
-		// 提取镜像信息
 		image := ""
 		if len(rs.Spec.Template.Spec.Containers) > 0 {
 			image = rs.Spec.Template.Spec.Containers[0].Image
 		}
 
+		// 修复：安全处理 nil 指针（旧 RS 的 Replicas 可能为 nil）
+		isCurrent := false
+		if rs.Spec.Replicas != nil {
+			isCurrent = *rs.Spec.Replicas > 0
+		}
+
 		revisions = append(revisions, &DeploymentRevision{
-			Revision:    revision,
-			RSName:      rs.Name,
-			Image:       image,
-			CreatedAt:   rs.CreationTimestamp.Unix(),
-			IsCurrent:   *rs.Spec.Replicas > 0,
+			Revision:  revision,
+			RSName:    rs.Name,
+			Image:     image,
+			CreatedAt: rs.CreationTimestamp.Unix(),
+			IsCurrent: isCurrent,
 		})
 	}
 
-	// 按版本号降序排序
+	sortRevisionsDesc(revisions)
+	return revisions, nil
+}
+
+// getStatefulSetHistory 获取 StatefulSet 的历史版本列表（通过 ControllerRevision）
+func (s *Services) getStatefulSetHistory(ctx context.Context, client *K8sClients, namespace, workloadName string) ([]*DeploymentRevision, error) {
+	sts, err := client.Kube.AppsV1().StatefulSets(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("获取 StatefulSet 失败: %w", err)
+	}
+
+	selector := metav1.FormatLabelSelector(sts.Spec.Selector)
+	crList, err := client.Kube.AppsV1().ControllerRevisions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, fmt.Errorf("获取 ControllerRevision 列表失败: %w", err)
+	}
+
+	revisions := make([]*DeploymentRevision, 0, len(crList.Items))
+	for _, cr := range crList.Items {
+		isOwned := false
+		for _, owner := range cr.OwnerReferences {
+			if owner.UID == sts.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+
+		image := ""
+		// 从 ControllerRevision.Data 中提取镜像信息
+		if len(cr.Data.Raw) > 0 {
+			var stsSpec appv1.StatefulSetSpec
+			if json.Unmarshal(cr.Data.Raw, &stsSpec) == nil && len(stsSpec.Template.Spec.Containers) > 0 {
+				image = stsSpec.Template.Spec.Containers[0].Image
+			}
+		}
+
+		revisions = append(revisions, &DeploymentRevision{
+			Revision:  cr.Revision,
+			RSName:    cr.Name,
+			Image:     image,
+			CreatedAt: cr.CreationTimestamp.Unix(),
+			IsCurrent: cr.Name == sts.Status.CurrentRevision,
+		})
+	}
+
+	sortRevisionsDesc(revisions)
+	return revisions, nil
+}
+
+// getDaemonSetHistory 获取 DaemonSet 的历史版本列表（通过 ControllerRevision）
+func (s *Services) getDaemonSetHistory(ctx context.Context, client *K8sClients, namespace, workloadName string) ([]*DeploymentRevision, error) {
+	ds, err := client.Kube.AppsV1().DaemonSets(namespace).Get(ctx, workloadName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("获取 DaemonSet 失败: %w", err)
+	}
+
+	selector := metav1.FormatLabelSelector(ds.Spec.Selector)
+	crList, err := client.Kube.AppsV1().ControllerRevisions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, fmt.Errorf("获取 ControllerRevision 列表失败: %w", err)
+	}
+
+	// DaemonSet 的最新版本即为当前版本
+	var maxRevision int64
+	for _, cr := range crList.Items {
+		isOwned := false
+		for _, owner := range cr.OwnerReferences {
+			if owner.UID == ds.UID {
+				isOwned = true
+				break
+			}
+		}
+		if isOwned && cr.Revision > maxRevision {
+			maxRevision = cr.Revision
+		}
+	}
+
+	revisions := make([]*DeploymentRevision, 0, len(crList.Items))
+	for _, cr := range crList.Items {
+		isOwned := false
+		for _, owner := range cr.OwnerReferences {
+			if owner.UID == ds.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+
+		image := ""
+		if len(cr.Data.Raw) > 0 {
+			var dsSpec appv1.DaemonSetSpec
+			if json.Unmarshal(cr.Data.Raw, &dsSpec) == nil && len(dsSpec.Template.Spec.Containers) > 0 {
+				image = dsSpec.Template.Spec.Containers[0].Image
+			}
+		}
+
+		revisions = append(revisions, &DeploymentRevision{
+			Revision:  cr.Revision,
+			RSName:    cr.Name,
+			Image:     image,
+			CreatedAt: cr.CreationTimestamp.Unix(),
+			IsCurrent: cr.Revision == maxRevision,
+		})
+	}
+
+	sortRevisionsDesc(revisions)
+	return revisions, nil
+}
+
+// sortRevisionsDesc 按版本号降序排序
+func sortRevisionsDesc(revisions []*DeploymentRevision) {
 	for i := 0; i < len(revisions)-1; i++ {
 		for j := i + 1; j < len(revisions); j++ {
 			if revisions[j].Revision > revisions[i].Revision {
@@ -2182,14 +2342,12 @@ func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*
 			}
 		}
 	}
-
-	return revisions, nil
 }
 
-// DeploymentRevision Deployment 历史版本信息
+// DeploymentRevision 工作负载历史版本信息（通用：Deployment/StatefulSet/DaemonSet）
 type DeploymentRevision struct {
 	Revision  int64  `json:"revision"`   // 版本号
-	RSName    string `json:"rs_name"`    // ReplicaSet 名称
+	RSName    string `json:"rs_name"`    // ReplicaSet/ControllerRevision 名称
 	Image     string `json:"image"`      // 镜像
 	CreatedAt int64  `json:"created_at"` // 创建时间
 	IsCurrent bool   `json:"is_current"` // 是否当前版本
