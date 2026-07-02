@@ -1123,19 +1123,22 @@ const startDaemonSetWatcher = (ds) => {
       getStatus: async () => {
         try {
           const res = await daemonsetsApi.detail({ namespace: ds.namespace, name: ds.name })
-          const d = res?.data || res || {}
+          const statusStr = res?.data?.status || 'Unknown'
+          const raw = res?.data?.data || {}
+          const s = raw.status || {}
           return {
-            status: d.status || 'Unknown',
-            desiredReplicas: d.desired_number_scheduled || d.desiredNumberScheduled || 0,
-            readyReplicas: d.number_ready || d.numberReady || 0,
-            updatedReplicas: d.updated_number_scheduled || d.number_ready || 0,
+            status: statusStr,
+            desiredReplicas: s.desiredNumberScheduled || 0,
+            readyReplicas: s.numberReady || 0,
+            updatedReplicas: s.updatedNumberScheduled || 0,
+            availableReplicas: s.numberAvailable || 0,
           }
         } catch { return null }
       },
       getEvents: async () => {
         try {
           const res = await daemonsetsApi.events({ namespace: ds.namespace, name: ds.name, limit: 20, since_seconds: 300 })
-          return res?.data?.items || res?.data || []
+          return res?.data?.events || res?.data?.items || []
         } catch { return [] }
       },
       onComplete: ({ success, elapsed }) => {

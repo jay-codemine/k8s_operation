@@ -1750,19 +1750,23 @@ const startStatefulSetWatcher = (sts) => {
       getStatus: async () => {
         try {
           const res = await statefulsetsApi.detail({ namespace: sts.namespace, name: sts.name })
-          const d = res?.data || res || {}
+          const statusStr = res?.data?.status || 'Unknown'
+          const raw = res?.data?.data || {}
+          const s = raw.status || {}
+          const specReplicas = raw.spec?.replicas || 1
           return {
-            status: d.status || 'Unknown',
-            desiredReplicas: d.replicas || 0,
-            readyReplicas: d.ready_replicas || 0,
-            updatedReplicas: d.updated_replicas || d.ready_replicas || 0,
+            status: statusStr,
+            desiredReplicas: specReplicas,
+            readyReplicas: s.readyReplicas || 0,
+            updatedReplicas: s.updatedReplicas || 0,
+            availableReplicas: s.readyReplicas || 0, // StatefulSet 无 availableReplicas，用 readyReplicas 代替
           }
         } catch { return null }
       },
       getEvents: async () => {
         try {
           const res = await statefulsetsApi.events({ namespace: sts.namespace, name: sts.name, limit: 20, since_seconds: 300 })
-          return res?.data?.items || res?.data || []
+          return res?.data?.events || res?.data?.items || []
         } catch { return [] }
       },
       onComplete: ({ success, elapsed }) => {

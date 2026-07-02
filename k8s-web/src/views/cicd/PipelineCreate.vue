@@ -768,7 +768,7 @@
                   <div class="input-hint">{{ defaultImageRegistry ? `已配置默认前缀: ${defaultImageRegistry}，填写应用名后自动拼接` : 'Jenkins 构建后将镜像推送到此地址，格式：registry/project/app' }}</div>
                 </div>
 
-                <!-- 镜像标签 -->
+                <!-- 镜像标签策略 -->
                 <div class="form-group">
                   <label class="form-label">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
@@ -776,9 +776,37 @@
                       <line x1="7" y1="7" x2="7.01" y2="7"/>
                     </svg>
                     镜像标签
-                    <span class="optional-badge">可选</span>
                   </label>
-                  <div class="input-wrapper">
+                  <div class="tag-strategy-selector">
+                    <div
+                      class="tag-strategy-btn"
+                      :class="{ active: tagStrategy === 'latest' }"
+                      @click="setTagStrategy('latest')"
+                    >
+                      <span class="tag-strategy-icon">🏷️</span>
+                      <span class="tag-strategy-label">latest</span>
+                      <span class="tag-strategy-desc">固定覆盖</span>
+                    </div>
+                    <div
+                      class="tag-strategy-btn"
+                      :class="{ active: tagStrategy === 'auto' }"
+                      @click="setTagStrategy('auto')"
+                    >
+                      <span class="tag-strategy-icon">🔄</span>
+                      <span class="tag-strategy-label">自动生成</span>
+                      <span class="tag-strategy-desc">commit-时间戳</span>
+                    </div>
+                    <div
+                      class="tag-strategy-btn"
+                      :class="{ active: tagStrategy === 'custom' }"
+                      @click="setTagStrategy('custom')"
+                    >
+                      <span class="tag-strategy-icon">✏️</span>
+                      <span class="tag-strategy-label">自定义</span>
+                      <span class="tag-strategy-desc">固定版本号</span>
+                    </div>
+                  </div>
+                  <div v-if="tagStrategy === 'custom'" class="input-wrapper" style="margin-top: 8px;">
                     <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
                       <line x1="7" y1="7" x2="7.01" y2="7"/>
@@ -787,10 +815,14 @@
                       type="text"
                       v-model="pipelineData.image_tag"
                       class="form-input with-icon"
-                      placeholder="留空则自动生成，如 v0.1.1"
+                      placeholder="输入固定标签，如 v1.0.0"
                     />
                   </div>
-                  <div class="input-hint">固定标签如 v0.1.1；留空则 Jenkins 自动生成 commit-timestamp 格式标签</div>
+                  <div class="input-hint">
+                    <template v-if="tagStrategy === 'latest'">每次构建推送 latest 标签，适合覆盖式部署（如 harbor.maitian-yun.com/foxess/wms:latest）</template>
+                    <template v-else-if="tagStrategy === 'auto'">Jenkins 自动生成 commit-timestamp 格式标签，适合版本追溯</template>
+                    <template v-else>固定标签如 v1.0.0，适合手动控制版本号</template>
+                  </div>
                 </div>
 
                 <!-- 镜像实时预览 -->
@@ -813,7 +845,8 @@
                     </div>
                     <div class="preview-tags">
                       <span class="tag-hint">标签规则：</span>
-                      <code v-if="pipelineData.image_tag">固定标签 → {{ pipelineData.image_tag }}</code>
+                      <code v-if="tagStrategy === 'latest'">固定标签 → latest</code>
+                      <code v-else-if="tagStrategy === 'custom' && pipelineData.image_tag">固定标签 → {{ pipelineData.image_tag }}</code>
                       <code v-else>{{ pipelineData.git_branch || 'main' }} → {{ imagePreview.tag }}</code>
                     </div>
                   </div>
@@ -1990,6 +2023,18 @@ export default {
     // Dockerfile 构建策略模式：统一使用平台生成
     const dockerfileMode = ref('platform')
     
+    // 镜像标签策略：latest / auto / custom
+    const tagStrategy = ref('latest')
+    const setTagStrategy = (strategy) => {
+      tagStrategy.value = strategy
+      if (strategy === 'latest') {
+        pipelineData.value.image_tag = 'latest'
+      } else if (strategy === 'auto') {
+        pipelineData.value.image_tag = ''
+      }
+      // custom 策略不自动清空，用户手动输入
+    }
+    
     // 语言类型显示名称（用于 Dockerfile 策略面板）
     const dockerfileLangLabel = computed(() => {
       const langMap = { java: 'Java', go: 'Go', frontend: 'Node.js', python: 'Python', custom: '自定义' }
@@ -2072,7 +2117,7 @@ export default {
       language_type: 'go',  // 与 selectedServiceType 联动，后端据此自动推导 jenkins_job
       // 构建核心参数（独立字段，不混入 env_vars）
       image_repo: '',       // 镜像仓库地址（必填），如 harbor.example.com/project/app
-      image_tag: '',        // 镜像标签（可选），如 v0.1.1；留空则 Jenkins 自动生成
+      image_tag: 'latest',  // 镜像标签，默认 latest；留空则 Jenkins 自动生成
       java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
       build_dir: '',          // 构建目录（多模块 Maven 项目指定子模块目录，仅 Java 生效）
       maven_private_repo_url: '', // 私有 Maven 仓库地址（用于拉取公司内部依赖包）
@@ -2501,6 +2546,15 @@ export default {
               await loadClusters()
               await loadNamespaces()
               await loadWorkloads()
+            }
+            // 回显标签策略
+            const loadedTag = pipelineData.value.image_tag
+            if (loadedTag === 'latest') {
+              tagStrategy.value = 'latest'
+            } else if (!loadedTag) {
+              tagStrategy.value = 'auto'
+            } else {
+              tagStrategy.value = 'custom'
             }
             // 编辑回显后，按实际语言类型+环境重新加载资源模板
             selectedResourceTemplate.value = ''
@@ -3283,6 +3337,8 @@ export default {
       dockerfileMode,
       dockerfileLangLabel,
       templateFileMap,
+      tagStrategy,
+      setTagStrategy,
       onServiceTypeChange,
       applyQuickTemplate,
       onResourceTemplateChange,
@@ -5234,6 +5290,66 @@ export default {
 }
 
 /* ==================== Dockerfile 策略选择器 ==================== */
+/* ==================== 镜像标签策略选择器 ==================== */
+.tag-strategy-selector {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.tag-strategy-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.tag-strategy-btn:hover {
+  border-color: #a0c4e8;
+  background: #f7fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(66, 153, 225, 0.1);
+}
+
+.tag-strategy-btn.active {
+  border-color: #4299e1;
+  background: linear-gradient(135deg, #ebf8ff 0%, #f0f9ff 100%);
+  box-shadow: 0 3px 12px rgba(66, 153, 225, 0.18);
+}
+
+.tag-strategy-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tag-strategy-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.tag-strategy-btn.active .tag-strategy-label {
+  color: #2b6cb0;
+}
+
+.tag-strategy-desc {
+  font-size: 11px;
+  color: #a0aec0;
+  line-height: 1.3;
+}
+
+.tag-strategy-btn.active .tag-strategy-desc {
+  color: #4a90d9;
+}
+
 .dockerfile-mode-selector {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -3414,7 +3414,7 @@ const startDeploymentWatcher = (deployment) => {
             limit: 20,
             since_seconds: 300,
           })
-          return res?.data?.items || res?.data || []
+          return res?.data?.events || res?.data?.items || []
         } catch { return [] }
       },
       onComplete: ({ success, elapsed }) => {
