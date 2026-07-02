@@ -485,19 +485,20 @@
             <div class="about-logo">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
                 <defs>
-                  <linearGradient id="fox-about-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:#7c3aed"/>
-                    <stop offset="50%" style="stop-color:#2563eb"/>
-                    <stop offset="100%" style="stop-color:#10b981"/>
+                  <linearGradient id="about-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#326CE5"/>
+                    <stop offset="100%" style="stop-color:#54A3FF"/>
                   </linearGradient>
                 </defs>
-                <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#fox-about-grad)"/>
-                <text x="32" y="42" font-size="26" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text>
+                <circle cx="32" cy="32" r="30" fill="url(#about-gradient)"/>
+                <g fill="#fff" transform="translate(12,12) scale(1.25)">
+                  <polygon points="16,0 20,12 32,12 22,20 26,32 16,24 6,32 10,20 0,12 12,12"/>
+                </g>
               </svg>
             </div>
             <div class="about-info">
-              <h3>FOX 麦田能源 ESS</h3>
-              <p class="about-desc">DevOps 运维平台 · 企业级多集群 Kubernetes 管理</p>
+              <h3>K8sOperation</h3>
+              <p class="about-desc">企业级多集群 Kubernetes 管理平台</p>
               <div class="about-version">
                 <span class="version-badge">v2.0.0</span>
                 <span class="version-date">2026-03-04</span>

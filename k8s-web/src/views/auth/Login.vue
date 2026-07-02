@@ -3,27 +3,19 @@
     <div class="login-box">
       <div class="login-header">
         <div class="logo">
-          <!-- FOX 麦田能源 ESS Logo -->
-          <svg xmlns="http://www.w3.org/2000/svg" width="220" height="80" viewBox="0 0 220 80">
-            <defs>
-              <linearGradient id="foxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#7c3aed"/>
-                <stop offset="25%" style="stop-color:#2563eb"/>
-                <stop offset="50%" style="stop-color:#10b981"/>
-                <stop offset="75%" style="stop-color:#f59e0b"/>
-                <stop offset="100%" style="stop-color:#ef4444"/>
-              </linearGradient>
-            </defs>
-            <!-- 彩色抽象图形 -->
-            <path d="M175,12 C185,12 195,18 198,28 C202,40 195,52 185,58 C178,62 170,60 165,54 C158,46 160,35 165,28 C168,22 172,16 175,12 Z" fill="url(#foxGrad)"/>
-            <circle cx="178" cy="30" r="5" fill="rgba(255,255,255,0.9)"/>
-            <!-- FOX 文字 -->
-            <text x="10" y="42" font-family="Arial, sans-serif" font-weight="900" font-size="38" fill="#ffffff" letter-spacing="2">FOX</text>
-            <!-- 麦田能源 ESS 文字 -->
-            <text x="10" y="68" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-weight="700" font-size="16" fill="#cbd5e1">麦田能源 ESS</text>
+          <!-- Kubernetes Logo -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 100 100">
+            <g fill="#326ce5">
+              <path
+                d="M39.971 5.05c-3.607-.418-7.152.532-9.957 2.694l-1.315 1.035 1.703 2.17 1.227-1.006c1.946-1.606 4.387-2.537 6.984-2.537 3.97 0 7.513 2.053 9.616 5.298l1.127 1.629 2.012-1.388-1.217-1.772c-2.563-3.722-6.534-6.13-10.984-6.23z"
+              />
+              <path
+                d="M42.026 94.796c3.608.418 7.153-.53 9.958-2.693l1.315-1.035-1.702-2.17-1.228 1.006c-1.947 1.606-4.388 2.537-6.985 2.537-3.969 0-7.512-2.053-9.615-5.298l-1.127-1.63-2.012 1.388 1.217 1.772c2.564 3.723 6.535 6.13 10.984 6.23z"
+              />
+            </g>
           </svg>
         </div>
-        <h2>DevOps 运维平台</h2>
+        <h2>K8sOperation Admin Dashboard</h2>
         <p>{{ mode === 'login' ? '请登录以继续' : '创建新账号' }}</p>
         <div v-if="ldapEnabled && mode === 'login'" class="ldap-badge">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -445,21 +437,10 @@ const handleSubmit = async () => {
   margin-bottom: 28px;
 }
 
-.login-header .logo {
-  margin-bottom: 12px;
-}
-
-.login-header .logo svg {
-  max-width: 100%;
-  height: auto;
-}
-
 .login-header h2 {
   color: #f8fafc;
-  font-size: 22px;
+  font-size: 26px;
   margin-bottom: 8px;
-  font-weight: 500;
-  letter-spacing: 1px;
 }
 
 .login-header p {

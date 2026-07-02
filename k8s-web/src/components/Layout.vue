@@ -7,19 +7,20 @@
           <div class="logo-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
               <defs>
-                <linearGradient id="fox-sidebar-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color:#7c3aed"/>
-                  <stop offset="50%" style="stop-color:#2563eb"/>
-                  <stop offset="100%" style="stop-color:#10b981"/>
+                <linearGradient id="k8s-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#326CE5"/>
+                  <stop offset="100%" style="stop-color:#54A3FF"/>
                 </linearGradient>
               </defs>
-              <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#fox-sidebar-grad)"/>
-              <text x="16" y="21" font-size="13" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text>
+              <circle cx="16" cy="16" r="15" fill="url(#k8s-gradient)"/>
+              <g fill="#fff" transform="translate(6,6) scale(0.625)">
+                <polygon points="16,0 20,12 32,12 22,20 26,32 16,24 6,32 10,20 0,12 12,12"/>
+              </g>
             </svg>
           </div>
           <div class="logo-text">
-            <span class="logo-title">FOX ESS</span>
-            <span class="logo-version">DevOps</span>
+            <span class="logo-title">K8sOperation</span>
+            <span class="logo-version">v2.0</span>
           </div>
         </div>
       </div>
