@@ -1238,16 +1238,19 @@ const startCronJobWatcher = (cj, jobName) => {
             desiredReplicas: completions,
             readyReplicas: succeeded,
             updatedReplicas: succeeded,
+            availableReplicas: succeeded, // Job 无 available 概念，用 succeeded 代替
           }
         }
         // 监听 CronJob 本身状态
         const res = await cronjobsApi.detail({ namespace: cj.namespace, name: cj.name })
         const d = res?.data?.cronjob || res?.data || {}
+        const isActive = !d.suspend
         return {
-          status: d.status || (d.suspend ? 'Suspended' : 'Active'),
+          status: isActive ? 'Running' : 'Suspended',
           desiredReplicas: 1,
-          readyReplicas: d.status === 'Active' ? 1 : 0,
-          updatedReplicas: d.status === 'Active' ? 1 : 0,
+          readyReplicas: isActive ? 1 : 0,
+          updatedReplicas: isActive ? 1 : 0,
+          availableReplicas: isActive ? 1 : 0,
         }
       },
       getEvents: async () => {

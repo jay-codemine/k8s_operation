@@ -167,7 +167,7 @@ func (c *KubeStatefulSetController) Detail(ctx *gin.Context) {
 		"message":       "获取详情成功",
 		"status":        status,
 		"status_reason": statusReason,
-		"result":        sts,
+		"data":          sts,
 	})
 }
 

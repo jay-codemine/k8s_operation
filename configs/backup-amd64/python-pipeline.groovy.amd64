@@ -1,16 +1,16 @@
 // ==============================================================================
-// K8s Operation Platform - 前端项目通用构建模板（K8s Pod Agent + Kaniko 容器化版）
+// K8s Operation Platform - Python 项目通用构建模板（K8s Pod Agent + Kaniko 容器化版）
 // ==============================================================================
-// 设计理念：一个模板服务 100+ 前端项目，所有项目差异通过参数传入
+// 设计理念：一个模板服务 100+ Python 项目，所有项目差异通过参数传入
 // 运行模式：Jenkins K8s 动态 Pod Agent，每次构建创建独立 Pod，完成后自动销毁
 // 镜像构建：使用 Kaniko（无需 Docker daemon、无需特权容器）
-// 支持框架：Vue.js, React, Angular, Next.js, Nuxt.js 等
+// 支持框架：Flask, FastAPI, Django, Celery 等
 //
 // ======================== Jenkins Job 配置方式 ========================
-//   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-frontend
+//   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-python
 //   2. Pipeline → Definition: Pipeline script from SCM
 //   3. SCM: Git → Repository URL: 平台仓库地址
-//   4. Script Path: configs/jenkins-templates/frontend-pipeline.groovy
+//   4. Script Path: configs/jenkins-templates/python-pipeline.groovy
 // ==============================================================================
 
 pipeline {
@@ -21,30 +21,34 @@ apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    jenkins-build: frontend
+    jenkins-build: python
 spec:
   containers:
-  - name: node
-    image: docker.m.daocloud.io/library/node:18-alpine3.18
+  - name: python
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/python:3.11-slim
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
       requests:
         cpu: '500m'
-        memory: '1Gi'
+        memory: '512Mi'
       limits:
         cpu: '2'
-        memory: '4Gi'
+        memory: '2Gi'
     env:
-    - name: NPM_CONFIG_REGISTRY
-      value: 'https://registry.npmmirror.com'
+    - name: PIP_INDEX_URL
+      value: 'https://pypi.tuna.tsinghua.edu.cn/simple'
+    - name: PIP_NO_CACHE_DIR
+      value: '0'
+    - name: PYTHONDONTWRITEBYTECODE
+      value: '1'
     volumeMounts:
-    - name: npm-cache
-      mountPath: /root/.npm
+    - name: pip-cache
+      mountPath: /root/.cache/pip
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.m.daocloud.io/kaniko-project/executor:debug
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/gcr.io/kaniko-project/executor:debug
     imagePullPolicy: Always
     command: ['sleep', '99d']
     securityContext:
@@ -60,12 +64,12 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: jnlp
-    image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk21
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk21
     imagePullPolicy: Always
   volumes:
-  - name: npm-cache
+  - name: pip-cache
     persistentVolumeClaim:
-      claimName: jenkins-npm-cache
+      claimName: jenkins-pip-cache
   - name: workspace-volume
     emptyDir: {}
 """
@@ -84,7 +88,7 @@ spec:
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git 分支')
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址（必填）')
         string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
-        string(name: 'DOCKERFILE_PATH', defaultValue: '', description: 'Dockerfile 路径（空则自动生成纯运行时 Dockerfile）')
+        string(name: 'DOCKERFILE_PATH', defaultValue: '', description: 'Dockerfile 路径（空则自动生成）')
         string(name: 'LANGUAGE_TYPE', defaultValue: '', description: '平台注入的语言类型')
 
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
@@ -92,26 +96,24 @@ spec:
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
 
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
-        string(name: 'NODE_VERSION', defaultValue: '18', description: 'Node.js 版本')
-        string(name: 'BUILD_COMMAND', defaultValue: 'npm run build', description: '构建命令')
-        string(name: 'BUILD_OUTPUT_DIR', defaultValue: 'dist', description: '构建产物目录')
+        string(name: 'PYTHON_VERSION', defaultValue: '3.11', description: 'Python 版本')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
         string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
         string(name: 'HMAC_CREDENTIAL_ID', defaultValue: 'hmac-secret', description: 'HMAC签名凭证ID')
 
-        booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube 代码质量扫描')
+        booleanParam(name: 'ENABLE_SONAR', defaultValue: false, description: '启用 SonarQube')
         string(name: 'SONAR_PROJECT_KEY', defaultValue: '', description: 'SonarQube 项目 Key')
         string(name: 'SONAR_PROJECT_NAME', defaultValue: '', description: 'SonarQube 项目名称')
-        string(name: 'SONAR_SOURCES', defaultValue: 'src', description: '源代码目录')
-        string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/node_modules/**,**/dist/**,**/*.spec.*,**/*.test.*', description: '排除扫描的文件模式')
-        booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁检查')
-        string(name: 'SONAR_COVERAGE_THRESHOLD', defaultValue: '80', description: '代码覆盖率阈值（%）')
-        string(name: 'SONAR_NEW_BUGS_MAX', defaultValue: '0', description: '新增 Bug 最大允许数')
-        string(name: 'SONAR_CODE_SMELLS_MAX', defaultValue: '10', description: '代码异味最大允许数')
-        string(name: 'SONAR_VULNERABILITIES_MAX', defaultValue: '0', description: '安全漏洞最大允许数')
-        string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '代码重复率阈值（%）')
-        string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁失败策略: block | warn | skip')
-        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
+        string(name: 'SONAR_SOURCES', defaultValue: '.', description: '源代码目录')
+        string(name: 'SONAR_EXCLUSIONS', defaultValue: '**/venv/**,**/__pycache__/**,**/test_*,**/*_test.py,**/migrations/**', description: '排除扫描')
+        booleanParam(name: 'SONAR_QUALITY_GATE', defaultValue: true, description: '启用质量门禁')
+        string(name: 'SONAR_COVERAGE_THRESHOLD', defaultValue: '80', description: '覆盖率阈值')
+        string(name: 'SONAR_NEW_BUGS_MAX', defaultValue: '0', description: 'Bug 最大数')
+        string(name: 'SONAR_CODE_SMELLS_MAX', defaultValue: '10', description: '异味最大数')
+        string(name: 'SONAR_VULNERABILITIES_MAX', defaultValue: '0', description: '漏洞最大数')
+        string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '重复率阈值')
+        string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁策略: block | warn | skip')
+        booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
         string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
@@ -126,7 +128,8 @@ spec:
 
         stage('Clean Workspace') {
             steps {
-                sh 'rm -rf .git 2>/dev/null || true; find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true'
+                deleteDir()
+                sh 'rm -rf .git 2>/dev/null || true'
                 script {
                     // 动态设置并发限制（从平台 config.yaml 的 MaxConcurrentBuilds 注入，需 Throttle Concurrent Builds 插件）
                     def maxConcurrent = (params.MAX_CONCURRENT_BUILDS ?: '10').toInteger()
@@ -139,11 +142,10 @@ spec:
                          throttleOption: 'project'
                         ]
                     ])
-                    def expectedType = 'frontend'
+                    def expectedType = 'python'
                     def actualType = params.LANGUAGE_TYPE?.trim()
                     if (actualType && actualType != expectedType) {
-                        def scriptMap = ['go': 'go-pipeline.groovy', 'java': 'java-spring-pipeline.groovy', 'frontend': 'frontend-pipeline.groovy', 'python': 'python-pipeline.groovy']
-                        error("模板类型不匹配: 语言=${actualType}, 当前=frontend. 请修改 Script Path 为: configs/jenkins-templates/${scriptMap[actualType] ?: "${actualType}-pipeline.groovy"}")
+                        error("模板类型不匹配: 语言=${actualType}, 当前=python")
                     }
                     if (!params.GIT_REPO?.trim()) { error("GIT_REPO 不能为空") }
                     if (!params.IMAGE_REPO?.trim()) { error("IMAGE_REPO 不能为空") }
@@ -173,57 +175,50 @@ spec:
                     echo "Commit: ${env.GIT_COMMIT_SHORT} | Image: ${env.FULL_IMAGE}"
                 }
             }
-            post {
-                success { script { stageCallback('checkout', 'success') } }
-                failure { script { stageCallback('checkout', 'failed') } }
-            }
+            post { success { script { stageCallback('checkout', 'success') } }; failure { script { stageCallback('checkout', 'failed') } } }
         }
 
         stage('Install Dependencies') {
             steps {
-                echo "=== 安装依赖 ==="
-                container('node') {
+                echo "=== 安装 Python 依赖 ==="
+                container('python') {
                     script {
-                        if (!fileExists('package.json')) { echo "未检测到 package.json，跳过"; return }
-                        sh 'npm ci --prefer-offline || npm install --prefer-offline'
+                        if (fileExists('requirements.txt')) {
+                            sh 'pip install -r requirements.txt -q'
+                        } else if (fileExists('setup.py') || fileExists('pyproject.toml')) {
+                            sh 'pip install -e . -q'
+                        } else {
+                            echo "未检测到依赖文件，跳过"
+                        }
                     }
                 }
             }
-            post {
-                success { script { stageCallback('dependencies', 'success') } }
-                failure { script { stageCallback('dependencies', 'failed') } }
-            }
+            post { success { script { stageCallback('dependencies', 'success') } }; failure { script { stageCallback('dependencies', 'failed') } } }
         }
 
-        stage('Lint & Test') {
+        stage('Lint') {
             when { expression { return !params.SKIP_TESTS } }
             steps {
-                echo "=== 代码检查 + 测试 ==="
-                container('node') {
-                    sh 'npm run lint 2>/dev/null || true; npm run test:unit 2>/dev/null || npm test 2>/dev/null || true'
+                container('python') {
+                    sh 'pip install flake8 -q 2>/dev/null || true; flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics 2>/dev/null || true'
                 }
             }
-            post {
-                success { script { stageCallback('test', 'success') } }
-                failure { script { stageCallback('test', 'failed') } }
-            }
+            post { success { script { stageCallback('lint', 'success') } }; failure { script { stageCallback('lint', 'failed') } } }
         }
 
-        stage('Build Frontend') {
+        stage('Test') {
+            when { expression { return !params.SKIP_TESTS } }
             steps {
-                echo "=== 构建前端 ==="
-                container('node') {
-                    sh """
-                        set -e
-                        ${params.BUILD_COMMAND}
-                        test -d ${params.BUILD_OUTPUT_DIR}
-                    """
+                container('python') {
+                    script {
+                        def hasTests = sh(script: "find . -name 'test_*.py' -o -name '*_test.py' | grep . >/dev/null 2>&1 && echo yes || echo no", returnStdout: true).trim()
+                        if (hasTests == 'yes') {
+                            sh 'pip install pytest pytest-cov -q 2>/dev/null || true; pytest --cov=. -v --cov-report=xml:coverage.xml 2>/dev/null || pytest -v 2>/dev/null || true'
+                        } else { echo "未检测到测试文件，跳过" }
+                    }
                 }
             }
-            post {
-                success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
-                failure { script { stageCallback('compile', 'failed'); stageCallback('build_binary', 'failed') } }
-            }
+            post { success { script { stageCallback('test', 'success'); stageCallback('build_binary', 'success') } }; failure { script { stageCallback('test', 'failed'); stageCallback('build_binary', 'failed') } } }
         }
 
         stage('SonarQube Analysis') {
@@ -231,18 +226,19 @@ spec:
             steps {
                 script {
                     try {
-                        def projectKey  = params.SONAR_PROJECT_KEY?.trim()  ?: env.JOB_NAME.replaceAll('/', '_')
-                        def projectName = params.SONAR_PROJECT_NAME?.trim() ?: env.JOB_NAME
+                        def projectKey = params.SONAR_PROJECT_KEY?.trim() ?: env.JOB_NAME.replaceAll('/', '_')
                         withSonarQubeEnv('SonarQube') {
-                            container('node') {
+                            container('python') {
                                 sh """
                                     if ! command -v sonar-scanner &>/dev/null; then
+                                        apt-get update -qq && apt-get install -y -qq wget unzip 2>/dev/null || true
                                         wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux-x64.zip -O /tmp/sonar.zip 2>/dev/null || true
                                         [ -f /tmp/sonar.zip ] && unzip -qo /tmp/sonar.zip -d /tmp/ && export PATH="/tmp/sonar-scanner-5.0.1.3006-linux-x64/bin:\$PATH"
                                     fi
-                                    sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.projectName=${projectName} \
-                                        -Dsonar.sources=${params.SONAR_SOURCES ?: 'src'} \
-                                        -Dsonar.exclusions=${params.SONAR_EXCLUSIONS ?: '**/node_modules/**'},**/build/**,**/.next/** \
+                                    sonar-scanner -Dsonar.projectKey=${projectKey} \
+                                        -Dsonar.sources=${params.SONAR_SOURCES ?: '.'} \
+                                        -Dsonar.exclusions=${params.SONAR_EXCLUSIONS ?: '**/venv/**'},**/build/**,**/dist/** \
+                                        -Dsonar.python.coverage.reportPaths=coverage.xml \
                                         -Dsonar.scm.disabled=true -Dsonar.qualitygate.wait=false -Dsonar.threads=4
                                 """
                             }
@@ -260,10 +256,9 @@ spec:
             when { allOf { expression { return params.ENABLE_SONAR && params.SONAR_QUALITY_GATE }; expression { return env.SONAR_ANALYSIS_FAILED != 'true' }; expression { return (params.SONAR_GATE_ACTION ?: 'block') != 'skip' } } }
             steps {
                 script {
-                    def gateAction = params.SONAR_GATE_ACTION ?: 'block'
                     def qg = waitForQualityGate(webhookSecretId: '', abortPipeline: false)
                     env.SONAR_QUALITY_GATE_STATUS = qg.status
-                    if (qg.status != 'OK' && gateAction == 'block') { error("Quality Gate 未通过: ${qg.status}") }
+                    if (qg.status != 'OK' && (params.SONAR_GATE_ACTION ?: 'block') == 'block') { error("Quality Gate 未通过: ${qg.status}") }
                 }
             }
             post { success { script { stageCallback('quality_gate', 'success') } }; failure { script { stageCallback('quality_gate', 'failed') } } }
@@ -272,16 +267,14 @@ spec:
         stage('Upload Artifact') {
             when { expression { return params.ENABLE_ARTIFACT_UPLOAD && params.PLATFORM_CALLBACK_URL?.trim() } }
             steps {
-                container('node') {
+                container('python') {
                     script {
-                        def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
-                        if (!fileExists(outputDir)) { error("构建产物目录不存在: ${outputDir}") }
-                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'frontend-app'
+                        def appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'python-app'
                         def archiveName = "${appName}-${env.FINAL_TAG}.tar.gz"
-                        sh "tar czf ${archiveName} -C ${outputDir} ."
+                        sh "tar czf ${archiveName} --exclude='.git' --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' ."
                         def uploadUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/artifact/upload').replace('/stage/callback', '/artifact/upload')
-                        def curlStatus = sh(script: "curl -s -w '%{http_code}' -o /tmp/resp.json -X POST '${uploadUrl}' -F 'file=@${archiveName}' -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' -F 'run_id=${params.RUN_ID ?: 0}' -F 'version=${env.FINAL_TAG}' -F 'language_type=frontend' -F 'artifact_type=dist' --connect-timeout 10 --max-time 300", returnStdout: true).trim()
-                        if (!curlStatus.endsWith('200')) { error("制品上传失败: HTTP ${curlStatus[-3..-1]}") }
+                        def curlStatus = sh(script: "curl -s -w '%{http_code}' -o /tmp/resp.json -X POST '${uploadUrl}' -F 'file=@${archiveName}' -F 'pipeline_id=${params.PIPELINE_ID ?: 0}' -F 'run_id=${params.RUN_ID ?: 0}' -F 'version=${env.FINAL_TAG}' -F 'language_type=python' -F 'artifact_type=archive' --connect-timeout 10 --max-time 300", returnStdout: true).trim()
+                        if (!curlStatus.endsWith('200')) { error("制品上传失败") }
                         echo "[制品上传] ✅ 上传成功"
                         sh "rm -f ${archiveName} /tmp/resp.json 2>/dev/null || true"
                     }
@@ -297,93 +290,28 @@ spec:
                 container('kaniko') {
                     script {
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
-                        def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
+                        def pythonVersion = params.PYTHON_VERSION ?: '3.11'
 
-                        // 统一使用平台生成的生产级 Dockerfile（Gzip + 缓存 + 安全头 + API 代理 + WebSocket）
+                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
                             dockerfile = '.Dockerfile.runtime'
-
-                            // 生产级 Nginx 配置
-                            writeFile file: 'nginx-app.conf', text: """\
-upstream backend {
-    server 127.0.0.1:8080;
-}
-
-server {
-    listen 80;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Gzip 压缩
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/javascript application/json application/javascript application/xml image/svg+xml;
-
-    # 静态资源缓存（30天 + immutable）
-    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
-    # API 反向代理 + WebSocket 支持
-    location /api/ {
-        proxy_pass http://backend;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-        client_max_body_size 200m;
-    }
-
-    # 健康检查端点
-    location /health {
-        access_log off;
-        return 200 "ok";
-        add_header Content-Type text/plain;
-    }
-
-    # SPA History 模式 fallback
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # 安全响应头
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-}
-"""
-
-                            // 运行时后端地址注入脚本（通过 API_BACKEND_URL 环境变量动态配置）
-                            writeFile file: 'backend-url-entrypoint.sh', text: """\
-#!/bin/sh
-if [ -n "\$API_BACKEND_URL" ]; then
-    echo "Configuring backend URL: \$API_BACKEND_URL"
-    sed -i "s|server 127.0.0.1:8080;|server \${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
-fi
-"""
-
                             writeFile file: dockerfile, text: """\
-FROM nginx:1.25-alpine
-RUN apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-COPY ${outputDir}/ /usr/share/nginx/html/
-COPY nginx-app.conf /etc/nginx/conf.d/default.conf
-COPY backend-url-entrypoint.sh /docker-entrypoint.d/90-backend-url.sh
-RUN chmod +x /docker-entrypoint.d/90-backend-url.sh
-RUN chown -R nginx:nginx /usr/share/nginx/html && chown -R nginx:nginx /var/cache/nginx && touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
-USER nginx
-EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://localhost/health || exit 1
-CMD ["nginx", "-g", "daemon off;"]
+FROM python:${pythonVersion}-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=Asia/Shanghai
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata && \\
+    ln -snf /usr/share/zoneinfo/\$TZ /etc/localtime && \\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r app && useradd -r -g app app
+WORKDIR /app
+COPY requirements.txt* ./
+RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+COPY . .
+RUN chown -R app:app /app
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD curl -f http://localhost:8000/health || exit 1
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
                         }
 
@@ -396,7 +324,7 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
                                 --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache/frontend \
+                                --cache-repo=${registryHost}/kaniko-cache/python \
                                 --label git.commit=${env.GIT_COMMIT_FULL} \
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.mode=k8s-kaniko \
@@ -416,25 +344,19 @@ CMD ["nginx", "-g", "daemon off;"]
     }
 
     post {
-        success { script { callbackPlatform('SUCCESS', "前端项目构建成功${params.ENABLE_SONAR ? ' | SonarQube: ' + (env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED') : ''}") } }
-        failure { script { callbackPlatform('FAILURE', '前端项目构建失败') } }
+        success { script { callbackPlatform('SUCCESS', "Python 项目构建成功${params.ENABLE_SONAR ? ' | SonarQube: ' + (env.SONAR_QUALITY_GATE_STATUS ?: 'SKIPPED') : ''}") } }
+        failure { script { callbackPlatform('FAILURE', 'Python 项目构建失败') } }
         aborted { script { callbackPlatform('ABORTED', '构建中止') } }
     }
 }
 
 // ==================== 回调函数 ====================
-// 获取回调地址（兼容首次构建 params 未注册的情况，fallback 到 JCasC 全局环境变量）
-def getCallbackUrl() {
-    return params.PLATFORM_CALLBACK_URL?.trim() ?: env.PLATFORM_CALLBACK_URL?.trim() ?: ''
-}
-
 def stageCallback(String stageType, String status) {
-    def callbackUrl = getCallbackUrl()
-    if (!callbackUrl) return
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) return
     try {
         def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0, stage_type: stageType, status: status]
         def body = groovy.json.JsonOutput.toJson(payload)
-        def stageUrl = callbackUrl.replace('/pipeline/callback', '/stage/callback')
+        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/stage/callback')
         def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}") : ''
         def headers = signature ? [[name: 'X-Signature', value: signature]] : []
         httpRequest(url: stageUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '100:599', timeout: 10)
@@ -442,8 +364,7 @@ def stageCallback(String stageType, String status) {
 }
 
 def callbackPlatform(String status, String message) {
-    def callbackUrl = getCallbackUrl()
-    if (!callbackUrl) { echo "未配置回调地址"; return }
+    if (!params.PLATFORM_CALLBACK_URL?.trim()) { echo "未配置回调地址"; return }
     def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, status: status,
         pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
         run_id: params.RUN_ID ? params.RUN_ID as Long : 0,
@@ -453,7 +374,7 @@ def callbackPlatform(String status, String message) {
     def body = groovy.json.JsonOutput.toJson(payload)
     def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}") : ''
     def headers = signature ? [[name: 'X-Signature', value: signature]] : []
-    httpRequest(url: callbackUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
+    httpRequest(url: params.PLATFORM_CALLBACK_URL, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
 }
 
 def hmacSha256(String secret, String data) {

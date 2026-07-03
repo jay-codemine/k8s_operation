@@ -1751,7 +1751,7 @@ const startStatefulSetWatcher = (sts) => {
         try {
           const res = await statefulsetsApi.detail({ namespace: sts.namespace, name: sts.name })
           const statusStr = res?.data?.status || 'Unknown'
-          const raw = res?.data?.data || {}
+          const raw = res?.data?.result || res?.data?.data || {}
           const s = raw.status || {}
           const specReplicas = raw.spec?.replicas || 1
           return {

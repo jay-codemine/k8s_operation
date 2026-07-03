@@ -147,6 +147,7 @@ func (c *KubeCronJobController) Detail(ctx *gin.Context) {
 
 	r.Success(gin.H{
 		"message": "获取 CronJob 详情成功",
+		"data":    cj,
 		"cronjob": gin.H{
 			"name":              cj.Name,
 			"namespace":         cj.Namespace,

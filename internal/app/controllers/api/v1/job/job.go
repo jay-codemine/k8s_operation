@@ -160,11 +160,36 @@ func (c *KubeJobController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	// 格式化输出（使用 BuildJobListResponse 中的同一逻辑）
+	// 格式化输出
 	detailData := job.BuildJobDetailResponse(jobObj)
+	status := "Running"
+	statusReason := ""
+	completions := int32(1)
+	if jobObj.Spec.Completions != nil {
+		completions = *jobObj.Spec.Completions
+	}
+	switch {
+	case jobObj.Status.Succeeded > 0 && jobObj.Status.Succeeded >= completions:
+		status = "Complete"
+	case jobObj.Status.Failed > 0:
+		status = "Failed"
+		if len(jobObj.Status.Conditions) > 0 {
+			statusReason = jobObj.Status.Conditions[0].Message
+		}
+	case jobObj.Status.Active > 0:
+		status = "Running"
+	default:
+		status = "Pending"
+	}
 
-	// 成功返回
-	r.Success(detailData)
+	// 成功返回 - 同时返回原始 K8s 对象和格式化数据
+	r.Success(gin.H{
+		"message":       "获取 Job 详情成功",
+		"status":        status,
+		"status_reason": statusReason,
+		"data":          jobObj,
+		"detail":        detailData,
+	})
 }
 
 // Delete godoc

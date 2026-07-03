@@ -17,7 +17,7 @@
 #   docker build -f docker/backend/Dockerfile.runtime --platform linux/amd64 -t devops-be:latest .
 # ==============================================================================
 
-FROM docker.m.daocloud.io/library/alpine:3.20
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/alpine:3.20
 
 # 创建非 root 用户（UID=1000 与 Deployment securityContext 一致）
 RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app

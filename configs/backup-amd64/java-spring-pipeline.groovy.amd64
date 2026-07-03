@@ -31,7 +31,7 @@ metadata:
 spec:
   containers:
   - name: maven
-    image: docker.m.daocloud.io/library/maven:3.9.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}-noble
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}-noble
     imagePullPolicy: Always
     command: ['sleep', '99d']
     resources:
@@ -50,7 +50,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.m.daocloud.io/kaniko-project/executor:debug
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/gcr.io/kaniko-project/executor:debug
     imagePullPolicy: Always
     command: ['sleep', '99d']
     securityContext:
@@ -66,7 +66,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: jnlp
-    image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk21
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk21
     imagePullPolicy: Always
   volumes:
   - name: maven-cache
@@ -650,7 +650,7 @@ ${agentJavaOpts} \
 -Dotel.exporter.otlp.endpoint=http://otel-collector-monitoring.svc.cluster.local:4318""" : ''
 
                             def dockerfileContent = """\
-FROM docker.m.daocloud.io/library/eclipse-temurin:${javaVersion}-jre-jammy
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/eclipse-temurin:${javaVersion}-jre-jammy
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && rm -rf /var/lib/apt/lists/*

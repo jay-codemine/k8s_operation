@@ -1487,6 +1487,7 @@ const startJobWatcher = (job) => {
           desiredReplicas: completions,
           readyReplicas: succeeded,
           updatedReplicas: succeeded,
+          availableReplicas: succeeded, // Job 无 available 概念，用 succeeded 代替
         }
       },
       getEvents: async () => {

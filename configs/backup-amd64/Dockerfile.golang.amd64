@@ -12,7 +12,7 @@
 #   Build Image 阶段执行 nerdctl build --build-arg BIN_NAME=xxx
 # ============================================
 
-FROM docker.m.daocloud.io/library/alpine:3.20
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/alpine:3.20
 
 # 安装运行时依赖（CA证书 + 时区）
 RUN apk add --no-cache ca-certificates tzdata wget && \
