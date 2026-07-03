@@ -150,9 +150,9 @@
       </header>
 
       <div class="page-content">
-        <router-view v-slot="{ Component }">
-          <transition name="page-fade" mode="out-in">
-            <component :is="Component" />
+        <router-view v-slot="{ Component, route: viewRoute }">
+          <transition name="page-fade" mode="default">
+            <component :is="Component" :key="viewRoute.fullPath" />
           </transition>
         </router-view>
       </div>

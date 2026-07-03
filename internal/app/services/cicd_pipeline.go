@@ -1822,38 +1822,33 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 
 	// 「发布开始」通知已在触发时发送（triggerJenkinsBuild），此处不再重复发送
 
-	switch workloadKind {
-	case "Deployment":
-		// Patch 更新镜像
-		patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, 
-			pipeline.TargetContainer, image)
-		_, err = kubeClient.AppsV1().Deployments(pipeline.TargetNamespace).Patch(
-			ctx, pipeline.TargetWorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-		if err == nil {
-			logs.WriteString("[INFO] 镜像更新已提交，等待 Rollout 完成...\n")
-			rolloutResult, err = s.waitAutoDeployRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, &logs)
+	// 使用统一的 Patch + Rollout 逻辑（与 release flow 完全一致）
+		timeout := 5 * time.Minute // 统一默认 5 分钟（WaitDeploymentRollout 内部也有兜底）
+		switch workloadKind {
+		case "Deployment":
+			if patchErr := PatchDeploymentImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+				err = patchErr
+			} else {
+				logs.WriteString("[INFO] 镜像更新已提交，等待 Deployment Rollout 完成...\n")
+				rolloutResult, err = WaitDeploymentRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
+			}
+		case "StatefulSet":
+			if patchErr := PatchStatefulSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+				err = patchErr
+			} else {
+				logs.WriteString("[INFO] 镜像更新已提交，等待 StatefulSet Rollout 完成...\n")
+				rolloutResult, err = WaitStatefulSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
+			}
+		case "DaemonSet":
+			if patchErr := PatchDaemonSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+				err = patchErr
+			} else {
+				logs.WriteString("[INFO] 镜像更新已提交，等待 DaemonSet Rollout 完成...\n")
+				rolloutResult, err = WaitDaemonSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
+			}
+		default:
+			err = fmt.Errorf("不支持的工作负载类型: %s", workloadKind)
 		}
-	case "StatefulSet":
-		patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, 
-			pipeline.TargetContainer, image)
-		_, err = kubeClient.AppsV1().StatefulSets(pipeline.TargetNamespace).Patch(
-			ctx, pipeline.TargetWorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-		if err == nil {
-			logs.WriteString("[INFO] 镜像更新已提交，等待 StatefulSet Rollout 完成...\n")
-			rolloutResult, err = s.waitAutoDeployStatefulSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, &logs)
-		}
-	case "DaemonSet":
-		patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, 
-			pipeline.TargetContainer, image)
-		_, err = kubeClient.AppsV1().DaemonSets(pipeline.TargetNamespace).Patch(
-			ctx, pipeline.TargetWorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-		if err == nil {
-			logs.WriteString("[INFO] 镜像更新已提交，等待 DaemonSet Rollout 完成...\n")
-			rolloutResult, err = s.waitAutoDeployDaemonSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, &logs)
-		}
-	default:
-		err = fmt.Errorf("不支持的工作负载类型: %s", workloadKind)
-	}
 
 	// 更新流水线部署状态
 	now := uint64(time.Now().Unix())
@@ -1917,181 +1912,6 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 		notifyInfo.Success = true
 		s.notifyAutoDeployResult(ctx, notifyInfo)
 	}
-}
-
-// waitAutoDeployRollout 等待自动部署的 Rollout 完成
-// 严格检查：必须所有新 Pod 就绪 + 无旧 Pod 残留 + 无 ImagePullBackOff/CrashLoopBackOff
-func (s *Services) waitAutoDeployRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) (*RolloutResult, error) {
-	timeout := 5 * time.Minute
-	interval := 5 * time.Second
-	endTime := time.Now().Add(timeout)
-
-	for time.Now().Before(endTime) {
-		dp, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("获取 Deployment 失败: %v", err)
-		}
-
-		replicas := int32(1)
-		if dp.Spec.Replicas != nil {
-			replicas = *dp.Spec.Replicas
-		}
-
-		logs.WriteString(fmt.Sprintf("[ROLLOUT] 期望: %d | 总数: %d | 更新: %d | 就绪: %d | 可用: %d | Gen: %d/%d\n",
-			replicas,
-			dp.Status.Replicas,
-			dp.Status.UpdatedReplicas,
-			dp.Status.ReadyReplicas,
-			dp.Status.AvailableReplicas,
-			dp.Status.ObservedGeneration, dp.Generation))
-
-		// 检查 Rollout 是否超过 ProgressDeadline
-		for _, cond := range dp.Status.Conditions {
-			if cond.Type == "Progressing" && cond.Reason == "ProgressDeadlineExceeded" {
-				return nil, fmt.Errorf("Rollout 超时: %s", cond.Message)
-			}
-		}
-
-		// 检查 Pod 级别错误（ImagePullBackOff / CrashLoopBackOff 等）
-		if dp.Spec.Selector != nil {
-			podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, dp.Spec.Selector, logs)
-			if podErr != nil {
-				return nil, podErr
-			}
-		}
-
-		// Rollout 完成条件（参考 kubectl rollout status 逻辑）：
-		// 1. ObservedGeneration >= Generation（控制器已处理最新配置）
-		// 2. UpdatedReplicas == replicas（所有 Pod 已更新到新版本）
-		// 3. Replicas == UpdatedReplicas（旧 Pod 已全部终止，无残留）
-		// 4. ReadyReplicas == replicas（所有新 Pod 就绪）
-		// 5. AvailableReplicas == replicas（所有新 Pod 可用）
-		if dp.Status.ObservedGeneration >= dp.Generation &&
-			dp.Status.UpdatedReplicas == replicas &&
-			dp.Status.Replicas == dp.Status.UpdatedReplicas &&
-			dp.Status.ReadyReplicas == replicas &&
-			dp.Status.AvailableReplicas == replicas {
-			logs.WriteString(fmt.Sprintf("[SUCCESS] 所有 %d 个副本已就绪（Ready=%d, Available=%d, 无旧 Pod 残留）\n", replicas, dp.Status.ReadyReplicas, dp.Status.AvailableReplicas))
-			return &RolloutResult{
-				Ready:     dp.Status.ReadyReplicas,
-				Total:     replicas,
-				Available: dp.Status.AvailableReplicas,
-			}, nil
-		}
-
-		time.Sleep(interval)
-	}
-
-	return nil, fmt.Errorf("Rollout 超时（%v）", timeout)
-}
-
-// waitAutoDeployStatefulSetRollout 等待 StatefulSet 自动部署的 Rollout 完成
-// 严格检查：所有 Pod 已更新 + 就绪 + 无旧 Pod 残留（参考 kubectl rollout status sts 逻辑）
-// StatefulSet 滚动更新默认从高序号到低序号逐个更新，必须等待所有 Pod 更新完毕
-func (s *Services) waitAutoDeployStatefulSetRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) (*RolloutResult, error) {
-	timeout := 5 * time.Minute
-	interval := 5 * time.Second
-	endTime := time.Now().Add(timeout)
-
-	for time.Now().Before(endTime) {
-		sts, err := client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("获取 StatefulSet 失败: %v", err)
-		}
-
-		replicas := int32(1)
-		if sts.Spec.Replicas != nil {
-			replicas = *sts.Spec.Replicas
-		}
-
-		logs.WriteString(fmt.Sprintf("[ROLLOUT-STS] 期望: %d | 总数: %d | 更新: %d | 就绪: %d | 当前: %d | Gen: %d/%d\n",
-			replicas,
-			sts.Status.Replicas,
-			sts.Status.UpdatedReplicas,
-			sts.Status.ReadyReplicas,
-			sts.Status.CurrentReplicas,
-			sts.Status.ObservedGeneration, sts.Generation))
-
-		// 检查 Pod 级别错误（ImagePullBackOff / CrashLoopBackOff 等）
-		if sts.Spec.Selector != nil {
-			podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, sts.Spec.Selector, logs)
-			if podErr != nil {
-				return nil, podErr
-			}
-		}
-
-		// Rollout 完成条件（参考 kubectl rollout status sts 逻辑）：
-		// 1. ObservedGeneration >= Generation（控制器已处理最新配置）
-		// 2. UpdatedReplicas == replicas（所有 Pod 已更新到新版本）
-		// 3. CurrentReplicas == UpdatedReplicas（无旧版本 Pod 残留）
-		// 4. ReadyReplicas == replicas（所有 Pod 就绪）
-		if sts.Status.ObservedGeneration >= sts.Generation &&
-			sts.Status.UpdatedReplicas == replicas &&
-			sts.Status.CurrentReplicas == sts.Status.UpdatedReplicas &&
-			sts.Status.ReadyReplicas == replicas {
-			logs.WriteString(fmt.Sprintf("[SUCCESS] StatefulSet 所有 %d 个副本已就绪（Updated=%d, Ready=%d, 无旧 Pod 残留）\n",
-				replicas, sts.Status.UpdatedReplicas, sts.Status.ReadyReplicas))
-			return &RolloutResult{
-				Ready:     sts.Status.ReadyReplicas,
-				Total:     replicas,
-				Available: sts.Status.ReadyReplicas,
-			}, nil
-		}
-
-		time.Sleep(interval)
-	}
-
-	return nil, fmt.Errorf("StatefulSet Rollout 超时（%v），请检查 Pod 状态", timeout)
-}
-
-// waitAutoDeployDaemonSetRollout 等待 DaemonSet 自动部署的 Rollout 完成
-// 严格检查：所有节点 Pod 已更新 + 就绪（参考 kubectl rollout status ds 逻辑）
-func (s *Services) waitAutoDeployDaemonSetRollout(ctx context.Context, client kubernetes.Interface, namespace, name string, logs *strings.Builder) (*RolloutResult, error) {
-	timeout := 5 * time.Minute
-	interval := 5 * time.Second
-	endTime := time.Now().Add(timeout)
-
-	for time.Now().Before(endTime) {
-		ds, err := client.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("获取 DaemonSet 失败: %v", err)
-		}
-
-		logs.WriteString(fmt.Sprintf("[ROLLOUT-DS] 期望: %d | 更新: %d | 就绪: %d | 可用: %d | Gen: %d/%d\n",
-			ds.Status.DesiredNumberScheduled,
-			ds.Status.UpdatedNumberScheduled,
-			ds.Status.NumberReady,
-			ds.Status.NumberAvailable,
-			ds.Status.ObservedGeneration, ds.Generation))
-
-		// 检查 Pod 级别错误（ImagePullBackOff / CrashLoopBackOff 等）
-		if ds.Spec.Selector != nil {
-			podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, ds.Spec.Selector, logs)
-			if podErr != nil {
-				return nil, podErr
-			}
-		}
-
-		// Rollout 完成条件（参考 kubectl rollout status ds 逻辑）：
-		// 1. ObservedGeneration >= Generation
-		// 2. UpdatedNumberScheduled == DesiredNumberScheduled（所有节点已更新）
-		// 3. NumberReady == DesiredNumberScheduled（所有 Pod 就绪）
-		if ds.Status.ObservedGeneration >= ds.Generation &&
-			ds.Status.UpdatedNumberScheduled == ds.Status.DesiredNumberScheduled &&
-			ds.Status.NumberReady == ds.Status.DesiredNumberScheduled {
-			logs.WriteString(fmt.Sprintf("[SUCCESS] DaemonSet 所有 %d 个 Pod 已就绪（Updated=%d, Ready=%d）\n",
-				ds.Status.DesiredNumberScheduled, ds.Status.UpdatedNumberScheduled, ds.Status.NumberReady))
-			return &RolloutResult{
-				Ready:     ds.Status.NumberReady,
-				Total:     ds.Status.DesiredNumberScheduled,
-				Available: ds.Status.NumberAvailable,
-			}, nil
-		}
-
-		time.Sleep(interval)
-	}
-
-	return nil, fmt.Errorf("DaemonSet Rollout 超时（%v），请检查 Pod 状态", timeout)
 }
 
 // getCurrentWorkloadRevision 获取工作负载在 K8s 集群中的当前版本号
@@ -2285,7 +2105,7 @@ func (s *Services) executeLegacyDeployAsync(ctx context.Context, pipeline *model
 	logs.WriteString("[INFO] 镜像更新已提交，等待 Rollout 完成...\n")
 
 	// 2. 等待 Rollout 完成
-	_, err = s.waitAutoDeployRollout(ctx, global.ManagementKubeClient, namespace, deploymentName, &logs)
+	_, err = WaitDeploymentRollout(ctx, global.ManagementKubeClient, namespace, deploymentName, 5*time.Minute, &logs)
 	if err != nil {
 		global.Logger.Error("[旧配置部署] Rollout 失败", zap.Error(err))
 		s.ReleaseDeploySilence(ctx, silenceRuleID, false)

@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
-	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,7 +15,6 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/pkg/k8s/deployment"
 )
 
 // CicdExecuteResult 执行结果
@@ -67,7 +66,9 @@ func (e *CicdTaskExecutor) Execute(ctx context.Context, task *models.CicdRelease
 	}
 }
 
-// executeDeployment 执行 Deployment 部署
+// ==================== Deployment ====================
+
+// executeDeployment 执行 Deployment 部署（统一使用 WaitDeploymentRollout）
 func (e *CicdTaskExecutor) executeDeployment(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
 	result := &CicdExecuteResult{}
 
@@ -82,8 +83,7 @@ func (e *CicdTaskExecutor) executeDeployment(ctx context.Context, kube kubernete
 	result.PrevImage = e.getContainerImage(dp.Spec.Template.Spec.Containers, release.ContainerName)
 
 	// 3. Patch 更新镜像
-	_, err = deployment.PatchDeploymentImage(ctx, kube, release.Namespace, release.WorkloadName, release.ContainerName, task.TargetImage)
-	if err != nil {
+	if err := PatchDeploymentImageFn(ctx, kube, release.Namespace, release.WorkloadName, release.ContainerName, task.TargetImage); err != nil {
 		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
 		return result
 	}
@@ -95,14 +95,12 @@ func (e *CicdTaskExecutor) executeDeployment(ctx context.Context, kube kubernete
 		zap.String("prev_image", result.PrevImage),
 		zap.String("target_image", task.TargetImage))
 
-	// 4. 等待 Rollout 完成
+	// 4. 等待 Rollout 完成（统一逻辑：5 条件 + Pod 故障检测）
 	timeout := time.Duration(release.TimeoutSec) * time.Second
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-	}
-
-	if err := e.waitDeploymentRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout); err != nil {
-		result.Message = fmt.Sprintf("等待Rollout完成失败: %v", err)
+	var logs strings.Builder
+	_, err = WaitDeploymentRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout, &logs)
+	if err != nil {
+		result.Message = fmt.Sprintf("等待Rollout完成失败: %v\n%s", err, logs.String())
 		return result
 	}
 
@@ -111,61 +109,9 @@ func (e *CicdTaskExecutor) executeDeployment(ctx context.Context, kube kubernete
 	return result
 }
 
-// waitDeploymentRollout 等待 Deployment Rollout 完成
-func (e *CicdTaskExecutor) waitDeploymentRollout(ctx context.Context, kube kubernetes.Interface, namespace, name string, timeout time.Duration) error {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
+// ==================== StatefulSet ====================
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("rollout timeout after %v", timeout)
-		case <-ticker.C:
-			dp, err := kube.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("get deployment failed: %w", err)
-			}
-
-			// 检查是否完成
-			if isDeploymentRolloutComplete(dp) {
-				global.Logger.Info("deployment rollout complete",
-					zap.String("namespace", namespace),
-					zap.String("name", name))
-				return nil
-			}
-
-			// 检查是否失败
-			for _, cond := range dp.Status.Conditions {
-				if cond.Type == appv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse {
-					return fmt.Errorf("rollout failed: %s", cond.Message)
-				}
-				if cond.Reason == "ProgressDeadlineExceeded" {
-					return fmt.Errorf("rollout progress deadline exceeded: %s", cond.Message)
-				}
-			}
-		}
-	}
-}
-
-// isDeploymentRolloutComplete 检查 Deployment Rollout 是否完成
-// 严格检查：所有 Pod 必须 Ready（容器就绪探针通过）才算完成
-// 注意：不检查 Replicas == replicas，因为滚动更新期间旧 Pod 可能还在终止中
-func isDeploymentRolloutComplete(dp *appv1.Deployment) bool {
-	replicas := int32(1)
-	if dp.Spec.Replicas != nil {
-		replicas = *dp.Spec.Replicas
-	}
-
-	return dp.Status.ObservedGeneration >= dp.Generation &&
-		dp.Status.UpdatedReplicas == replicas &&
-		dp.Status.ReadyReplicas == replicas &&
-		dp.Status.AvailableReplicas == replicas
-}
-
-// executeStatefulSet 执行 StatefulSet 部署
+// executeStatefulSet 执行 StatefulSet 部署（统一使用 WaitStatefulSetRollout）
 func (e *CicdTaskExecutor) executeStatefulSet(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
 	result := &CicdExecuteResult{}
 
@@ -180,21 +126,24 @@ func (e *CicdTaskExecutor) executeStatefulSet(ctx context.Context, kube kubernet
 	result.PrevImage = e.getContainerImage(sts.Spec.Template.Spec.Containers, release.ContainerName)
 
 	// 3. Patch 更新镜像
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, release.ContainerName, task.TargetImage)
-	_, err = kube.AppsV1().StatefulSets(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-	if err != nil {
+	if err := PatchStatefulSetImageFn(ctx, kube, release.Namespace, release.WorkloadName, release.ContainerName, task.TargetImage); err != nil {
 		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
 		return result
 	}
 
-	// 4. 等待 Rollout 完成
-	timeout := time.Duration(release.TimeoutSec) * time.Second
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-	}
+	global.Logger.Info("patched statefulset image",
+		zap.String("namespace", release.Namespace),
+		zap.String("statefulset", release.WorkloadName),
+		zap.String("container", release.ContainerName),
+		zap.String("prev_image", result.PrevImage),
+		zap.String("target_image", task.TargetImage))
 
-	if err := e.waitStatefulSetRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout); err != nil {
-		result.Message = fmt.Sprintf("等待Rollout完成失败: %v", err)
+	// 4. 等待 Rollout 完成（统一逻辑：5 条件 + Pod 故障检测）
+	timeout := time.Duration(release.TimeoutSec) * time.Second
+	var logs strings.Builder
+	_, err = WaitStatefulSetRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout, &logs)
+	if err != nil {
+		result.Message = fmt.Sprintf("等待Rollout完成失败: %v\n%s", err, logs.String())
 		return result
 	}
 
@@ -203,39 +152,9 @@ func (e *CicdTaskExecutor) executeStatefulSet(ctx context.Context, kube kubernet
 	return result
 }
 
-// waitStatefulSetRollout 等待 StatefulSet Rollout 完成
-func (e *CicdTaskExecutor) waitStatefulSetRollout(ctx context.Context, kube kubernetes.Interface, namespace, name string, timeout time.Duration) error {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
+// ==================== DaemonSet ====================
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("rollout timeout after %v", timeout)
-		case <-ticker.C:
-			sts, err := kube.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("get statefulset failed: %w", err)
-			}
-
-			replicas := int32(1)
-			if sts.Spec.Replicas != nil {
-				replicas = *sts.Spec.Replicas
-			}
-
-			if sts.Status.UpdatedReplicas == replicas &&
-				sts.Status.ReadyReplicas == replicas &&
-				sts.Status.ObservedGeneration >= sts.Generation {
-				return nil
-			}
-		}
-	}
-}
-
-// executeDaemonSet 执行 DaemonSet 部署
+// executeDaemonSet 执行 DaemonSet 部署（统一使用 WaitDaemonSetRollout）
 func (e *CicdTaskExecutor) executeDaemonSet(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
 	result := &CicdExecuteResult{}
 
@@ -250,21 +169,24 @@ func (e *CicdTaskExecutor) executeDaemonSet(ctx context.Context, kube kubernetes
 	result.PrevImage = e.getContainerImage(ds.Spec.Template.Spec.Containers, release.ContainerName)
 
 	// 3. Patch 更新镜像
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, release.ContainerName, task.TargetImage)
-	_, err = kube.AppsV1().DaemonSets(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-	if err != nil {
+	if err := PatchDaemonSetImageFn(ctx, kube, release.Namespace, release.WorkloadName, release.ContainerName, task.TargetImage); err != nil {
 		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
 		return result
 	}
 
-	// 4. 等待 Rollout 完成
-	timeout := time.Duration(release.TimeoutSec) * time.Second
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-	}
+	global.Logger.Info("patched daemonset image",
+		zap.String("namespace", release.Namespace),
+		zap.String("daemonset", release.WorkloadName),
+		zap.String("container", release.ContainerName),
+		zap.String("prev_image", result.PrevImage),
+		zap.String("target_image", task.TargetImage))
 
-	if err := e.waitDaemonSetRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout); err != nil {
-		result.Message = fmt.Sprintf("等待Rollout完成失败: %v", err)
+	// 4. 等待 Rollout 完成（统一逻辑：4 条件 + Pod 故障检测）
+	timeout := time.Duration(release.TimeoutSec) * time.Second
+	var logs strings.Builder
+	_, err = WaitDaemonSetRollout(ctx, kube, release.Namespace, release.WorkloadName, timeout, &logs)
+	if err != nil {
+		result.Message = fmt.Sprintf("等待Rollout完成失败: %v\n%s", err, logs.String())
 		return result
 	}
 
@@ -273,34 +195,10 @@ func (e *CicdTaskExecutor) executeDaemonSet(ctx context.Context, kube kubernetes
 	return result
 }
 
-// waitDaemonSetRollout 等待 DaemonSet Rollout 完成
-func (e *CicdTaskExecutor) waitDaemonSetRollout(ctx context.Context, kube kubernetes.Interface, namespace, name string, timeout time.Duration) error {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("rollout timeout after %v", timeout)
-		case <-ticker.C:
-			ds, err := kube.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("get daemonset failed: %w", err)
-			}
-
-			if ds.Status.UpdatedNumberScheduled == ds.Status.DesiredNumberScheduled &&
-				ds.Status.NumberReady == ds.Status.DesiredNumberScheduled &&
-				ds.Status.ObservedGeneration >= ds.Generation {
-				return nil
-			}
-		}
-	}
-}
+// ==================== CronJob ====================
 
 // executeCronJob 执行 CronJob 镜像更新
+// CronJob 不等待 Rollout（模板更新后下次调度生效），但会做快速校验
 func (e *CicdTaskExecutor) executeCronJob(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
 	result := &CicdExecuteResult{}
 
@@ -333,7 +231,7 @@ func (e *CicdTaskExecutor) executeCronJob(ctx context.Context, kube kubernetes.I
 	patchBytes, _ := json.Marshal(patchData)
 	_, err = kube.BatchV1().CronJobs(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	if err != nil {
-		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
+		result.Message = fmt.Sprintf("更新CronJob镜像失败: %v", err)
 		return result
 	}
 
@@ -344,46 +242,57 @@ func (e *CicdTaskExecutor) executeCronJob(ctx context.Context, kube kubernetes.I
 		zap.String("prev_image", result.PrevImage),
 		zap.String("target_image", task.TargetImage))
 
-	// CronJob 不需要等待 Rollout，更新模板后下次调度会使用新镜像
+	// 4. 快速校验：检查是否有活跃 Job 存在 Pod 故障
+	if err := ValidateCronJob(ctx, kube, release.Namespace, release.WorkloadName); err != nil {
+		result.Message = fmt.Sprintf("CronJob 镜像验证失败: %v（模板已更新，下次调度使用新镜像）", err)
+		return result
+	}
+
 	result.Success = true
 	result.Message = "CronJob 镜像更新成功，下次调度将使用新镜像"
 	return result
 }
 
+// ==================== Job ====================
+
 // executeJob 执行 Job 镜像更新
+// Job 的 Pod 模板不可变，采用 delete + create 方式重建，并等待执行完成
 func (e *CicdTaskExecutor) executeJob(ctx context.Context, kube kubernetes.Interface, task *models.CicdReleaseTask, release *models.CicdRelease) *CicdExecuteResult {
 	result := &CicdExecuteResult{}
 
-	// 1. 获取当前 Job
-	job, err := kube.BatchV1().Jobs(release.Namespace).Get(ctx, release.WorkloadName, metav1.GetOptions{})
+	// 1. 获取当前 Job，验证存在
+	oldJob, err := kube.BatchV1().Jobs(release.Namespace).Get(ctx, release.WorkloadName, metav1.GetOptions{})
 	if err != nil {
+		// 如果 Job 不存在，尝试直接创建
 		result.Message = fmt.Sprintf("获取Job失败: %v", err)
 		return result
 	}
 
 	// 2. 保存原镜像
-	result.PrevImage = e.getContainerImage(job.Spec.Template.Spec.Containers, release.ContainerName)
+	result.PrevImage = e.getContainerImage(oldJob.Spec.Template.Spec.Containers, release.ContainerName)
 
-	// 3. Patch 更新镜像
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, release.ContainerName, task.TargetImage)
-	_, err = kube.BatchV1().Jobs(release.Namespace).Patch(ctx, release.WorkloadName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-	if err != nil {
-		result.Message = fmt.Sprintf("更新镜像失败: %v", err)
-		return result
-	}
-
-	global.Logger.Info("patched job image",
+	global.Logger.Info("recreating job with new image",
 		zap.String("namespace", release.Namespace),
 		zap.String("job", release.WorkloadName),
 		zap.String("container", release.ContainerName),
 		zap.String("prev_image", result.PrevImage),
 		zap.String("target_image", task.TargetImage))
 
-	// Job 不需要等待 Rollout，更新镜像后新的 Pod 会使用新镜像
+	// 3. 删除旧 Job + 创建新 Job + 等待完成
+	timeout := time.Duration(release.TimeoutSec) * time.Second
+	var logs strings.Builder
+	_, err = RecreateJobAndWait(ctx, kube, release.Namespace, release.WorkloadName, release.ContainerName, task.TargetImage, timeout, &logs)
+	if err != nil {
+		result.Message = fmt.Sprintf("Job 执行失败: %v\n%s", err, logs.String())
+		return result
+	}
+
 	result.Success = true
-	result.Message = "Job 镜像更新成功"
+	result.Message = "Job 执行成功"
 	return result
 }
+
+// ==================== 工具函数 ====================
 
 // getContainerImage 获取容器镜像
 func (e *CicdTaskExecutor) getContainerImage(containers []corev1.Container, containerName string) string {

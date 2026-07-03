@@ -215,19 +215,19 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
   const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  
+
   // 未登录时跳转到登录页
   if (requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
     return
   }
-  
+
   // 登录页直接放行
   if (to.path === '/login') {
     next()
     return
   }
-  
+
   // 已登录时，确保加载了权限
   if (token && !permissionStore.state.loaded) {
     try {
@@ -236,7 +236,7 @@ router.beforeEach(async (to, from, next) => {
       console.error('加载权限失败', e)
     }
   }
-  
+
   // 超级管理员跳过所有权限检查
   if (permissionStore.state.isSuperAdmin) {
     next()
@@ -248,39 +248,63 @@ router.beforeEach(async (to, from, next) => {
   if (routeScope) {
     const hasAccess = permissionStore.hasScopeAccess(routeScope.scope, routeScope.minLevel)
     if (!hasAccess) {
-      next({ 
-        path: '/forbidden', 
-        query: { 
+      next({
+        path: '/forbidden',
+        query: {
           type: 'scope',
           path: to.path,
           scope: routeScope.scope,
           required: routeScope.minLevel
-        } 
+        }
       })
       return
     }
   }
-  
+
   // 集群级路由权限检查
   if (to.path.startsWith('/c/') && to.params.clusterId) {
     const clusterId = parseInt(to.params.clusterId)
     if (clusterId) {
       const canAccess = permissionStore.canAccessCluster(clusterId, 'view')
       if (!canAccess) {
-        next({ 
-          path: '/forbidden', 
-          query: { 
+        next({
+          path: '/forbidden',
+          query: {
             type: 'cluster',
             path: to.path,
             clusterId: clusterId
-          } 
+          }
         })
         return
       }
     }
   }
-  
+
   next()
+})
+
+// ================================================================
+// 全局 chunk 加载失败容错：新版部署后旧哈希 chunk 404 时强制全页刷新
+// ================================================================
+// Vite 按路由拆分代码，每次构建文件名带有内容哈希.
+// 部署新版本后，旧浏览器 tab 里的路由懒加载会请求已被删除的旧 chunk,
+// 导致 "Failed to fetch dynamically imported module" 白屏.
+// 拦截此错误并强制刷新，用户无感升级.
+// ================================================================
+router.onError((error, to) => {
+  if (error.message?.includes('Failed to fetch dynamically imported module')) {
+    console.warn('[Router] chunk 加载失败（可能为新版部署）, 强制刷新', to?.fullPath)
+    window.location.href = to?.fullPath || '/dashboard'
+  }
+})
+
+// 兜底：捕获未被路由拦截的异步组件加载错误
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = event.reason?.message || ''
+  if (msg.includes('Failed to fetch dynamically imported module')) {
+    console.warn('[Global] 异步模块加载失败, 刷新页面')
+    window.location.reload()
+  }
 })
 
 export default router

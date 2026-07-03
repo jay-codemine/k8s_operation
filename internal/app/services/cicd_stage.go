@@ -1084,7 +1084,7 @@ func (s *Services) waitDeploymentRolloutWithUpdate(ctx context.Context, client k
 		}
 
 		// 检查 Pod 状态（捕获 ImagePullBackOff 等错误）
-		podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, dp.Spec.Selector, logs)
+		podErr := checkPodErrors(ctx, client, namespace, dp.Spec.Selector, logs)
 		if podErr != nil {
 			return podErr
 		}
@@ -1142,49 +1142,6 @@ func (s *Services) updateStageLogsIfNeeded(ctx context.Context, stageID int64, l
 			"logs": logs,
 		})
 	}
-}
-
-// checkDeploymentPodStatus 检查 Pod 状态，捕获 ImagePullBackOff 等错误
-func (s *Services) checkDeploymentPodStatus(ctx context.Context, client kubernetes.Interface, namespace, name string, selector *metav1.LabelSelector, logs *strings.Builder) error {
-	if selector == nil {
-		return nil
-	}
-
-	// 构建 label selector
-	labelSelector := metav1.FormatLabelSelector(selector)
-	
-	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
-	if err != nil {
-		return nil // 获取 Pod 失败不需要成为致命错误
-	}
-
-	for _, pod := range pods.Items {
-		// 检查容器状态
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.State.Waiting != nil {
-				reason := cs.State.Waiting.Reason
-				msg := cs.State.Waiting.Message
-				
-				// 检测镜像拉取失败
-				if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-					errMsg := fmt.Sprintf("镜像拉取失败 [%s]: %s", reason, msg)
-					logs.WriteString(fmt.Sprintf("[ERROR] Pod %s: %s\n", pod.Name, errMsg))
-					return errors.New(errMsg)
-				}
-				
-				// 检测 CrashLoopBackOff
-				if reason == "CrashLoopBackOff" {
-					errMsg := fmt.Sprintf("容器崩溃重启 [%s]: %s", reason, msg)
-					logs.WriteString(fmt.Sprintf("[ERROR] Pod %s: %s\n", pod.Name, errMsg))
-					return errors.New(errMsg)
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // updateStatefulSetImage 更新 StatefulSet 镜像
@@ -1268,7 +1225,7 @@ func (s *Services) waitStatefulSetRollout(ctx context.Context, client kubernetes
 			ss.Status.ReadyReplicas))
 
 		// 检查 Pod 状态
-		podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, ss.Spec.Selector, logs)
+		podErr := checkPodErrors(ctx, client, namespace, ss.Spec.Selector, logs)
 		if podErr != nil {
 			return podErr
 		}
@@ -1362,7 +1319,7 @@ func (s *Services) waitDaemonSetRollout(ctx context.Context, client kubernetes.I
 			ds.Status.NumberAvailable))
 
 		// 检查 Pod 状态
-		podErr := s.checkDeploymentPodStatus(ctx, client, namespace, name, ds.Spec.Selector, logs)
+		podErr := checkPodErrors(ctx, client, namespace, ds.Spec.Selector, logs)
 		if podErr != nil {
 			return podErr
 		}

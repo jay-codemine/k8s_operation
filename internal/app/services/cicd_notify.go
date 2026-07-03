@@ -90,12 +90,6 @@ type AutoDeployNotifyInfo struct {
 	RollbackReason string               // 回滚原因
 }
 
-// RolloutResult Rollout 完成后的状态信息
-type RolloutResult struct {
-	Ready      int32 // 就绪 Pod 数
-	Total      int32 // 期望 Pod 数
-	Available  int32 // 可用 Pod 数
-}
 
 // ==================== 部署通知 ====================
 
