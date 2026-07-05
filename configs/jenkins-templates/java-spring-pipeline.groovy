@@ -351,7 +351,8 @@ spec:
                         // 则使用 -pl <module> -am 从根 pom 构建（自动解析兄弟模块依赖）
                         def isMultiModule = false
                         if (fileExists('pom.xml')) {
-                            def hasModules = sh(script: "grep -c '<modules>' pom.xml 2>/dev/null || echo 0", returnStdout: true).trim()
+                            def hasModules = sh(script: "grep -c '<modules>' pom.xml 2>/dev/null || true", returnStdout: true).trim()
+                            if (!hasModules.isInteger()) { hasModules = '0' }
                             if (hasModules.toInteger() > 0) {
                                 isMultiModule = true
                                 if (buildDir == '.') {
