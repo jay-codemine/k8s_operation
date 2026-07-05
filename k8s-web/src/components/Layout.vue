@@ -243,6 +243,7 @@ const menuPermissions = {
   '/platform/health': ['super_admin', 'platform_admin', 'cluster_admin'],
   '/platform/settings': ['super_admin', 'platform_admin'],
   '/platform/appstore': ['super_admin', 'platform_admin', 'cluster_admin'],
+  '/platform/aiops': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin'],
   
   // ==================== 平台管理（IAM 统一收口） ====================
   '/admin/users': ['super_admin', 'platform_admin'],
@@ -270,10 +271,17 @@ const menuPermissions = {
   '/security/rbac/permission-check': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
   
   // ==================== CI/CD 流水线 ====================
+  '/cicd/apps': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
+  '/cicd/quick-onboard': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/pipelines': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
+  '/cicd/build-records': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
+  '/cicd/artifacts': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/releases': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
-  '/cicd/templates': ['super_admin', 'platform_admin'],
+  '/cicd/release-history': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
+  '/cicd/approval-policy': ['super_admin', 'platform_admin'],
+  '/cicd/templates': ['super_admin', 'platform_admin'],
+  '/cicd/agents': ['super_admin', 'platform_admin', 'cicd_admin'],
   
   // ==================== 监控中心 ====================
   '/monitoring': ['super_admin', 'platform_admin', 'cluster_admin', 'cicd_admin', 'developer', 'viewer'],
@@ -356,13 +364,14 @@ const menuGroupsConfig = reactive([
   {
     name: 'CI/CD',
     icon: '⚡',
-    count: 12,
+    count: 11,
     collapsed: true,
     match: ['/cicd'],
     items: [
       // ── 应用中心 ──
       { section: '应用中心' },
       { path: '/cicd/apps', label: '应用总览', icon: '🏠' },
+      { path: '/cicd/quick-onboard', label: '快速接入', icon: '⚡' },
       // ── 流水线 (CI) ──
       { section: '流水线 · CI' },
       { path: '/cicd/pipelines', label: '流水线管理', icon: '⚙️' },

@@ -36,5 +36,6 @@ func (r *kubePodRouter) Inject(router *gin.RouterGroup) {
 	router.GET("/yaml", pod.Yaml)                                   // 获取 Pod 的 YAML 配置
 	router.PUT("/apply_yaml", pod.ApplyYaml)                        // 应用 Pod YAML 配置
 	router.GET("/terminal", pod.Terminal)                              // 容器终端（WebSocket）
+	router.POST("/events", pod.EventList)                              // 获取 Pod 事件
 
 }

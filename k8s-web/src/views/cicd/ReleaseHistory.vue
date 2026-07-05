@@ -177,8 +177,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import http from '@/api/http'
-import { API_BASE } from '@/api/paths'
+import { getReleaseHistory, getReleaseStatsEnhanced } from '@/api/cicd'
 
 const releases = ref([])
 const total = ref(0)
@@ -209,8 +208,8 @@ const visiblePages = computed(() => {
 
 const loadStats = async () => {
   try {
-    const res = await http.get(`${API_BASE}/k8s/cicd/release/stats-enhanced`)
-    enhancedStats.value = res.data?.data || {}
+    const res = await getReleaseStatsEnhanced()
+    enhancedStats.value = res?.data || res || {}
   } catch (e) {
     console.error('加载发布统计失败', e)
   }
@@ -223,8 +222,8 @@ const loadReleases = async () => {
     if (statusFilter.value) params.status = statusFilter.value
     if (appNameFilter.value) params.app_name = appNameFilter.value
     if (namespaceFilter.value) params.namespace = namespaceFilter.value
-    const res = await http.get(`${API_BASE}/k8s/cicd/release/history`, { params })
-    const data = res.data?.data || res.data || {}
+    const res = await getReleaseHistory(params)
+    const data = res?.data || res || {}
     releases.value = data.list || []
     total.value = data.total || 0
   } catch (e) {

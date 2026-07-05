@@ -5,7 +5,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useClusterStore } from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 
 /**
  * 命名空间权限过滤 Hook

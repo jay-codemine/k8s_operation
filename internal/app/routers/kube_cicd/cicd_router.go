@@ -17,6 +17,7 @@ type CicdRouter struct {
 	resourceCtrl    *cicd.ResourceController
 	artifactCtrl    *cicd.ArtifactController
 	agentCtrl       *cicd.BuildAgentController
+	onboardCtrl     *cicd.QuickOnboardController
 }
 
 func NewCicdRouter() *CicdRouter {
@@ -31,6 +32,7 @@ func NewCicdRouter() *CicdRouter {
 		resourceCtrl:    cicd.NewResourceController(),
 		artifactCtrl:    cicd.NewArtifactController(),
 		agentCtrl:       cicd.NewBuildAgentController(),
+		onboardCtrl:     cicd.NewQuickOnboardController(),
 	}
 }
 
@@ -39,54 +41,54 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	// /api/v1/k8s/cicd/pipeline/...
 	pipeline := rg.Group("/pipeline")
 	{
-		pipeline.GET("/list", r.pipelineCtrl.List)         // 获取流水线列表
-		pipeline.GET("/detail", r.pipelineCtrl.Detail)     // 获取流水线详情
-		pipeline.GET("/check-name", r.pipelineCtrl.CheckName) // 检查应用名称是否可用
-		pipeline.POST("/create", r.pipelineCtrl.Create)    // 创建流水线
-		pipeline.POST("/batch-create", r.pipelineCtrl.BatchCreate) // 批量创建流水线（导入多个项目）
-		pipeline.POST("/update", r.pipelineCtrl.Update)    // 更新流水线
-		pipeline.POST("/delete", r.pipelineCtrl.Delete)    // 删除流水线
-		pipeline.POST("/run", r.pipelineCtrl.Run)          // 运行流水线（触发 Jenkins 构建）
-		pipeline.POST("/stop", r.pipelineCtrl.Stop)        // 停止流水线
-		pipeline.POST("/batch-run", r.pipelineCtrl.BatchRun)   // 批量运行流水线
-		pipeline.POST("/batch-stop", r.pipelineCtrl.BatchStop) // 批量停止流水线
-		pipeline.GET("/logs", r.pipelineCtrl.Logs)         // 获取构建日志
-		pipeline.GET("/status", r.pipelineCtrl.Status)     // 获取实时状态
-		pipeline.GET("/stages", r.pipelineCtrl.Stages)     // 获取阶段数据（Jenkins Pipeline）
-		pipeline.GET("/history", r.pipelineCtrl.History)   // 获取运行历史
-		pipeline.GET("/build-records", r.pipelineCtrl.BuildRecords) // 获取全量构建记录（跨流水线）
-		pipeline.GET("/build-records/export", r.pipelineCtrl.ExportBuildRecords) // 导出构建记录CSV
-		pipeline.GET("/build-stats", r.pipelineCtrl.BuildStats)       // 构建统计数据（成功率/趋势/平均时长）
-		pipeline.GET("/template-verify", r.pipelineCtrl.TemplateVerify)     // 模板化发布验证
-		pipeline.GET("/template-simulate", r.pipelineCtrl.TemplateSimulate) // 模拟模板化发布流程
-		pipeline.GET("/sonar-report", r.pipelineCtrl.SonarReport)          // SonarQube 代码质量报告
-		pipeline.GET("/deploy-silence-status", r.pipelineCtrl.DeploySilenceStatus) // 发布静默状态查询
-		pipeline.GET("/jenkins-config", r.pipelineCtrl.JenkinsConfig)               // Jenkins 配置信息（回调地址等）
-		pipeline.GET("/discover", r.pipelineCtrl.Discover)                           // 从K8s Deployment自动发现应用信息
-		// sonar-callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT，Jenkins 回调无需认证）
-		// callback 已移至 cicd_callback_router.go（公开接口，跳过 JWT）
+		pipeline.GET("/list", r.pipelineCtrl.List)
+		pipeline.GET("/detail", r.pipelineCtrl.Detail)
+		pipeline.GET("/check-name", r.pipelineCtrl.CheckName)
+		pipeline.POST("/create", middlewares.RequireCICDPermission("cicd:pipeline:create"), r.pipelineCtrl.Create)
+		pipeline.POST("/batch-create", middlewares.RequireCICDPermission("cicd:pipeline:create"), r.pipelineCtrl.BatchCreate)
+		pipeline.POST("/update", middlewares.RequireCICDPermission("cicd:pipeline:edit"), r.pipelineCtrl.Update)
+		pipeline.POST("/delete", middlewares.RequireCICDPermission("cicd:pipeline:delete"), r.pipelineCtrl.Delete)
+		pipeline.POST("/run", middlewares.RequireCICDPermission("cicd:pipeline:run"), r.pipelineCtrl.Run)
+		pipeline.POST("/stop", middlewares.RequireCICDPermission("cicd:build:cancel"), r.pipelineCtrl.Stop)
+		pipeline.POST("/batch-run", middlewares.RequireCICDPermission("cicd:pipeline:run"), r.pipelineCtrl.BatchRun)
+		pipeline.POST("/batch-stop", middlewares.RequireCICDPermission("cicd:build:cancel"), r.pipelineCtrl.BatchStop)
+		pipeline.GET("/logs", r.pipelineCtrl.Logs)
+		pipeline.GET("/status", r.pipelineCtrl.Status)
+		pipeline.GET("/stages", r.pipelineCtrl.Stages)
+		pipeline.GET("/history", r.pipelineCtrl.History)
+		pipeline.GET("/build-records", r.pipelineCtrl.BuildRecords)
+		pipeline.GET("/build-records/export", r.pipelineCtrl.ExportBuildRecords)
+		pipeline.GET("/build-stats", r.pipelineCtrl.BuildStats)
+		pipeline.GET("/template-verify", r.pipelineCtrl.TemplateVerify)
+		pipeline.GET("/template-simulate", r.pipelineCtrl.TemplateSimulate)
+		pipeline.GET("/sonar-report", r.pipelineCtrl.SonarReport)
+		pipeline.GET("/deploy-silence-status", r.pipelineCtrl.DeploySilenceStatus)
+		pipeline.GET("/jenkins-config", r.pipelineCtrl.JenkinsConfig)
+		pipeline.GET("/discover", r.pipelineCtrl.Discover)
+		pipeline.GET("/discover-workloads", r.pipelineCtrl.DiscoverWorkloads)
+		pipeline.GET("/discover-apps", r.pipelineCtrl.DiscoverApplications)
 	}
 
 	// ==================== 发布单管理 ====================
 	// /api/v1/k8s/cicd/release/...
 	release := rg.Group("/release")
 	{
-		release.POST("/create", r.releaseCtrl.Create)     // 创建发布单
-		release.GET("/detail", r.releaseCtrl.Detail)      // 发布单详情
-		release.GET("/list", r.releaseCtrl.List)          // 发布单列表
-		release.GET("/stats", r.releaseCtrl.Stats)        // 发布单统计
-		release.POST("/update", r.releaseCtrl.Update)     // 编辑发布单
-		release.POST("/delete", r.releaseCtrl.Delete)     // 删除发布单
-		release.POST("/cancel", r.releaseCtrl.Cancel)     // 取消发布（智能判断回滚/取消）
-		release.POST("/rollback", r.releaseCtrl.Rollback) // 回滚发布
-		release.POST("/retry", r.releaseCtrl.Retry)       // 重试发布
-		release.GET("/tasks", r.releaseCtrl.Tasks)        // 获取发布单下的任务列表
-		release.POST("/batch-retry", r.releaseCtrl.BatchRetry)       // 批量重新发布
-		release.POST("/batch-rollback", r.releaseCtrl.BatchRollback) // 批量回滚
-		release.POST("/batch-cancel", r.releaseCtrl.BatchCancel)     // 批量取消
-		release.POST("/sync-from-pipeline", r.releaseCtrl.SyncFromPipeline) // 同步流水线记录
-		release.GET("/history", r.releaseCtrl.History)                       // 发布历史查询（增强版）
-		release.GET("/stats-enhanced", r.releaseCtrl.StatsEnhanced)           // 增强版发布统计
+		release.POST("/create", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.releaseCtrl.Create)
+		release.GET("/detail", r.releaseCtrl.Detail)
+		release.GET("/list", r.releaseCtrl.List)
+		release.GET("/stats", r.releaseCtrl.Stats)
+		release.POST("/update", middlewares.RequireCICDPermission("cicd:pipeline:edit"), r.releaseCtrl.Update)
+		release.POST("/delete", middlewares.RequireCICDPermission("cicd:pipeline:delete"), r.releaseCtrl.Delete)
+		release.POST("/cancel", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.releaseCtrl.Cancel)
+		release.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.releaseCtrl.Rollback)
+		release.POST("/retry", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.releaseCtrl.Retry)
+		release.GET("/tasks", r.releaseCtrl.Tasks)
+		release.POST("/batch-retry", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.releaseCtrl.BatchRetry)
+		release.POST("/batch-rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.releaseCtrl.BatchRollback)
+		release.POST("/batch-cancel", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.releaseCtrl.BatchCancel)
+		release.POST("/sync-from-pipeline", middlewares.RequireCICDPermission("cicd:pipeline:run"), r.releaseCtrl.SyncFromPipeline)
+		release.GET("/history", r.releaseCtrl.History)
+		release.GET("/stats-enhanced", r.releaseCtrl.StatsEnhanced)
 	}
 
 	// ==================== 回调接口 ====================
@@ -96,59 +98,58 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	// /api/v1/k8s/cicd/git/...
 	git := rg.Group("/git")
 	{
-		git.POST("/branches", r.gitCtrl.GetBranches) // 获取远程分支列表
-		git.POST("/validate", r.gitCtrl.ValidateRepo) // 验证仓库连接
+		git.POST("/branches", r.gitCtrl.GetBranches)
+		git.POST("/validate", r.gitCtrl.ValidateRepo)
 	}
 
 	// ==================== 环境管理 ====================
 	// /api/v1/k8s/cicd/environment/...
 	environment := rg.Group("/environment")
 	{
-		environment.GET("/list", r.environmentCtrl.List)       // 获取环境列表
-		environment.GET("/detail", r.environmentCtrl.Detail)   // 获取环境详情
-		environment.POST("/create", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Create)  // 创建环境
-		environment.POST("/update", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Update)  // 更新环境
-		environment.POST("/delete", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Delete)  // 删除环境
+		environment.GET("/list", r.environmentCtrl.List)
+		environment.GET("/detail", r.environmentCtrl.Detail)
+		environment.POST("/create", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Create)
+		environment.POST("/update", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Update)
+		environment.POST("/delete", middlewares.RequireCICDPermission("cicd:environment:manage"), r.environmentCtrl.Delete)
 	}
 
 	// ==================== 审批流程 ====================
 	// /api/v1/k8s/cicd/approval/...
 	approval := rg.Group("/approval")
 	{
-		approval.GET("/list", r.approvalCtrl.List)       // 获取审批列表
-		approval.GET("/detail", r.approvalCtrl.Detail)   // 获取审批详情
-		approval.GET("/pending", r.approvalCtrl.Pending) // 获取待审批列表
-		approval.GET("/stats", r.approvalCtrl.Stats)     // 获取审批统计
-		approval.POST("/create", r.approvalCtrl.Create)  // 创建审批申请
-		approval.POST("/update", r.approvalCtrl.Update)  // 更新审批记录
-		approval.POST("/delete", middlewares.RequireCICDPermission("cicd:approval:manage"), r.approvalCtrl.Delete)  // 删除审批记录
-		approval.POST("/action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.Action)  // 审批操作
-		approval.POST("/batch-action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.BatchAction)  // 批量审批操作
+		approval.GET("/list", r.approvalCtrl.List)
+		approval.GET("/detail", r.approvalCtrl.Detail)
+		approval.GET("/pending", r.approvalCtrl.Pending)
+		approval.GET("/stats", r.approvalCtrl.Stats)
+		approval.POST("/create", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.approvalCtrl.Create)
+		approval.POST("/update", middlewares.RequireCICDPermission("cicd:pipeline:edit"), r.approvalCtrl.Update)
+		approval.POST("/delete", middlewares.RequireCICDPermission("cicd:approval:manage"), r.approvalCtrl.Delete)
+		approval.POST("/action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.Action)
+		approval.POST("/batch-action", middlewares.RequireCICDPermission("cicd:approval:action"), r.approvalCtrl.BatchAction)
 	}
 
 	// ==================== 流水线阶段 ====================
 	// /api/v1/k8s/cicd/stage/...
 	stage := rg.Group("/stage")
 	{
-		stage.GET("/list", r.stageCtrl.GetStages)        // 获取运行阶段列表
-		stage.GET("/logs", r.stageCtrl.GetStageLogs)     // 获取阶段日志
-		stage.POST("/approve", r.stageCtrl.ApproveStage) // 审批阶段
-		stage.POST("/deploy", r.stageCtrl.DeployStage)   // 执行部署阶段
-		stage.POST("/cancel", r.stageCtrl.CancelDeploy)  // 取消部署（智能判断）
-		stage.POST("/rollback", r.stageCtrl.RollbackDeploy) // 回滚到指定版本
-		stage.GET("/history", r.stageCtrl.GetDeployHistory) // 获取历史版本列表
-		// callback 已移至 cicd_callback_router.go（公开接口，跳过JWT）
+		stage.GET("/list", r.stageCtrl.GetStages)
+		stage.GET("/logs", r.stageCtrl.GetStageLogs)
+		stage.POST("/approve", middlewares.RequireCICDPermission("cicd:approval:action"), r.stageCtrl.ApproveStage)
+		stage.POST("/deploy", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.stageCtrl.DeployStage)
+		stage.POST("/cancel", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.stageCtrl.CancelDeploy)
+		stage.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.stageCtrl.RollbackDeploy)
+		stage.GET("/history", r.stageCtrl.GetDeployHistory)
 	}
 
 	// ==================== 流水线模板 ====================
 	// /api/v1/k8s/cicd/template/...
 	template := rg.Group("/template")
 	{
-		template.GET("/list", r.templateCtrl.List)       // 获取模板列表
-		template.GET("/detail", r.templateCtrl.Detail)   // 获取模板详情
-		template.POST("/create", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Create)  // 创建模板
-		template.POST("/update", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Update)  // 更新模板
-		template.POST("/delete", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Delete)  // 删除模板
+		template.GET("/list", r.templateCtrl.List)
+		template.GET("/detail", r.templateCtrl.Detail)
+		template.POST("/create", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Create)
+		template.POST("/update", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Update)
+		template.POST("/delete", middlewares.RequireCICDPermission("cicd:template:manage"), r.templateCtrl.Delete)
 	}
 
 	// ==================== 资源配置管理 ====================
@@ -156,54 +157,57 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	resource := rg.Group("/resource")
 	{
 		// 资源模板
-		resource.GET("/templates", r.resourceCtrl.TemplateList)           // 获取资源模板列表
-		resource.GET("/template/default", r.resourceCtrl.TemplateDefault) // 获取默认模板
-		resource.GET("/template/:id", r.resourceCtrl.TemplateDetail)      // 获取模板详情
-		resource.POST("/template", r.resourceCtrl.TemplateCreate)         // 创建模板
-		resource.PUT("/template/:id", r.resourceCtrl.TemplateUpdate)      // 更新模板
-		resource.DELETE("/template/:id", r.resourceCtrl.TemplateDelete)   // 删除模板
+		resource.GET("/templates", r.resourceCtrl.TemplateList)
+		resource.GET("/template/default", r.resourceCtrl.TemplateDefault)
+		resource.GET("/template/:id", r.resourceCtrl.TemplateDetail)
+		resource.POST("/template", middlewares.RequireCICDPermission("cicd:resource:manage"), r.resourceCtrl.TemplateCreate)
+		resource.PUT("/template/:id", middlewares.RequireCICDPermission("cicd:resource:manage"), r.resourceCtrl.TemplateUpdate)
+		resource.DELETE("/template/:id", middlewares.RequireCICDPermission("cicd:resource:manage"), r.resourceCtrl.TemplateDelete)
 
 		// 环境规则
-		resource.GET("/rules", r.resourceCtrl.RuleList)     // 获取规则列表
-		resource.PUT("/rule/:id", r.resourceCtrl.RuleUpdate) // 更新规则
+		resource.GET("/rules", r.resourceCtrl.RuleList)
+		resource.PUT("/rule/:id", middlewares.RequireCICDPermission("cicd:resource:manage"), r.resourceCtrl.RuleUpdate)
 
 		// 资源校验
-		resource.POST("/validate", r.resourceCtrl.Validate) // 校验资源配置
+		resource.POST("/validate", r.resourceCtrl.Validate)
 
 		// 发布审批
-		resource.GET("/approvals", r.resourceCtrl.ApprovalList)              // 审批列表
-		resource.GET("/approval/:id", r.resourceCtrl.ApprovalDetail)         // 审批详情
-		resource.PUT("/approval/:id/approve", r.resourceCtrl.ApprovalApprove) // 通过审批
-		resource.PUT("/approval/:id/reject", r.resourceCtrl.ApprovalReject)   // 拒绝审批
+		resource.GET("/approvals", r.resourceCtrl.ApprovalList)
+		resource.GET("/approval/:id", r.resourceCtrl.ApprovalDetail)
+		resource.PUT("/approval/:id/approve", middlewares.RequireCICDPermission("cicd:approval:action"), r.resourceCtrl.ApprovalApprove)
+		resource.PUT("/approval/:id/reject", middlewares.RequireCICDPermission("cicd:approval:action"), r.resourceCtrl.ApprovalReject)
 	}
 
 	// ==================== 制品库管理 ====================
 	// /api/v1/k8s/cicd/artifact/...
 	artifact := rg.Group("/artifact")
 	{
-		artifact.GET("/list", r.artifactCtrl.List)                 // 制品列表
-		artifact.GET("/detail", r.artifactCtrl.Detail)             // 制品详情
-		artifact.GET("/by-run", r.artifactCtrl.ListByRunID)        // 某次运行的制品列表
-		artifact.POST("/create", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.CreateRecord)      // 创建制品记录
-		artifact.POST("/attach", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.AttachFile)        // 补传/替换文件
-		artifact.POST("/update", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.Update)            // 更新制品信息
-		artifact.GET("/download", r.artifactCtrl.Download)         // 下载制品文件
-		artifact.POST("/delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.Delete)            // 删除制品
-		artifact.POST("/batch-delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.BatchDelete) // 批量删除
-		artifact.GET("/stats", r.artifactCtrl.Stats)               // 制品统计
+		artifact.GET("/list", r.artifactCtrl.List)
+		artifact.GET("/detail", r.artifactCtrl.Detail)
+		artifact.GET("/by-run", r.artifactCtrl.ListByRunID)
+		artifact.POST("/create", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.CreateRecord)
+		artifact.POST("/attach", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.AttachFile)
+		artifact.POST("/update", middlewares.RequireCICDPermission("cicd:artifact:upload"), r.artifactCtrl.Update)
+		artifact.GET("/download", r.artifactCtrl.Download)
+		artifact.POST("/delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.Delete)
+		artifact.POST("/batch-delete", middlewares.RequireCICDPermission("cicd:artifact:delete"), r.artifactCtrl.BatchDelete)
+		artifact.GET("/stats", r.artifactCtrl.Stats)
 	}
 
 	// ==================== 构建探针管理 ====================
 	// /api/v1/k8s/cicd/agent/...
 	agent := rg.Group("/agent")
 	{
-		agent.GET("/list", r.agentCtrl.List)             // 探针列表（分页 + 筛选）
-		agent.GET("/detail", r.agentCtrl.Detail)         // 探针详情
-		agent.POST("/upload", r.agentCtrl.Upload)        // 上传探针文件
-		agent.POST("/update", r.agentCtrl.Update)        // 更新探针信息
-		agent.POST("/toggle", r.agentCtrl.ToggleStatus)  // 切换启用/停用
-		agent.POST("/delete", r.agentCtrl.Delete)        // 删除探针
-		agent.GET("/download", r.agentCtrl.Download)     // 下载探针文件（支持 ID 和名称）
-		agent.GET("/by-scope", r.agentCtrl.ListByScope)  // 按语言获取已启用探针
+		agent.GET("/list", r.agentCtrl.List)
+		agent.GET("/detail", r.agentCtrl.Detail)
+		agent.POST("/upload", middlewares.RequireCICDPermission("cicd:agent:manage"), r.agentCtrl.Upload)
+		agent.POST("/update", middlewares.RequireCICDPermission("cicd:agent:manage"), r.agentCtrl.Update)
+		agent.POST("/toggle", middlewares.RequireCICDPermission("cicd:agent:manage"), r.agentCtrl.ToggleStatus)
+		agent.POST("/delete", middlewares.RequireCICDPermission("cicd:agent:manage"), r.agentCtrl.Delete)
+		agent.GET("/download", r.agentCtrl.Download)
+		agent.GET("/by-scope", r.agentCtrl.ListByScope)
 	}
+
+	// ==================== 快速接入 ====================
+	rg.POST("/quick-onboard", middlewares.RequireCICDPermission("cicd:pipeline:create"), r.onboardCtrl.Onboard)
 }

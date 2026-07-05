@@ -628,6 +628,10 @@ func seedCICDPermissions() {
 		{"cicd:approval:manage", "管理审批策略", "配置审批流程和审批人", "approval", "manage", "审批与管理", "/cicd/approval/manage", 132},
 		{"cicd:environment:manage", "环境管理", "创建/编辑/删除环境配置", "environment", "manage", "审批与管理", "/cicd/environment/manage", 133},
 		{"cicd:template:manage", "模板管理", "管理流水线模板", "template", "manage", "审批与管理", "/cicd/template/manage", 134},
+
+		// 标签: 平台运维
+		{"cicd:resource:manage", "资源模板管理", "管理资源模板和环境规则", "resource", "manage", "平台运维", "/cicd/resource/manage", 140},
+		{"cicd:agent:manage", "构建探针管理", "上传/更新/删除构建探针", "agent", "manage", "平台运维", "/cicd/agent/manage", 141},
 	}
 
 	now := uint64(time.Now().Unix())
@@ -667,7 +671,7 @@ func seedCICDPermissions() {
 		devPerms := []string{
 			"cicd:pipeline:view", "cicd:pipeline:create", "cicd:pipeline:edit", "cicd:pipeline:run",
 			"cicd:build:view", "cicd:build:trigger", "cicd:build:cancel",
-			"cicd:deploy:dev", "cicd:deploy:test",
+			"cicd:deploy:dev", "cicd:deploy:test", "cicd:deploy:rollback",
 			"cicd:artifact:view", "cicd:approval:view",
 		}
 		for _, pName := range devPerms {

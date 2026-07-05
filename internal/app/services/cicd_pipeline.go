@@ -2155,6 +2155,7 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	case models.LanguageTypeJava:
 		setDefault(params, "JAVA_VERSION", "17")
 		setDefault(params, "MAVEN_GOALS", "clean package -DskipTests -B")
+		setDefault(params, "MAVEN_THREADS", "1C")
 		setDefault(params, "SKIP_TESTS", "false")
 		setDefault(params, "BUILD_DIR", "") // 空=自动检测 pom.xml 位置
 		// 私有 Maven 仓库（用于拉取公司内部依赖包，如 Nexus/GitLab Maven Registry）
@@ -2260,6 +2261,7 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			DefaultParams: map[string]string{
 				"JAVA_VERSION":    "17",
 				"MAVEN_GOALS":     "clean package -DskipTests -B",
+				"MAVEN_THREADS":   "1C",
 			},
 			Description: "Java/Spring Boot 通用构建模板，支持 Maven + SonarQube + 质量门禁 + 制品上传",
 		},

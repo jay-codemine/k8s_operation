@@ -73,9 +73,7 @@ RUN mkdir -p /app/storage/logs /app/storage/artifacts /app/configs && \
 # 从编译阶段复制二进制
 COPY --from=builder /app/devops-be /app/devops-be
 
-# 复制配置模板和 SQL（方便初始化）
-COPY --chown=app:app configs/jenkins-templates/ /app/configs/jenkins-templates/
-COPY --chown=app:app configs/dockerfile-templates/ /app/configs/dockerfile-templates/
+# 注：Jenkins/模板文件由 Git 仓库直接提供，不需要打进镜像
 
 RUN chmod +x /app/devops-be && chown app:app /app/devops-be
 

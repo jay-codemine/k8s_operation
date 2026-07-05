@@ -571,7 +571,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ingressApi from '@/api/cluster/networking/ingress'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 import permissionStore from '@/stores/permission'
 
 const router = useRouter()

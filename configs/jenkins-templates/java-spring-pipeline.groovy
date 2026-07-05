@@ -100,7 +100,8 @@ spec:
         // 构建参数
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
         choice(name: 'JAVA_VERSION', choices: ['17', '21', '11', '8'], description: 'Java 版本（同时决定构建 JDK 和运行时镜像：8/11/17/21）')
-        string(name: 'MAVEN_GOALS', defaultValue: 'clean package -DskipTests -B', description: 'Maven 构建命令')
+        string(name: 'MAVEN_GOALS', defaultValue: 'clean package -DskipTests -B', description: 'Maven 构建命令（如 clean package / clean install / verify）')
+        string(name: 'MAVEN_THREADS', defaultValue: '1C', description: 'Maven 并行构建线程数（如 1C=每核1线程, 2C, 4=4线程）')
         string(name: 'BUILD_DIR', defaultValue: '', description: '构建目录（pom.xml 所在路径，留空则自动检测。支持：根目录、子目录如 backend/、多模块如 services/user-service/）')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
         string(name: 'REGISTRY_CREDENTIAL_ID', defaultValue: 'harbor-registry', description: '镜像仓库凭证ID')
@@ -349,34 +350,37 @@ spec:
                         // 多模块项目智能检测：如果根目录有父 pom 且包含 <modules>，
                         // 则使用 -pl <module> -am 从根 pom 构建（自动解析兄弟模块依赖）
                         def isMultiModule = false
-                        if (buildDir != '.' && fileExists('pom.xml')) {
+                        if (fileExists('pom.xml')) {
                             def hasModules = sh(script: "grep -c '<modules>' pom.xml 2>/dev/null || echo 0", returnStdout: true).trim()
                             if (hasModules.toInteger() > 0) {
                                 isMultiModule = true
-                                echo "[Build] 检测到多模块项目，使用 -pl ${buildDir} -am 从根 POM 构建"
+                                if (buildDir == '.') {
+                                    echo "[Build] 检测到多模块项目（根 POM），构建全部模块。如需只构建指定子模块，请设置 BUILD_DIR"
+                                } else {
+                                    echo "[Build] 检测到多模块项目，使用 -pl ${buildDir} -am 从根 POM 构建（自动解析兄弟模块依赖）"
+                                }
                             }
                         }
                         env.IS_MULTI_MODULE = isMultiModule.toString()
 
-                        if (buildDir == '.') {
-                            sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
-                        } else if (isMultiModule) {
-                            // 多模块：从根 pom 构建，-pl 指定目标模块，-am 自动构建其依赖模块
-                            sh "mvn package -pl ${buildDir} -am -DskipTests -B -T 1C -s ${env.MVN_SETTINGS}"
-                        } else {
-                            // 独立子项目：直接指定 pom.xml
-                            sh "mvn package -DskipTests -B -T 1C -s ${env.MVN_SETTINGS} -f ${buildDir}/pom.xml"
-                        }
+                        def mavenGoals = params.MAVEN_GOALS?.trim() ?: 'clean package -DskipTests -B'
+                        def mavenArgs = getMavenBuildArgs(buildDir, isMultiModule, mavenGoals)
+                        sh mavenArgs
                         archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true, allowEmptyArchive: true
 
                         // ==================== 智能查找 JAR 产出 ====================
-                        def searchBase = (buildDir == '.') ? 'target' : "${buildDir}/target"
-                        def jarFile = sh(script: "find ${searchBase} -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' 2>/dev/null | head -1", returnStdout: true).trim()
-
-                        if (!jarFile) {
-                            // 多模块项目：递归搜索所有 target 目录
-                            echo "[Build] 在 ${searchBase} 未直接找到 JAR，尝试递归搜索..."
+                        def jarFile = ''
+                        if (buildDir == '.' && isMultiModule) {
+                            // 根目录多模块全量构建：根 target/ 通常无 JAR，直接递归搜索子模块
+                            echo "[Build] 多模块全量构建，递归搜索子模块 JAR 产出..."
                             jarFile = sh(script: "find . -path '*/target/*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -path '*/.m2/*' -type f | sort -t/ -k3 | head -1", returnStdout: true).trim()
+                        } else {
+                            def searchBase = (buildDir == '.') ? 'target' : "${buildDir}/target"
+                            jarFile = sh(script: "find ${searchBase} -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' 2>/dev/null | head -1", returnStdout: true).trim()
+                            if (!jarFile) {
+                                echo "[Build] 在 ${searchBase} 未直接找到 JAR，尝试递归搜索..."
+                                jarFile = sh(script: "find . -path '*/target/*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -path '*/.m2/*' -type f | sort -t/ -k3 | head -1", returnStdout: true).trim()
+                            }
                         }
 
                         if (jarFile) {
@@ -403,13 +407,7 @@ spec:
                     script {
                         def buildDir = env.BUILD_DIR ?: '.'
                         def isMultiModule = (env.IS_MULTI_MODULE == 'true')
-                        if (buildDir == '.') {
-                            sh "mvn test -B -T 1C -s ${env.MVN_SETTINGS} -Dsurefire.useFile=false"
-                        } else if (isMultiModule) {
-                            sh "mvn test -pl ${buildDir} -am -B -T 1C -s ${env.MVN_SETTINGS} -Dsurefire.useFile=false"
-                        } else {
-                            sh "mvn test -B -T 1C -s ${env.MVN_SETTINGS} -f ${buildDir}/pom.xml -Dsurefire.useFile=false"
-                        }
+                        sh getMavenBuildArgs(buildDir, isMultiModule, 'test -B -Dsurefire.useFile=false')
                     }
                 }
             }
@@ -435,22 +433,21 @@ spec:
 
                         withSonarQubeEnv('SonarQube') {
                             container('maven') {
+                                def sonarBuildDir = env.BUILD_DIR ?: '.'
+                                def sonarIsMultiModule = (env.IS_MULTI_MODULE == 'true')
+                                def sonarBaseArgs = getMavenBuildArgs(sonarBuildDir, sonarIsMultiModule, 'sonar:sonar -Dmaven.main.skip=true -DskipTests -B')
                                 sh """
-                                    mvn sonar:sonar \
-                                        -s ${env.MVN_SETTINGS} \
-                                        -Dmaven.main.skip=true \
-                                        -DskipTests \
-                                        -Dsonar.projectKey=${projectKey} \
-                                        -Dsonar.projectName=${projectName} \
-                                        -Dsonar.projectVersion=${env.FINAL_TAG} \
-                                        -Dsonar.sources=${sources} \
-                                        -Dsonar.java.binaries=${binaries} \
-                                        -Dsonar.exclusions=${exclusions},**/target/**,**/build/** \
-                                        -Dsonar.scm.disabled=true \
-                                        -Dsonar.qualitygate.wait=false \
-                                        -Dsonar.threads=4 \
-                                        -Dsonar.links.ci=${env.BUILD_URL} \
-                                        -B
+                                    ${sonarBaseArgs} \\
+                                        -Dsonar.projectKey=${projectKey} \\
+                                        -Dsonar.projectName=${projectName} \\
+                                        -Dsonar.projectVersion=${env.FINAL_TAG} \\
+                                        -Dsonar.sources=${sources} \\
+                                        -Dsonar.java.binaries=${binaries} \\
+                                        -Dsonar.exclusions=${exclusions},**/target/**,**/build/** \\
+                                        -Dsonar.scm.disabled=true \\
+                                        -Dsonar.qualitygate.wait=false \\
+                                        -Dsonar.threads=4 \\
+                                        -Dsonar.links.ci=${env.BUILD_URL}
                                 """
                             }
                         }
@@ -740,6 +737,24 @@ DOCKERFILE_EOF
         }
         failure { script { callbackPlatform('FAILURE', 'Java 项目构建失败') } }
         aborted { script { callbackPlatform('ABORTED', '构建中止') } }
+    }
+}
+
+// ==================== Maven 构建命令生成（统一处理多模块/独立项目/子目录） ====================
+// 参数：
+//   buildDir     - pom.xml 所在目录（'.' 表示根目录）
+//   isMultiModule - 是否为多模块项目（根 pom.xml 含 <modules>）
+//   goals        - Maven 构建目标（如 'clean package -DskipTests -B'）
+// 根据 buildDir + isMultiModule 自动拼接 -pl/-am/-f 参数，消除各处重复的分支逻辑
+def getMavenBuildArgs(String buildDir, boolean isMultiModule, String goals) {
+    def settingsArg = "-s ${env.MVN_SETTINGS}"
+    def threadArg = params.MAVEN_THREADS?.trim() ?: '1C'
+    if (buildDir == '.') {
+        return "mvn ${goals} -T ${threadArg} ${settingsArg}"
+    } else if (isMultiModule) {
+        return "mvn ${goals} -pl ${buildDir} -am -T ${threadArg} ${settingsArg}"
+    } else {
+        return "mvn ${goals} -T ${threadArg} ${settingsArg} -f ${buildDir}/pom.xml"
     }
 }
 

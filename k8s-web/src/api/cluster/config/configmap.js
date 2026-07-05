@@ -131,7 +131,15 @@ const configmapApi = {
         'Content-Type': 'application/json'
       }
     })
-  }
+  },
+
+  /**
+   * JSON Patch 更新 ConfigMap
+   * @param {Object} data { namespace, name, patches: [{op, path, value}] }
+   */
+  patchJson(data) {
+    return http.post(`${K8S_BASE}/configmap/patch-json`, data)
+  },
 }
 
 export default configmapApi

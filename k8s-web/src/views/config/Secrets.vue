@@ -706,7 +706,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import secretApi from '@/api/cluster/config/secret'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 import permissionStore from '@/stores/permission'
 
 // ===== 操作权限控制 =====

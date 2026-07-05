@@ -716,7 +716,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import configmapApi from '@/api/cluster/config/configmap'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 import permissionStore from '@/stores/permission'
 import { useClusterStore } from '@/stores/cluster'
 const { confirm: showConfirm } = useConfirmDialog()

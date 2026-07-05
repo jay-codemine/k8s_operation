@@ -825,3 +825,32 @@ func (c *PodController) ApplyYaml(ctx *gin.Context) {
 		"message":   "YAML 应用成功",
 	})
 }
+
+// EventList godoc
+// @Summary 获取 Pod 事件列表
+// @Tags K8s Pod 管理
+// @Accept json
+// @Produce json
+// @Param body body requests.KubeEventListRequest true "查询参数"
+// @Success 200 {object} map[string]any
+// @Router /api/v1/k8s/pod/events [post]
+func (c *PodController) EventList(ctx *gin.Context) {
+	param := requests.NewKubeEventListRequest()
+	r := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidKubeEventListRequest); !ok {
+		return
+	}
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := services.NewServices()
+	items, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
+	if err != nil {
+		ctx.Error(err)
+		global.Logger.Error("pod.EventList error", zap.Error(err))
+	}
+	r.Success(gin.H{
+		"events":  items,
+		"next":    next,
+		"message": "已获取到最新的事件记录",
+	})
+}

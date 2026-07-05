@@ -3,34 +3,8 @@ import http from './http'
 import { API_BASE } from './paths'
 
 // =======================
-// K8s集群管理（真实后端接口）
-// 对应 Swagger：/api/v1/k8s/cluster/*
+// K8s集群管理 → 统一使用 @/api/cluster 或 @/api/platform/cluster
 // =======================
-
-// 创建 K8s 集群
-export const createK8sCluster = (clusterData) => {
-  return http.post(`${API_BASE}/k8s/cluster/create`, clusterData)
-}
-
-// 更新 K8s 集群
-export const updateK8sCluster = (id, clusterData) => {
-  return http.post(`${API_BASE}/k8s/cluster/update`, { id, ...clusterData })
-}
-
-// 删除 K8s 集群
-export const deleteK8sCluster = (id) => {
-  return http.post(`${API_BASE}/k8s/cluster/delete`, { id })
-}
-
-// 集群列表
-export const getK8sClusters = (params) => {
-  return http.get(`${API_BASE}/k8s/cluster/list`, { params })
-}
-
-// 初始化集群
-export const initK8sCluster = (data) => {
-  return http.post(`${API_BASE}/k8s/cluster/init`, data)
-}
 
 // =======================
 // CI/CD 流水线管理（统一使用 platform/pipeline.js）
@@ -97,6 +71,19 @@ export const deletePipelineTemplate = (id) => {
 
 // 部署到K8s（兼容旧接口）
 export { runPipeline as deployToK8s } from './platform/pipeline'
+
+// =======================
+// 快速接入
+// =======================
+
+/**
+ * 快速接入应用（一键创建 K8s 资源 + 接入流水线 + 可选首次部署）
+ * 支持 5 种工作负载: Deployment / StatefulSet / DaemonSet / CronJob / Job
+ * @param {Object} data - 接入参数
+ */
+export const quickOnboard = (data) => {
+  return http.post(`${API_BASE}/k8s/cicd/quick-onboard`, data)
+}
 
 // 获取部署历史（兼容旧接口）
 export { getPipelineHistory as getDeploymentHistory } from './platform/pipeline'
@@ -875,6 +862,38 @@ export const getBuildAgentsByScope = (scope) => {
  * @param {string} params.deployment - Deployment名称
  * @returns {Promise} 返回包含容器、镜像仓库等自动填充信息
  */
+/**
+ * 获取全量构建记录（跨流水线）
+ * @param {Object} params - 查询参数 {page, page_size, status, keyword, pipeline_id}
+ */
+export const getBuildRecords = (params = {}) => {
+  return http.get(`${PIPELINE_BASE}/build-records`, { params })
+}
+
+/**
+ * 获取构建统计数据
+ * @param {Object} params - {days: 7}
+ */
+export const getBuildStats = (params = {}) => {
+  return http.get(`${PIPELINE_BASE}/build-stats`, { params })
+}
+
+/**
+ * 发现命名空间下所有工作负载（5种类型）
+ * @param {Object} params - { cluster_id, namespace }
+ */
+export const discoverWorkloads = (params) => {
+  return http.get(`${PIPELINE_BASE}/discover-workloads`, { params })
+}
+
+/**
+ * 以应用为中心发现：工作负载 + 关联 ConfigMap/Secret/Service/PVC
+ * @param {Object} params - { cluster_id, namespace }
+ */
+export const discoverApps = (params) => {
+  return http.get(`${PIPELINE_BASE}/discover-apps`, { params })
+}
+
 export const discoverFromK8s = (params) => {
   return http.get(`${PIPELINE_BASE}/discover`, { params })
 }

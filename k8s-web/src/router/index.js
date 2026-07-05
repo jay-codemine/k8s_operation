@@ -140,6 +140,8 @@ const router = createRouter({
         {path: 'cicd/artifacts', component: () => import('@/views/cicd/Artifacts.vue')},
         // CICD 构建探针管理
         {path: 'cicd/agents', component: () => import('@/views/cicd/BuildAgents.vue')},
+        // CICD 快速接入
+        {path: 'cicd/quick-onboard', component: () => import('@/views/cicd/QuickOnboard.vue')},
 
         {
           path: 'images/repositories',

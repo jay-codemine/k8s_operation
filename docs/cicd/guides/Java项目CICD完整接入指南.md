@@ -372,6 +372,7 @@ Jenkins 使用 java-spring-pipeline.groovy 模板执行:
 | `PLATFORM_CALLBACK_URL` | 自动 | - | `config.yaml` | 平台回调地址 |
 | `JAVA_VERSION` | 可选 | `17` | `injectLanguageParams` | JDK 版本 |
 | `MAVEN_GOALS` | 可选 | `clean package -DskipTests -B` | `injectLanguageParams` | Maven 构建命令 |
+| `MAVEN_THREADS` | 可选 | `1C` | `injectLanguageParams` | Maven 并行构建线程数（如 `1C`/`2C`/`4`） |
 | `SKIP_TESTS` | 可选 | `false` | `injectLanguageParams` | 跳过单元测试 |
 | `ENABLE_SONAR` | 可选 | `true` | `injectLanguageParams` | SonarQube 代码扫描 |
 | `SONAR_QUALITY_GATE` | 可选 | `true` | `injectLanguageParams` | 质量门禁检查 |

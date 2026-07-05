@@ -261,8 +261,8 @@ export default {
         if (res.code === 0) {
           apps.value = (res.data?.list || res.data || []).map(p => ({
             ...p,
-            language: p.language || detectLanguage(p),
-            branch: p.branch || p.git_branch || 'main',
+            language: p.language_type || p.language || detectLanguage(p),
+            branch: p.git_branch || p.branch || 'main',
             git_repo: p.git_repo || p.git_url || '',
             lastRunStatus: p.last_run_status || p.lastRunStatus || '',
             lastRunTime: p.last_run_time || p.lastRunTime || '',

@@ -349,10 +349,10 @@ import serviceApi from '@/api/cluster/networking/service'
 import ingressApi from '@/api/cluster/networking/ingress'
 import pvApi from '@/api/cluster/storage/pv'
 import pvcApi from '@/api/cluster/storage/pvc'
-import storageclassApi from '@/api/cluster/storage/storageclass'
+import storageclassApi from '@/api/cluster/storage/storageclasses'
 import configmapApi from '@/api/cluster/config/configmap'
 import secretApi from '@/api/cluster/config/secret'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 
 const router = useRouter()
 const clusterStore = useClusterStore()

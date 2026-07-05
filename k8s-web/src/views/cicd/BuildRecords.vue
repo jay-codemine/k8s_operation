@@ -201,9 +201,8 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import http from '@/api/http'
-import { API_BASE } from '@/api/paths'
 import { getPipelines } from '@/api/platform/pipeline'
+import { getBuildRecords, getBuildStats } from '@/api/cicd'
 
 const router = useRouter()
 
@@ -246,8 +245,8 @@ const loadPipelines = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await http.get(`${API_BASE}/k8s/cicd/pipeline/build-stats`, { params: { days: 7 } })
-    const data = res.data?.data || res.data || {}
+    const res = await getBuildStats({ days: 7 })
+    const data = res?.data || res || {}
     statsData.value = data.stats || {}
     trendData.value = data.trend || []
   } catch (e) {
@@ -262,8 +261,8 @@ const loadRecords = async () => {
     if (statusFilter.value) params.status = statusFilter.value
     if (keyword.value) params.keyword = keyword.value
     if (pipelineFilter.value) params.pipeline_id = pipelineFilter.value
-    const res = await http.get(`${API_BASE}/k8s/cicd/pipeline/build-records`, { params })
-    const data = res.data?.data || res.data || {}
+    const res = await getBuildRecords(params)
+    const data = res?.data || res || {}
     records.value = data.list || []
     total.value = data.total || 0
   } catch (e) {
@@ -285,7 +284,7 @@ const exportRecords = () => {
   if (keyword.value) params.set('keyword', keyword.value)
   if (pipelineFilter.value) params.set('pipeline_id', pipelineFilter.value)
   const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  const url = `${API_BASE}/k8s/cicd/pipeline/build-records/export?${params.toString()}`
+  const url = `/api/v1/k8s/cicd/pipeline/build-records/export?${params.toString()}`
   fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     .then(r => r.blob())
     .then(blob => {

@@ -1818,7 +1818,7 @@ import {
 import { checkPipelineName, getJenkinsConfig } from '@/api/platform/pipeline.js'
 import { getClusterList } from '@/api/cluster.js'
 import { getNamespaces } from '@/api/namespace.js'
-import namespaceApi from '@/api/cluster/config/namespace'
+import namespaceApi from '@/api/cluster/namespaces'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import statefulsetsApi from '@/api/cluster/workloads/statefulsets'
 import daemonsetsApi from '@/api/cluster/workloads/daemonsets'
@@ -1883,18 +1883,6 @@ export default {
         description: '停止后再启动',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
       },
-      {
-        value: 'blueGreen',
-        name: '蓝绿部署',
-        description: '零停机切换',
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/><path d="M9 13l6-6"/></svg>'
-      },
-      {
-        value: 'canary',
-        name: '金丝雀',
-        description: '渐进式发布',
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>'
-      }
     ])
 
     // 集群列表
@@ -2081,6 +2069,7 @@ export default {
         { name: 'IMAGE_REPO', value: 'harbor.example.com/project/app-name', _hint: '镜像仓库地址（必填）' },
         { name: 'JAVA_VERSION', value: '17', _hint: 'Java 版本' },
         { name: 'MAVEN_GOALS', value: 'clean package -DskipTests -B', _hint: 'Maven 构建命令' },
+        { name: 'MAVEN_THREADS', value: '1C', _hint: 'Maven 并行构建线程数' },
         { name: 'GIT_CREDENTIAL_ID', value: 'gitee-id', _hint: 'Git 凭证 ID' },
       ],
       go: [

@@ -113,7 +113,7 @@ const podsApi = {
    * @param {number} [params.since_seconds=3600] - 最近N秒的事件
    */
   events(params) {
-    return http.post(`${K8S_BASE}/deployment/events`, {
+    return http.post(`${K8S_BASE}/pod/events`, {
       namespace: params.namespace,
       kind: 'Pod',
       name: params.name,
