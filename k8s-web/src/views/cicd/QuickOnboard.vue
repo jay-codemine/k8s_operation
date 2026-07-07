@@ -809,7 +809,11 @@ export default {
 
     goToPipeline() {
       this.showResult = false
-      this.$router.push('/cicd/pipelines')
+      if (this.result.pipeline_id) {
+        this.$router.push(`/cicd/pipelines/${this.result.pipeline_id}?tab=stages`)
+      } else {
+        this.$router.push('/cicd/pipelines')
+      }
     },
   },
 }

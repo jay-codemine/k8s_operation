@@ -91,6 +91,8 @@ spec:
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址（必填）')
         string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'DOCKERFILE_PATH', defaultValue: '', description: 'Dockerfile 路径（空则自动生成纯运行时 Dockerfile）')
+        booleanParam(name: 'USE_PROJECT_DOCKERFILE', defaultValue: false, description: '使用项目根目录的 Dockerfile（而非平台自动生成）')
+        string(name: 'EXTRA_REPOS', defaultValue: '', description: '额外依赖仓库列表（格式: url|path[|branch];url|path[|branch]）')
         string(name: 'LANGUAGE_TYPE', defaultValue: '', description: '平台注入的语言类型（用于交叉校验，不要手动修改）')
 
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
@@ -224,6 +226,38 @@ spec:
             post {
                 success { script { stageCallback('checkout', 'success') } }
                 failure { script { stageCallback('checkout', 'failed') } }
+            }
+        }
+
+        // ==================== 克隆额外依赖仓库（支持 go.mod replace 本地路径） ====================
+        stage('Clone Extra Repos') {
+            when { expression { return params.EXTRA_REPOS?.trim() } }
+            steps {
+                echo "=== 克隆私有依赖仓库 ==="
+                script {
+                    def extraRepos = params.EXTRA_REPOS.trim()
+                    extraRepos.split(';').each { entry ->
+                        def parts = entry.split('\\|')
+                        if (parts.size() >= 2) {
+                            def repoUrl = parts[0].trim()
+                            def targetPath = parts[1].trim()
+                            def branch = parts.size() >= 3 ? parts[2].trim() : 'master'
+                            echo "[Extra Repos] 克隆: ${repoUrl} → ${targetPath} (${branch})"
+                            try {
+                                sh "mkdir -p \$(dirname ${targetPath})"
+                                sh "git clone --depth 1 -b ${branch} ${repoUrl} ${targetPath}"
+                            } catch (Exception e) {
+                                echo "[Extra Repos] 克隆失败: ${repoUrl} (${branch})，尝试默认分支..."
+                                try {
+                                    sh "git clone --depth 1 ${repoUrl} ${targetPath}"
+                                } catch (Exception e2) {
+                                    echo "[Extra Repos] 最终克隆失败: ${repoUrl}，跳过"
+                                }
+                            }
+                        }
+                    }
+                    echo "[Extra Repos] ✅ 所有依赖仓库克隆完成"
+                }
             }
         }
 
@@ -557,6 +591,7 @@ spec:
 
         // ==================== 准备构建探针（从平台拉取） ====================
         stage('Prepare Build Agents') {
+            when { expression { return params.ENABLE_TRACING?.toBoolean() } }
             steps {
                 echo "=== 准备构建探针（自动拉取平台已启用 Agent） ==="
                 container('maven') {
@@ -596,6 +631,19 @@ spec:
                                                     env.AGENT_JAVA_OPTS += "${agent.env_value} "
                                                 }
                                             }
+                                            // 自动解压归档文件（tgz/zip），供项目自带 Dockerfile 直接 COPY
+                                            def lowerName = fileName.toLowerCase()
+                                            if (lowerName.endsWith('.tgz') || lowerName.endsWith('.tar.gz')) {
+                                                sh "mkdir -p ./${agentName} && tar -xzf ${localPath} -C ./${agentName}/"
+                                                echo "[Agents] 已解压 tgz → ./${agentName}/"
+                                            } else if (lowerName.endsWith('.zip')) {
+                                                sh "mkdir -p ./${agentName} && unzip -q ${localPath} -d ./${agentName}/"
+                                                echo "[Agents] 已解压 zip → ./${agentName}/"
+                                            } else {
+                                                sh "mkdir -p ./${agentName}"
+                                                sh "cp ${localPath} ./${agentName}/${fileName}"
+                                                echo "[Agents] 已复制单文件 → ./${agentName}/${fileName}"
+                                            }
                                             agentsPrepared << agentName
                                             platformAvailable = true
                                         }
@@ -632,9 +680,16 @@ spec:
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def javaVersion = params.JAVA_VERSION ?: '17'
 
-                        // 统一使用平台生成的 Dockerfile（忽略项目自带 Dockerfile）
+                        // Dockerfile 选择优先级：
+                        // 1. DOCKERFILE_PATH 显式指定 → 直接使用
+                        // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带
+                        // 3. 平台自动生成生产级 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            dockerfile = '.Dockerfile.runtime'
+                            if (params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                                dockerfile = 'Dockerfile'
+                                echo "[Build Image] 使用项目自带 Dockerfile"
+                            } else {
+                                dockerfile = '.Dockerfile.runtime'
                             def agentCopyLines = env.AGENT_DOCKER_COPY_LINES ?: ''
                             def agentEnvLines = env.AGENT_ENV_LINES ?: ''
                             def agentJavaOpts = env.AGENT_JAVA_OPTS?.trim() ?: ''
@@ -672,6 +727,7 @@ ${dockerfileContent}
 DOCKERFILE_EOF
 """
                             echo "[Build Image] 平台统一生成 Dockerfile（注入 ${agentCopyLines.count('COPY')} 个探针）"
+                            }
                         }
 
                         // 配置镜像仓库认证（writeFile 避免 shell 特殊字符 + sandbox 限制）

@@ -177,7 +177,7 @@
               </svg>
               重新部署
             </button>
-            <button 
+            <button
               v-if="selectedStage.type === 'deploy' && selectedStage.status === 'success'"
               class="action-btn rollback"
               @click="$emit('rollback', selectedStage)"
@@ -188,6 +188,25 @@
               </svg>
               回滚
             </button>
+            <!-- 查看Pod按钮：部署成功后显示 -->
+            <button
+              v-if="selectedStage.type === 'deploy' && selectedStage.status === 'success' && deployTarget.namespace && deployTarget.name"
+              :class="['action-btn', 'view-pods', { loading: podLoading }]"
+              @click="togglePodPanel"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="20" rx="3"/>
+                <path d="M2 8h20"/>
+                <path d="M8 2v6"/>
+                <circle cx="7" cy="13" r="1.5"/>
+                <circle cx="12" cy="13" r="1.5"/>
+                <circle cx="7" cy="18" r="1.5"/>
+                <circle cx="12" cy="18" r="1.5"/>
+                <line x1="18" y1="12" x2="18" y2="19"/>
+                <polyline points="15 16 18 19 21 16"/>
+              </svg>
+              {{ showPodPanel ? '收起Pod' : `查看Pod (${podCount})` }}
+            </button>
             <button class="action-btn logs" @click="$emit('view-logs', selectedStage)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -196,6 +215,107 @@
               查看日志
             </button>
           </div>
+
+          <!-- Pod 列表面板（部署成功后展示） -->
+          <transition name="slide-up">
+            <div v-if="showPodPanel && deployTarget.namespace && deployTarget.name" class="pod-panel">
+              <!-- 加载状态 -->
+              <div v-if="podLoading" class="pod-loading">
+                <div class="spinner-small"></div>
+                <span>正在获取最新 Pod...</span>
+              </div>
+              <!-- 错误状态 -->
+              <div v-else-if="podError" class="pod-error">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>{{ podError }}</span>
+                <button class="retry-link" @click="fetchDeployPods">重试</button>
+              </div>
+              <!-- Pod 列表 -->
+              <template v-else-if="pods.length > 0">
+                <div class="pod-panel-header">
+                  <div class="pod-panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="pod-icon">
+                      <rect x="2" y="2" width="20" height="20" rx="3"/><path d="M2 8h20"/><path d="M8 2v6"/>
+                    </svg>
+                    <span>关联 Pod</span>
+                    <span v-if="deployTarget.namespace" class="pod-ns-tag">{{ deployTarget.namespace }}</span>
+                    <span v-if="deployTarget.kind" class="pod-kind-tag">{{ deployTarget.kind }}</span>
+                    <span class="pod-count-badge">{{ pods.length }}</span>
+                  </div>
+                  <router-link
+                    v-if="props.clusterId && deployTarget.namespace"
+                    :to="`/c/${props.clusterId}/workloads/pods?namespace=${encodeURIComponent(deployTarget.namespace)}`"
+                    class="view-all-link"
+                  >
+                    Pod列表查看全部 →
+                  </router-link>
+                </div>
+                <div class="pod-list">
+                  <div
+                    v-for="(pod, idx) in pods"
+                    :key="pod.name"
+                    :class="['pod-item', { 'is-latest': idx === 0, [`status-${pod.status.toLowerCase()}`]: true }]"
+                  >
+                    <!-- 最新标记 -->
+                    <span v-if="idx === 0" class="latest-tag">最新</span>
+                    <!-- Pod 状态指示 -->
+                    <div :class="['pod-status-indicator', pod.status.toLowerCase()]"></div>
+                    <div class="pod-info">
+                      <div class="pod-name-row">
+                        <span class="pod-name" :title="pod.name">{{ pod.name }}</span>
+                        <span v-if="pod.nodeName !== '-'" class="pod-node">{{ pod.nodeName }}</span>
+                      </div>
+                      <div class="pod-meta-row">
+                        <span :class="['pod-status-text', pod.status.toLowerCase()]">{{ pod.status }}</span>
+                        <span class="pod-separator">|</span>
+                        <span>{{ readyText(pod) }}</span>
+                        <span class="pod-separator">|</span>
+                        <span>重启 {{ pod.restartCount }} 次</span>
+                        <span class="pod-separator">|</span>
+                        <span>{{ formatAge(pod.createdAt) }}</span>
+                        <span v-if="pod.podIP !== '-'" class="pod-separator">|</span>
+                        <span v-if="pod.podIP !== '-'" class="pod-ip">{{ pod.podIP }}</span>
+                      </div>
+                    </div>
+                    <div class="pod-actions">
+                      <button
+                        v-if="props.clusterId"
+                        class="pod-mini-btn"
+                        title="查看详情"
+                        @click="viewPodDetail(pod)"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                      <button class="pod-mini-btn" title="查看日志" @click="viewPodLogs(pod)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                      </button>
+                      <button class="pod-mini-btn" title="打开终端" @click="viewPodTerminal(pod)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="4 17 10 11 4 5"/>
+                          <line x1="12" y1="19" x2="20" y2="19"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <!-- 空状态 -->
+              <div v-else class="pod-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="20" rx="3"/><path d="M2 8h20"/><path d="M8 2v6"/>
+                </svg>
+                <span>该部署暂无运行中的 Pod</span>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </transition>
@@ -203,17 +323,97 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { useDeploymentPods } from '@/composables/useDeploymentPods'
+
+const router = useRouter()
+const { pods, loading: podLoading, error: podError, latestPod, fetchPods, formatAge } = useDeploymentPods()
 
 const props = defineProps({
   stages: { type: Array, default: () => [] },
-  canApprove: { type: Boolean, default: false }
+  canApprove: { type: Boolean, default: false },
+  pipeline: { type: Object, default: null },
+  clusterId: { type: [String, Number], default: '' }
 })
 
-defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs', 'rollback'])
+const emit = defineEmits(['approve', 'deploy', 'retry-deploy', 'view-logs', 'rollback', 'view-pods'])
 
 const activeTab = ref('all')
 const selectedStage = ref(null)
+const showPodPanel = ref(false)
+const podsFetched = ref(false)
+
+// 从 stage.deploy_info 或 pipeline 配置提取部署目标
+const deployTarget = computed(() => {
+  const stage = selectedStage.value
+  const p = props.pipeline
+  // 优先级：stage.deploy_info（实际部署信息）> pipeline 配置（静态目标）
+  const stageInfo = stage?.deploy_info || {}
+  return {
+    namespace: stageInfo.namespace || p?.target_namespace || '',
+    name: stageInfo.workload_name || stageInfo.WorkloadName || p?.target_workload_name || '',
+    kind: stageInfo.workload_kind || stageInfo.WorkloadKind || p?.target_workload_kind || 'Deployment',
+  }
+})
+
+const podCount = computed(() => pods.value.length)
+
+// Pod 面板切换 + 触发获取
+async function togglePodPanel() {
+  showPodPanel.value = !showPodPanel.value
+  if (showPodPanel.value && !podsFetched.value) {
+    await fetchDeployPods()
+  }
+}
+
+// 获取关联 Pod
+async function fetchDeployPods() {
+  const { namespace, name, kind } = deployTarget.value
+  if (!namespace || !name) return
+  await fetchPods(namespace, name, kind)
+  podsFetched.value = true
+}
+
+// Pod 列表中 ready 容器数
+function readyText(pod) {
+  const total = pod.containers.length
+  const ready = pod.containers.filter(c => c.ready).length
+  return `${ready}/${total} Ready`
+}
+
+// 跳转 Pod 详情
+function viewPodDetail(pod) {
+  if (!props.clusterId) return
+  router.push({
+    path: `/c/${props.clusterId}/workloads/pods`,
+    query: { namespace: pod.namespace, name: pod.name }
+  })
+}
+
+// 跳转 Pod 日志（通过 emit）
+function viewPodLogs(pod) {
+  emit('view-pods', { type: 'logs', pod })
+}
+
+// 跳转 Pod 终端（通过 emit）
+function viewPodTerminal(pod) {
+  emit('view-pods', { type: 'terminal', pod })
+}
+
+// 选中阶段时自动重置 Pod 面板
+watch(selectedStage, async (stage) => {
+  showPodPanel.value = false
+  podsFetched.value = false
+  // 如果选中部署成功阶段，自动拉取 Pod
+  if (stage?.type === 'deploy' && stage?.status === 'success') {
+    await nextTick()
+    if (deployTarget.value.namespace && deployTarget.value.name) {
+      showPodPanel.value = true
+      await fetchDeployPods()
+    }
+  }
+})
 
 // 统计 tabs
 const statsTabs = computed(() => {
@@ -808,5 +1008,299 @@ watch(runningStage, (stage) => {
 .slide-up-enter-from, .slide-up-leave-to {
   opacity: 0;
   transform: translateY(20px);
+}
+
+/* ---- Pod 列表面板 ---- */
+.pod-panel {
+  margin: 0 20px 20px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.pod-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.pod-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.pod-icon {
+  width: 18px;
+  height: 18px;
+  color: #3b82f6;
+}
+
+.pod-count-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.pod-ns-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #f0fdf4;
+  color: #059669;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-weight: 500;
+}
+
+.pod-kind-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.view-all-link {
+  font-size: 13px;
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.view-all-link:hover {
+  color: #2563eb;
+}
+
+.pod-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.pod-loading .spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.pod-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  background: #fef2f2;
+  border-radius: 8px;
+  margin: 16px;
+  font-size: 13px;
+  color: #991b1b;
+}
+
+.pod-error svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.retry-link {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.retry-link:hover {
+  text-decoration: underline;
+}
+
+.pod-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pod-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.pod-item:last-child {
+  border-bottom: none;
+}
+
+.pod-item:hover {
+  background: #f9fafb;
+}
+
+.pod-item.is-latest {
+  background: linear-gradient(90deg, #f0fdf4 0%, #fff 40%);
+}
+
+.pod-item.status-terminating {
+  opacity: 0.6;
+  background: #fefce8;
+}
+
+.latest-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #10b981;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.pod-status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pod-status-indicator.running { background: #10b981; }
+.pod-status-indicator.pending { background: #f59e0b; }
+.pod-status-indicator.failed { background: #ef4444; }
+.pod-status-indicator.succeeded { background: #6b7280; }
+.pod-status-indicator.unknown { background: #9ca3af; }
+.pod-status-indicator.terminating { background: #f59e0b; animation: pulse 1.5s infinite; }
+
+.pod-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pod-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.pod-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pod-node {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.pod-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.pod-separator {
+  color: #e5e7eb;
+}
+
+.pod-status-text { font-weight: 500; }
+.pod-status-text.running { color: #059669; }
+.pod-status-text.pending { color: #d97706; }
+.pod-status-text.failed { color: #dc2626; }
+.pod-status-text.succeeded { color: #6b7280; }
+.pod-status-text.terminating { color: #d97706; }
+
+.pod-ip {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.pod-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pod-mini-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.pod-mini-btn:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.pod-mini-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pod-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.pod-empty svg {
+  width: 36px;
+  height: 36px;
+  color: #d1d5db;
+}
+
+/* 查看 Pod 按钮 */
+.action-btn.view-pods {
+  background: #059669;
+  color: #fff;
+}
+
+.action-btn.view-pods:hover {
+  background: #047857;
+}
+
+.action-btn.view-pods.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 </style>

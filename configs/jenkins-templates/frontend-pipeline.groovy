@@ -85,6 +85,8 @@ spec:
         string(name: 'IMAGE_REPO', defaultValue: '', description: '镜像仓库地址（必填）')
         string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签（空则自动生成）')
         string(name: 'DOCKERFILE_PATH', defaultValue: '', description: 'Dockerfile 路径（空则自动生成纯运行时 Dockerfile）')
+        booleanParam(name: 'USE_PROJECT_DOCKERFILE', defaultValue: false, description: '使用项目根目录的 Dockerfile（而非平台自动生成）')
+        string(name: 'EXTRA_REPOS', defaultValue: '', description: '额外依赖仓库列表（格式: url|path[|branch];url|path[|branch]）')
         string(name: 'LANGUAGE_TYPE', defaultValue: '', description: '平台注入的语言类型')
 
         string(name: 'PIPELINE_ID', defaultValue: '', description: '平台流水线ID')
@@ -176,6 +178,97 @@ spec:
             post {
                 success { script { stageCallback('checkout', 'success') } }
                 failure { script { stageCallback('checkout', 'failed') } }
+            }
+        }
+
+        // ==================== 克隆额外依赖仓库 ====================
+        stage('Clone Extra Repos') {
+            when { expression { return params.EXTRA_REPOS?.trim() } }
+            steps {
+                echo "=== 克隆私有依赖仓库 ==="
+                script {
+                    def extraRepos = params.EXTRA_REPOS.trim()
+                    extraRepos.split(';').each { entry ->
+                        def parts = entry.split('\\|')
+                        if (parts.size() >= 2) {
+                            def repoUrl = parts[0].trim()
+                            def targetPath = parts[1].trim()
+                            def branch = parts.size() >= 3 ? parts[2].trim() : 'master'
+                            echo "[Extra Repos] 克隆: ${repoUrl} → ${targetPath} (${branch})"
+                            try {
+                                sh "mkdir -p \$(dirname ${targetPath})"
+                                sh "git clone --depth 1 -b ${branch} ${repoUrl} ${targetPath}"
+                            } catch (Exception e) {
+                                echo "[Extra Repos] 克隆失败: ${repoUrl} (${branch})，尝试默认分支..."
+                                try { sh "git clone --depth 1 ${repoUrl} ${targetPath}" }
+                                catch (Exception e2) { echo "[Extra Repos] 最终克隆失败: ${repoUrl}，跳过" }
+                            }
+                        }
+                    }
+                    echo "[Extra Repos] ✅ 所有依赖仓库克隆完成"
+                }
+            }
+        }
+
+        // ==================== 准备构建探针（SkyWalking/OpenTelemetry） ====================
+        stage('Prepare Build Agents') {
+            when { expression { return params.ENABLE_TRACING?.toBoolean() } }
+            steps {
+                echo "=== 准备 APM 探针 ==="
+                container('node') {
+                    script {
+                        def agentsDir = '.agents'
+                        sh "mkdir -p ${agentsDir}"
+                        env.AGENT_DOCKER_COPY_LINES = ''
+                        env.AGENT_ENV_LINES = ''
+                        def agentsPrepared = []
+
+                        def platformUrl = params.PLATFORM_CALLBACK_URL?.trim()
+                        if (platformUrl) {
+                            def apiBase = platformUrl.replaceAll('/api/v1/k8s/cicd/pipeline/callback.*', '/api/v1/k8s/cicd')
+                            def listUrl = "${apiBase}/agent/by-scope?scope=frontend"
+                            try {
+                                def response = sh(script: "wget -q -O - '${listUrl}' 2>/dev/null || curl -s '${listUrl}'", returnStdout: true).trim()
+                                if (response) {
+                                    def json = new groovy.json.JsonSlurper().parseText(response)
+                                    def agentList = json?.data?.list ?: json?.list ?: []
+                                    agentList.each { agent ->
+                                        def fileName = agent.file_name ?: "${agent.name}"
+                                        def destPath = agent.docker_copy_dest ?: "/app/${fileName}"
+                                        def localDir = "${agentsDir}/${agent.name}"
+                                        def localPath = "${localDir}/${fileName}"
+                                        sh "mkdir -p ${localDir}"
+                                        def downloadUrl = "${apiBase}/agent/download?name=${agent.name}"
+                                        def dlResult = sh(script: "wget -q -O '${localPath}' '${downloadUrl}' || curl -s -o '${localPath}' '${downloadUrl}'", returnStatus: true)
+                                        if (dlResult == 0) {
+                                            env.AGENT_DOCKER_COPY_LINES += "COPY ${localPath} ${destPath}\n"
+                                            if (agent.env_key && agent.env_value) {
+                                                env.AGENT_ENV_LINES += "ENV ${agent.env_key}=\"${agent.env_value}\"\n"
+                                            }
+                                            // 自动解压归档文件（tgz/zip），供项目自带 Dockerfile 直接 COPY
+                                            def lowerName = fileName.toLowerCase()
+                                            if (lowerName.endsWith('.tgz') || lowerName.endsWith('.tar.gz')) {
+                                                sh "mkdir -p ./${agent.name} && tar -xzf ${localPath} -C ./${agent.name}/"
+                                                echo "[Agents] 已解压 tgz → ./${agent.name}/"
+                                            } else if (lowerName.endsWith('.zip')) {
+                                                sh "mkdir -p ./${agent.name} && unzip -q ${localPath} -d ./${agent.name}/"
+                                                echo "[Agents] 已解压 zip → ./${agent.name}/"
+                                            } else {
+                                                sh "mkdir -p ./${agent.name}"
+                                                sh "cp ${localPath} ./${agent.name}/${fileName}"
+                                                echo "[Agents] 已复制单文件 → ./${agent.name}/${fileName}"
+                                            }
+                                            agentsPrepared << agent.name
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                echo "[Agents] 平台 API 不可用: ${e.message}"
+                            }
+                        }
+                        echo "[Agents] === 准备完成: ${agentsPrepared.join(', ') ?: '无'} ==="
+                    }
+                }
             }
         }
 
@@ -299,9 +392,16 @@ spec:
                         def dockerfile = params.DOCKERFILE_PATH?.trim()
                         def outputDir = params.BUILD_OUTPUT_DIR ?: 'dist'
 
-                        // 统一使用平台生成的生产级 Dockerfile（Gzip + 缓存 + 安全头 + API 代理 + WebSocket）
+                        // Dockerfile 选择优先级：
+                        // 1. DOCKERFILE_PATH 显式指定 → 直接使用
+                        // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带
+                        // 3. 平台自动生成生产级 Dockerfile（Gzip + 缓存 + 安全头 + API 代理 + WebSocket）
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            dockerfile = '.Dockerfile.runtime'
+                            if (params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                                dockerfile = 'Dockerfile'
+                                echo "[Build Image] 使用项目自带 Dockerfile"
+                            } else {
+                                dockerfile = '.Dockerfile.runtime'
 
                             // 生产级 Nginx 配置
                             writeFile file: 'nginx-app.conf', text: """\
@@ -385,6 +485,8 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://localhost/health || exit 1
 CMD ["nginx", "-g", "daemon off;"]
 """
+                            }
+                            echo "[Build Image] 平台统一生成 Dockerfile（Nginx + Gzip + 缓存 + 安全头）"
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]

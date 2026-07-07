@@ -733,6 +733,23 @@
                 </div>
               </div>
 
+              <!-- SkyWalking / OpenTelemetry 链路跟踪开关 -->
+              <div class="form-group">
+                <div class="toggle-row">
+                  <div class="toggle-info">
+                    <label class="form-label">
+                      链路跟踪 (SkyWalking / OpenTelemetry)
+                      <span class="env-tag" style="background:#7c3aed;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">APM</span>
+                    </label>
+                    <p class="toggle-desc">启用后自动注入探针（Java Agent / Go SDK），将链路数据上报到 SkyWalking 或 OpenTelemetry Collector</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="pipelineData.enable_tracing" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
               <!-- ==================== 构建核心参数 ==================== -->
               <div class="build-params-section">
                 <div class="section-divider">
@@ -862,8 +879,26 @@
                     Dockerfile 策略
                   </label>
                   <div class="dockerfile-mode-selector">
+                    <!-- 选项1：项目自带 Dockerfile -->
                     <div
-                      :class="['df-mode-card', 'active']"
+                      :class="['df-mode-card', { active: dockerfileMode === 'project' }]"
+                      @click="dockerfileMode = 'project'"
+                    >
+                      <div class="df-mode-icon project">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                      </div>
+                      <div class="df-mode-info">
+                        <div class="df-mode-title">项目自带 Dockerfile</div>
+                        <div class="df-mode-desc">使用代码仓库中的 Dockerfile，保持构建逻辑自主可控</div>
+                      </div>
+                      <div class="df-mode-check" v-if="dockerfileMode === 'project'">&#10003;</div>
+                    </div>
+                    <!-- 选项2：平台统一生成 -->
+                    <div
+                      :class="['df-mode-card', { active: dockerfileMode === 'platform' }]"
+                      @click="dockerfileMode = 'platform'"
                     >
                       <div class="df-mode-icon platform">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -876,18 +911,40 @@
                         <div class="df-mode-title">平台统一生成<span class="df-badge recommend">推荐</span></div>
                         <div class="df-mode-desc">由平台生成生产级最优 Dockerfile，忽略项目自带文件</div>
                       </div>
-                      <div class="df-mode-check">&#10003;</div>
+                      <div class="df-mode-check" v-if="dockerfileMode === 'platform'">&#10003;</div>
                     </div>
                   </div>
 
-                  <!-- 策略说明面板 -->
-                  <div class="df-info-panel">
+                  <!-- 选项1说明：平台统一生成 -->
+                  <div v-if="dockerfileMode === 'platform'" class="df-info-panel">
                     <div class="df-info-content">
                       <div class="df-info-title">&#129302; 平台统一生成说明</div>
                       <div class="df-info-steps">
                         <div class="df-step"><span class="df-step-num">1</span>平台根据 {{ dockerfileLangLabel }} 语言类型自动生成生产级 Dockerfile</div>
                         <div class="df-step"><span class="df-step-num">2</span>自动注入「构建探针管理」中已启用的 Agent（如 SkyWalking / OpenTelemetry）</div>
                         <div class="df-step"><span class="df-step-num">3</span>阿里云镜像源加速 &bull; 非 root 用户 &bull; 最小化镜像层 &bull; 生产级 JVM 参数</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 选项2说明：项目自带 Dockerfile -->
+                  <div v-if="dockerfileMode === 'project'" class="df-info-panel project-panel">
+                    <div class="df-info-content">
+                      <div class="df-info-title">&#128193; 项目自带 Dockerfile 说明</div>
+                      <div class="df-info-steps">
+                        <div class="df-step"><span class="df-step-num">1</span>平台将使用代码仓库根目录下的 <code>Dockerfile</code></div>
+                        <div class="df-step"><span class="df-step-num">2</span>构建时不再自动生成，完全由项目维护者控制构建逻辑</div>
+                        <div class="df-step"><span class="df-step-num">3</span>适用于已有 Dockerfile 的项目，或需要自定义构建流程的场景</div>
+                      </div>
+                      <!-- 自定义 Dockerfile 路径 -->
+                      <div class="df-custom-path" style="margin-top:12px;">
+                        <label style="font-size:13px;font-weight:500;color:#374151;">自定义路径（留空则使用根目录 Dockerfile）</label>
+                        <input
+                          v-model="customDockerfilePath"
+                          type="text"
+                          placeholder="例如: docker/Dockerfile 或 Dockerfile.prod"
+                          style="width:100%;margin-top:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;"
+                        />
                       </div>
                     </div>
                   </div>
@@ -1038,6 +1095,96 @@
                     </svg>
                     添加环境变量
                   </button>
+                </div>
+              </div>
+
+              <!-- 依赖仓库管理 -->
+              <div class="env-section">
+                <div class="env-section-header" @click="showDependencyRepos = !showDependencyRepos">
+                  <div class="env-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                      <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                    依赖仓库
+                    <span class="badge">{{ dependencyRepos.length }}</span>
+                    <span v-if="dependencyRepos.length > 0" style="font-size:11px;color:#059669;margin-left:4px;">→ EXTRA_REPOS</span>
+                  </div>
+                  <svg :class="['chevron', { expanded: showDependencyRepos }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </div>
+
+                <div v-show="showDependencyRepos" class="dependency-repos-container">
+                  <div class="df-hint" style="margin-bottom:12px;font-size:12px;color:#6b7280;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
+                      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                    </svg>
+                    配置 Go 项目的私有依赖库（go.mod replace），CI 构建时自动 clone 到指定路径。格式将自动生成 <code>EXTRA_REPOS</code> 环境变量
+                  </div>
+
+                  <div v-for="(repo, index) in dependencyRepos" :key="index" class="dep-repo-row">
+                    <div class="dep-repo-fields">
+                      <input
+                        v-model="repo.url"
+                        type="text"
+                        class="form-input dep-repo-url"
+                        placeholder="Git 仓库地址"
+                      />
+                      <span class="dep-repo-arrow">→</span>
+                      <input
+                        v-model="repo.path"
+                        type="text"
+                        class="form-input dep-repo-path"
+                        placeholder="克隆到 ../library/xxx"
+                      />
+                      <input
+                        v-model="repo.branch"
+                        type="text"
+                        class="form-input dep-repo-branch"
+                        placeholder="分支/tag (默认master)"
+                      />
+                    </div>
+                    <button type="button" class="btn-icon-sm danger" @click="removeDependencyRepo(index)" title="删除">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- 空状态提示 -->
+                  <div v-if="dependencyRepos.length === 0" class="dep-empty">
+                    <span>暂无依赖仓库配置。如果项目 go.mod 中有 replace 本地路径，请添加对应依赖仓库。</span>
+                  </div>
+
+                  <div class="dep-repo-actions">
+                    <button type="button" class="btn-add-env" @click="addDependencyRepo">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      添加依赖仓库
+                    </button>
+                    <button
+                      v-if="detectedDependencies.length > 0 && dependencyRepos.length === 0"
+                      type="button"
+                      class="btn-add-env"
+                      style="background:#f0fdf4;color:#059669;border-color:#86efac;margin-left:8px;"
+                      @click="applyDetectedDependencies"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      导入检测到的 {{ detectedDependencies.length }} 个依赖
+                    </button>
+                  </div>
+
+                  <!-- 生成的 EXTRA_REPOS 预览 -->
+                  <div v-if="dependencyRepos.length > 0" class="dep-preview">
+                    <span class="dep-preview-label">EXTRA_REPOS =</span>
+                    <code class="dep-preview-value">{{ extraReposPreview }}</code>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1815,7 +1962,7 @@ import {
   validateResourceConfig,
   discoverFromK8s
 } from '@/api/cicd.js'
-import { checkPipelineName, getJenkinsConfig } from '@/api/platform/pipeline.js'
+import { checkPipelineName, getJenkinsConfig, runPipeline } from '@/api/platform/pipeline.js'
 import { getClusterList } from '@/api/cluster.js'
 import { getNamespaces } from '@/api/namespace.js'
 import namespaceApi from '@/api/cluster/namespaces'
@@ -1970,15 +2117,20 @@ export default {
     
     // Dockerfile 模式标签
     const dockerfileModeLabel = computed(() => {
-      return '平台统一生成'
+      return dockerfileMode.value === 'project' ? '项目自带' : '平台统一生成'
     })
-    
+
+    // 自定义 Dockerfile 路径（项目自带模式）
+    const customDockerfilePath = ref('')
+
     // Dockerfile 内容生成
     const dockerfileContent = computed(() => {
+      // 项目自带模式：不展示平台生成的 Dockerfile
+      if (dockerfileMode.value === 'project') {
+        const path = customDockerfilePath.value || 'Dockerfile'
+        return `# 使用项目自带 Dockerfile\n# 路径: ${path}\n# 构建时将使用代码仓库中的该文件\n# 请确保该文件存在于代码仓库中`
+      }
       const lang = pipelineData.value.language_type
-      
-      // 统一使用平台生成的 Dockerfile
-      // 根据语言生成Dockerfile
       const dockerfiles = {
         java: `# 多阶段构建：Java Spring Boot 应用\n# 阶段1：构建\nFROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/maven:3.9-eclipse-temurin-17 AS builder\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:go-offline -B\nCOPY src ./src\nRUN mvn clean package -DskipTests\n\n# 阶段2：运行（jammy 基底，兼容 snappy-java/Netty 等原生库）\nFROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/eclipse-temurin:17-jre-jammy\nWORKDIR /app\nCOPY --from=builder /app/target/*.jar app.jar\nRUN groupadd -r appgroup && useradd -r -g appgroup -d /app appuser\nRUN mkdir -p /app/logs && chown -R appuser:appgroup /app\nUSER appuser\nEXPOSE 8080\nENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -Djava.security.egd=file:/dev/./urandom"\nENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]`,
         go: `# 多阶段构建：Go 应用\n# 阶段1：构建\nFROM golang:1.24-alpine AS builder\nWORKDIR /app\nCOPY go.mod go.sum ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 GOOS=linux go build -o /app/main .\n\n# 阶段2：运行\nFROM alpine:3.19\nWORKDIR /app\nCOPY --from=builder /app/main .\nRUN addgroup -S appgroup && adduser -S appuser -G appgroup\nUSER appuser\nEXPOSE 8080\nENTRYPOINT ["./main"]`,
@@ -1986,7 +2138,6 @@ export default {
         python: `# Python 应用\nFROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nRUN addgroup --system appgroup && adduser --system --group appuser\nUSER appuser\nEXPOSE 8000\nCMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]`,
         custom: `# 自定义应用\n# 请根据实际需求修改此 Dockerfile\nFROM ubuntu:22.04\nWORKDIR /app\nCOPY . .\nRUN echo "请添加构建命令"\nEXPOSE 8080\nCMD ["echo", "请替换为实际启动命令"]`
       }
-      
       return dockerfiles[lang] || dockerfiles.custom
     })
     
@@ -2116,6 +2267,7 @@ export default {
       env_vars: [],
       enable_sonar: false,  // SonarQube 代码质量扫描开关（Java 项目默认启用）
       enable_artifact_upload: false,  // 制品上传到平台制品库开关
+      enable_tracing: false,  // SkyWalking/OpenTelemetry 链路跟踪开关
 
       deploy_config: {
         replicas: 1,
@@ -2258,6 +2410,55 @@ export default {
 
     const removeEnvVar = (index) => {
       pipelineData.value.env_vars.splice(index, 1)
+    }
+
+    // ==================== 依赖仓库管理 ====================
+    const showDependencyRepos = ref(false)
+    const dependencyRepos = ref([])
+    // 从 go.mod replace 自动检测到的依赖
+    const detectedDependencies = ref([])
+
+    const addDependencyRepo = () => {
+      dependencyRepos.value.push({ url: '', path: '', branch: '' })
+    }
+
+    const removeDependencyRepo = (index) => {
+      dependencyRepos.value.splice(index, 1)
+    }
+
+    // 预览生成的 EXTRA_REPOS 值
+    const extraReposPreview = computed(() => {
+      return dependencyRepos.value
+        .filter(r => r.url && r.path)
+        .map(r => {
+          let entry = `${r.url}|${r.path}`
+          if (r.branch) entry += `|${r.branch}`
+          return entry
+        })
+        .join(';')
+    })
+
+    // 生成 EXTRA_REPOS 环境变量字符串
+    const buildExtraRepos = () => {
+      return extraReposPreview.value
+    }
+
+    // 从检测结果导入依赖仓库
+    const applyDetectedDependencies = () => {
+      dependencyRepos.value = detectedDependencies.value.map(d => ({
+        url: d.url || '',
+        path: d.path || '',
+        branch: d.branch || ''
+      }))
+    }
+
+    /** 根据 repoUrl 的 Git 主机推断依赖仓库地址 */
+    const guessDependencyUrl = (localPath, repoUrl) => {
+      try {
+        const base = repoUrl.replace(/\.git$/, '').replace(/\/[^/]+$/, '')
+        const name = localPath.split('/').pop()
+        return `${base}/${name}.git`
+      } catch { return '' }
     }
 
     // 资源配置
@@ -2618,16 +2819,22 @@ export default {
         }
         const response = await createPipeline(submitData)
         if (response.code === 0) {
+          const newId = response.data?.id || 0
           // 处理警告信息
           if (response.data?.warnings?.length) {
             const warnMsg = '应用创建成功！但有以下注意事项：\n\n' +
               response.data.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n') +
               '\n\n建议确认后再进行构建。'
             alert(warnMsg)
-          } else {
-            alert('应用创建成功！')
           }
-          router.push('/cicd/pipelines')
+          // 如果启用了自动部署，触发首次构建并跳转到执行阶段页
+          if (submitData.auto_deploy && newId) {
+            autoTriggerBuild(newId)
+          } else if (newId) {
+            router.push(`/cicd/pipelines/${newId}?tab=stages`)
+          } else {
+            router.push('/cicd/pipelines')
+          }
         } else {
           alert(response.msg || '创建失败')
         }
@@ -2658,6 +2865,7 @@ export default {
           if (idx >= 0) { envVars[idx].value = String(val) }
           else { envVars.push({ name: key, value: String(val) }) }
         }
+        injectEnv('ENABLE_TRACING', submitData.enable_tracing ? 'true' : 'false')
         injectEnv('IMAGE_REPO', submitData.image_repo)
         if (submitData.image_tag) injectEnv('IMAGE_TAG', submitData.image_tag)
         injectEnv('SKIP_TESTS', submitData.skip_tests ? 'true' : 'false')
@@ -2673,8 +2881,19 @@ export default {
             injectEnv('MAVEN_PRIVATE_REPO_URL', submitData.maven_private_repo_url)
           }
         }
-        // Dockerfile 策略：统一使用平台生成
-        injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
+        // Dockerfile 策略
+        if (dockerfileMode.value === 'project') {
+          // 项目自带 Dockerfile：传路径（空则使用根目录 Dockerfile）
+          const dfPath = customDockerfilePath.value || 'Dockerfile'
+          injectEnv('DOCKERFILE_PATH', dfPath)
+          injectEnv('USE_PROJECT_DOCKERFILE', 'true')
+        } else {
+          // 平台统一生成
+          injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
+        }
+        // 依赖仓库 → EXTRA_REPOS
+        const extraRepos = buildExtraRepos()
+        if (extraRepos) injectEnv('EXTRA_REPOS', extraRepos)
         if (submitData.git_credential_id) injectEnv('GIT_CREDENTIAL_ID', submitData.git_credential_id)
 
         // SonarQube 开关同步
@@ -2737,12 +2956,17 @@ export default {
 
         if (response.code === 0) {
           if (!isEdit) {
-            // 新建成功：记录 ID 并显示拓扑页
+            // 新建成功：记录 ID
             createdPipelineId.value = response.data?.id || 0
             if (response.data?.warnings?.length) {
               createWarnings.value = response.data.warnings
             }
-            showTopology()
+            // 如果启用了自动部署，触发首次构建并跳转到执行阶段页
+            if (pipelineData.value.auto_deploy && createdPipelineId.value) {
+              autoTriggerBuild(createdPipelineId.value)
+            } else {
+              showTopology()
+            }
           } else {
             // 编辑模式：保存成功后跳转到流水线详情的执行阶段页
             if (response.data?.warnings?.length) {
@@ -3065,6 +3289,16 @@ export default {
           // Dockerfile 检测结果（后端未实现检测时默认为未知）
           const hasDockerfile = false
 
+          // 检测 go.mod replace 依赖（仅 Go 项目）
+          detectedDependencies.value = []
+          if (language === 'Go' && response.data?.go_mod_replaces) {
+            detectedDependencies.value = response.data.go_mod_replaces.map(r => ({
+              url: r.repo_url || guessDependencyUrl(r.path, repoUrl),
+              path: r.path || `../library/${r.module.split('/').pop()}`,
+              branch: r.version || '',
+            }))
+          }
+
           repoDetectionResult.value = {
             repoType,
             defaultBranch: pipelineData.value.git_branch,
@@ -3242,7 +3476,24 @@ export default {
     }
 
     const viewPipelineDetail = () => {
-      router.push(`/cicd/pipelines/${createdPipelineId.value}`)
+      router.push(`/cicd/pipelines/${createdPipelineId.value}?tab=stages`)
+    }
+
+    /**
+     * 自动触发首次构建 + 跳转到执行阶段页
+     * 用于创建应用时启用自动部署的场景
+     * @param {number} pipelineId - 流水线 ID
+     */
+    const autoTriggerBuild = async (pipelineId) => {
+      try {
+        // 跳转到执行阶段页（立即跳转，构建在后端异步触发）
+        router.push(`/cicd/pipelines/${pipelineId}?tab=stages`)
+        // 异步触发首次构建
+        await runPipeline(pipelineId)
+      } catch (e) {
+        console.error('自动触发构建失败:', e)
+        // 跳转已发生，静默处理错误即可
+      }
     }
 
     // 部署预览 computed
@@ -3325,6 +3576,7 @@ export default {
       quickTemplates,
       dockerfileMode,
       dockerfileLangLabel,
+      customDockerfilePath,
       templateFileMap,
       tagStrategy,
       setTagStrategy,
@@ -3391,6 +3643,7 @@ export default {
       showTopology,
       goToPipelineList,
       viewPipelineDetail,
+      autoTriggerBuild,
       deployPreview,
       // 方法
       nextStep,
@@ -3399,6 +3652,13 @@ export default {
       toggleEnvVars,
       addEnvVar,
       removeEnvVar,
+      showDependencyRepos,
+      dependencyRepos,
+      detectedDependencies,
+      addDependencyRepo,
+      removeDependencyRepo,
+      applyDetectedDependencies,
+      extraReposPreview,
       toggleResources,
       increaseReplicas,
       decreaseReplicas,
@@ -4204,6 +4464,106 @@ export default {
 .btn-add-env svg {
   width: 18px;
   height: 18px;
+}
+
+/* ---- 依赖仓库管理 ---- */
+.dependency-repos-container {
+  padding: 8px 0 12px;
+}
+
+.dep-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dep-repo-fields {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dep-repo-url {
+  flex: 2;
+  min-width: 160px;
+}
+
+.dep-repo-path {
+  flex: 1.5;
+  min-width: 120px;
+}
+
+.dep-repo-branch {
+  flex: 1;
+  min-width: 100px;
+}
+
+.dep-repo-arrow {
+  font-size: 14px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.dep-repo-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.dep-empty {
+  padding: 14px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px dashed #d1d5db;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.dep-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0fdf4;
+  border-radius: 8px;
+  border: 1px solid #86efac;
+  font-size: 12px;
+}
+
+.dep-preview-label {
+  color: #059669;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dep-preview-value {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  color: #065f46;
+  word-break: break-all;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.df-hint {
+  padding: 10px 14px;
+  background: #eff6ff;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  line-height: 1.5;
+}
+
+.df-hint code {
+  background: #dbeafe;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #1e40af;
 }
 
 /* ==================== 部署策略卡片 ==================== */
@@ -5512,6 +5872,21 @@ export default {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.df-info-panel.project-panel {
+  border: 1px solid #fef08a;
+}
+
+.df-info-panel.project-panel .df-info-content {
+  background: #fffbeb;
+  border-color: #fef08a;
+}
+
+.df-custom-path input:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
 }
 
 .df-info-text {

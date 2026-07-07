@@ -44,13 +44,15 @@ spec:
             - sh
             - -c
             - |
-              chown -R 1000:1000 /app/storage/logs /app/storage/artifacts
-              chmod -R 775 /app/storage/logs /app/storage/artifacts
+              chown -R 1000:1000 /app/storage/logs /app/storage/artifacts /app/storage/agents
+              chmod -R 775 /app/storage/logs /app/storage/artifacts /app/storage/agents
           volumeMounts:
             - name: log-storage
               mountPath: /app/storage/logs
             - name: artifact-storage
               mountPath: /app/storage/artifacts
+            - name: agent-storage
+              mountPath: /app/storage/agents
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
@@ -312,6 +314,9 @@ spec:
             # 日志存储（PVC 持久化，可选）
             - name: log-storage
               mountPath: /app/storage/logs
+            # 构建探针存储（PVC 持久化）
+            - name: agent-storage
+              mountPath: /app/storage/agents
 
       # ==================== 卷定义 ====================
       volumes:
@@ -328,3 +333,6 @@ spec:
         - name: log-storage
           persistentVolumeClaim:
             claimName: k8soperation-logs
+        - name: agent-storage
+          persistentVolumeClaim:
+            claimName: k8soperation-agents

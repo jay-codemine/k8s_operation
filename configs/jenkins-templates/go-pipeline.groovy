@@ -338,6 +338,68 @@ spec:
             }
         }
 
+        // ==================== 准备构建探针（SkyWalking/OpenTelemetry） ====================
+        stage('Prepare Build Agents') {
+            when { expression { return params.ENABLE_TRACING?.toBoolean() } }
+            steps {
+                echo "=== 准备 APM 探针 ==="
+                container('golang') {
+                    script {
+                        def agentsDir = '.agents'
+                        sh "mkdir -p ${agentsDir}"
+                        env.AGENT_DOCKER_COPY_LINES = ''
+                        env.AGENT_ENV_LINES = ''
+                        def agentsPrepared = []
+
+                        def platformUrl = params.PLATFORM_CALLBACK_URL?.trim()
+                        if (platformUrl) {
+                            def apiBase = platformUrl.replaceAll('/api/v1/k8s/cicd/pipeline/callback.*', '/api/v1/k8s/cicd')
+                            def listUrl = "${apiBase}/agent/by-scope?scope=go"
+                            try {
+                                def response = sh(script: "wget -q -O - '${listUrl}' 2>/dev/null || curl -s '${listUrl}'", returnStdout: true).trim()
+                                if (response) {
+                                    def json = new groovy.json.JsonSlurper().parseText(response)
+                                    def agentList = json?.data?.list ?: json?.list ?: []
+                                    agentList.each { agent ->
+                                        def fileName = agent.file_name ?: "${agent.name}"
+                                        def destPath = agent.docker_copy_dest ?: "/app/${fileName}"
+                                        def localDir = "${agentsDir}/${agent.name}"
+                                        def localPath = "${localDir}/${fileName}"
+                                        sh "mkdir -p ${localDir}"
+                                        def downloadUrl = "${apiBase}/agent/download?name=${agent.name}"
+                                        def dlResult = sh(script: "wget -q -O '${localPath}' '${downloadUrl}' || curl -s -o '${localPath}' '${downloadUrl}'", returnStatus: true)
+                                        if (dlResult == 0) {
+                                            env.AGENT_DOCKER_COPY_LINES += "COPY ${localPath} ${destPath}\n"
+                                            if (agent.env_key && agent.env_value) {
+                                                env.AGENT_ENV_LINES += "ENV ${agent.env_key}=\"${agent.env_value}\"\n"
+                                            }
+                                            // 自动解压归档文件（tgz/zip），供项目自带 Dockerfile 直接 COPY
+                                            def lowerName = fileName.toLowerCase()
+                                            if (lowerName.endsWith('.tgz') || lowerName.endsWith('.tar.gz')) {
+                                                sh "mkdir -p ./${agent.name} && tar -xzf ${localPath} -C ./${agent.name}/"
+                                                echo "[Agents] 已解压 tgz → ./${agent.name}/"
+                                            } else if (lowerName.endsWith('.zip')) {
+                                                sh "mkdir -p ./${agent.name} && unzip -q ${localPath} -d ./${agent.name}/"
+                                                echo "[Agents] 已解压 zip → ./${agent.name}/"
+                                            } else {
+                                                sh "mkdir -p ./${agent.name}"
+                                                sh "cp ${localPath} ./${agent.name}/${fileName}"
+                                                echo "[Agents] 已复制单文件 → ./${agent.name}/${fileName}"
+                                            }
+                                            agentsPrepared << agent.name
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                echo "[Agents] 平台 API 不可用: ${e.message}"
+                            }
+                        }
+                        echo "[Agents] === 准备完成: ${agentsPrepared.join(', ') ?: '无'} ==="
+                    }
+                }
+            }
+        }
+
         stage('Compile Check') {
             steps {
                 echo "=== 编译检查（直接产出最终二进制，Build Image 复用，避免重复编译） ==="

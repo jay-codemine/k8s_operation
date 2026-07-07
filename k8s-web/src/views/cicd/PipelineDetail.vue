@@ -444,12 +444,15 @@
             <PipelineHorizontalView
               :stages="pipelineStages"
               :pipeline-id="pipelineId"
+              :pipeline="pipeline"
+              :cluster-id="pipeline.target_cluster_id"
               :can-approve="canApprove"
               @approve="handleApproveStage"
               @deploy="handleDeployStage"
               @retry-deploy="handleRetryDeploy"
               @rollback="handleRollback"
               @view-logs="activeTab = 'logs'; loadLogs()"
+              @view-pods="handleViewPods"
             />
           </template>
 
@@ -2934,6 +2937,45 @@ export default {
       }
     }
 
+    /**
+     * 处理查看 Pod 事件
+     * @param {{ type: 'logs'|'terminal'|'detail', pod: Object }} payload
+     */
+    const handleViewPods = (payload) => {
+      if (!payload?.pod) return
+      const { type, pod } = payload
+      const clusterId = pipeline.value?.target_cluster_id
+
+      switch (type) {
+        case 'terminal':
+          // 跳转到 Pod 终端页面
+          if (clusterId) {
+            const terminalUrl = `/c/${clusterId}/workloads/pods?namespace=${encodeURIComponent(pod.namespace)}&name=${encodeURIComponent(pod.name)}&tab=terminal`
+            router.push(terminalUrl)
+          } else {
+            Message.warning({ content: '缺少集群信息，无法跳转终端' })
+          }
+          break
+        case 'logs':
+          // 跳转到 Pod 日志页面
+          if (clusterId) {
+            const logsUrl = `/c/${clusterId}/workloads/pods?namespace=${encodeURIComponent(pod.namespace)}&name=${encodeURIComponent(pod.name)}&tab=logs`
+            router.push(logsUrl)
+          } else {
+            Message.warning({ content: '缺少集群信息，无法跳转日志' })
+          }
+          break
+        default:
+          // 默认跳转到 Pod 详情列表
+          if (clusterId) {
+            router.push({
+              path: `/c/${clusterId}/workloads/pods`,
+              query: { namespace: pod.namespace, name: pod.name }
+            })
+          }
+      }
+    }
+
     // 格式化
     const statusText = (status) => {
       const map = { idle: '空闲', running: '运行中', disabled: '已禁用', error: '错误' }
@@ -3235,6 +3277,7 @@ export default {
       highlightApproval,
       copyLogs,
       downloadLogs,
+      handleViewPods,
       statusText,
       runStatusText,
       deployStatusText,
