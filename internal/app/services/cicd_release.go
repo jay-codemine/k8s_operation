@@ -276,9 +276,34 @@ func (s *Services) CicdReleaseDetail(ctx context.Context, releaseID int64) (*mod
 	return rel, tasks, nil
 }
 
-// CicdReleaseList 发布单列表
-func (s *Services) CicdReleaseList(ctx context.Context, req *requests.CicdReleaseListRequest) ([]*models.CicdRelease, int64, error) {
-	return s.dao.CicdReleaseList(ctx, req.Keyword, req.AppName, req.Status, req.Page, req.PageSize)
+// CicdReleaseList 发布单列表（返回带 deploy_mode 的增强数据）
+func (s *Services) CicdReleaseList(ctx context.Context, req *requests.CicdReleaseListRequest) ([]*models.CicdReleaseWithDeployMode, int64, error) {
+	releases, total, err := s.dao.CicdReleaseList(ctx, req.Keyword, req.AppName, req.Status, req.Page, req.PageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 为每条发布记录补充 deploy_mode
+	result := make([]*models.CicdReleaseWithDeployMode, 0, len(releases))
+	for _, rel := range releases {
+		enriched := &models.CicdReleaseWithDeployMode{
+			CicdRelease: *rel,
+			DeployMode:  "jenkins", // 默认值
+		}
+		// 通过 build_id → pipeline_run → pipeline 获取 deploy_mode
+		if rel.BuildID > 0 {
+			run, runErr := s.dao.PipelineRunGetByID(ctx, rel.BuildID)
+			if runErr == nil && run != nil {
+				pipeline, pErr := s.dao.PipelineGetByID(ctx, run.PipelineID)
+				if pErr == nil && pipeline != nil {
+					enriched.DeployMode = pipeline.DeployMode
+				}
+			}
+		}
+		result = append(result, enriched)
+	}
+
+	return result, total, nil
 }
 
 // CicdReleaseStats 发布单统计

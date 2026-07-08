@@ -42,3 +42,9 @@ type CicdRelease struct {
 }
 
 func (CicdRelease) TableName() string { return "cicd_release" }
+
+// CicdReleaseWithDeployMode 带部署模式的发布单（前端列表用）
+type CicdReleaseWithDeployMode struct {
+	CicdRelease
+	DeployMode string `json:"deploy_mode"`
+}

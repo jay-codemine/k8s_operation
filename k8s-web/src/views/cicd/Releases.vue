@@ -310,6 +310,12 @@
           <!-- Tier 1: 基础信息（谁发的 / 环境 / 策略） -->
           <div class="rc-tier">
             <div class="rc-field">
+              <span class="rc-label">模式</span>
+              <span :class="['deploy-mode-tag', rel.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                {{ rel.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+              </span>
+            </div>
+            <div class="rc-field">
               <span class="rc-label">环境</span>
               <span class="rc-value ns">{{ rel.namespace || 'default' }}</span>
             </div>
@@ -388,6 +394,7 @@
                 <input type="checkbox" class="row-checkbox" :checked="isAllSelected" :indeterminate.prop="isIndeterminate" @change="toggleAll" />
               </th>
               <th>应用</th>
+              <th>模式</th>
               <th>版本号</th>
               <th>状态</th>
               <th>命名空间</th>
@@ -419,6 +426,11 @@
               <td>
                 <code class="version-tag" v-if="rel.image_tag">{{ rel.image_tag }}</code>
                 <span v-else class="text-muted">-</span>
+              </td>
+              <td>
+                <span :class="['deploy-mode-tag', rel.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                  {{ rel.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+                </span>
               </td>
               <td>
                 <div class="status-cell">
