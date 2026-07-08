@@ -129,11 +129,30 @@ func (w *GitOpsSyncWorker) checkWorkflowAndSyncStatus(ctx context.Context, pipel
 		if err == nil {
 			switch wf.Status.Phase {
 			case models.WorkflowStatusSucceeded:
+				// Workflow 构建成功，触发审批流程（与 Jenkins 回调逻辑对齐）
+				// UpdateBuildStagesComplete 会将构建阶段标记完成，若有审批则设为 waiting 并创建审批记录、发送飞书通知
+				if err := w.svc.UpdateBuildStagesComplete(ctx, run.ID,
+					models.PipelineRunStatusSuccess,
+					run.ImageURL, run.ImageDigest, ""); err != nil {
+					global.Logger.Warnf("[GitOps] 更新构建阶段/审批状态失败: run=%d, err=%v", run.ID, err)
+				}
+
+				_ = w.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
+				_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
+
 				// Workflow 成功，检查 ArgoCD sync 状态
 				if run.ArgoAppName != "" && run.SyncStatus != models.SyncStatusSynced {
 					w.checkArgoCDStatus(ctx, run.ArgoAppName, run)
 				}
 			case models.WorkflowStatusFailed, models.WorkflowStatusError:
+				// 构建失败也更新阶段状态
+				if err := w.svc.UpdateBuildStagesComplete(ctx, run.ID,
+					models.PipelineRunStatusFailed,
+					run.ImageURL, run.ImageDigest,
+					wf.Status.Message); err != nil {
+					global.Logger.Warnf("[GitOps] 更新失败阶段状态失败: run=%d, err=%v", run.ID, err)
+				}
+
 				_ = w.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
 				_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 			}
