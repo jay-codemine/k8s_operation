@@ -295,7 +295,7 @@ const loadNamespaces = async () => {
     const cluster = clusters.value.find(c => c.id === form.target_cluster_id)
     if (cluster) clusterStore.setCurrent(cluster)
     const res = await getNamespaces(form.target_cluster_id)
-    namespaces.value = res.data?.namespaces || res.data || []
+    namespaces.value = res.data?.namespaces || res.data?.list || res.data || []
   } catch { namespaces.value = [] }
   finally { loadingNamespaces.value = false }
 }
@@ -327,7 +327,7 @@ const loadWorkloads = async () => {
       case 'DaemonSet': res = await daemonsetsApi.list(params); break
       default: res = await deploymentsApi.list(params)
     }
-    workloads.value = (res.data?.items || res.data || []).map(w => ({ name: w.metadata?.name || w.name }))
+    workloads.value = (res.data?.items || res.data?.list || res.data || []).map(w => ({ name: w.metadata?.name || w.name }))
   } catch { workloads.value = [] }
   finally { loadingWorkloads.value = false }
 }
