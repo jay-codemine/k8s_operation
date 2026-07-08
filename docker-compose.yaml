@@ -1,0 +1,122 @@
+version: "3.8"
+
+# ============================================================
+# K8sOperation 全栈本地开发/测试环境
+# 包含: MySQL 8.0 + Redis 7 + 后端 API + 前端 Web
+# 使用: docker-compose up -d
+# ============================================================
+
+services:
+  # ==================== MySQL 8.0 ====================
+  mysql:
+    image: mysql:8.0
+    container_name: k8sop-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: admin123
+      MYSQL_DATABASE: k8s-platform
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max-connections=500
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docs/sql/k8s_platform_full_init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - k8sop-net
+
+  # ==================== Redis 7 ====================
+  redis:
+    image: redis:7-alpine
+    container_name: k8sop-redis
+    restart: always
+    command: redis-server --requirepass admin123 --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "admin123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - k8sop-net
+
+  # ==================== 后端 API (Go) ====================
+  backend:
+    image: devops-be:latest
+    container_name: k8sop-backend
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      GIN_MODE: release
+      APP_CONFIG: /app/configs/config.yaml
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs/config-docker.yaml:/app/configs/config.yaml:ro
+      - backend_logs:/app/storage/logs
+      - backend_artifacts:/app/storage/artifacts
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - k8sop-net
+
+  # ==================== 前端 Web (Vue3 + Nginx) ====================
+  frontend:
+    image: devops-fe:latest
+    container_name: k8sop-frontend
+    build:
+      context: ./k8s-web
+      dockerfile: ../docker/frontend/Dockerfile
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_BACKEND_URL: "http://backend:8080"
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - k8sop-net
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  backend_artifacts:
+    driver: local
+
+networks:
+  k8sop-net:
+    driver: bridge

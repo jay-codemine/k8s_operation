@@ -1,0 +1,10 @@
+# ============================================================
+# Jenkins Namespace
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/part-of: k8soperation-platform

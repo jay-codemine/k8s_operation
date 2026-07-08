@@ -1,0 +1,114 @@
+# ============================================================
+# K8sOperation Docker Compose 专用配置
+# 与 docker-compose.yaml 配合使用，服务名即容器名
+# ============================================================
+
+Server:
+  RunMode: release
+  Port: 8080
+  ReadTimeout: 3600
+  WriteTimeout: 3600
+  IdleTimeout: 300
+  ShutdownTimeout: 300
+
+Database:
+  DBType: mysql
+  Username: root
+  Password: admin123
+  Host: mysql          # docker-compose 服务名
+  Port: 3306
+  DBName: k8s-platform
+  Charset: utf8
+  ParseTime: true
+  MaxIdleConns: 5
+  MaxOpenConns: 100
+  MaxLifeSeconds: 300
+
+Cache:
+  Type: redis
+  Name: sk_sid
+  Address: redis:6379  # docker-compose 服务名
+  Username: ""
+  Password: "admin123"
+  MaxConnect: 10
+  Network: tcp
+  Secret: "k8smana"
+
+App:
+  LogLevel: info
+  TIMEZONE: "Asia/Shanghai"
+  LogType: single
+  LogFileName: storage/logs/app.log
+  LogMaxSize: 1
+  LogMaxBackup: 3
+  LogMaxAge: 30
+  LogCompress: true
+  BusinessLogFileName: storage/logs/biz.log
+  MirrorBusinessToSystem: false
+  JWTMaxRefreshTime: 86400
+  JWTSigningKey: "k8sop-docker-compose-secret"
+  JWTExpireTime: 120000
+  AppName: "k8operation"
+  GlobalKubeConfigPath: configs/k8s.yaml
+  DefaultClusterID: 1
+  AutoInitK8s: false
+
+PodLog:
+  EnableStreaming: false
+  TailDefault: 500
+  TailMax: 5000
+  LimitBytes: 2097152
+  Timestamps: false
+  Previous: false
+
+ErrorCode:
+  AllowOverride: true
+
+ClusterClient:
+  TTL: 30m
+  TTLJitter: 3m
+
+Pod:
+  eviction:
+    default_grace_seconds: 30
+
+Node:
+  drain:
+    max_grace_seconds: 300
+    ignore_daemon_sets: true
+    delete_empty_dir: false
+
+Jenkins:
+  URL: ""
+  Username: ""
+  APIToken: ""
+  TriggerTimeout: 60
+  CallbackURL: "http://backend:8080"
+  PlatformURL: "http://frontend"
+  GitCredentialID: "gitee-id"
+  RegistryCredentialID: "harbor-registry"
+  HMACCredentialID: "hmac-secret"
+  HMACSecret: ""
+  PollInterval: 15
+  MaxBuildTime: 30
+  EnableDingTalk: false
+  DingTalkWebhook: ""
+  EnableFeishu: false
+  FeishuWebhook: ""
+  FeishuSecret: ""
+
+Monitoring:
+  Enabled: false
+  PrometheusURL: ""
+  QueryTimeout: 30
+
+AIAssistant:
+  Enabled: false
+  APIKey: ""
+  BaseURL: ""
+  Model: "gpt-4o"
+  MaxTokens: 2048
+  Temperature: 0.7
+  SystemPrompt: ""
+  ApprovalExpire: 30
+  MaxHistoryRound: 20

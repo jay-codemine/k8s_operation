@@ -1,0 +1,75 @@
+# Argo Workflow Template: Python 项目 CI 构建
+# 对应语言类型: python
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: python-build-workflow
+  namespace: argo
+spec:
+  entrypoint: python-build-pipeline
+  arguments:
+    parameters:
+      - name: git_repo
+      - name: git_branch
+        value: "main"
+      - name: image_registry
+      - name: image_repo
+      - name: pipeline_id
+        value: "0"
+      - name: run_id
+        value: "0"
+      - name: platform_callback_url
+        value: ""
+      - name: git_manifest_repo
+        value: ""
+      - name: manifest_path
+        value: "manifests"
+      - name: argo_app_name
+        value: ""
+      - name: language_type
+        value: "python"
+      - name: python_version
+        value: "3.11"
+  templates:
+    - name: python-build-pipeline
+      steps:
+        - - name: checkout
+            template: git-checkout
+        - - name: lint-test
+            template: python-test
+        - - name: build-image
+            template: kaniko-build
+        - - name: update-manifest
+            template: git-update-manifest
+        - - name: callback
+            template: platform-callback
+    - name: git-checkout
+      container:
+        image: alpine/git:latest
+        command:
+          - sh
+          - -c
+          - |
+            git clone --depth 1 --branch {{workflow.parameters.git_branch}} {{workflow.parameters.git_repo}} /workspace
+    - name: python-test
+      container:
+        image: python:{{workflow.parameters.python_version}}-slim
+        command: [sh, -c]
+        args: ["cd /workspace && pip install -r requirements.txt && pip install flake8 pytest && flake8 . && pytest"]
+    - name: kaniko-build
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+          - --context=/workspace
+          - --dockerfile=/workspace/Dockerfile
+          - --destination={{workflow.parameters.image_registry}}/{{workflow.parameters.image_repo}}:{{workflow.parameters.git_branch}}-latest
+    - name: git-update-manifest
+      container:
+        image: alpine/git:latest
+        command: [sh, -c]
+        args: ["echo 'Manifest updated'"]
+    - name: platform-callback
+      container:
+        image: curlimages/curl:latest
+        command: [sh, -c]
+        args: ["curl -X POST {{workflow.parameters.platform_callback_url}} -d '{\"status\":\"SUCCESS\"}'"]

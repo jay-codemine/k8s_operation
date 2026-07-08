@@ -1,0 +1,21 @@
+# ============================================================
+# K8sOperation 前端 - Kustomization
+# 一键部署：kubectl apply -k deploy/frontend/
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: k8soperation
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - service-nodeport.yaml  # 按需取消注释（NodePort 暴露）
+  # - ingress.yaml           # 按需取消注释（Ingress 暴露）
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: k8soperation-platform
+    includeSelectors: false

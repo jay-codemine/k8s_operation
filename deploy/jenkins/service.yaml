@@ -1,0 +1,68 @@
+# ============================================================
+# Jenkins Service
+# http(8080): Web UI 和 API 访问
+# agent(50000): JNLP Agent 通信端口
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: agent
+      port: 50000
+      targetPort: agent
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+---
+# Agent 专用 Service（用于 Jenkins Tunnel 配置）
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-agent
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: agent
+spec:
+  type: ClusterIP
+  ports:
+    - name: agent
+      port: 50000
+      targetPort: agent
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+---
+# NodePort Service（集群外访问 Jenkins Web UI，可选）
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-nodeport
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master

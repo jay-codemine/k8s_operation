@@ -1,0 +1,90 @@
+# ============================================================
+# Jenkins PVC - 持久化存储
+# 包含：Jenkins 主数据 + 各语言构建缓存
+#
+# jenkins-data       → 使用默认 standard StorageClass 动态供给（已 Bound）
+# 缓存类 PVC         → 使用 storageClassName: "" 匹配 pv.yaml 中的静态 PV，立即 Bound
+# ============================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-data
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-data-pv
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Go 模块缓存 → 绑定到静态 PV jenkins-go-cache-pv（见 pv.yaml）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-go-cache
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-go-cache-pv
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Maven 本地仓库缓存 → 绑定到静态 PV jenkins-maven-cache-pv（见 pv.yaml）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-maven-cache
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-maven-cache-pv
+  resources:
+    requests:
+      storage: 20Gi
+---
+# npm 缓存 → 绑定到静态 PV jenkins-npm-cache-pv（见 pv.yaml）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-npm-cache
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-npm-cache-pv
+  resources:
+    requests:
+      storage: 10Gi
+---
+# pip 缓存 → 绑定到静态 PV jenkins-pip-cache-pv（见 pv.yaml）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-pip-cache
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-pip-cache-pv
+  resources:
+    requests:
+      storage: 5Gi

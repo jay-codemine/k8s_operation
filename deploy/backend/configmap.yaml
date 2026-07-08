@@ -1,0 +1,150 @@
+# ============================================================
+# K8sOperation 平台主配置 ConfigMap
+# 说明：存放非敏感配置项，敏感信息（密码、Token）放 Secret
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8soperation-config
+  namespace: k8soperation
+  labels:
+    app.kubernetes.io/name: k8soperation
+data:
+  config.yaml: |
+    Server:
+      RunMode: release
+      Port: 8080
+      ReadTimeout: 3600
+      WriteTimeout: 3600
+      IdleTimeout: 300
+      ShutdownTimeout: 300
+
+    Database:
+      DBType: "${DB_TYPE}"
+      Username: "${DB_USERNAME}"
+      Password: "${DB_PASSWORD}"
+      Host: "${DB_HOST}"
+      Port: "${DB_PORT}"
+      DBName: "${DB_NAME}"
+      Charset: "${DB_CHARSET}"
+      ParseTime: "${DB_PARSE_TIME}"
+      MaxIdleConns: "${DB_MAX_IDLE_CONNS}"
+      MaxOpenConns: "${DB_MAX_OPEN_CONNS}"
+      MaxLifeSeconds: "${DB_MAX_LIFE_SECONDS}"
+
+    Cache:
+      Type: "${CACHE_TYPE}"
+      Name: "${CACHE_NAME}"
+      Address: "${REDIS_ADDRESS}"
+      Addresses:
+        - redis-cluster.global.svc.cluster.local:6379
+      Username: "${CACHE_USERNAME}"
+      Password: "${REDIS_PASSWORD}"
+      MaxConnect: "${CACHE_MAX_CONNECT}"
+      Network: "${CACHE_NETWORK}"
+      Secret: "${CACHE_SECRET}"
+
+    App:
+      LogLevel: info                        # 生产环境建议 info
+      TIMEZONE: "Asia/Shanghai"
+      LogType: single
+      LogFileName: storage/logs/app.log
+      BusinessLogFileName: storage/logs/biz.log
+      LogMaxSize: 50                        # 生产环境单文件 50MB
+      LogMaxBackup: 5
+      LogMaxAge: 30
+      LogCompress: true
+      MirrorBusinessToSystem: false
+      JWTMaxRefreshTime: 86400
+      JWTSigningKey: "${JWT_SIGNING_KEY}"
+      JWTExpireTime: 120000
+      AppName: "k8soperation"
+      GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
+      DefaultClusterID: 3
+      AutoInitK8s: true
+      AllowEmptyStart: true
+
+    PodLog:
+      EnableStreaming: false
+      TailDefault: 500
+      TailMax: 5000
+      LimitBytes: 2097152
+      Timestamps: false
+      Previous: false
+
+    ErrorCode:
+      AllowOverride: false                  # 生产环境禁止覆盖
+
+    ClusterClient:
+      TTL: 30m
+      TTLJitter: 3m
+
+    Pod:
+      eviction:
+        default_grace_seconds: 30
+
+    Node:
+      drain:
+        max_grace_seconds: 300
+        ignore_daemon_sets: true
+        delete_empty_dir: false
+
+    Jenkins:
+      URL: "${JENKINS_URL}"
+      Username: "${JENKINS_USERNAME}"
+      APIToken: "${JENKINS_API_TOKEN}"
+      TriggerTimeout: 60
+      CallbackURL: "${PLATFORM_FRONTEND_URL}"                     # 审批按钮回调地址（走前端 Nginx 反代 /api/ → 后端）
+      PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（通知链接用）
+      DefaultBranch: "main"                                        # 默认 Git 分支
+      DefaultImageRegistry: "${DEFAULT_IMAGE_REGISTRY}"           # 默认镜像仓库前缀
+      # 凭证 ID（对应 Jenkins Credentials 中的 ID）
+      GitCredentialID: "${GIT_CREDENTIAL_ID}"
+      RegistryCredentialID: "${REGISTRY_CREDENTIAL_ID}"
+      HMACCredentialID: "${HMAC_CREDENTIAL_ID}"
+      HMACSecret: "${HMAC_SECRET}"
+      PollInterval: 15
+      MaxBuildTime: 30
+      MaxConcurrentBuilds: 10                                      # 每个 Job 最大并发构建数
+      EnableDingTalk: ${ENABLE_DINGTALK}
+      DingTalkWebhook: "${DINGTALK_WEBHOOK}"
+      EnableFeishu: ${ENABLE_FEISHU}
+      FeishuWebhook: "${FEISHU_WEBHOOK}"
+      FeishuSecret: "${FEISHU_SECRET}"
+
+    Security:
+      KubeConfigEncryptKey: "${KUBECONFIG_ENCRYPT_KEY}"
+      PasswordBcryptCost: 10
+      AutoEncryptLegacyData: true
+
+    Monitoring:
+      Enabled: false                        # 按需开启监控集成
+      PrometheusURL: ""                     # Prometheus 地址（为空时从数据源表读取）
+      QueryTimeout: 30
+
+    LDAP:
+      Enabled: false                        # 按需开启 LDAP 身份源
+      Host: "${LDAP_HOST}"
+      Port: 389
+      UseTLS: false
+      SkipVerify: false
+      BindDN: "${LDAP_BIND_DN}"
+      BindPassword: "${LDAP_BIND_PASSWORD}"
+      BaseDN: "${LDAP_BASE_DN}"
+      UserFilter: "(uid={0})"
+      GroupBaseDN: "${LDAP_GROUP_BASE_DN}"
+      GroupFilter: "(objectClass=groupOfNames)"
+      GroupAttr: "cn"
+      AttrUsername: "uid"
+      AttrEmail: "mail"
+      AttrPhone: "telephoneNumber"
+      SyncOnLogin: true
+      AutoCreate: true
+      LocalFallback: true
+
+    AIAssistant:
+      Enabled: false                        # 按需开启
+      DefaultProvider: "qwen"
+      SystemPrompt: "你是 K8s 管理平台的 AI 助手，擅长 Kubernetes 集群管理、资源运维、故障诊断。请用中文回复，简洁专业。"
+      ApprovalExpire: 30
+      MaxHistoryRound: 20

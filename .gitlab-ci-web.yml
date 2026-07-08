@@ -1,0 +1,118 @@
+# GitLab CI 前端项目 → K8s Operation 平台集成
+# 用法：将此文件内容合并到你的 .gitlab-ci.yml
+
+stages:
+  - install
+  - build
+  - deploy
+
+cache:
+  key: $CI_COMMIT_REF_SLUG
+  paths:
+    - node_modules/
+
+variables:
+  DOCKER_HUB_URL: swr.cn-east-2.myhuaweicloud.com
+  HARBOR_URL: harbor.maitian-yun.com
+  DOCKER_HUB_ORG: foxess
+  REPOSITORY_NAME: web2
+  PROJECT_NAME: foxess.web2
+
+  # ====== K8s Operation 平台配置 ======
+  # 在 GitLab Settings → CI/CD → Variables 中添加：
+  #   K8S_PLATFORM_URL    = http://your-platform:38180
+  #   K8S_PLATFORM_TOKEN  = <JWT token>
+  #   K8S_CLUSTER_ID      = <集群ID，在平台集群管理页查看>
+  #   K8S_NAMESPACE       = <目标命名空间>
+  #   K8S_WORKLOAD_NAME   = <Deployment名称>
+  #   K8S_CONTAINER_NAME  = <容器名称>
+
+install-job:
+  stage: install
+  rules:
+    - changes:
+        - package.json
+        - README.md
+      if: '$CI_COMMIT_REF_NAME == "main"'
+  script:
+    - npm install --unsafe-perm
+
+# ==================== 测试环境 ====================
+build-job:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" && $CI_COMMIT_TAG == null'
+  script:
+    - npm run build
+    - docker build -t $HARBOR_URL/$DOCKER_HUB_ORG/$REPOSITORY_NAME:latest .
+    - docker push $HARBOR_URL/$DOCKER_HUB_ORG/$REPOSITORY_NAME:latest
+    - docker image rm $HARBOR_URL/$DOCKER_HUB_ORG/$REPOSITORY_NAME:latest -f
+    - echo "build over"
+
+deploy-test:
+  stage: deploy
+  needs: [build-job]
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main" && $CI_COMMIT_TAG == null'
+  script:
+    - |
+      echo ">>> 触发 K8s 测试环境部署"
+      curl -sS -X POST "${K8S_PLATFORM_URL}/api/v1/k8s/cicd/release/create" \
+        -H "Authorization: Bearer ${K8S_PLATFORM_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"app_name\": \"${PROJECT_NAME}\",
+          \"namespace\": \"${K8S_NAMESPACE:-default}\",
+          \"workload_kind\": \"Deployment\",
+          \"workload_name\": \"${K8S_WORKLOAD_NAME:-${REPOSITORY_NAME}}\",
+          \"container_name\": \"${K8S_CONTAINER_NAME:-${REPOSITORY_NAME}}\",
+          \"image_repo\": \"${HARBOR_URL}/${DOCKER_HUB_ORG}/${REPOSITORY_NAME}\",
+          \"image_tag\": \"latest\",
+          \"cluster_ids\": [${K8S_CLUSTER_ID}],
+          \"strategy\": \"rolling\",
+          \"timeout_sec\": 300,
+          \"message\": \"GitLab CI 自动发布: ${CI_COMMIT_SHORT_SHA} by ${GITLAB_USER_NAME}\"
+        }" | tee /tmp/deploy-result.json
+      echo ""
+      echo ">>> 部署已触发，请在平台发布管理页查看进度"
+
+# ==================== 生产环境（Tag 触发） ====================
+prod-deploy:
+  stage: deploy
+  cache:
+    key: main-prod
+    policy: pull-push
+    paths:
+      - .npm/
+      - node_modules/.cache
+  script:
+    - echo "docker build for prod"
+    - docker login -u cn-east-2@ASH2TOU5QX4GMEOGV03H -p 4cc2490e1c95b42ede875ac6c238dd826514ba08f5ce909660c1fe5919140e5a $DOCKER_HUB_URL
+    - echo VUE_APP_WEB_VERSION=$CI_COMMIT_TAG >> .env.prod
+    - npm install --cache .npm --unsafe-perm
+    - cat .env.prod
+    - npm run build
+    - docker build -t $DOCKER_HUB_URL/$DOCKER_HUB_ORG/$PROJECT_NAME:$CI_COMMIT_TAG .
+    - docker push $DOCKER_HUB_URL/$DOCKER_HUB_ORG/$PROJECT_NAME:$CI_COMMIT_TAG
+    - docker image rm $DOCKER_HUB_URL/$DOCKER_HUB_ORG/$PROJECT_NAME:$CI_COMMIT_TAG -f
+    - |
+      echo ">>> 触发 K8s 生产环境部署"
+      curl -sS -X POST "${K8S_PLATFORM_URL}/api/v1/k8s/cicd/release/create" \
+        -H "Authorization: Bearer ${K8S_PLATFORM_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"app_name\": \"${PROJECT_NAME}\",
+          \"namespace\": \"${K8S_PROD_NAMESPACE:-production}\",
+          \"workload_kind\": \"Deployment\",
+          \"workload_name\": \"${K8S_PROD_WORKLOAD_NAME:-${REPOSITORY_NAME}}\",
+          \"container_name\": \"${K8S_CONTAINER_NAME:-${REPOSITORY_NAME}}\",
+          \"image_repo\": \"${DOCKER_HUB_URL}/${DOCKER_HUB_ORG}/${PROJECT_NAME}\",
+          \"image_tag\": \"${CI_COMMIT_TAG}\",
+          \"cluster_ids\": [${K8S_CLUSTER_ID}],
+          \"strategy\": \"rolling\",
+          \"timeout_sec\": 300,
+          \"message\": \"GitLab CI 生产发布: ${CI_COMMIT_TAG} by ${GITLAB_USER_NAME}\"
+        }" | tee /tmp/deploy-result.json
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: on_success

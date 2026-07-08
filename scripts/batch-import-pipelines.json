@@ -1,0 +1,64 @@
+{
+  "_说明": "批量创建流水线导入模板 - 修改此文件后运行 batch-import-pipelines.ps1",
+  "_用法": "1. 复制此模板  2. 修改 pipelines 数组  3. 运行导入脚本",
+  "skip_existing": true,
+  "pipelines": [
+    {
+      "_注释": "=== Java Spring Boot 项目示例 ===",
+      "name": "order-service",
+      "description": "订单服务",
+      "git_repo": "https://gitee.com/your-org/order-service.git",
+      "git_branch": "main",
+      "language_type": "java",
+      "auto_deploy": true,
+      "target_cluster_id": 1,
+      "target_namespace": "production",
+      "target_workload_name": "order-service",
+      "deploy_env": "prod",
+      "require_approval": true
+    },
+    {
+      "_注释": "=== Go 微服务项目示例 ===",
+      "name": "user-service",
+      "description": "用户服务",
+      "git_repo": "https://gitee.com/your-org/user-service.git",
+      "git_branch": "main",
+      "language_type": "go",
+      "auto_deploy": true,
+      "target_cluster_id": 1,
+      "target_namespace": "production",
+      "target_workload_name": "user-service",
+      "deploy_env": "prod",
+      "require_approval": true
+    },
+    {
+      "_注释": "=== 前端项目示例 ===",
+      "name": "admin-web",
+      "description": "管理后台前端",
+      "git_repo": "https://gitee.com/your-org/admin-web.git",
+      "git_branch": "main",
+      "language_type": "frontend",
+      "auto_deploy": true,
+      "target_cluster_id": 1,
+      "target_namespace": "production",
+      "target_workload_name": "admin-web",
+      "deploy_env": "prod",
+      "require_approval": false
+    },
+    {
+      "_注释": "=== Python 项目示例 ===",
+      "name": "data-processor",
+      "description": "数据处理服务",
+      "git_repo": "https://gitee.com/your-org/data-processor.git",
+      "git_branch": "main",
+      "language_type": "python",
+      "auto_deploy": false
+    },
+    {
+      "_注释": "=== 最简配置（仅CI不部署）===",
+      "name": "payment-service",
+      "git_repo": "https://gitee.com/your-org/payment-service.git",
+      "language_type": "java"
+    }
+  ]
+}

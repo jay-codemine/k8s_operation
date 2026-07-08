@@ -1,0 +1,349 @@
+{
+	"info": {
+		"_postman_id": "cicd-pipeline-collection-2024",
+		"name": "K8s CICD Pipeline 完整闭环验证",
+		"description": "# CICD Pipeline 完整闭环验证\n\n## 闭环流程\n```\n平台创建流水线 → 触发Jenkins构建 → Jenkins回调平台 → 状态同步 → 查看日志\n```\n\n## 使用步骤\n1. 导入并配置环境变量\n2. 执行登录获取Token\n3. 创建流水线（配置Jenkins Job）\n4. 运行流水线（触发构建）\n5. 查看状态和日志",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{"key": "baseUrl", "value": "http://localhost:8080", "type": "string"},
+		{"key": "token", "value": "", "type": "string"},
+		{"key": "pipelineId", "value": "", "type": "string"},
+		{"key": "jenkinsUrl", "value": "http://jenkins:8080", "type": "string"},
+		{"key": "jenkinsJob", "value": "nginx-deploy", "type": "string"}
+	],
+	"item": [
+		{
+			"name": "00-前置准备",
+			"item": [
+				{
+					"name": "00-1 登录获取Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('登录成功', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data && jsonData.data.token) {",
+									"    pm.collectionVariables.set('token', jsonData.data.token);",
+									"    console.log('Token已保存');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"123456\"\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"]}
+					}
+				}
+			]
+		},
+		{
+			"name": "01-流水线CRUD",
+			"item": [
+				{
+					"name": "01-1 创建流水线（nginx-deploy）",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('创建成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data && jsonData.data.pipeline_id) {",
+									"    pm.collectionVariables.set('pipelineId', jsonData.data.pipeline_id);",
+									"    console.log('流水线ID:', jsonData.data.pipeline_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"nginx-deploy-{{$timestamp}}\",\n    \"description\": \"Nginx应用部署流水线\",\n    \"git_repo\": \"https://github.com/your-org/nginx-demo.git\",\n    \"git_branch\": \"main\",\n    \"jenkins_url\": \"{{jenkinsUrl}}\",\n    \"jenkins_job\": \"{{jenkinsJob}}\",\n    \"jenkins_credential_id\": \"harbor-registry\",\n    \"env_vars\": [\n        {\"name\": \"NAMESPACE\", \"value\": \"default\"},\n        {\"name\": \"DEPLOYMENT_NAME\", \"value\": \"nginx-deployment\"},\n        {\"name\": \"CONTAINER_NAME\", \"value\": \"nginx\"}\n    ],\n    \"deploy_config\": {\n        \"namespace\": \"default\",\n        \"deployment_name\": \"nginx-deployment\",\n        \"image\": \"nginx\",\n        \"replicas\": 2\n    }\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/create", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "create"]}
+					}
+				},
+				{
+					"name": "01-2 获取流水线详情",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('查询成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data && jsonData.data.pipeline) {",
+									"    console.log('流水线名称:', jsonData.data.pipeline.name);",
+									"    console.log('状态:', jsonData.data.pipeline.status);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/detail?id={{pipelineId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "k8s", "cicd", "pipeline", "detail"],
+							"query": [{"key": "id", "value": "{{pipelineId}}"}]
+						}
+					}
+				},
+				{
+					"name": "01-3 获取流水线列表",
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/list?page=1&page_size=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "k8s", "cicd", "pipeline", "list"],
+							"query": [{"key": "page", "value": "1"}, {"key": "page_size", "value": "10"}]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "02-运行流水线（触发Jenkins）",
+			"item": [
+				{
+					"name": "02-1 运行流水线",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('启动成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"console.log('运行ID:', jsonData.data ? jsonData.data.run_id : 'N/A');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": {{pipelineId}},\n    \"branch\": \"main\",\n    \"params\": {\n        \"IMAGE_TAG\": \"v1.0.{{$timestamp}}\"\n    }\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/run", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "run"]}
+					}
+				},
+				{
+					"name": "02-2 查询运行状态",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('查询成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data) {",
+									"    var p = jsonData.data.pipeline;",
+									"    console.log('流水线状态:', p.status);",
+									"    console.log('最近运行状态:', p.last_run_status);",
+									"    console.log('构建号:', p.last_build_number);",
+									"    if (jsonData.data.build_info) {",
+									"        console.log('Jenkins构建中:', jsonData.data.build_info.building);",
+									"        console.log('Jenkins结果:', jsonData.data.build_info.result);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/status?id={{pipelineId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "k8s", "cicd", "pipeline", "status"],
+							"query": [{"key": "id", "value": "{{pipelineId}}"}]
+						}
+					}
+				},
+				{
+					"name": "02-3 获取构建日志",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('获取日志成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data && jsonData.data.logs) {",
+									"    console.log('日志长度:', jsonData.data.logs.length);",
+									"    // 打印前500字符",
+									"    console.log('日志预览:', jsonData.data.logs.substring(0, 500));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/logs?id={{pipelineId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "k8s", "cicd", "pipeline", "logs"],
+							"query": [{"key": "id", "value": "{{pipelineId}}"}]
+						}
+					}
+				},
+				{
+					"name": "02-4 停止流水线",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": {{pipelineId}}\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/stop", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "stop"]}
+					}
+				}
+			]
+		},
+		{
+			"name": "03-运行历史",
+			"item": [
+				{
+					"name": "03-1 获取运行历史",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('查询成功', function() { pm.response.to.have.status(200); });",
+									"var jsonData = pm.response.json();",
+									"if (jsonData.data && jsonData.data.list) {",
+									"    console.log('历史记录数:', jsonData.data.list.length);",
+									"    jsonData.data.list.forEach(function(run, i) {",
+									"        console.log('  #' + run.build_number + ' ' + run.status + ' ' + run.trigger_type);",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/history?id={{pipelineId}}&page=1&page_size=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "k8s", "cicd", "pipeline", "history"],
+							"query": [
+								{"key": "id", "value": "{{pipelineId}}"},
+								{"key": "page", "value": "1"},
+								{"key": "page_size", "value": "10"}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "04-Jenkins回调（模拟）",
+			"item": [
+				{
+					"name": "04-1 模拟Jenkins成功回调",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('回调处理成功', function() { pm.response.to.have.status(200); });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"job_name\": \"{{jenkinsJob}}\",\n    \"build_number\": 1,\n    \"status\": \"SUCCESS\",\n    \"duration\": 120,\n    \"message\": \"构建部署成功\",\n    \"git_commit\": \"abc1234\",\n    \"image\": \"nginx:v1.0.0\"\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "callback"]}
+					}
+				},
+				{
+					"name": "04-2 模拟Jenkins失败回调",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"job_name\": \"{{jenkinsJob}}\",\n    \"build_number\": 2,\n    \"status\": \"FAILURE\",\n    \"duration\": 60,\n    \"message\": \"构建失败: unit test failed\"\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/callback", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "callback"]}
+					}
+				}
+			]
+		},
+		{
+			"name": "05-清理",
+			"item": [
+				{
+					"name": "05-1 删除流水线",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": {{pipelineId}}\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/api/v1/k8s/cicd/pipeline/delete", "host": ["{{baseUrl}}"], "path": ["api", "v1", "k8s", "cicd", "pipeline", "delete"]}
+					}
+				}
+			]
+		}
+	]
+}

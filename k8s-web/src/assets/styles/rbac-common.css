@@ -1,0 +1,775 @@
+/**
+ * RBAC 模块通用样式 - 大厂风格 (Rancher/KubeSphere)
+ * 适用于：Role、RoleBinding、ServiceAccount、权限校验等页面
+ */
+
+/* ============================================
+   1. 页面容器
+   ============================================ */
+.rbac-view {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding: 24px;
+}
+
+/* ============================================
+   2. 页面头部
+   ============================================ */
+.rbac-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rbac-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.rbac-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #165DFF, #4080FF);
+  border-radius: 12px;
+  font-size: 24px;
+  color: #fff;
+}
+
+.rbac-title-group h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  letter-spacing: -0.5px;
+}
+
+.rbac-title-group p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.rbac-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ============================================
+   3. 统计卡片区域
+   ============================================ */
+.rbac-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  cursor: default;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #165DFF;
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+}
+
+.stat-card.primary {
+  background: linear-gradient(135deg, #f0f0ff, #ffffff);
+  border-color: #c7d2fe;
+}
+
+.stat-card.success {
+  background: linear-gradient(135deg, #ecfdf5, #ffffff);
+  border-color: #a7f3d0;
+}
+
+.stat-card.warning {
+  background: linear-gradient(135deg, #fffbeb, #ffffff);
+  border-color: #fde68a;
+}
+
+.stat-card.info {
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
+  border-color: #bfdbfe;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.stat-card.primary .stat-icon { background: rgba(22, 93, 255, 0.15); color: #4080FF; }
+.stat-card.success .stat-icon { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.stat-card.warning .stat-icon { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.stat-card.info .stat-icon { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+
+.stat-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 20px;
+}
+
+.stat-trend.up {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.stat-trend.down {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ============================================
+   4. 工具栏
+   ============================================ */
+.rbac-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 搜索框 */
+.rbac-search {
+  position: relative;
+  min-width: 260px;
+}
+
+.rbac-search input {
+  width: 100%;
+  padding: 10px 12px 10px 38px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.rbac-search input:focus {
+  border-color: #165DFF;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.rbac-search input::placeholder {
+  color: #6b7280;
+}
+
+.rbac-search .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* 筛选下拉 */
+.rbac-filter {
+  position: relative;
+}
+
+.rbac-filter select {
+  appearance: none;
+  padding: 10px 36px 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+  min-width: 150px;
+}
+
+.rbac-filter select:hover {
+  border-color: #d1d5db;
+}
+
+.rbac-filter select:focus {
+  border-color: #165DFF;
+}
+
+.rbac-filter::after {
+  content: '▼';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+/* 按钮样式 */
+.rbac-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.rbac-btn-primary {
+  background: linear-gradient(135deg, #165DFF, #4080FF);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.rbac-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.rbac-btn-secondary {
+  background: #ffffff;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+.rbac-btn-secondary:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.rbac-btn-success {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: white;
+}
+
+.rbac-btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: white;
+}
+
+.rbac-btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.rbac-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ============================================
+   5. 表格容器
+   ============================================ */
+.rbac-table-container {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.rbac-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rbac-table thead {
+  background: #f9fafb;
+}
+
+.rbac-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rbac-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.rbac-table tbody tr {
+  transition: all 0.15s ease;
+}
+
+.rbac-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.rbac-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 资源名称样式 */
+.resource-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-name .icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.resource-name .name {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.resource-name .meta {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* 标签样式 */
+.rbac-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 20px;
+}
+
+.rbac-tag-primary {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
+
+.rbac-tag-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+}
+
+.rbac-tag-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.rbac-tag-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.rbac-tag-default {
+  background: rgba(107, 114, 128, 0.15);
+  color: #d1d5db;
+}
+
+/* 命名空间标签 */
+.namespace-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+/* 集群标签 */
+.cluster-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* 类型标签 */
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.type-badge.Role,
+.type-badge.RoleBinding {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.type-badge.ClusterRole,
+.type-badge.ClusterRoleBinding {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+/* 操作按钮组 */
+.rbac-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rbac-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rbac-action-btn:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.rbac-action-btn.view:hover { border-color: rgba(59, 130, 246, 0.5); color: #60a5fa; }
+.rbac-action-btn.edit:hover { border-color: rgba(245, 158, 11, 0.5); color: #fbbf24; }
+.rbac-action-btn.delete:hover { border-color: rgba(239, 68, 68, 0.5); color: #f87171; }
+
+/* ============================================
+   6. 空状态
+   ============================================ */
+.rbac-empty {
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.rbac-empty-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  border-radius: 50%;
+  font-size: 36px;
+  color: #165DFF;
+}
+
+.rbac-empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.rbac-empty-desc {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+/* ============================================
+   7. 模态框
+   ============================================ */
+.rbac-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  padding: 20px;
+}
+
+.rbac-modal-content {
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rbac-modal-content.large {
+  max-width: 800px;
+}
+
+.rbac-modal-content.xlarge {
+  max-width: 1000px;
+}
+
+.rbac-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rbac-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.rbac-modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 8px;
+  color: #6b7280;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rbac-modal-close:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.rbac-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.rbac-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* ============================================
+   8. 表单样式
+   ============================================ */
+.rbac-form-section {
+  margin-bottom: 24px;
+}
+
+.rbac-form-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rbac-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rbac-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rbac-form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rbac-form-group input,
+.rbac-form-group select,
+.rbac-form-group textarea {
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.rbac-form-group input:focus,
+.rbac-form-group select:focus,
+.rbac-form-group textarea:focus {
+  border-color: #165DFF;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.rbac-form-group .help-text {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* ============================================
+   9. 加载状态
+   ============================================ */
+.rbac-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.rbac-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(22, 93, 255, 0.15);
+  border-top-color: #165DFF;
+  border-radius: 50%;
+  animation: rbac-spin 0.8s linear infinite;
+}
+
+@keyframes rbac-spin {
+  to { transform: rotate(360deg); }
+}
+
+.rbac-loading-text {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* ============================================
+   10. 响应式
+   ============================================ */
+@media (max-width: 768px) {
+  .rbac-view {
+    padding: 16px;
+  }
+
+  .rbac-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .rbac-header-right {
+    width: 100%;
+  }
+
+  .rbac-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rbac-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+  }
+
+  .rbac-search {
+    min-width: 100%;
+  }
+}

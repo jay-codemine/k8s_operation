@@ -1,0 +1,24 @@
+# ============================================================
+# Kustomization - 一键部署所有资源（前端 + 后端）
+# 使用方式：
+#   kubectl apply -k deploy/backend/   # 仅后端
+#   kubectl apply -k deploy/frontend/  # 仅前端
+#   kubectl apply -k deploy/jenkins/   # Jenkins（独立 namespace: devops）
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: k8soperation
+
+resources:
+  - backend/           # 后端（Namespace + Secret + ConfigMap + PVC + Service + Deployment）
+  - frontend/          # 前端（Deployment + Service + Ingress）
+  # Jenkins 单独部署：kubectl apply -k deploy/jenkins/（namespace: devops）
+
+# 注意: 不使用 commonLabels，因为它会注入到 Service selector 中
+# 导致直接 apply 单个资源时 selector 与 Pod labels 不匹配
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: k8soperation-platform
+    includeSelectors: false

@@ -1,0 +1,38 @@
+# ============================================================
+# PV：制品 + 日志存储（开发环境 hostPath）
+# ============================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: k8soperation-artifacts
+  labels:
+    app.kubernetes.io/name: k8soperation
+    app.kubernetes.io/component: artifact-storage
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /data/k8soperation/artifacts
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: k8soperation-logs
+  labels:
+    app.kubernetes.io/name: k8soperation
+    app.kubernetes.io/component: log-storage
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /data/k8soperation/logs
+    type: DirectoryOrCreate

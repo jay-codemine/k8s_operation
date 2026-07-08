@@ -1,0 +1,213 @@
+package requests
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/thedevsaddam/govalidator"
+	"k8soperation/pkg/valid"
+)
+
+// ========== 创建发布单 ==========
+
+func NewCicdReleaseCreateRequest() *CicdReleaseCreateRequest {
+	return &CicdReleaseCreateRequest{
+		Namespace:    "default",
+		WorkloadKind: "Deployment",
+		Strategy:     "rolling",
+		TimeoutSec:   300,
+		Concurrency:  3,
+	}
+}
+
+type CicdReleaseCreateRequest struct {
+	// 模板化发布：传入 pipeline_id 后自动继承流水线的部署配置，以下字段均可省略
+	PipelineID int64 `json:"pipeline_id"` // 可选：关联流水线ID，自动填充部署配置
+
+	AppName       string `json:"app_name" valid:"app_name"`
+	Namespace     string `json:"namespace" valid:"namespace"`
+	WorkloadKind  string `json:"workload_kind" valid:"workload_kind"`
+	WorkloadName  string `json:"workload_name" valid:"workload_name"`
+	ContainerName string `json:"container_name" valid:"container_name"`
+
+	Strategy    string `json:"strategy" valid:"strategy"`
+	TimeoutSec  uint32 `json:"timeout_sec" valid:"timeout_sec"`
+	Concurrency uint32 `json:"concurrency" valid:"concurrency"`
+
+	ImageRepo   string `json:"image_repo" valid:"image_repo"`
+	ImageTag    string `json:"image_tag" valid:"image_tag"`
+	ImageDigest string `json:"image_digest" valid:"image_digest"`
+
+	ClusterIDs []int64 `json:"cluster_ids" valid:"cluster_ids"`
+
+	Message   string `json:"message"`   // 可选：发布说明/备注
+	RequestID string `json:"request_id"` // 可选，幂等校验用
+}
+
+func ValidCicdReleaseCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	req := data.(*CicdReleaseCreateRequest)
+
+	// 如果指定了 pipeline_id，则放宽校验（后端会从流水线继承配置）
+	if req.PipelineID > 0 {
+		// 仅要求 image_tag（最小化输入）
+		rules := govalidator.MapData{
+			"image_tag": []string{"required"},
+		}
+		messages := govalidator.MapData{
+			"image_tag": []string{"required: image_tag不能为空"},
+		}
+		return valid.ValidateOptions(data, rules, messages)
+	}
+
+	rules := govalidator.MapData{
+		"app_name":       []string{"required"},
+		"namespace":      []string{"required"},
+		"workload_name":  []string{"required"},
+		"container_name": []string{"required"},
+		"image_repo":     []string{"required"},
+		// image_tag / image_digest 至少一个
+		"cluster_ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"app_name":       []string{"required: app_name不能为空"},
+		"namespace":      []string{"required: namespace不能为空"},
+		"workload_name":  []string{"required: workload_name不能为空"},
+		"container_name": []string{"required: container_name不能为空"},
+		"image_repo":     []string{"required: image_repo不能为空"},
+		"cluster_ids":    []string{"required: cluster_ids不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 发布单列表查询 ==========
+
+func NewCicdReleaseListRequest() *CicdReleaseListRequest {
+	return &CicdReleaseListRequest{
+		Page:     1,
+		PageSize: 20,
+	}
+}
+
+type CicdReleaseListRequest struct {
+	Page     int    `form:"page" valid:"page"`
+	PageSize int    `form:"page_size" valid:"page_size"`
+	Keyword  string `form:"keyword" valid:"keyword"` // 模糊搜索：应用名、工作负载名、镜像等
+	AppName  string `form:"app_name" valid:"app_name"`
+	Status   string `form:"status" valid:"status"`
+}
+
+func ValidCicdReleaseListRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	return nil // 全部可选
+}
+
+// ========== 发布单ID请求（取消/重试） ==========
+
+type CicdReleaseIDRequest struct {
+	ID int64 `json:"id" valid:"id"`
+}
+
+func ValidCicdReleaseIDRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"id": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"id": []string{"required: id不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 编辑发布单 ==========
+
+type CicdReleaseUpdateRequest struct {
+	ID            int64  `json:"id" valid:"id"`
+	AppName       string `json:"app_name" valid:"app_name"`
+	Namespace     string `json:"namespace" valid:"namespace"`
+	WorkloadKind  string `json:"workload_kind" valid:"workload_kind"`
+	WorkloadName  string `json:"workload_name" valid:"workload_name"`
+	ContainerName string `json:"container_name" valid:"container_name"`
+	Strategy      string `json:"strategy" valid:"strategy"`
+	TimeoutSec    uint32 `json:"timeout_sec" valid:"timeout_sec"`
+	Concurrency   uint32 `json:"concurrency" valid:"concurrency"`
+	ImageRepo     string `json:"image_repo" valid:"image_repo"`
+	ImageTag      string `json:"image_tag" valid:"image_tag"`
+	Message       string `json:"message" valid:"message"`
+}
+
+func ValidCicdReleaseUpdateRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"id": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"id": []string{"required: id不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== Jenkins构建回调 ==========
+
+type CicdBuildCallbackRequest struct {
+	BuildID     int64  `json:"build_id"`     // Jenkins 构建ID
+	Status      string `json:"status"`       // SUCCESS / FAILURE / ABORTED
+	ImageRepo   string `json:"image_repo"`   // 构建出的镜像Repo
+	ImageTag    string `json:"image_tag"`    // 构建出的镜像Tag
+	ImageDigest string `json:"image_digest"` // 镜像摘要（可选）
+	Message     string `json:"message"`      // 构建消息
+}
+
+// ========== 批量发布 ==========
+
+type CicdReleaseBatchRetryRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchRetryRequest() *CicdReleaseBatchRetryRequest {
+	return &CicdReleaseBatchRetryRequest{}
+}
+
+func ValidCicdReleaseBatchRetryRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 批量回滚 ==========
+
+type CicdReleaseBatchRollbackRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchRollbackRequest() *CicdReleaseBatchRollbackRequest {
+	return &CicdReleaseBatchRollbackRequest{}
+}
+
+func ValidCicdReleaseBatchRollbackRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}
+
+// ========== 批量取消 ==========
+
+type CicdReleaseBatchCancelRequest struct {
+	IDs []int64 `json:"ids" valid:"ids"`
+}
+
+func NewCicdReleaseBatchCancelRequest() *CicdReleaseBatchCancelRequest {
+	return &CicdReleaseBatchCancelRequest{}
+}
+
+func ValidCicdReleaseBatchCancelRequest(data interface{}, ctx *gin.Context) map[string][]string {
+	rules := govalidator.MapData{
+		"ids": []string{"required"},
+	}
+	messages := govalidator.MapData{
+		"ids": []string{"required: 发布单ID列表不能为空"},
+	}
+	return valid.ValidateOptions(data, rules, messages)
+}

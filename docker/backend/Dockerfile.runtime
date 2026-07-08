@@ -1,0 +1,44 @@
+# ==============================================================================
+# K8sOperation 后端 - 纯运行时 Dockerfile（Jenkins/CI 专用）
+# ==============================================================================
+# 适用场景：
+#   - Jenkins 流水线已完成 Go 编译，产出 bin/devops-be
+#   - 本地已通过 go build 交叉编译完成
+#   - 此 Dockerfile 仅将二进制打包为最小镜像（无编译环境）
+#
+# 前置步骤：
+#   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+#     -ldflags="-s -w" -o bin/devops-be ./cmd/k8soperation
+#
+# 构建命令（在项目根目录执行）：
+#   docker build -f docker/backend/Dockerfile.runtime -t devops-be:latest .
+#
+# 指定平台：
+#   docker build -f docker/backend/Dockerfile.runtime --platform linux/amd64 -t devops-be:latest .
+# ==============================================================================
+
+FROM docker.m.daocloud.io/library/alpine:3.20
+
+# 创建非 root 用户（UID=1000 与 Deployment securityContext 一致）
+RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
+
+WORKDIR /app
+RUN mkdir -p /app/storage/logs /app/configs
+
+# 接收平台编译好的二进制（由 Jenkins Build Binary 阶段 或 本地 go build 产出）
+COPY bin/devops-be /app/devops-be
+RUN chmod +x /app/devops-be
+
+RUN chown -R app:app /app
+USER app
+
+ENV GIN_MODE=release
+ENV APP_CONFIG=/app/configs/config.yaml
+ENV K8S_CONFIG=/app/configs/k8s.yaml
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz/live || exit 1
+
+ENTRYPOINT ["/app/devops-be"]

@@ -1,0 +1,115 @@
+# ============================================================
+# Jenkins PVs - 静态 hostPath PV（单节点集群）
+# 包含：jenkins-data 主数据 + 4 个构建缓存
+# ============================================================
+
+# Jenkins 主数据 PV（/var/jenkins_home）
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-data-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: master
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""           # 静态绑定
+  claimRef:
+    namespace: devops
+    name: jenkins-data
+  hostPath:
+    path: /data/jenkins/home
+    type: DirectoryOrCreate
+---
+# Go 模块缓存 PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-go-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: go
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""          # 静态绑定，不使用 StorageClass 动态供给
+  claimRef:                     # 预绑定到指定 PVC，防止被其他 PVC 抢占
+    namespace: devops
+    name: jenkins-go-cache
+  hostPath:
+    path: /data/jenkins/go-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-maven-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: maven
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-maven-cache
+  hostPath:
+    path: /data/jenkins/maven-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-npm-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: npm
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-npm-cache
+  hostPath:
+    path: /data/jenkins/npm-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-pip-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: pip
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-pip-cache
+  hostPath:
+    path: /data/jenkins/pip-cache
+    type: DirectoryOrCreate

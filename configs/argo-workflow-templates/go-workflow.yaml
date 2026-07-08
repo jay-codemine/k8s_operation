@@ -1,0 +1,181 @@
+# Argo Workflow Template: Go 项目 CI 构建
+# 对应语言类型: go
+# 平台自动注入参数: GIT_REPO, GIT_BRANCH, IMAGE_REGISTRY, IMAGE_REPO,
+#   PIPELINE_ID, RUN_ID, PLATFORM_CALLBACK_URL, GIT_MANIFEST_REPO, MANIFEST_PATH, ARGO_APP_NAME
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: go-build-workflow
+  namespace: argo
+spec:
+  entrypoint: go-build-pipeline
+  arguments:
+    parameters:
+      - name: git_repo
+      - name: git_branch
+        value: "main"
+      - name: image_registry
+      - name: image_repo
+      - name: pipeline_id
+        value: "0"
+      - name: run_id
+        value: "0"
+      - name: platform_callback_url
+        value: ""
+      - name: git_manifest_repo
+        value: ""
+      - name: manifest_path
+        value: "manifests"
+      - name: argo_app_name
+        value: ""
+      - name: language_type
+        value: "go"
+      - name: go_version
+        value: "1.24"
+
+  templates:
+    # ==================== 主流程 ====================
+    - name: go-build-pipeline
+      steps:
+        - - name: checkout
+            template: git-checkout
+        - - name: test
+            template: go-test
+        - - name: build-image
+            template: kaniko-build
+        - - name: update-manifest
+            template: git-update-manifest
+            when: "{{steps.build-image.outputs.parameters.image_tag}} != ''"
+        - - name: callback
+            template: platform-callback
+
+    # ==================== Git 检出 ====================
+    - name: git-checkout
+      outputs:
+        parameters:
+          - name: commit_sha
+            valueFrom:
+              path: /tmp/commit.txt
+          - name: commit_message
+            valueFrom:
+              path: /tmp/commit_msg.txt
+      container:
+        image: alpine/git:latest
+        command:
+          - sh
+          - -c
+          - |
+            git clone --depth 1 --branch {{workflow.parameters.git_branch}} {{workflow.parameters.git_repo}} /workspace
+            cd /workspace
+            git rev-parse HEAD > /tmp/commit.txt
+            git log -1 --pretty=%B > /tmp/commit_msg.txt
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    # ==================== Go 测试 ====================
+    - name: go-test
+      inputs:
+        parameters:
+          - name: go_version
+            value: "{{workflow.parameters.go_version}}"
+      container:
+        image: golang:{{inputs.parameters.go_version}}-alpine
+        command:
+          - sh
+          - -c
+          - |
+            cd /workspace
+            go vet ./...
+            go test ./... -v -coverprofile=coverage.out
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    # ==================== Kaniko 构建镜像 ====================
+    - name: kaniko-build
+      outputs:
+        parameters:
+          - name: image_tag
+            valueFrom:
+              path: /tmp/image_tag.txt
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        command:
+          - /kaniko/executor
+        args:
+          - --context=/workspace
+          - --dockerfile=/workspace/Dockerfile
+          - --destination={{workflow.parameters.image_registry}}/{{workflow.parameters.image_repo}}:{{workflow.parameters.git_branch}}-{{steps.checkout.outputs.parameters.commit_sha}}
+          - --cache=true
+          - --cache-ttl=24h
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: docker-config
+            mountPath: /kaniko/.docker
+
+    # ==================== 更新 Git Manifest ====================
+    - name: git-update-manifest
+      inputs:
+        parameters:
+          - name: manifest_repo
+            value: "{{workflow.parameters.git_manifest_repo}}"
+          - name: manifest_path
+            value: "{{workflow.parameters.manifest_path}}"
+      container:
+        image: alpine/git:latest
+        command:
+          - sh
+          - -c
+          - |
+            if [ -z "{{inputs.parameters.manifest_repo}}" ]; then
+              echo "No manifest repo configured, skipping manifest update"
+              exit 0
+            fi
+            IMAGE="{{workflow.parameters.image_registry}}/{{workflow.parameters.image_repo}}:{{workflow.parameters.git_branch}}-{{steps.checkout.outputs.parameters.commit_sha}}"
+            git clone --depth 1 {{inputs.parameters.manifest_repo}} /manifest
+            cd /manifest
+            # Update image tag in the manifest
+            find {{inputs.parameters.manifest_path}} -name "*.yaml" -o -name "*.yml" | xargs sed -i "s|image:.*|image: $IMAGE|g"
+            git add .
+            git commit -m "ci: update image to $IMAGE [pipeline={{workflow.parameters.pipeline_id}}]"
+            git push origin HEAD
+        volumeMounts:
+          - name: manifest-workspace
+            mountPath: /manifest
+
+    # ==================== 平台回调 ====================
+    - name: platform-callback
+      container:
+        image: curlimages/curl:latest
+        command:
+          - sh
+          - -c
+          - |
+            echo "Notifying platform: {{workflow.parameters.platform_callback_url}}"
+            if [ -n "{{workflow.parameters.platform_callback_url}}" ]; then
+              curl -X POST {{workflow.parameters.platform_callback_url}} \
+                -H "Content-Type: application/json" \
+                -H "X-Signature: $(echo -n '{{workflow.name}}:{{workflow.pipeline_id}}:SUCCESS' | openssl dgst -sha256 -hmac '{{workflow.parameters.hmac_secret}}' | awk '{print $2}')" \
+                -d '{
+                  "pipeline_id": {{workflow.parameters.pipeline_id}},
+                  "run_id": {{workflow.parameters.run_id}},
+                  "status": "SUCCESS",
+                  "image": "{{workflow.parameters.image_registry}}/{{workflow.parameters.image_repo}}:{{workflow.parameters.git_branch}}-latest"
+                }'
+            fi
+      volumes:
+        - name: callback-script
+          emptyDir: {}
+
+  # ==================== 持久卷 ====================
+  volumes:
+    - name: workspace
+      persistentVolumeClaim:
+        claimName: argo-workflow-workspace
+    - name: manifest-workspace
+      emptyDir: {}
+    - name: docker-config
+      secret:
+        secretName: registry-credentials

@@ -1,0 +1,57 @@
+# ============================================================
+# Jenkins ServiceAccount + RBAC
+# Jenkins Kubernetes Plugin 需要权限在集群中创建 Pod（动态 Agent）
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+---
+# ClusterRole: 允许 Jenkins 在任意 namespace 创建/管理构建 Pod
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-agent-manager
+  labels:
+    app.kubernetes.io/name: jenkins
+rules:
+  # Pod 管理（动态 Agent）
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  # 事件（调试用）
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  # Secret 读取（拉取镜像用）
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  # PVC（构建缓存）
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-agent-manager-binding
+  labels:
+    app.kubernetes.io/name: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-agent-manager
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: devops

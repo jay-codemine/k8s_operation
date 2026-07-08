@@ -1,0 +1,24 @@
+# ============================================================
+# Jenkins Kustomization
+# 使用方式：kubectl apply -k deploy/jenkins/
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: devops
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - secret.yaml
+  - pv.yaml        # 静态 hostPath PV（缓存类 PVC 直接绑定）
+  - pvc.yaml
+  - configmap.yaml
+  - statefulset.yaml
+  - service.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: k8soperation-platform
+    includeSelectors: false

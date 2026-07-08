@@ -1,0 +1,31 @@
+# frontend deps
+node_modules/
+
+# build outputs
+bin/
+dist/
+build/
+k8soperation
+output/
+*.exe
+*.dll
+*.so
+*.dylib
+*.stackdump
+
+# logs
+*.log
+
+# local configs (only ignore sensitive config files, keep templates)
+configs/config.yaml
+configs/k8s.yaml
+storage/logs/*
+storage/artifacts/*
+!storage/artifacts/.gitkeep*.exe~
+*.exe
+deploy/registry-secret.yaml
+
+# K8s Secrets（含敏感信息，禁止提交）
+deploy/backend/secret.yaml
+deploy/jenkins/secret.yaml
+.DS_Store
