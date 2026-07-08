@@ -216,8 +216,6 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		gitops.GET("/app-status", gitOpsCtrl.GetAppStatus)
 		gitops.GET("/sync-history", gitOpsCtrl.GetSyncHistory)
 		gitops.POST("/sync", middlewares.RequireCICDPermission("cicd:pipeline:run"), gitOpsCtrl.TriggerSync)
-			gitops.GET("/release-stats", gitOpsCtrl.ReleaseStats)   // 领导视图统计
-			gitops.GET("/release-search", gitOpsCtrl.ReleaseSearch) // 增强搜索
 	}
 
 	// ==================== 快速接入 ====================

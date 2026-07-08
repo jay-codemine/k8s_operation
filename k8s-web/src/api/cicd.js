@@ -925,20 +925,3 @@ export const getGitOpsSyncHistory = (pipelineId) => {
 export const triggerGitOpsSync = (pipelineId) => {
   return http.post(`${GITOPS_BASE}/sync`, { pipeline_id: pipelineId })
 }
-
-// ==================== GitOps 发布统计与增强搜索 ====================
-
-/**
- * 获取 GitOps 发布统计数据（领导视图）
- */
-export const getGitOpsReleaseStats = () => {
-  return http.get(`${GITOPS_BASE}/release-stats`)
-}
-
-/**
- * GitOps 发布增强搜索
- * @param {Object} params - { keyword, app_name, status, sync_status, env, date_from, date_to, page, page_size }
- */
-export const getGitOpsReleaseSearch = (params = {}) => {
-  return http.get(`${GITOPS_BASE}/release-search`, { params })
-}
