@@ -130,6 +130,7 @@ const router = createRouter({
         // GitOps 流水线（ArgoCD）
         {path: 'cicd/gitops/create', component: () => import('@/views/cicd/GitOpsCreate.vue')},
         {path: 'cicd/gitops/:id/edit', component: () => import('@/views/cicd/GitOpsCreate.vue')},
+        {path: 'cicd/gitops/releases', component: () => import('@/views/cicd/GitOpsReleases.vue')},
         {path: 'cicd/build-records', component: () => import('@/views/cicd/BuildRecords.vue')},
         {path: 'cicd/templates', component: () => import('@/views/cicd/PipelineTemplates.vue')},
         // CICD 发布管理

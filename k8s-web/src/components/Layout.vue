@@ -376,7 +376,7 @@ const menuGroupsConfig = reactive([
       // ── 流水线 (CI) ──
       { section: '流水线 · CI' },
       { path: '/cicd/pipelines', label: '流水线管理', icon: '⚙️' },
-      { path: '/cicd/gitops/create', label: 'GitOps (ArgoCD)', icon: '🔄' },
+      { path: '/cicd/gitops/releases', label: 'GitOps 发布', icon: '🔄' },
       { path: '/cicd/build-records', label: '构建记录', icon: '📋' },
       { path: '/cicd/artifacts', label: '制品库', icon: '📦' },
       // ── 发布中心 (CD) ──
