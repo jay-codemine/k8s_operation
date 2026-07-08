@@ -56,6 +56,21 @@
         </a-form-item>
       </a-col>
       <a-col :span="8">
+        <a-form-item field="gitops_config.workflow_template" label="Workflow 模板">
+          <a-input
+            v-model="form.workflow_template"
+            placeholder="留空自动选择"
+            allow-clear
+          />
+          <template #extra>
+            自定义 Argo WorkflowTemplate 名称，留空则根据语言类型自动选择
+          </template>
+        </a-form-item>
+      </a-col>
+    </a-row>
+
+    <a-row :gutter="16">
+      <a-col :span="12">
         <a-form-item field="gitops_config.workflow_namespace" label="Workflow 命名空间">
           <a-input
             v-model="form.workflow_namespace"
@@ -151,6 +166,7 @@ const form = reactive({
   manifest_path: 'manifests',
   argo_project: 'default',
   target_revision: 'main',
+  workflow_template: '',
   workflow_namespace: 'argo',
   image_registry: '',
   image_repo: '',

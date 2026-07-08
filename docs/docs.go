@@ -3650,6 +3650,11 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/pipeline/discover-apps": {
+            "get": {
+                "responses": {}
+            }
+        },
         "/api/v1/k8s/cicd/pipeline/history": {
             "get": {
                 "description": "分页获取流水线的历史运行记录",
@@ -4194,6 +4199,41 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/quick-onboard": {
+            "post": {
+                "description": "支持 5 种工作负载类型: Deployment/StatefulSet/DaemonSet/CronJob/Job",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD QuickOnboard"
+                ],
+                "summary": "快速接入应用（一键创建 K8s 资源 + 接入流水线 + 可选首次部署）",
+                "parameters": [
+                    {
+                        "description": "接入参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.QuickOnboardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -11451,6 +11491,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/pod/events": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "K8s Pod 管理"
+                ],
+                "summary": "获取 Pod 事件列表",
+                "parameters": [
+                    {
+                        "description": "查询参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.KubeEventListRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/pod/evict": {
             "post": {
                 "description": "通过 Eviction API 驱逐某个 Pod（受 PDB 约束）",
@@ -18461,6 +18535,63 @@ const docTemplate = `{
                 }
             }
         },
+        "models.GitOpsConfig": {
+            "type": "object",
+            "properties": {
+                "argo_app_name": {
+                    "description": "ArgoCD 配置",
+                    "type": "string"
+                },
+                "argo_project": {
+                    "description": "ArgoCD Project (默认 \"default\")",
+                    "type": "string"
+                },
+                "auto_sync": {
+                    "description": "同步策略",
+                    "type": "boolean"
+                },
+                "build_context": {
+                    "description": "构建上下文 (默认 \".\")",
+                    "type": "string"
+                },
+                "dockerfile_path": {
+                    "description": "Dockerfile 路径 (默认 \"Dockerfile\")",
+                    "type": "string"
+                },
+                "git_manifest_repo": {
+                    "description": "Git 仓库（存放 K8s manifests）",
+                    "type": "string"
+                },
+                "image_registry": {
+                    "description": "镜像构建配置",
+                    "type": "string"
+                },
+                "image_repo": {
+                    "description": "镜像仓库名 (e.g., myapp)",
+                    "type": "string"
+                },
+                "manifest_path": {
+                    "description": "manifests 路径 (如 \"manifests/overlays/prod\")",
+                    "type": "string"
+                },
+                "prune_resource": {
+                    "description": "启用资源清理 (不在 Git 中的资源自动删除)",
+                    "type": "boolean"
+                },
+                "target_revision": {
+                    "description": "目标分支/标签",
+                    "type": "string"
+                },
+                "workflow_namespace": {
+                    "description": "WorkflowTemplate 命名空间",
+                    "type": "string"
+                },
+                "workflow_template": {
+                    "description": "Argo Workflows 配置",
+                    "type": "string"
+                }
+            }
+        },
         "models.HPAConfig": {
             "type": "object",
             "properties": {
@@ -19156,6 +19287,17 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.EnvVarDef": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "requests.EnvVarKV": {
             "type": "object",
             "properties": {
@@ -19490,6 +19632,17 @@ const docTemplate = `{
                 },
                 "kube_config": {
                     "description": "✅ 可选（不填就不更新）",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.KVDef": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "value": {
                     "type": "string"
                 }
             }
@@ -20981,6 +21134,10 @@ const docTemplate = `{
                     "description": "部署环境",
                     "type": "string"
                 },
+                "deploy_mode": {
+                    "description": "GitOps 部署模式配置",
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -21007,6 +21164,14 @@ const docTemplate = `{
                 },
                 "git_repo": {
                     "type": "string"
+                },
+                "gitops_config": {
+                    "description": "GitOps 配置（DeployMode=gitops 时必填）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GitOpsConfig"
+                        }
+                    ]
                 },
                 "jenkins_job": {
                     "type": "string"
@@ -21217,6 +21382,21 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.PortDef": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "protocol": {
+                    "description": "TCP/UDP，默认 TCP",
+                    "type": "string"
+                }
+            }
+        },
         "requests.PortMapping": {
             "type": "object",
             "properties": {
@@ -21229,6 +21409,159 @@ const docTemplate = `{
                 },
                 "target_port": {
                     "type": "integer"
+                }
+            }
+        },
+        "requests.QuickOnboardRequest": {
+            "type": "object",
+            "properties": {
+                "app_name": {
+                    "description": "--- 基础信息 ---",
+                    "type": "string"
+                },
+                "auto_deploy": {
+                    "description": "--- 可选：是否立即部署 ---",
+                    "type": "boolean"
+                },
+                "cluster_id": {
+                    "description": "--- 集群 ---",
+                    "type": "integer"
+                },
+                "configmap_data": {
+                    "description": "--- ConfigMap ---",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.KVDef"
+                    }
+                },
+                "configmap_mount_path": {
+                    "description": "如 /etc/config",
+                    "type": "string"
+                },
+                "container_name": {
+                    "type": "string"
+                },
+                "cpu_lim": {
+                    "description": "如 \"500m\"",
+                    "type": "string"
+                },
+                "cpu_req": {
+                    "description": "--- 资源配置 ---",
+                    "type": "string"
+                },
+                "cron_concurrency_policy": {
+                    "description": "Allow/Forbid/Replace",
+                    "type": "string"
+                },
+                "cron_schedule": {
+                    "description": "--- CronJob 专属 ---",
+                    "type": "string"
+                },
+                "env_vars": {
+                    "description": "--- 环境变量 ---",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.EnvVarDef"
+                    }
+                },
+                "git_branch": {
+                    "type": "string"
+                },
+                "git_repo": {
+                    "description": "--- 可选：Git 仓库（用于创建流水线）---",
+                    "type": "string"
+                },
+                "image": {
+                    "description": "--- 镜像 ---",
+                    "type": "string"
+                },
+                "job_backoff_limit": {
+                    "description": "重试次数",
+                    "type": "integer"
+                },
+                "job_completions": {
+                    "description": "--- Job 专属 ---",
+                    "type": "integer"
+                },
+                "job_parallelism": {
+                    "description": "并行度",
+                    "type": "integer"
+                },
+                "job_ttl_seconds_after_finished": {
+                    "description": "完成后保留时间",
+                    "type": "integer"
+                },
+                "mem_lim": {
+                    "description": "如 \"256Mi\"",
+                    "type": "string"
+                },
+                "mem_req": {
+                    "description": "如 \"128Mi\"",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "ports": {
+                    "description": "--- 端口 ---",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.PortDef"
+                    }
+                },
+                "pvc_access_mode": {
+                    "description": "ReadWriteOnce/ReadWriteMany/ReadOnlyMany",
+                    "type": "string"
+                },
+                "pvc_mount_path": {
+                    "description": "如 /data",
+                    "type": "string"
+                },
+                "pvc_name": {
+                    "description": "--- PVC 存储 ---",
+                    "type": "string"
+                },
+                "pvc_size": {
+                    "description": "如 \"10Gi\"",
+                    "type": "string"
+                },
+                "pvc_storage_class": {
+                    "description": "storage class 名称",
+                    "type": "string"
+                },
+                "replicas": {
+                    "description": "--- 副本数（Deployment/StatefulSet 有效）---",
+                    "type": "integer"
+                },
+                "secret_data": {
+                    "description": "--- Secret ---",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.KVDef"
+                    }
+                },
+                "secret_mount_path": {
+                    "description": "如 /etc/secrets",
+                    "type": "string"
+                },
+                "service_ports": {
+                    "description": "可选，默认用 ports",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.PortDef"
+                    }
+                },
+                "service_type": {
+                    "description": "--- Service 配置 ---",
+                    "type": "string"
+                },
+                "workload_kind": {
+                    "description": "Deployment|StatefulSet|DaemonSet|CronJob|Job",
+                    "type": "string"
+                },
+                "workload_name": {
+                    "description": "可选，默认=app_name",
+                    "type": "string"
                 }
             }
         },

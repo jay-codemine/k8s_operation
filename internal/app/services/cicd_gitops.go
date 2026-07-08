@@ -359,6 +359,59 @@ func (s *Services) GitOpsSyncCallback(ctx context.Context, req *requests.GitOpsS
 	return nil
 }
 
+// ==================== 前端认证接口 ====================
+
+// GitOpsGetAppStatus 通过 ArgoCD API 查询 Application 同步状态（供前端调用）
+func (s *Services) GitOpsGetAppStatus(ctx context.Context, appName string) (*argocd.SyncStatus, error) {
+	if global.GitOpsSetting == nil || global.GitOpsSetting.ArgoCDURL == "" {
+		return nil, errors.New("GitOps 模式未配置 ArgoCD，请在 config.yaml 中设置 GitOps.ArgoCDURL")
+	}
+
+	argoClient := argocd.GetOrCreateClient(
+		global.GitOpsSetting.ArgoCDURL,
+		global.GitOpsSetting.ArgoCDAuthToken,
+	)
+
+	return argoClient.GetApplicationStatus(ctx, appName)
+}
+
+// GitOpsTriggerSyncByPipeline 通过流水线 ID 触发 ArgoCD 同步（供前端调用）
+func (s *Services) GitOpsTriggerSyncByPipeline(ctx context.Context, pipelineID int64) error {
+	if global.GitOpsSetting == nil || global.GitOpsSetting.ArgoCDURL == "" {
+		return errors.New("GitOps 模式未配置 ArgoCD，请在 config.yaml 中设置 GitOps.ArgoCDURL")
+	}
+
+	pipeline, err := s.dao.PipelineGetByID(ctx, pipelineID)
+	if err != nil {
+		return fmt.Errorf("查询流水线失败: %w", err)
+	}
+
+	gitOpsConfig, err := models.GitOpsConfigFromJSONMap(pipeline.GitOpsConfig)
+	if err != nil || gitOpsConfig == nil {
+		return fmt.Errorf("解析 GitOps 配置失败: %w", err)
+	}
+
+	if gitOpsConfig.ArgoCDAppName == "" {
+		return errors.New("未配置 ArgoCD Application 名称")
+	}
+
+	argoClient := argocd.GetOrCreateClient(
+		global.GitOpsSetting.ArgoCDURL,
+		global.GitOpsSetting.ArgoCDAuthToken,
+	)
+
+	// 触发同步
+	if err := argoClient.SyncApplication(ctx, gitOpsConfig.ArgoCDAppName,
+		gitOpsConfig.TargetRevision, gitOpsConfig.PruneResource); err != nil {
+		return fmt.Errorf("触发 ArgoCD 同步失败: %w", err)
+	}
+
+	global.Logger.Infof("[GitOps] 手动触发 ArgoCD 同步: pipeline=%d, app=%s",
+		pipelineID, gitOpsConfig.ArgoCDAppName)
+
+	return nil
+}
+
 // ==================== HMAC 验证 ====================
 
 // GitOpsVerifyHMAC 验证 GitOps Webhook 的 HMAC 签名（公开方法，供 controller 调用）

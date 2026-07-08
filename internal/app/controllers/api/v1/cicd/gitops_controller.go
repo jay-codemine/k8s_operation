@@ -84,3 +84,67 @@ func (c *GitOpsController) Webhook(ctx *gin.Context) {
 	pipelineCtrl := NewPipelineController()
 	pipelineCtrl.Callback(ctx)
 }
+
+// GetAppStatus 获取 ArgoCD Application 同步状态
+// GET /api/v1/k8s/cicd/gitops/app-status
+func (c *GitOpsController) GetAppStatus(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	appName := ctx.Query("app_name")
+	if appName == "" {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("缺少必要参数: app_name"))
+		return
+	}
+
+	status, err := c.svc.GitOpsGetAppStatus(ctx, appName)
+	if err != nil {
+		global.Logger.Errorf("[GitOps] 查询 Application 状态失败: %v", err)
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{
+		"app_name":      appName,
+		"sync_status":   status.SyncStatus,
+		"sync_revision": status.SyncRevision,
+		"health_status": status.HealthStatus,
+		"phase":         status.Phase,
+	})
+}
+
+// GetSyncHistory 获取流水线的 GitOps 同步历史
+// GET /api/v1/k8s/cicd/gitops/sync-history
+func (c *GitOpsController) GetSyncHistory(ctx *gin.Context) {
+	// 复用 PipelineController.History 逻辑（内部自行处理响应）
+	pipelineCtrl := NewPipelineController()
+	pipelineCtrl.History(ctx)
+}
+
+// TriggerSync 手动触发 ArgoCD Application 同步
+// POST /api/v1/k8s/cicd/gitops/sync
+func (c *GitOpsController) TriggerSync(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	type triggerRequest struct {
+		PipelineID int64 `json:"pipeline_id"`
+	}
+
+	var req triggerRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("参数解析失败"))
+		return
+	}
+
+	if req.PipelineID <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("缺少必要参数: pipeline_id"))
+		return
+	}
+
+	if err := c.svc.GitOpsTriggerSyncByPipeline(ctx, req.PipelineID); err != nil {
+		global.Logger.Errorf("[GitOps] 手动触发同步失败: %v", err)
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(gin.H{"message": "同步已触发"})
+}

@@ -323,6 +323,56 @@
             </div>
           </div>
 
+          <!-- GitOps 同步状态（仅在 GitOps 模式下显示） -->
+          <div v-if="pipeline.deploy_mode === 'gitops'" class="section gitops-section">
+            <h3 class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="title-icon">
+                <polyline points="16 3 21 3 21 8"/>
+                <line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/>
+                <line x1="15" y1="15" x2="21" y2="21"/>
+                <line x1="4" y1="4" x2="9" y2="9"/>
+              </svg>
+              GitOps 同步状态
+            </h3>
+            <div class="gitops-info-card">
+              <div class="gitops-grid">
+                <div class="gitops-item">
+                  <span class="gitops-label">部署模式</span>
+                  <span class="gitops-value tag-gitops">GitOps (ArgoCD)</span>
+                </div>
+                <div v-if="latestRun && latestRun.argo_app_name" class="gitops-item">
+                  <span class="gitops-label">ArgoCD Application</span>
+                  <span class="gitops-value code-text">{{ latestRun.argo_app_name }}</span>
+                </div>
+                <div v-if="latestRun && latestRun.workflow_name" class="gitops-item">
+                  <span class="gitops-label">Argo Workflow</span>
+                  <span class="gitops-value code-text">{{ latestRun.workflow_name }}</span>
+                </div>
+                <div v-if="latestRun && latestRun.sync_status" class="gitops-item">
+                  <span class="gitops-label">同步状态</span>
+                  <span :class="['gitops-value', 'sync-status-badge', `sync-${(latestRun.sync_status || '').toLowerCase()}`]">
+                    {{ latestRun.sync_status }}
+                  </span>
+                </div>
+                <div v-if="latestRun && latestRun.sync_revision" class="gitops-item">
+                  <span class="gitops-label">同步版本</span>
+                  <span class="gitops-value code-text">{{ (latestRun.sync_revision || '').substring(0, 8) }}</span>
+                </div>
+              </div>
+              <!-- 手动同步按钮 -->
+              <div class="gitops-actions">
+                <button class="btn btn-sync" @click="handleGitOpsSync" :disabled="syncingGitOps">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                  </svg>
+                  {{ syncingGitOps ? '同步中...' : '手动触发同步' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- 快速操作 -->
           <div class="section">
             <h3 class="section-title">快速操作</h3>
@@ -1690,7 +1740,7 @@ import {
 } from '@/api/platform/pipeline'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import { PipelineHorizontalView, CodeQualityPanel } from '@/components/cicd'
-import { getSonarReport } from '@/api/cicd'
+import { getSonarReport, triggerGitOpsSync } from '@/api/cicd'
 
 export default {
   name: 'PipelineDetail',
@@ -1769,6 +1819,7 @@ export default {
     const approving = ref(false)
     const deploying = ref(false)
     const rollingBack = ref(false)  // 回滚中
+    const syncingGitOps = ref(false)  // GitOps 同步中
     const cancelling = ref(false)   // 取消中
     const approvalDecision = ref('approve')  // 默认通过
     const approvalComment = ref('')  // 审批备注
@@ -2365,6 +2416,27 @@ export default {
 
     const handleEdit = () => {
       router.push(`/cicd/pipelines/${pipelineId.value}/edit`)
+    }
+
+    // 手动触发 GitOps (ArgoCD) 同步
+    const handleGitOpsSync = async () => {
+      if (!pipelineId.value) return
+      syncingGitOps.value = true
+      try {
+        const response = await triggerGitOpsSync(parseInt(pipelineId.value))
+        if (response.code === 0) {
+          Message.success('ArgoCD 同步已触发')
+          // 刷新数据
+          await loadPipeline()
+        } else {
+          Message.error(response.msg || '触发同步失败')
+        }
+      } catch (error) {
+        console.error('GitOps 同步失败:', error)
+        Message.error(error.msg || '触发同步失败')
+      } finally {
+        syncingGitOps.value = false
+      }
     }
 
     const viewRunLogs = (run) => {
@@ -3246,6 +3318,8 @@ export default {
       runSubmitting,
       handleStop,
       handleEdit,
+      handleGitOpsSync,
+      syncingGitOps,
       viewRunLogs,
       toggleStageExpand,
       selectStage,
@@ -8056,5 +8130,110 @@ export default {
   text-align: center;
   color: #94a3b8;
   font-size: 14px;
+}
+
+/* ==================== GitOps 同步状态 ==================== */
+.gitops-section {
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 12px;
+  padding: 0;
+}
+.gitops-section .section-title {
+  padding: 16px 20px 8px;
+  margin: 0;
+  border-bottom: none;
+}
+.gitops-info-card {
+  padding: 12px 20px 16px;
+}
+.gitops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.gitops-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gitops-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+.gitops-value {
+  font-size: 14px;
+  color: #1f2937;
+  font-weight: 600;
+}
+.gitops-value.code-text {
+  font-family: monospace;
+  font-size: 13px;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: fit-content;
+}
+.gitops-value.tag-gitops {
+  color: #0d9488;
+  font-weight: 600;
+}
+.sync-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sync-status-badge.sync-synced {
+  background: #d1fae5;
+  color: #065f46;
+}
+.sync-status-badge.sync-outofsync {
+  background: #fef3c7;
+  color: #92400e;
+}
+.sync-status-badge.sync-unknown {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+.sync-status-badge.sync-progressing {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.gitops-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ccfbf1;
+}
+.btn-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: #0d9488;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-sync:hover {
+  background: #0f766e;
+}
+.btn-sync:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-sync svg {
+  width: 16px;
+  height: 16px;
 }
 </style>

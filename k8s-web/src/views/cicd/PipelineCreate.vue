@@ -352,7 +352,62 @@
                   <div class="input-hint">选择语言后自动匹配 Jenkins 构建模板，无需手动配置</div>
                 </div>
               </div>
-                        
+
+              <!-- 部署模式选择 -->
+              <div class="form-section">
+                <div class="section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                    <line x1="4" y1="22" x2="4" y2="15"/>
+                  </svg>
+                  部署模式
+                </div>
+                <div class="form-group">
+                  <div class="deploy-mode-selector">
+                    <div
+                      :class="['mode-card', { active: pipelineData.deploy_mode === 'jenkins' }]"
+                      @click="pipelineData.deploy_mode = 'jenkins'"
+                    >
+                      <div class="mode-card-header">
+                        <div class="mode-icon jenkins-icon">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                          </svg>
+                        </div>
+                        <div class="mode-info">
+                          <div class="mode-title">Jenkins CI/CD</div>
+                          <div class="mode-desc">传统 Push-based 部署，Jenkins 构建后直接更新 K8s 工作负载</div>
+                        </div>
+                        <div v-if="pipelineData.deploy_mode === 'jenkins'" class="mode-check">&#10003;</div>
+                      </div>
+                    </div>
+                    <div
+                      :class="['mode-card', { active: pipelineData.deploy_mode === 'gitops' }]"
+                      @click="pipelineData.deploy_mode = 'gitops'"
+                    >
+                      <div class="mode-card-header">
+                        <div class="mode-icon gitops-icon">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="16 3 21 3 21 8"/>
+                            <line x1="4" y1="20" x2="21" y2="3"/>
+                            <polyline points="21 16 21 21 16 21"/>
+                            <line x1="15" y1="15" x2="21" y2="21"/>
+                            <line x1="4" y1="4" x2="9" y2="9"/>
+                          </svg>
+                        </div>
+                        <div class="mode-info">
+                          <div class="mode-title">GitOps (ArgoCD)</div>
+                          <div class="mode-desc">Pull-based 部署，Argo Workflows 构建 + ArgoCD 自动同步</div>
+                        </div>
+                        <div v-if="pipelineData.deploy_mode === 'gitops'" class="mode-check">&#10003;</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- 描述（可折叠） -->
               <div class="form-group">
                 <label class="form-label" style="cursor:pointer;display:flex;align-items:center;gap:6px;" @click="showDescription = !showDescription">
@@ -374,20 +429,60 @@
           <!-- Step 2: 构建配置 -->
           <div v-show="currentStep === 1" class="step-panel">
             <div class="panel-header">
-              <div class="panel-icon jenkins">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div :class="['panel-icon', pipelineData.deploy_mode === 'gitops' ? 'gitops' : 'jenkins']">
+                <svg v-if="pipelineData.deploy_mode === 'gitops'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="16 3 21 3 21 8"/>
+                  <line x1="4" y1="20" x2="21" y2="3"/>
+                  <polyline points="21 16 21 21 16 21"/>
+                  <line x1="15" y1="15" x2="21" y2="21"/>
+                  <line x1="4" y1="4" x2="9" y2="9"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
                   <line x1="8" y1="21" x2="16" y2="21"/>
                   <line x1="12" y1="17" x2="12" y2="21"/>
                 </svg>
               </div>
               <div>
-                <h2>构建配置</h2>
-                <p>镜像仓库和 Jenkins 构建参数</p>
+                <h2 v-if="pipelineData.deploy_mode === 'gitops'">GitOps 配置</h2>
+                <h2 v-else>构建配置</h2>
+                <p v-if="pipelineData.deploy_mode === 'gitops'">配置 ArgoCD + Argo Workflows 参数</p>
+                <p v-else>镜像仓库和 Jenkins 构建参数</p>
               </div>
             </div>
 
-            <div class="form-card">
+            <!-- GitOps 模式：显示 GitOpsConfigForm -->
+            <div v-if="pipelineData.deploy_mode === 'gitops'" class="form-card">
+              <GitOpsConfigForm v-model="pipelineData.gitops_config" />
+              <!-- 构建核心参数在 GitOps 模式下同样需要：镜像仓库 -->
+              <div class="build-params-section" style="margin-top:20px;">
+                <div class="section-divider">
+                  <span class="divider-text">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
+                      <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    </svg>
+                    构建参数
+                  </span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">镜像仓库地址 <span class="required">*</span></label>
+                  <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                      <line x1="6" y1="6" x2="6.01" y2="6"/>
+                      <line x1="6" y1="18" x2="6.01" y2="18"/>
+                    </svg>
+                    <input type="text" v-model="pipelineData.image_repo" class="form-input with-icon"
+                      :placeholder="defaultImageRegistry ? `${defaultImageRegistry}/应用名` : 'harbor.example.com/project/app-name'" />
+                  </div>
+                  <div class="input-hint">GitOps 模式下镜像由 Argo Workflows 构建并推送</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Jenkins 模式：显示现有构建配置 -->
+            <div v-else class="form-card">
               <!-- 默认顯示：构建功能开关 -->
               <!-- Jenkins 高级配置已自动处理，隐藏不显示 -->
               <div class="form-group" v-show="false">
@@ -1974,19 +2069,22 @@ import jobsApi from '@/api/cluster/workloads/jobs'
 import podsApi from '@/api/cluster/workloads/pods'
 import { useClusterStore } from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
+import { GitOpsConfigForm } from '@/components/cicd'
 
 export default {
   name: 'PipelineCreate',
+  components: { GitOpsConfigForm },
   setup() {
     const router = useRouter()
     const route = useRoute()
     const pipelineId = route.params.id
     const isEdit = !!pipelineId
 
-    // 步骤定义：快速发布 3 步（应用信息 + 构建配置 + 自动部署）
+    // 步骤定义：快速发布 4 步（应用信息 + 构建配置 + 部署策略 + 自动部署）
     const steps = ref([
-      { id: 'basic', title: '应用信息', description: '名称、语言和仓库' },
-      { id: 'jenkins', title: '构建配置', description: '镜像仓库和构建参数' },
+      { id: 'basic', title: '应用信息', description: '名称、模式、语言和仓库' },
+      { id: 'build', title: '构建配置', description: '镜像仓库和构建参数' },
+      { id: 'strategy', title: '部署策略', description: '滚动更新和资源配额' },
       { id: 'auto-deploy', title: '自动部署', description: 'K8s 目标配置' }
     ])
 
@@ -2252,6 +2350,23 @@ export default {
       description: '',
       git_repo: '',
       git_branch: 'main',
+      // 部署模式: 'jenkins' | 'gitops'
+      deploy_mode: 'jenkins',
+      gitops_config: {
+        argo_app_name: '',
+        git_manifest_repo: '',
+        manifest_path: 'manifests',
+        argo_project: 'default',
+        target_revision: 'main',
+        workflow_template: '',
+        workflow_namespace: 'argo',
+        image_registry: '',
+        image_repo: '',
+        dockerfile_path: 'Dockerfile',
+        build_context: '.',
+        auto_sync: true,
+        prune_resource: false
+      },
       jenkins_url: '',
       jenkins_job: '',
       language_type: 'go',  // 与 selectedServiceType 联动，后端据此自动推导 jenkins_job
@@ -2701,6 +2816,9 @@ export default {
               description: data.description || '',
               git_repo: data.git_repo || '',
               git_branch: data.git_branch || 'main',
+              // 部署模式回显
+              deploy_mode: data.deploy_mode || 'jenkins',
+              gitops_config: data.gitops_config ? { ...pipelineData.value.gitops_config, ...data.gitops_config } : pipelineData.value.gitops_config,
               jenkins_url: data.jenkins_url || '',
               jenkins_job: data.jenkins_job || '',
               language_type: langType,
@@ -2789,6 +2907,25 @@ export default {
           git_repo: pipelineData.value.git_repo,
           git_branch: pipelineData.value.git_branch || 'main',
           language_type: pipelineData.value.language_type || 'go',
+          deploy_mode: pipelineData.value.deploy_mode,
+          gitops_config: pipelineData.value.deploy_mode === 'gitops'
+            ? {
+                ...pipelineData.value.gitops_config,
+                // 仅在 gitops_config 未填写 image_repo/image_registry 时，从顶层 image_repo 补充
+                ...(pipelineData.value.gitops_config.image_repo || pipelineData.value.gitops_config.image_registry
+                  ? {}
+                  : pipelineData.value.image_repo
+                    ? (() => {
+                        const parts = pipelineData.value.image_repo.split('/')
+                        return parts.length >= 3
+                          ? { image_registry: parts[0] + '/' + parts[1], image_repo: parts[2] }
+                          : parts.length === 2
+                            ? { image_registry: parts[0], image_repo: parts[1] }
+                            : { image_repo: parts[0] }
+                      })()
+                    : {})
+              }
+            : undefined,
           auto_deploy: pipelineData.value.auto_deploy,
           target_cluster_id: pipelineData.value.target_cluster_id || 0,
           target_namespace: pipelineData.value.target_namespace || '',
@@ -2928,9 +3065,32 @@ export default {
           }
         }
         submitData.env_vars = envVars
-        delete submitData.enable_sonar  // 后端不需要此字段（通过 env_vars 传递 ENABLE_SONAR）
+        // enable_sonar 后端需要此字段写入 DB 列，同时通过 env_vars 传递 ENABLE_SONAR 给 Jenkins
         // 注意：enable_artifact_upload 是后端独立字段，保留传递
         // 清理前端独立字段，后端不需要
+        // GitOps 模式：合并镜像仓库地址到 gitops_config
+        if (submitData.deploy_mode === 'gitops') {
+          if (!submitData.gitops_config) submitData.gitops_config = {}
+          if (submitData.image_repo) {
+            // 将顶层的 image_repo 合并到 gitops_config 中
+            if (!submitData.gitops_config.image_registry && !submitData.gitops_config.image_repo) {
+              const parts = submitData.image_repo.split('/')
+              if (parts.length >= 3) {
+                submitData.gitops_config.image_registry = parts[0] + '/' + parts[1]
+                submitData.gitops_config.image_repo = parts[2]
+              } else if (parts.length === 2) {
+                submitData.gitops_config.image_registry = parts[0]
+                submitData.gitops_config.image_repo = parts[1]
+              } else {
+                submitData.gitops_config.image_repo = parts[0]
+              }
+            }
+          }
+        } else {
+          // Jenkins 模式：清除 gitops_config
+          delete submitData.gitops_config
+        }
+
         delete submitData.image_repo
         delete submitData.image_tag
         delete submitData.skip_tests
@@ -7651,5 +7811,88 @@ export default {
   .deploy-preview-panel {
     display: none;
   }
+}
+
+/* ==================== 部署模式选择器 ==================== */
+.deploy-mode-selector {
+  display: flex;
+  gap: 12px;
+}
+.mode-card {
+  flex: 1;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fff;
+}
+.mode-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+.mode-card.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
+}
+.mode-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mode-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.mode-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.mode-icon.jenkins-icon {
+  background: #fef3c7;
+  color: #d97706;
+}
+.mode-icon.gitops-icon {
+  background: #ccfbf1;
+  color: #0d9488;
+}
+.mode-info {
+  flex: 1;
+}
+.mode-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 2px;
+}
+.mode-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+.mode-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* GitOps panel-icon style */
+.panel-icon.gitops {
+  background: linear-gradient(135deg, #ccfbf1, #99f6e4);
+  color: #0d9488;
 }
 </style>

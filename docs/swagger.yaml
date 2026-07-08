@@ -382,6 +382,48 @@ definitions:
       value:
         type: string
     type: object
+  models.GitOpsConfig:
+    properties:
+      argo_app_name:
+        description: ArgoCD 配置
+        type: string
+      argo_project:
+        description: ArgoCD Project (默认 "default")
+        type: string
+      auto_sync:
+        description: 同步策略
+        type: boolean
+      build_context:
+        description: 构建上下文 (默认 ".")
+        type: string
+      dockerfile_path:
+        description: Dockerfile 路径 (默认 "Dockerfile")
+        type: string
+      git_manifest_repo:
+        description: Git 仓库（存放 K8s manifests）
+        type: string
+      image_registry:
+        description: 镜像构建配置
+        type: string
+      image_repo:
+        description: 镜像仓库名 (e.g., myapp)
+        type: string
+      manifest_path:
+        description: manifests 路径 (如 "manifests/overlays/prod")
+        type: string
+      prune_resource:
+        description: 启用资源清理 (不在 Git 中的资源自动删除)
+        type: boolean
+      target_revision:
+        description: 目标分支/标签
+        type: string
+      workflow_namespace:
+        description: WorkflowTemplate 命名空间
+        type: string
+      workflow_template:
+        description: Argo Workflows 配置
+        type: string
+    type: object
   models.HPAConfig:
     properties:
       cpu_target:
@@ -849,6 +891,13 @@ definitions:
       username:
         type: string
     type: object
+  requests.EnvVarDef:
+    properties:
+      name:
+        type: string
+      value:
+        type: string
+    type: object
   requests.EnvVarKV:
     properties:
       name:
@@ -1074,6 +1123,13 @@ definitions:
         type: integer
       kube_config:
         description: ✅ 可选（不填就不更新）
+        type: string
+    type: object
+  requests.KVDef:
+    properties:
+      key:
+        type: string
+      value:
         type: string
     type: object
   requests.KubeAppConfigCreateRequest:
@@ -2101,6 +2157,9 @@ definitions:
       deploy_env:
         description: 部署环境
         type: string
+      deploy_mode:
+        description: GitOps 部署模式配置
+        type: string
       description:
         type: string
       enable_artifact_upload:
@@ -2120,6 +2179,10 @@ definitions:
         type: string
       git_repo:
         type: string
+      gitops_config:
+        allOf:
+        - $ref: '#/definitions/models.GitOpsConfig'
+        description: GitOps 配置（DeployMode=gitops 时必填）
       jenkins_job:
         type: string
       jenkins_url:
@@ -2269,6 +2332,16 @@ definitions:
         description: 工作负载名称
         type: string
     type: object
+  requests.PortDef:
+    properties:
+      name:
+        type: string
+      port:
+        type: integer
+      protocol:
+        description: TCP/UDP，默认 TCP
+        type: string
+    type: object
   requests.PortMapping:
     properties:
       port:
@@ -2278,6 +2351,118 @@ definitions:
         type: string
       target_port:
         type: integer
+    type: object
+  requests.QuickOnboardRequest:
+    properties:
+      app_name:
+        description: '--- 基础信息 ---'
+        type: string
+      auto_deploy:
+        description: '--- 可选：是否立即部署 ---'
+        type: boolean
+      cluster_id:
+        description: '--- 集群 ---'
+        type: integer
+      configmap_data:
+        description: '--- ConfigMap ---'
+        items:
+          $ref: '#/definitions/requests.KVDef'
+        type: array
+      configmap_mount_path:
+        description: 如 /etc/config
+        type: string
+      container_name:
+        type: string
+      cpu_lim:
+        description: 如 "500m"
+        type: string
+      cpu_req:
+        description: '--- 资源配置 ---'
+        type: string
+      cron_concurrency_policy:
+        description: Allow/Forbid/Replace
+        type: string
+      cron_schedule:
+        description: '--- CronJob 专属 ---'
+        type: string
+      env_vars:
+        description: '--- 环境变量 ---'
+        items:
+          $ref: '#/definitions/requests.EnvVarDef'
+        type: array
+      git_branch:
+        type: string
+      git_repo:
+        description: '--- 可选：Git 仓库（用于创建流水线）---'
+        type: string
+      image:
+        description: '--- 镜像 ---'
+        type: string
+      job_backoff_limit:
+        description: 重试次数
+        type: integer
+      job_completions:
+        description: '--- Job 专属 ---'
+        type: integer
+      job_parallelism:
+        description: 并行度
+        type: integer
+      job_ttl_seconds_after_finished:
+        description: 完成后保留时间
+        type: integer
+      mem_lim:
+        description: 如 "256Mi"
+        type: string
+      mem_req:
+        description: 如 "128Mi"
+        type: string
+      namespace:
+        type: string
+      ports:
+        description: '--- 端口 ---'
+        items:
+          $ref: '#/definitions/requests.PortDef'
+        type: array
+      pvc_access_mode:
+        description: ReadWriteOnce/ReadWriteMany/ReadOnlyMany
+        type: string
+      pvc_mount_path:
+        description: 如 /data
+        type: string
+      pvc_name:
+        description: '--- PVC 存储 ---'
+        type: string
+      pvc_size:
+        description: 如 "10Gi"
+        type: string
+      pvc_storage_class:
+        description: storage class 名称
+        type: string
+      replicas:
+        description: '--- 副本数（Deployment/StatefulSet 有效）---'
+        type: integer
+      secret_data:
+        description: '--- Secret ---'
+        items:
+          $ref: '#/definitions/requests.KVDef'
+        type: array
+      secret_mount_path:
+        description: 如 /etc/secrets
+        type: string
+      service_ports:
+        description: 可选，默认用 ports
+        items:
+          $ref: '#/definitions/requests.PortDef'
+        type: array
+      service_type:
+        description: '--- Service 配置 ---'
+        type: string
+      workload_kind:
+        description: Deployment|StatefulSet|DaemonSet|CronJob|Job
+        type: string
+      workload_name:
+        description: 可选，默认=app_name
+        type: string
     type: object
   requests.ResourceRef:
     properties:
@@ -5500,6 +5685,9 @@ paths:
       summary: 从K8s Deployment自动发现应用信息
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/pipeline/discover-apps:
+    get:
+      responses: {}
   /api/v1/k8s/cicd/pipeline/history:
     get:
       description: 分页获取流水线的历史运行记录
@@ -5872,6 +6060,29 @@ paths:
       summary: 更新流水线
       tags:
       - CICD Pipeline
+  /api/v1/k8s/cicd/quick-onboard:
+    post:
+      consumes:
+      - application/json
+      description: '支持 5 种工作负载类型: Deployment/StatefulSet/DaemonSet/CronJob/Job'
+      parameters:
+      - description: 接入参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.QuickOnboardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 快速接入应用（一键创建 K8s 资源 + 接入流水线 + 可选首次部署）
+      tags:
+      - CICD QuickOnboard
   /api/v1/k8s/cicd/release/batch-cancel:
     post:
       consumes:
@@ -10706,6 +10917,28 @@ paths:
       summary: 获取Pod的详情
       tags:
       - K8s Pod管理
+  /api/v1/k8s/pod/events:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 查询参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/requests.KubeEventListRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取 Pod 事件列表
+      tags:
+      - K8s Pod 管理
   /api/v1/k8s/pod/evict:
     post:
       consumes:

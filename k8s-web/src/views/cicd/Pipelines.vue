@@ -310,6 +310,11 @@
               </span>
             </td>
             <td>
+              <span :class="['deploy-mode-tag', pipeline.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                {{ pipeline.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+              </span>
+            </td>
+            <td>
               <span :class="['run-status-tag', `status-${getEffectiveRunStatus(pipeline)}`]">
                 {{ runStatusText(getEffectiveRunStatus(pipeline)) }}
               </span>
@@ -458,6 +463,12 @@
         <!-- 运行状态 -->
         <div class="run-status">
           <div class="status-info">
+            <div class="status-row">
+              <span class="label">部署模式</span>
+              <span :class="['deploy-mode-tag', pipeline.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                {{ pipeline.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+              </span>
+            </div>
             <div class="status-row">
               <span class="label">上次运行</span>
               <span :class="['run-status-tag', `status-${getEffectiveRunStatus(pipeline)}`]">
@@ -1711,6 +1722,26 @@ export default {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
+}
+
+/* ==================== 部署模式标签 ==================== */
+.deploy-mode-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.deploy-mode-tag.mode-jenkins {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+.deploy-mode-tag.mode-gitops {
+  background: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid #99f6e4;
 }
 
 .status-tag.status-running {

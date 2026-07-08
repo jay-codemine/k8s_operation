@@ -208,6 +208,16 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		agent.GET("/by-scope", r.agentCtrl.ListByScope)
 	}
 
+	// ==================== GitOps 管理（认证接口） ====================
+	// /api/v1/k8s/cicd/gitops/...
+	gitOpsCtrl := cicd.NewGitOpsController()
+	gitops := rg.Group("/gitops")
+	{
+		gitops.GET("/app-status", gitOpsCtrl.GetAppStatus)
+		gitops.GET("/sync-history", gitOpsCtrl.GetSyncHistory)
+		gitops.POST("/sync", middlewares.RequireCICDPermission("cicd:pipeline:run"), gitOpsCtrl.TriggerSync)
+	}
+
 	// ==================== 快速接入 ====================
 	rg.POST("/quick-onboard", middlewares.RequireCICDPermission("cicd:pipeline:create"), r.onboardCtrl.Onboard)
 }

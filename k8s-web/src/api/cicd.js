@@ -900,26 +900,28 @@ export const discoverFromK8s = (params) => {
 
 // ==================== GitOps APIs ====================
 
+const GITOPS_BASE = `${API_BASE}/k8s/cicd/gitops`
+
 /**
  * 获取 ArgoCD Application 同步状态
- * @param {Object} params - { app_name }
+ * @param {string} appName - ArgoCD Application 名称
  */
 export const getGitOpsAppStatus = (appName) => {
-  return http.get(`${CICD_BASE}/gitops/app-status`, { params: { app_name: appName } })
+  return http.get(`${GITOPS_BASE}/app-status`, { params: { app_name: appName } })
 }
 
 /**
  * 获取 GitOps 流水线同步历史
- * @param {number} pipelineId
+ * @param {number} pipelineId - 流水线ID
  */
 export const getGitOpsSyncHistory = (pipelineId) => {
-  return http.get(`${CICD_BASE}/gitops/sync-history`, { params: { pipeline_id: pipelineId } })
+  return http.get(`${GITOPS_BASE}/sync-history`, { params: { id: pipelineId } })
 }
 
 /**
  * 手动触发 ArgoCD 同步
- * @param {number} pipelineId
+ * @param {number} pipelineId - 流水线ID
  */
 export const triggerGitOpsSync = (pipelineId) => {
-  return http.post(`${CICD_BASE}/gitops/sync`, { pipeline_id: pipelineId })
+  return http.post(`${GITOPS_BASE}/sync`, { pipeline_id: pipelineId })
 }
