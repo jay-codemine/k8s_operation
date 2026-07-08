@@ -184,9 +184,45 @@
               </a-col>
               <a-col :span="8">
                 <a-form-item field="require_approval" label="发布审批">
-                  <a-switch v-model="form.require_approval" />
-                  <template #extra>生产环境建议开启</template>
+                  <a-switch v-model="form.require_approval" @change="onApprovalToggle" />
+                  <template #extra>{{ form.require_approval ? '已开启，审批人可在审批策略页面配置' : '生产环境建议开启' }}</template>
                 </a-form-item>
+              </a-col>
+            </a-row>
+
+            <!-- 审批级别配置（开启审批时显示） -->
+            <a-row v-if="form.require_approval" :gutter="16">
+              <a-col :span="24">
+                <div class="approval-config-section">
+                  <div class="approval-config-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                      <path d="M9 11l3 3L22 4"/>
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                    <span>多级审批配置</span>
+                    <router-link to="/cicd/approval-policy" class="approval-policy-link">
+                      全局策略设置 →
+                    </router-link>
+                  </div>
+                  <div class="approval-levels-list" v-if="form.approval_levels && form.approval_levels.length > 0">
+                    <div v-for="(level, idx) in form.approval_levels" :key="idx" class="approval-level-item">
+                      <span class="level-badge">第{{ level.level }}级</span>
+                      <span class="level-label">{{ level.label }}</span>
+                      <span class="level-role">{{ level.role }}</span>
+                      <button type="button" class="btn-remove-level" @click="removeApprovalLevel(idx)" title="移除此级">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div v-else class="approval-empty-hint">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    尚未配置审批级别，将使用环境默认审批策略。可在「审批策略」页面统一配置。
+                  </div>
+                  <button type="button" class="btn-add-level" @click="addApprovalLevel">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    添加审批级别
+                  </button>
+                </div>
               </a-col>
             </a-row>
           </template>
@@ -255,7 +291,8 @@ const form = reactive({
   target_workload_name: '',
   target_container: '',
   deploy_env: 'dev',
-  require_approval: false
+  require_approval: false,
+  approval_levels: []  // 多级审批配置 [{ level, role, label }]
 })
 
 // 名称检查
@@ -310,6 +347,29 @@ const onNamespaceChange = () => {
   loadWorkloads()
 }
 
+// 审批级别配置
+const onApprovalToggle = (val) => {
+  if (val && form.approval_levels.length === 0) {
+    // 默认添加一级审批
+    form.approval_levels.push({ level: 1, role: 'ops_lead', label: '运维负责人' })
+  }
+}
+const addApprovalLevel = () => {
+  const nextLevel = form.approval_levels.length + 1
+  const defaults = [
+    { level: 1, role: 'dev_lead', label: '开发负责人' },
+    { level: 2, role: 'test_lead', label: '测试负责人' },
+    { level: 3, role: 'ops_lead', label: '运维负责人' },
+  ]
+  const def = defaults.find(d => d.level === nextLevel) || { level: nextLevel, role: `level_${nextLevel}`, label: `第${nextLevel}级审批` }
+  form.approval_levels.push({ ...def })
+}
+const removeApprovalLevel = (idx) => {
+  form.approval_levels.splice(idx, 1)
+  // 重新编号
+  form.approval_levels.forEach((l, i) => l.level = i + 1)
+}
+
 // 工作负载
 const workloads = ref([])
 const loadingWorkloads = ref(false)
@@ -355,6 +415,7 @@ const loadPipelineData = async () => {
     form.target_container = data.target_container || ''
     form.deploy_env = data.deploy_env || 'dev'
     form.require_approval = data.require_approval || false
+    form.approval_levels = data.approval_levels || []
     if (data.target_cluster_id) {
       await loadClusters()
       await loadNamespaces()
@@ -401,7 +462,8 @@ const submit = async () => {
       target_workload_name: form.target_workload_name || '',
       target_container: form.target_container || form.target_workload_name || '',
       deploy_env: form.deploy_env || 'dev',
-      require_approval: form.require_approval || false
+      require_approval: form.require_approval || false,
+      approval_levels: form.require_approval ? form.approval_levels : []
     }
 
     let response
@@ -561,4 +623,106 @@ onMounted(() => {
   display: inline-block;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 审批配置区域 */
+.approval-config-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.approval-config-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.approval-policy-link {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: #3b82f6;
+  text-decoration: none;
+}
+.approval-policy-link:hover { text-decoration: underline; }
+
+.approval-levels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.approval-level-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.level-badge {
+  background: #3b82f6;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.level-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.level-role {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.btn-remove-level {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 2px;
+}
+.btn-remove-level:hover { color: #ef4444; }
+
+.approval-empty-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  padding: 8px 0;
+  margin-bottom: 12px;
+}
+
+.btn-add-level {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+}
+.btn-add-level:hover { border-color: #3b82f6; color: #3b82f6; }
 </style>

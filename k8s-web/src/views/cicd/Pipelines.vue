@@ -826,19 +826,9 @@ export default {
         Message.error({ content: '流水线 ID 无效' })
         return
       }
-      try {
-        Message.info({ content: `正在启动流水线 "${pipeline.name}"...` })
-        const response = await triggerPipeline(pipeline.id)
-        if (response.code === 0) {
-          Message.success({ content: '流水线启动成功，正在跳转到构建界面...' })
-          // 发布成功后跳转到详情页执行阶段 Tab，实时查看构建进度
-          router.push(`/cicd/pipelines/${pipeline.id}?tab=stages`)
-        } else {
-          throw new Error(response.msg || '启动失败')
-        }
-      } catch (error) {
-        Message.error({ content: error.message || '启动流水线失败' })
-      }
+      // 统一走发布单流程：先创建发布记录，再触发构建
+      // 跳转到发布单页面，预选该流水线
+      router.push(`/cicd/releases?pipeline_id=${pipeline.id}&action=create`)
       activeMenu.value = null
     }
 

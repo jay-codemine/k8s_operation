@@ -1282,7 +1282,22 @@ export default {
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
 
-    onMounted(() => { loadAll(); loadPipelines(); loadClusters() })
+    onMounted(() => {
+      loadAll(); loadPipelines(); loadClusters()
+      // 支持从流水线列表直接跳转创建发布单（预选流水线）
+      const pipelineId = router.currentRoute.value.query.pipeline_id
+      const action = router.currentRoute.value.query.action
+      if (pipelineId && action === 'create') {
+        // 等待 pipelines 加载后预选
+        const unwatch = watch(pipelines, (val) => {
+          if (val.length > 0) {
+            createForm.value.pipeline_id = Number(pipelineId)
+            showCreateDialog.value = true
+            unwatch()
+          }
+        })
+      }
+    })
 
     return {
       loading, releases, searchKeyword, searchFocused, statusFilter, releaseViewMode, currentPage, totalPages, total,
