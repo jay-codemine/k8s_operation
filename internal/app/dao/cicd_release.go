@@ -286,3 +286,129 @@ func (d *Dao) CicdReleaseStatsEnhanced(ctx context.Context) (*ReleaseStatsEnhanc
 
 	return stats, nil
 }
+
+// ==================== GitOps 发布统计与增强搜索 ====================
+
+// GitOpsReleaseStats 获取 GitOps 发布统计（仅 deploy_mode=gitops 的流水线）
+func (d *Dao) GitOpsReleaseStats(ctx context.Context) (*models.GitOpsReleaseStats, error) {
+	stats := &models.GitOpsReleaseStats{}
+
+	type row struct {
+		Status     string
+		SyncStatus string
+		Cnt        int64
+		AvgSec     float64
+	}
+	var rows []row
+	err := d.db.WithContext(ctx).Raw(`
+		SELECT r.status, COALESCE(pr.sync_status, 'Unknown') as sync_status,
+		       COUNT(*) as cnt, COALESCE(AVG(pr.duration_sec), 0) as avg_sec
+		FROM cicd_release r
+		LEFT JOIN cicd_pipeline_run pr ON r.build_id = pr.id
+		LEFT JOIN cicd_pipeline p ON pr.pipeline_id = p.id
+		WHERE r.is_del = 0 AND p.deploy_mode = 'gitops'
+		GROUP BY r.status, pr.sync_status
+	`).Scan(&rows).Error
+	if err != nil {
+		return stats, err
+	}
+
+	for _, r := range rows {
+		stats.Total += r.Cnt
+		switch r.Status {
+		case "Succeeded":
+			stats.Synced += r.Cnt
+		case "Failed":
+			stats.Failed += r.Cnt
+		case "Running", "Queued":
+			stats.Running += r.Cnt
+		}
+		if r.SyncStatus != "Synced" && r.SyncStatus != "synced" {
+			stats.PendingSync += r.Cnt
+		}
+		stats.AvgSyncSec += r.AvgSec * float64(r.Cnt)
+	}
+	if stats.Total > 0 {
+		stats.AvgSyncSec = stats.AvgSyncSec / float64(stats.Total)
+		stats.SuccessRate = float64(stats.Synced) / float64(stats.Total) * 100
+	}
+
+	// 今日发布数
+	d.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM cicd_release r
+		LEFT JOIN cicd_pipeline_run pr ON r.build_id = pr.id
+		LEFT JOIN cicd_pipeline p ON pr.pipeline_id = p.id
+		WHERE r.is_del = 0 AND p.deploy_mode = 'gitops'
+		AND r.created_at >= UNIX_TIMESTAMP(CURDATE())
+	`).Scan(&stats.TodayCount)
+
+	// 活跃应用数
+	d.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT p.id) FROM cicd_release r
+		LEFT JOIN cicd_pipeline_run pr ON r.build_id = pr.id
+		LEFT JOIN cicd_pipeline p ON pr.pipeline_id = p.id
+		WHERE r.is_del = 0 AND p.deploy_mode = 'gitops'
+	`).Scan(&stats.ActiveApps)
+
+	return stats, nil
+}
+
+// GitOpsReleaseSearch 增强 GitOps 发布搜索
+func (d *Dao) GitOpsReleaseSearch(ctx context.Context, req *models.GitOpsReleaseSearchRequest) ([]*models.GitOpsReleaseItem, int64, error) {
+	var items []*models.GitOpsReleaseItem
+	var total int64
+
+	query := d.db.WithContext(ctx).Table("cicd_release r").
+		Select(`r.id, r.app_name, r.status, r.image_repo, r.image_tag,
+			r.namespace, r.created_at,
+			COALESCE(pr.pipeline_id, 0) as pipeline_id,
+			COALESCE(p.name, '') as pipeline_name,
+			COALESCE(pr.sync_status, 'Unknown') as sync_status,
+			COALESCE(pr.sync_revision, '') as sync_revision,
+			COALESCE(pr.argo_app_name, '') as argo_app,
+			COALESCE(pr.workflow_name, '') as workflow,
+			COALESCE(p.deploy_mode, 'gitops') as deploy_mode`).
+		Joins("LEFT JOIN cicd_pipeline_run pr ON r.build_id = pr.id").
+		Joins("LEFT JOIN cicd_pipeline p ON pr.pipeline_id = p.id").
+		Where("r.is_del = 0").Where("p.deploy_mode = 'gitops'")
+
+	if req.Keyword != "" {
+		kw := "%" + req.Keyword + "%"
+		query = query.Where("(r.app_name LIKE ? OR pr.argo_app_name LIKE ? OR pr.workflow_name LIKE ? OR p.name LIKE ?)", kw, kw, kw, kw)
+	}
+	if req.AppName != "" {
+		query = query.Where("r.app_name LIKE ?", "%"+req.AppName+"%")
+	}
+	if req.Status != "" {
+		query = query.Where("r.status = ?", req.Status)
+	}
+	if req.SyncStatus != "" {
+		query = query.Where("pr.sync_status = ?", req.SyncStatus)
+	}
+	if req.Env != "" {
+		query = query.Where("r.namespace = ?", req.Env)
+	}
+	if req.DateFrom != "" {
+		query = query.Where("r.created_at >= UNIX_TIMESTAMP(?)", req.DateFrom)
+	}
+	if req.DateTo != "" {
+		query = query.Where("r.created_at <= UNIX_TIMESTAMP(?)", req.DateTo+" 23:59:59")
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.PageSize < 1 || req.PageSize > 100 {
+		req.PageSize = 20
+	}
+	offset := (req.Page - 1) * req.PageSize
+	if err := query.Order("r.id DESC").Offset(offset).Limit(req.PageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
+}

@@ -464,3 +464,23 @@ func parseArgoTime(timeStr string) time.Time {
 	}
 	return t
 }
+
+// ==================== GitOps 发布统计与增强搜索 ====================
+
+// GitOpsReleaseStats 获取 GitOps 发布统计
+func (s *Services) GitOpsReleaseStats(ctx context.Context) (*models.GitOpsReleaseStats, error) {
+	stats := &models.GitOpsReleaseStats{}
+	rows, err := s.dao.GitOpsReleaseStats(ctx)
+	if err != nil {
+		return stats, err
+	}
+	if rows != nil {
+		stats = rows
+	}
+	return stats, nil
+}
+
+// GitOpsReleaseSearch 增强 GitOps 发布搜索
+func (s *Services) GitOpsReleaseSearch(ctx context.Context, req *models.GitOpsReleaseSearchRequest) ([]*models.GitOpsReleaseItem, int64, error) {
+	return s.dao.GitOpsReleaseSearch(ctx, req)
+}

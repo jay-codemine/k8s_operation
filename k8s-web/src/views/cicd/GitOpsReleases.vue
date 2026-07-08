@@ -83,6 +83,14 @@
         <input v-model="keyword" @input="debounceSearch" placeholder="搜索应用名、ArgoCD App、Git 仓库..." class="search-input" />
       </div>
       <div class="action-right">
+        <button class="btn-action has-label" :class="{ active: showLeaderView }" @click="showLeaderView = !showLeaderView" title="领导视图">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+          <span>领导</span>
+        </button>
+        <button class="btn-action has-label" :class="{ active: showAdvSearch }" @click="showAdvSearch = !showAdvSearch" title="高级搜索">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v6M8 11h6"/></svg>
+          <span>搜索</span>
+        </button>
         <button class="btn-action" :class="{ active: viewMode === 'timeline' }" @click="viewMode = 'timeline'" title="时间线">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </button>
@@ -94,6 +102,123 @@
         </button>
       </div>
     </div>
+
+    <!-- 领导视图面板 -->
+    <Transition name="slide">
+      <div v-if="showLeaderView" class="leader-panel">
+        <div class="leader-grid">
+          <div class="leader-card primary">
+            <div class="leader-card-icon synced">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div class="leader-card-body">
+              <span class="leader-value">{{ leaderStats.success_rate }}%</span>
+              <span class="leader-label">成功率</span>
+            </div>
+            <div class="leader-bar"><div class="leader-bar-fill" :style="{ width: leaderStats.success_rate + '%' }"></div></div>
+          </div>
+          <div class="leader-card">
+            <div class="leader-card-icon today">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div class="leader-card-body">
+              <span class="leader-value">{{ leaderStats.today_count }}</span>
+              <span class="leader-label">今日发布</span>
+            </div>
+          </div>
+          <div class="leader-card">
+            <div class="leader-card-icon apps">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div class="leader-card-body">
+              <span class="leader-value">{{ leaderStats.active_apps }}</span>
+              <span class="leader-label">活跃应用</span>
+            </div>
+          </div>
+          <div class="leader-card warn">
+            <div class="leader-card-icon pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="leader-card-body">
+              <span class="leader-value">{{ leaderStats.pending_sync }}</span>
+              <span class="leader-label">待同步</span>
+            </div>
+          </div>
+        </div>
+        <div class="leader-meta-row">
+          <div class="leader-meta-item">
+            <span class="meta-dot synced"></span>
+            已同步 <strong>{{ leaderStats.synced }}</strong> 次
+          </div>
+          <div class="leader-meta-item">
+            <span class="meta-dot failed"></span>
+            失败 <strong>{{ leaderStats.failed }}</strong> 次
+          </div>
+          <div class="leader-meta-item">
+            <span class="meta-dot running"></span>
+            进行中 <strong>{{ leaderStats.running }}</strong> 次
+          </div>
+          <div class="leader-meta-item">
+            <span class="meta-label">平均同步</span>
+            <strong>{{ leaderStats.avg_sync_sec }}s</strong>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 高级搜索面板 -->
+    <Transition name="slide">
+      <div v-if="showAdvSearch" class="adv-search-panel">
+        <div class="adv-search-row">
+          <div class="adv-field">
+            <label>应用名</label>
+            <input v-model="advSearch.app_name" placeholder="输入应用名..." @keyup.enter="applyAdvSearch" />
+          </div>
+          <div class="adv-field">
+            <label>同步状态</label>
+            <select v-model="advSearch.sync_status" @change="applyAdvSearch">
+              <option value="">全部</option>
+              <option value="Synced">已同步</option>
+              <option value="OutOfSync">漂移</option>
+              <option value="Unknown">未知</option>
+            </select>
+          </div>
+          <div class="adv-field">
+            <label>发布状态</label>
+            <select v-model="advSearch.status" @change="applyAdvSearch">
+              <option value="">全部</option>
+              <option value="Succeeded">成功</option>
+              <option value="Failed">失败</option>
+              <option value="Running">运行中</option>
+            </select>
+          </div>
+          <div class="adv-field">
+            <label>环境</label>
+            <input v-model="advSearch.env" placeholder="命名空间..." @keyup.enter="applyAdvSearch" />
+          </div>
+        </div>
+        <div class="adv-search-row">
+          <div class="adv-field">
+            <label>开始日期</label>
+            <input type="date" v-model="advSearch.date_from" @change="applyAdvSearch" />
+          </div>
+          <div class="adv-field">
+            <label>结束日期</label>
+            <input type="date" v-model="advSearch.date_to" @change="applyAdvSearch" />
+          </div>
+          <div class="adv-field actions">
+            <button class="btn-adv-search" @click="applyAdvSearch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              搜索
+            </button>
+            <button class="btn-adv-reset" @click="resetAdvSearch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 加载中 -->
     <div v-if="loading && releases.length === 0" class="skeleton-grid">
@@ -311,9 +436,8 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
-import { getReleases } from '@/api/cicd.js'
+import { getReleases, getGitOpsReleaseStats, getGitOpsReleaseSearch, triggerGitOpsSync } from '@/api/cicd.js'
 import { getPipelines, runPipeline } from '@/api/platform/pipeline.js'
-import { triggerGitOpsSync } from '@/api/cicd.js'
 
 const router = useRouter()
 
@@ -329,9 +453,15 @@ const pageSize = ref(20)
 const total = ref(0)
 const showPublish = ref(false)
 const publishing = ref(false)
+const showLeaderView = ref(false)
+const showAdvSearch = ref(false)
 
 // 统计数据
 const stats = reactive({ total: 0, running: 0, synced: 0, failed: 0 })
+// 领导视图统计
+const leaderStats = reactive({ total: 0, synced: 0, failed: 0, running: 0, pending_sync: 0, today_count: 0, avg_sync_sec: 0, active_apps: 0, success_rate: 0 })
+// 高级搜索
+const advSearch = reactive({ app_name: '', sync_status: '', status: '', env: '', date_from: '', date_to: '' })
 
 // 发布表单
 const publishForm = reactive({ pipeline_id: '', version: '' })
@@ -369,20 +499,39 @@ const loadData = async () => {
       gitopsPipelines.value = (pipeRes.data?.list || []).filter(p => p.deploy_mode === 'gitops')
     }
 
-    // 加载发布记录
-    const relRes = await getReleases({ page: page.value, page_size: pageSize.value, keyword: keyword.value || undefined })
+    // 加载发布记录 - 使用增强搜索 API
+    const searchParams = {
+      page: page.value, page_size: pageSize.value,
+      keyword: keyword.value || undefined,
+      app_name: advSearch.app_name || undefined,
+      sync_status: advSearch.sync_status || undefined,
+      status: advSearch.status || undefined,
+      env: advSearch.env || undefined,
+      date_from: advSearch.date_from || undefined,
+      date_to: advSearch.date_to || undefined,
+    }
+    // 移除空值
+    Object.keys(searchParams).forEach(k => { if (!searchParams[k]) delete searchParams[k] })
+
+    const relRes = await getGitOpsReleaseSearch(searchParams)
     if (relRes.code === 0) {
-      const all = relRes.data?.list || []
-      // 只保留 GitOps 的发布记录
-      releases.value = all.filter(r => r.deploy_mode === 'gitops')
-      total.value = releases.value.length
+      releases.value = relRes.data?.list || []
+      total.value = relRes.data?.total || 0
 
       // 计算统计
-      stats.total = releases.value.length
+      stats.total = total.value
       stats.synced = releases.value.filter(r => r.sync_status === 'Synced').length
       stats.failed = releases.value.filter(r => r.status === 'Failed').length
       stats.running = releases.value.filter(r => ['Running', 'Queued'].includes(r.status)).length
     }
+
+    // 加载领导视图统计（独立 API）
+    try {
+      const statsRes = await getGitOpsReleaseStats()
+      if (statsRes.code === 0 && statsRes.data?.stats) {
+        Object.assign(leaderStats, statsRes.data.stats)
+      }
+    } catch (_) { /* 非关键 */ }
   } catch (e) {
     console.error('加载失败', e)
   } finally {
@@ -433,9 +582,13 @@ const viewDetail = (rel) => {
 }
 
 const debounceSearch = () => {
-  // 简单延迟搜索
   clearTimeout(window._gitopsSearchTimer)
   window._gitopsSearchTimer = setTimeout(() => loadData(), 300)
+}
+const applyAdvSearch = () => { page.value = 1; loadData() }
+const resetAdvSearch = () => {
+  Object.assign(advSearch, { app_name: '', sync_status: '', status: '', env: '', date_from: '', date_to: '' })
+  page.value = 1; loadData()
 }
 
 // 格式化
@@ -460,6 +613,7 @@ const formatTime = (ts) => {
 }
 
 watch([keyword, statusFilter], () => { page.value = 1; loadData() })
+watch(showLeaderView, async (val) => { if (val) { try { const r = await getGitOpsReleaseStats(); if (r.code === 0 && r.data?.stats) Object.assign(leaderStats, r.data.stats) } catch (_) {} } })
 watch(page, () => loadData())
 
 onMounted(loadData)
@@ -655,6 +809,81 @@ onMounted(loadData)
 .card-btn:hover { border-color: #0d9488; color: #0d9488; }
 .card-btn.sync { background: #f0fdfa; border-color: #99f6e4; color: #0d9488; }
 .card-btn.sync:hover { background: #0d9488; color: #fff; }
+
+/* ===== 按钮增强 ===== */
+.btn-action.has-label {
+  width: auto; padding: 0 12px; gap: 6px; font-size: 12px; font-weight: 500;
+}
+
+/* ===== 领导视图面板 ===== */
+.leader-panel {
+  background: linear-gradient(135deg, #f8fafc 0%, #f0fdfa 100%);
+  border: 1px solid #ccfbf1; border-radius: 16px;
+  padding: 20px 24px; margin-bottom: 20px;
+}
+.leader-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.leader-card {
+  background: #fff; border-radius: 12px; padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #f1f5f9;
+  display: flex; align-items: center; gap: 14px; transition: all 0.2s;
+}
+.leader-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.leader-card.primary { border-color: #059669; background: linear-gradient(135deg, #f0fdfa, #ecfdf5); }
+.leader-card.warn { border-color: #fbbf24; background: linear-gradient(135deg, #fffbeb, #fef3c7); }
+.leader-card-icon {
+  width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.leader-card-icon svg { width: 20px; height: 20px; }
+.leader-card-icon.synced { background: #d1fae5; color: #059669; }
+.leader-card-icon.today { background: #dbeafe; color: #2563eb; }
+.leader-card-icon.apps { background: #ede9fe; color: #7c3aed; }
+.leader-card-icon.pending { background: #fef3c7; color: #d97706; }
+.leader-card-body { display: flex; flex-direction: column; min-width: 0; }
+.leader-value { font-size: 22px; font-weight: 700; color: #1f2937; line-height: 1; }
+.leader-label { font-size: 12px; color: #6b7280; margin-top: 3px; }
+.leader-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; min-width: 40px; }
+.leader-bar-fill { height: 100%; background: linear-gradient(90deg, #059669, #10b981); border-radius: 3px; transition: width 0.6s ease; }
+.leader-meta-row { display: flex; gap: 24px; padding-top: 4px; }
+.leader-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6b7280; }
+.leader-meta-item strong { color: #1f2937; }
+.meta-dot { width: 8px; height: 8px; border-radius: 50%; }
+.meta-dot.synced { background: #059669; }
+.meta-dot.failed { background: #dc2626; }
+.meta-dot.running { background: #d97706; }
+.meta-label { font-size: 12px; color: #94a3b8; margin-right: 4px; }
+
+/* ===== 高级搜索面板 ===== */
+.adv-search-panel {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+  padding: 18px 20px; margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.adv-search-row { display: flex; gap: 12px; margin-bottom: 10px; }
+.adv-search-row:last-child { margin-bottom: 0; }
+.adv-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.adv-field label { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+.adv-field input, .adv-field select {
+  padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+  font-size: 13px; outline: none; background: #fff;
+}
+.adv-field input:focus, .adv-field select:focus { border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13,148,136,0.1); }
+.adv-field.actions { flex-direction: row; align-items: flex-end; gap: 8px; }
+.btn-adv-search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 18px; background: linear-gradient(135deg, #0d9488, #0f766e);
+  color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-adv-search:hover { box-shadow: 0 2px 8px rgba(13,148,136,0.3); }
+.btn-adv-reset {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border: 1px solid #e2e8f0; border-radius: 8px;
+  background: #fff; font-size: 13px; color: #64748b; cursor: pointer;
+}
+.btn-adv-reset:hover { border-color: #94a3b8; color: #374151; }
+
+/* ===== 动画 ===== */
+.slide-enter-active, .slide-leave-active { transition: all 0.25s ease; }
+.slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-8px); }
 
 /* ===== 空状态 ===== */
 .empty-hero { text-align: center; padding: 80px 20px; }

@@ -48,3 +48,49 @@ type CicdReleaseWithDeployMode struct {
 	CicdRelease
 	DeployMode string `json:"deploy_mode"`
 }
+
+// ==================== GitOps 发布统计与搜索 ====================
+
+// GitOpsReleaseStats GitOps 发布统计数据
+type GitOpsReleaseStats struct {
+	Total       int64   `json:"total"`
+	Synced      int64   `json:"synced"`
+	Failed      int64   `json:"failed"`
+	Running     int64   `json:"running"`
+	PendingSync int64   `json:"pending_sync"`
+	TodayCount  int64   `json:"today_count"`
+	AvgSyncSec  float64 `json:"avg_sync_sec"`
+	ActiveApps  int64   `json:"active_apps"`
+	SuccessRate float64 `json:"success_rate"`
+}
+
+// GitOpsReleaseSearchRequest 增强搜索请求
+type GitOpsReleaseSearchRequest struct {
+	Keyword    string `form:"keyword" json:"keyword"`
+	AppName    string `form:"app_name" json:"app_name"`
+	Status     string `form:"status" json:"status"`
+	SyncStatus string `form:"sync_status" json:"sync_status"`
+	Env        string `form:"env" json:"env"`
+	DateFrom   string `form:"date_from" json:"date_from"`
+	DateTo     string `form:"date_to" json:"date_to"`
+	Page       int    `form:"page" json:"page"`
+	PageSize   int    `form:"page_size" json:"page_size"`
+}
+
+// GitOpsReleaseItem 前端展示用 GitOps 发布项
+type GitOpsReleaseItem struct {
+	ID           int64  `json:"id"`
+	AppName      string `json:"app_name"`
+	PipelineID   int64  `json:"pipeline_id"`
+	PipelineName string `json:"pipeline_name"`
+	Status       string `json:"status"`
+	SyncStatus   string `json:"sync_status"`
+	SyncRevision string `json:"sync_revision"`
+	ArgoApp      string `json:"argo_app"`
+	Workflow     string `json:"workflow"`
+	ImageRepo    string `json:"image_repo"`
+	ImageTag     string `json:"image_tag"`
+	Namespace    string `json:"namespace"`
+	DeployMode   string `json:"deploy_mode"`
+	CreatedAt    uint64 `json:"created_at"`
+}

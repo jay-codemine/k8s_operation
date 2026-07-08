@@ -4,8 +4,10 @@ import (
 	"io"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
@@ -147,4 +149,37 @@ func (c *GitOpsController) TriggerSync(ctx *gin.Context) {
 	}
 
 	rsp.Success(gin.H{"message": "同步已触发"})
+}
+
+// ReleaseStats 获取 GitOps 发布统计数据
+// GET /api/v1/k8s/cicd/gitops/release-stats
+func (c *GitOpsController) ReleaseStats(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+	svc := services.NewServices()
+	stats, err := svc.GitOpsReleaseStats(ctx.Request.Context())
+	if err != nil {
+		global.Logger.Error("GitOpsReleaseStats error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+	rsp.Success(gin.H{"stats": stats})
+}
+
+// ReleaseSearch 增强 GitOps 发布搜索
+// GET /api/v1/k8s/cicd/gitops/release-search
+func (c *GitOpsController) ReleaseSearch(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+	var req models.GitOpsReleaseSearchRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails(err.Error()))
+		return
+	}
+	svc := services.NewServices()
+	list, total, err := svc.GitOpsReleaseSearch(ctx.Request.Context(), &req)
+	if err != nil {
+		global.Logger.Error("GitOpsReleaseSearch error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
+		return
+	}
+	rsp.Success(gin.H{"list": list, "total": total})
 }
