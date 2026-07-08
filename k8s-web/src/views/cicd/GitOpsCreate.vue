@@ -291,7 +291,10 @@ const loadNamespaces = async () => {
   if (!form.target_cluster_id) { namespaces.value = []; return }
   loadingNamespaces.value = true
   try {
-    const res = await getNamespaces({ cluster_id: form.target_cluster_id })
+    // 设置集群上下文到 store，确保后续 API Header 中的 X-Cluster-ID 正确
+    const cluster = clusters.value.find(c => c.id === form.target_cluster_id)
+    if (cluster) clusterStore.setCurrent(cluster)
+    const res = await getNamespaces(form.target_cluster_id)
     namespaces.value = res.data?.namespaces || res.data || []
   } catch { namespaces.value = [] }
   finally { loadingNamespaces.value = false }
@@ -314,7 +317,10 @@ const loadWorkloads = async () => {
   if (!form.target_cluster_id || !form.target_namespace) { workloads.value = []; return }
   loadingWorkloads.value = true
   try {
-    const params = { cluster_id: form.target_cluster_id, namespace: form.target_namespace }
+    // 确保集群上下文已设置到 store
+    const cluster = clusters.value.find(c => c.id === form.target_cluster_id)
+    if (cluster) clusterStore.setCurrent(cluster)
+    const params = { namespace: form.target_namespace }
     let res
     switch (form.target_workload_kind) {
       case 'StatefulSet': res = await statefulsetsApi.list(params); break
