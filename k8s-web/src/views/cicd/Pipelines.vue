@@ -19,13 +19,25 @@
           </svg>
           {{ loading ? '加载中...' : '刷新' }}
         </button>
-        <button v-if="canOperate" class="btn btn-primary" @click="createPipeline">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          创建流水线
-        </button>
+        <div v-if="canOperate" class="header-create-group">
+          <button class="btn btn-primary" @click="createPipeline">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Jenkins
+          </button>
+          <button class="btn btn-gitops" @click="createGitOpsPipeline">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 3 21 3 21 8"/>
+              <line x1="4" y1="20" x2="21" y2="3"/>
+              <polyline points="21 16 21 21 16 21"/>
+              <line x1="15" y1="15" x2="21" y2="21"/>
+              <line x1="4" y1="4" x2="9" y2="9"/>
+            </svg>
+            GitOps
+          </button>
+        </div>
       </div>
     </div>
 
@@ -164,25 +176,47 @@
       </div>
       <div class="filter-right">
         <div class="filter-tabs">
-          <button 
+          <button
             :class="['filter-tab', { active: statusFilter === '' }]"
             @click="statusFilter = ''"
           >
             全部
           </button>
-          <button 
+          <button
             :class="['filter-tab', { active: statusFilter === 'running' }]"
             @click="statusFilter = 'running'"
           >
             <span class="status-dot running"></span>
             运行中
           </button>
-          <button 
+          <button
             :class="['filter-tab', { active: statusFilter === 'idle' }]"
             @click="statusFilter = 'idle'"
           >
             <span class="status-dot idle"></span>
             空闲
+          </button>
+        </div>
+        <div class="filter-tabs deploy-mode-tabs">
+          <button
+            :class="['filter-tab', { active: deployModeFilter === '' }]"
+            @click="deployModeFilter = ''"
+          >
+            全部模式
+          </button>
+          <button
+            :class="['filter-tab', { active: deployModeFilter === 'jenkins' }]"
+            @click="deployModeFilter = 'jenkins'"
+          >
+            <span class="mode-icon">⚙️</span>
+            Jenkins
+          </button>
+          <button
+            :class="['filter-tab', { active: deployModeFilter === 'gitops' }]"
+            @click="deployModeFilter = 'gitops'"
+          >
+            <span class="mode-icon">🔄</span>
+            GitOps
           </button>
         </div>
         <div class="view-switch">
@@ -310,8 +344,8 @@
               </span>
             </td>
             <td>
-              <span :class="['deploy-mode-tag', pipeline.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
-                {{ pipeline.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+              <span :class="['deploy-mode-tag', pipeline.deployMode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                {{ pipeline.deployMode === 'gitops' ? 'GitOps' : 'Jenkins' }}
               </span>
             </td>
             <td>
@@ -465,8 +499,8 @@
           <div class="status-info">
             <div class="status-row">
               <span class="label">部署模式</span>
-              <span :class="['deploy-mode-tag', pipeline.deploy_mode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
-                {{ pipeline.deploy_mode === 'gitops' ? 'GitOps' : 'Jenkins' }}
+              <span :class="['deploy-mode-tag', pipeline.deployMode === 'gitops' ? 'mode-gitops' : 'mode-jenkins']">
+                {{ pipeline.deployMode === 'gitops' ? 'GitOps' : 'Jenkins' }}
               </span>
             </div>
             <div class="status-row">
@@ -616,6 +650,7 @@ export default {
     const pipelines = ref([])
     const searchQuery = ref('')
     const statusFilter = ref('')
+    const deployModeFilter = ref('')
     const viewMode = ref('table')
     const currentPage = ref(1)
     const pageSize = ref(12)
@@ -731,6 +766,9 @@ export default {
       if (statusFilter.value) {
         result = result.filter(p => p.status === statusFilter.value)
       }
+      if (deployModeFilter.value) {
+        result = result.filter(p => p.deployMode === deployModeFilter.value)
+      }
       return result
     })
 
@@ -763,6 +801,7 @@ export default {
             gitRepo: item.git_repo,
             branch: item.git_branch,
             jenkinsJob: item.jenkins_job,
+            deployMode: item.deploy_mode || 'jenkins',
             autoDeploy: item.auto_deploy || false,
             requireApproval: item.require_approval || false,
             lastDeployStatus: item.last_deploy_status || ''
@@ -970,8 +1009,16 @@ export default {
 
     // 导航
     const createPipeline = () => router.push('/cicd/pipelines/create')
+    const createGitOpsPipeline = () => router.push('/cicd/gitops/create')
     const viewPipeline = (id) => router.push(`/cicd/pipelines/${id}`)
-    const editPipeline = (id) => router.push(`/cicd/pipelines/${id}/edit`)
+    const editPipeline = (id) => {
+      const pipeline = pipelines.value.find(p => p.id === id)
+      if (pipeline && pipeline.deployMode === 'gitops') {
+        router.push(`/cicd/gitops/${id}/edit`)
+      } else {
+        router.push(`/cicd/pipelines/${id}/edit`)
+      }
+    }
     const viewHistory = (id) => router.push(`/cicd/pipelines/${id}?tab=history`)
     const viewLogs = (id) => router.push(`/cicd/pipelines/${id}?tab=logs`)
 
@@ -1029,7 +1076,7 @@ export default {
     }
 
     // 监听
-    watch([searchQuery, statusFilter], () => {
+    watch([searchQuery, statusFilter, deployModeFilter], () => {
       currentPage.value = 1
       loadPipelines()
     })
@@ -1050,6 +1097,7 @@ export default {
       pipelines,
       searchQuery,
       statusFilter,
+      deployModeFilter,
       viewMode,
       currentPage,
       pageSize,
@@ -1090,6 +1138,7 @@ export default {
       clearSelection,
       toggleMenu,
       createPipeline,
+      createGitOpsPipeline,
       viewPipeline,
       editPipeline,
       viewHistory,
@@ -1145,6 +1194,11 @@ export default {
 .header-right {
   display: flex;
   gap: 12px;
+}
+
+.header-create-group {
+  display: flex;
+  gap: 8px;
 }
 
 /* 统计卡片 */
@@ -1335,6 +1389,16 @@ export default {
 
 .status-dot.idle {
   background: #3182ce;
+}
+
+/* 部署模式筛选标签 */
+.deploy-mode-tabs {
+  margin-left: 8px;
+}
+
+.mode-icon {
+  font-size: 13px;
+  line-height: 1;
 }
 
 @keyframes pulse {
@@ -2376,6 +2440,17 @@ export default {
 .btn-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+}
+
+.btn-gitops {
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: white;
+  border-color: #0f766e;
+}
+
+.btn-gitops:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.4);
 }
 
 .btn-outline {

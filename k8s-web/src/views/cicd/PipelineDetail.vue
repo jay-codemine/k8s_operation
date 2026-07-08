@@ -789,7 +789,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <div class="warning-content">
                     <span class="warning-text">{{ selectedStage.config_warning }}</span>
-                    <router-link :to="`/cicd/pipelines/${pipeline.id}/edit`" class="config-link">
+                    <router-link :to="pipelineEditUrl" class="config-link">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       去配置
                     </router-link>
@@ -2415,8 +2415,22 @@ export default {
     }
 
     const handleEdit = () => {
-      router.push(`/cicd/pipelines/${pipelineId.value}/edit`)
+      const deployMode = pipeline.value.deploy_mode || 'jenkins'
+      if (deployMode === 'gitops') {
+        router.push(`/cicd/gitops/${pipelineId.value}/edit`)
+      } else {
+        router.push(`/cicd/pipelines/${pipelineId.value}/edit`)
+      }
     }
+
+    // 动态编辑 URL（用于模板 router-link）
+    const pipelineEditUrl = computed(() => {
+      const deployMode = pipeline.value.deploy_mode || 'jenkins'
+      if (deployMode === 'gitops') {
+        return `/cicd/gitops/${pipeline.value.id}/edit`
+      }
+      return `/cicd/pipelines/${pipeline.value.id}/edit`
+    })
 
     // 手动触发 GitOps (ArgoCD) 同步
     const handleGitOpsSync = async () => {
@@ -3318,6 +3332,7 @@ export default {
       runSubmitting,
       handleStop,
       handleEdit,
+      pipelineEditUrl,
       handleGitOpsSync,
       syncingGitOps,
       viewRunLogs,

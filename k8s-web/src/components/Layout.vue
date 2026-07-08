@@ -274,6 +274,7 @@ const menuPermissions = {
   '/cicd/apps': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/quick-onboard': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/pipelines': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
+  '/cicd/gitops': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/build-records': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/artifacts': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/releases': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
@@ -364,7 +365,7 @@ const menuGroupsConfig = reactive([
   {
     name: 'CI/CD',
     icon: '⚡',
-    count: 11,
+    count: 12,
     collapsed: true,
     match: ['/cicd'],
     items: [
@@ -375,6 +376,7 @@ const menuGroupsConfig = reactive([
       // ── 流水线 (CI) ──
       { section: '流水线 · CI' },
       { path: '/cicd/pipelines', label: '流水线管理', icon: '⚙️' },
+      { path: '/cicd/gitops/create', label: 'GitOps (ArgoCD)', icon: '🔄' },
       { path: '/cicd/build-records', label: '构建记录', icon: '📋' },
       { path: '/cicd/artifacts', label: '制品库', icon: '📦' },
       // ── 发布中心 (CD) ──

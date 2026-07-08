@@ -12,6 +12,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/app/worker"
+	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/k8s/crd"
 	"k8soperation/pkg/openai"
 )
@@ -36,6 +37,8 @@ func InitAll() error {
 	if err := initialize.SetupSetting(); err != nil {
 		return err
 	}
+	// 注册所有错误码（必须在任何业务逻辑之前调用）
+	errorcode.Register()
 	// 初始校验规则
 	if err := initialize.SetupValidator(); err != nil {
 		return err

@@ -127,6 +127,9 @@ const router = createRouter({
         {path: 'cicd/pipelines/create', component: () => import('@/views/cicd/PipelineCreate.vue')},
         {path: 'cicd/pipelines/:id', component: () => import('@/views/cicd/PipelineDetail.vue')},
         {path: 'cicd/pipelines/:id/edit', component: () => import('@/views/cicd/PipelineCreate.vue')},
+        // GitOps 流水线（ArgoCD）
+        {path: 'cicd/gitops/create', component: () => import('@/views/cicd/GitOpsCreate.vue')},
+        {path: 'cicd/gitops/:id/edit', component: () => import('@/views/cicd/GitOpsCreate.vue')},
         {path: 'cicd/build-records', component: () => import('@/views/cicd/BuildRecords.vue')},
         {path: 'cicd/templates', component: () => import('@/views/cicd/PipelineTemplates.vue')},
         // CICD 发布管理
