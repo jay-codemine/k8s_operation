@@ -181,7 +181,7 @@ type CicdPipeline struct {
 	TargetContainer    string `gorm:"column:target_container" json:"target_container"`         // 容器名称
 	DeployEnv          string `gorm:"column:deploy_env" json:"deploy_env"`                      // 部署环境(dev/staging/prod)
 	RequireApproval      bool   `gorm:"column:require_approval" json:"require_approval"`              // 是否需要审批
-n	// 金丝雀部署配置
+	// 金丝雀部署配置
 	EnableCanary       bool   `gorm:"column:enable_canary" json:"enable_canary"`
 	CanaryReplicas     int32  `gorm:"column:canary_replicas;default:1" json:"canary_replicas"`
 	CanaryTrafficRatio int32  `gorm:"column:canary_traffic_ratio;default:10" json:"canary_traffic_ratio"`
@@ -438,7 +438,7 @@ type PipelineListItem struct {
 	LastBuildNumber int    `json:"last_build_number"`
 	AutoDeploy      bool   `json:"auto_deploy"`
 	RequireApproval bool   `json:"require_approval"`
-n	// 金丝雀部署配置
+	// 金丝雀部署配置
 	EnableCanary       bool   `gorm:"column:enable_canary" json:"enable_canary"`
 	CanaryReplicas     int32  `gorm:"column:canary_replicas;default:1" json:"canary_replicas"`
 	CanaryTrafficRatio int32  `gorm:"column:canary_traffic_ratio;default:10" json:"canary_traffic_ratio"`

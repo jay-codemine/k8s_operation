@@ -14,7 +14,7 @@ import (
 )
 
 var ErrNoClusterConfig = errors.New("生产环境禁止空启动：无法加载 K8s 集群配置，请检查数据库或 kubeconfig 文件")
-n// logK8sInitWarn K8s 启动 WARN（可由 LogControl.SuppressK8sClusterInitWarn 抑制）
+// logK8sInitWarn K8s 启动 WARN（可由 LogControl.SuppressK8sClusterInitWarn 抑制）
 func logK8sInitWarn(msg string, fields ...zap.Field) {
 	if global.LogControlSetting != nil && global.LogControlSetting.SuppressK8sClusterInitWarn {
 		return

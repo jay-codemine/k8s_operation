@@ -70,7 +70,7 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	}
 
 	// ==================== 发布单管理 ====================
-n	// ==================== 金丝雀部署 ====================
+	// ==================== 金丝雀部署 ====================
 	canaryCtrl := cicd.NewCanaryDeployController()
 	canary := rg.Group("/canary")
 	{

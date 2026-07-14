@@ -72,6 +72,7 @@ type AppSettingS struct {
 	DefaultClusterID   uint32
 	AutoInitK8s        bool // 开机自启初始化k8s集群
 	AllowEmptyStart    bool // 是否允许无集群空启动（生产环境建议 false）
+	SkipAutoMigrate    bool // 跳过自动建表（已通过 init.sql 初始化完成时设为 true）
 }
 
 type ErrorCodeSettingS struct {

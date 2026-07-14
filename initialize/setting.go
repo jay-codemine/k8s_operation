@@ -189,7 +189,7 @@ func SetupSetting() error {
 			// LDAP 可选
 			log.Println("[LDAP] 配置块未找到")
 			global.LDAPSetting = nil
-n	// 读取 LogControl 配置
+	// 读取 LogControl 配置
 	if err = s.ReadSection("LogControl", &global.LogControlSetting); err != nil || global.LogControlSetting == nil {
 		log.Println("[LogControl] 配置块未找到，使用默认值")
 		global.LogControlSetting = &setting.LogControlS{}

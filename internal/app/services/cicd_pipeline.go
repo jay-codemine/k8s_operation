@@ -1945,6 +1945,22 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 }
 
 // getCurrentWorkloadRevision 获取工作负载在 K8s 集群中的当前版本号
+// executeCanaryDeployAsync 异步执行金丝雀部署
+func (s *Services) executeCanaryDeployAsync(ctx context.Context, pipeline *models.CicdPipeline, kubeClient kubernetes.Interface, image, workloadKind string, runID int64) {
+	if workloadKind != "" && workloadKind != "Deployment" {
+		global.Logger.Warn("[Canary] 当前仅支持 Deployment，回退到普通部署", zap.String("kind", workloadKind))
+		s.executeAutoDeployAsync(ctx, pipeline, kubeClient, image, workloadKind, runID)
+		return
+	}
+	containerName := pipeline.TargetContainer
+	result := s.CanaryCreateAndMonitor(ctx, kubeClient, pipeline, image, containerName, runID)
+	if !result.Success {
+		global.Logger.Error("[Canary] 创建失败，回退到普通部署", zap.String("error", result.Message))
+		s.executeAutoDeployAsync(ctx, pipeline, kubeClient, image, workloadKind, runID)
+		return
+	}
+	go s.monitorCanaryAndDecide(kubeClient, pipeline, image, runID)
+}
 // Deployment: 返回最新 ReplicaSet 的 revision（如 "5"）
 // StatefulSet/DaemonSet: 返回最新 ControllerRevision 的 revision（如 "3"）
 func (s *Services) getCurrentWorkloadRevision(ctx context.Context, client kubernetes.Interface, workloadKind, namespace, workloadName string) string {

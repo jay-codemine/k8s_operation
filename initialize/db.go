@@ -68,8 +68,14 @@ func SetupDB() error {
 	return nil
 }
 
-// autoMigrateTables 自动迁移表结构
+// autoMigrateTables 自动迁移表结构（仅当 SkipAutoMigrate=false 时执行）
+// 生产环境已通过 init.sql 初始化完成，建议设为 true 跳过
 func autoMigrateTables() error {
+	if global.AppSetting != nil && global.AppSetting.SkipAutoMigrate {
+		log.Println("[DB] SkipAutoMigrate=true, 跳过自动建表（依赖 init.sql 已完成初始化）")
+		return nil
+	}
+
 	// 平台基础表
 	if err := global.DB.AutoMigrate(
 		&models.PlatformSettings{},

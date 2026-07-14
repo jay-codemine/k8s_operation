@@ -63,6 +63,7 @@ data:
       DefaultClusterID: 3
       AutoInitK8s: true
       AllowEmptyStart: true
+      SkipAutoMigrate: true                 # 生产环境已通过 init.sql 初始化，跳过 GORM AutoMigrate
 
     PodLog:
       EnableStreaming: false
