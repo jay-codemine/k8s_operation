@@ -22,7 +22,7 @@ spec:
     name: jenkins-data
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/jenkins/home
+    path: /data/jenkins/home
 ---
 # Go 模块缓存
 apiVersion: v1
@@ -45,7 +45,7 @@ spec:
     name: jenkins-go-cache
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/jenkins/go-cache
+    path: /data/jenkins/go-cache
 ---
 # Maven 本地仓库缓存
 apiVersion: v1
@@ -68,7 +68,7 @@ spec:
     name: jenkins-maven-cache
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/jenkins/maven-cache
+    path: /data/jenkins/maven-cache
 ---
 # npm 缓存
 apiVersion: v1
@@ -91,7 +91,7 @@ spec:
     name: jenkins-npm-cache
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/jenkins/npm-cache
+    path: /data/jenkins/npm-cache
 ---
 # pip 缓存
 apiVersion: v1
@@ -114,4 +114,4 @@ spec:
     name: jenkins-pip-cache
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/jenkins/pip-cache
+    path: /data/jenkins/pip-cache

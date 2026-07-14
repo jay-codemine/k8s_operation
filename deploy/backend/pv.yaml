@@ -19,7 +19,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.0.16.2          # ← 改成你的 NFS Server IP
-    path: /data/nfs/k8soperation/artifacts
+    path: /data/k8soperation/artifacts
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -37,7 +37,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/k8soperation/logs
+    path: /data/k8soperation/logs
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -55,4 +55,4 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.0.16.2
-    path: /data/nfs/k8soperation/agents
+    path: /data/k8soperation/agents
