@@ -1,3 +1,10 @@
+-- ============================================================
+-- K8sOperation 平台全量初始化 SQL
+-- 用法: mysql -u root -p < docs/sql/k8s_platform_full_init.sql
+-- ============================================================
+CREATE DATABASE IF NOT EXISTS `k8s-platform` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE `k8s-platform`;
+
 -- MySQL dump 10.13  Distrib 8.0.31, for Win64 (x86_64)
 --
 -- Host: localhost    Database: k8s-platform
