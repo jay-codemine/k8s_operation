@@ -226,6 +226,13 @@ CREATE TABLE IF NOT EXISTS `cicd_pipeline` (
   `target_container` varchar(100) DEFAULT '' COMMENT '目标容器名称',
   `deploy_env` varchar(20) DEFAULT 'dev' COMMENT '部署环境',
   `require_approval` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要审批',
+  -- 金丝雀部署配置 (v16.8)
+  `enable_canary` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用金丝雀部署',
+  `canary_replicas` int NOT NULL DEFAULT 1 COMMENT '金丝雀副本数',
+  `canary_traffic_ratio` int NOT NULL DEFAULT 10 COMMENT '金丝雀流量比例(%)',
+  `canary_duration_sec` int NOT NULL DEFAULT 300 COMMENT '金丝雀观察时长(秒)',
+  `canary_auto_promote` tinyint(1) NOT NULL DEFAULT 0 COMMENT '观察通过自动晋升',
+  `canary_analysis_rules` text COMMENT '金丝雀分析规则JSON',
   `enable_sonar` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用SonarQube代码扫描',
   `enable_artifact_upload` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用制品上传',
   -- 发布联动告警静默
