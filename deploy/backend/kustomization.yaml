@@ -9,7 +9,7 @@ namespace: k8soperation
 
 resources:
   - namespace.yaml
-  # - secret.yaml            # 先复制 secret.yaml.example → secret.yaml 并填写实际值
+  - secret.yaml
   - configmap.yaml
   # - pv.yaml                # 按需取消注释                # PV 必须在 PVC 之前
   # - pvc.yaml               # 按需取消注释
