@@ -319,9 +319,9 @@ type CanarySettingS struct {
 
 // LogControlS 日志控制配置
 type LogControlS struct {
-	SuppressPrometheusQueryWarn bool `mapstructure:"SuppressPrometheusQueryWarn"`
-	SuppressK8sClusterInitWarn  bool `mapstructure:"SuppressK8sClusterInitWarn"`
-	SuppressK8sClusterInitError bool `mapstructure:"SuppressK8sClusterInitError"`
+	SuppressPrometheusQueryWarn bool `mapstructure:"SuppressPrometheusQueryWarn" yaml:"SuppressPrometheusQueryWarn"`
+	SuppressK8sClusterInitWarn  bool `mapstructure:"SuppressK8sClusterInitWarn" yaml:"SuppressK8sClusterInitWarn"`
+	SuppressK8sClusterInitError bool `mapstructure:"SuppressK8sClusterInitError" yaml:"SuppressK8sClusterInitError"`
 }
 
 // LDAPGroupRoleMapping LDAP 组到平台角色的映射

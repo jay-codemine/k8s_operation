@@ -191,8 +191,18 @@ func SetupSetting() error {
 			global.LDAPSetting = nil
 	// 读取 LogControl 配置
 	if err = s.ReadSection("LogControl", &global.LogControlSetting); err != nil || global.LogControlSetting == nil {
-		log.Println("[LogControl] 配置块未找到，使用默认值")
-		global.LogControlSetting = &setting.LogControlS{}
+		log.Println("[LogControl] 配置块未找到，使用默认值（全部抑制）")
+		global.LogControlSetting = &setting.LogControlS{
+			SuppressPrometheusQueryWarn: true,
+			SuppressK8sClusterInitWarn:  true,
+			SuppressK8sClusterInitError: true,
+		}
+	}
+	if global.LogControlSetting != nil {
+		log.Printf("[LogControl] SuppressPrometheusQuery=%v SuppressK8sInitWarn=%v SuppressK8sInitError=%v",
+			global.LogControlSetting.SuppressPrometheusQueryWarn,
+			global.LogControlSetting.SuppressK8sClusterInitWarn,
+			global.LogControlSetting.SuppressK8sClusterInitError)
 	}
 
 	// 读取 Canary 配置
