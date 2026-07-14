@@ -1,0 +1,15 @@
+# Jenkins 完整插件清单
+# 复制以下名称到 Jenkins → Plugins → Available → 搜索安装
+# 安装完成后重启 Jenkins
+
+workflow-aggregator
+kubernetes
+git
+configuration-as-code           # JCasC 配置即代码（Secret/Credentials/Cloud 注入）
+http_request
+credentials-binding
+pipeline-utility-steps
+sonar
+throttle-concurrents
+junit
+blueocean
