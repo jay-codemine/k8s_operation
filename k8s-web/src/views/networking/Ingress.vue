@@ -589,7 +589,7 @@ const canOperate = computed(() => {
 
 // 状态
 const ingresses = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 const searchQuery = ref('')
 const namespaceFilter = ref('')

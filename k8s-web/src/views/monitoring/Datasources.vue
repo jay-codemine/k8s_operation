@@ -357,7 +357,7 @@ const typePresets = [
 
 // ===== 状态 =====
 const list = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const refreshing = ref(false)
 const testing = ref(null)
 const testingForm = ref(false)

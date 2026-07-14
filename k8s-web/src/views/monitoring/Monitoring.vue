@@ -466,7 +466,7 @@ function openNodeDetail(node) {
 }
 
 // ===== 状态 =====
-const loading = ref(false)
+const loading = ref(true)
 const chartsLoading = ref(false)
 const healthy = ref(false)
 const datasourceInfo = ref('')

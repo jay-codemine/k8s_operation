@@ -45,9 +45,9 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-if="loading"><td colspan="9" class="muted">加载中...</td></tr>
+        <tr v-if="loading"><td colspan="9" style="text-align:center;padding:50px 0"><div class="loading-spinner"></div><p style="color:#64748b;margin-top:16px">加载中...</p></td></tr>
         <tr v-else-if="!list.length"><td colspan="9" class="muted">暂无数据</td></tr>
-        <tr v-for="row in list" :key="row.namespace + '/' + row.name">
+        <tr v-for="row in paginatedList" :key="row.namespace + '/' + row.name">
           <td><input type="checkbox" :checked="isSelected(row)" @change="toggleSelect(row)" /></td>
           <td>
             <span class="status" :class="row.status?.toLowerCase()">{{ row.status }}</span>
@@ -85,6 +85,8 @@
         </tr>
       </tbody>
     </table>
+n    <!-- 分页 -->
+    <Pagination v-if="total > 0" v-model:currentPage="currentPage" v-model:itemsPerPage="itemsPerPage" :totalItems="total" />
 
     <!-- 创建/编辑弹窗 -->
     <div v-if="formVisible" class="modal-mask" @click.self="formVisible = false">
@@ -223,6 +225,8 @@
               </tr>
             </tbody>
           </table>
+n    <!-- 分页 -->
+    <Pagination v-if="total > 0" v-model:currentPage="currentPage" v-model:itemsPerPage="itemsPerPage" :totalItems="total" />
           <div v-if="batchResults.length" class="batch-result">
             <h3>执行结果（成功 {{ batchSuccessCnt }} / 失败 {{ batchFailCnt }}）</h3>
             <table class="hpa-table small">
@@ -249,6 +253,8 @@
                 </tr>
               </tbody>
             </table>
+n    <!-- 分页 -->
+    <Pagination v-if="total > 0" v-model:currentPage="currentPage" v-model:itemsPerPage="itemsPerPage" :totalItems="total" />
           </div>
         </div>
         <div class="modal-footer">
@@ -264,6 +270,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import Pagination from '@/components/Pagination.vue'
 import { useRoute } from 'vue-router'
 import { hpaApi } from '@/api/cluster/workloads/autoscaler'
 
@@ -272,10 +279,16 @@ const clusterId = computed(() => route.params.clusterId)
 
 const list = ref([])
 const total = ref(0)
-const loading = ref(false)
+const loading = ref(true)
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+const paginatedList = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return list.value.slice(start, start + itemsPerPage.value)
+})
 const submitting = ref(false)
 const errorMsg = ref('')
-const filter = ref({ namespace: '', name: '', page: 1, limit: 50 })
+const filter = ref({ namespace: '', name: '', page: 1, limit: 1000 })
 const selected = ref([])
 
 // 创建/编辑表单
@@ -756,4 +769,17 @@ onMounted(() => {
   background: #fafafa;
 }
 .yaml-textarea:focus { outline: none; border-color: #1677ff; background: #fff; }
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #326ce5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 </style>

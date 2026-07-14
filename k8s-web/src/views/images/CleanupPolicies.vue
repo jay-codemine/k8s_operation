@@ -272,7 +272,7 @@ export default {
     const { confirm: showConfirm } = useConfirmDialog()
     const policies = ref([])
     const registries = ref([])
-    const loading = ref(false)
+    const loading = ref(true)
     
     // ===== 操作权限控制 =====
     const canOperate = computed(() => {

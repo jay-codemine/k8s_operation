@@ -374,7 +374,7 @@ const activeTab = ref('platform')
 const roles = ref([])
 const clusters = ref([])
 const searchQuery = ref('')
-const loading = ref(false)
+const loading = ref(true)
 const submitting = ref(false)
 
 // K8s 角色

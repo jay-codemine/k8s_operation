@@ -362,7 +362,7 @@ export default {
     // 数据状态
     const registries = ref([])
     const stats = ref({ total: 0, connected: 0, disconnected: 0, type_counts: {} })
-    const loading = ref(false)
+    const loading = ref(true)
     const checkingAll = ref(false)
     const total = ref(0)
     const currentPage = ref(1)

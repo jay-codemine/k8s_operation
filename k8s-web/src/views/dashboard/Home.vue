@@ -569,7 +569,7 @@ const updateTime = () => {
 }
 
 // 加载状态
-const loading = ref(false)
+const loading = ref(true)
 
 // 统计数据
 const clusterStats = ref({

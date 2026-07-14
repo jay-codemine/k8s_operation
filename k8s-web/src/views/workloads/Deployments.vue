@@ -3472,7 +3472,7 @@ const getAuthHeaders = () => {
 // =========================
 // 状态变量
 // =========================
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 const searchQuery = ref('')
 const statusFilter = ref('all')

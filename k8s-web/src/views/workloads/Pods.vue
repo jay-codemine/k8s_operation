@@ -1272,7 +1272,7 @@ onUnmounted(() => {
   stopAutoRefresh(); // 清理自动刷新定时器
 });
 
-const loading = ref(false);
+const loading = ref(true);
 const errorMsg = ref('');
 const searchQuery = ref('');
 const statusFilter = ref('all');  // all, Running, Pending, Failed

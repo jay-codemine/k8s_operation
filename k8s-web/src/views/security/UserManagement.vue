@@ -278,7 +278,7 @@ const users = ref([])
 const allRoles = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
-const loading = ref(false)
+const loading = ref(true)
 const submitting = ref(false)
 
 const showDetailDrawer = ref(false)

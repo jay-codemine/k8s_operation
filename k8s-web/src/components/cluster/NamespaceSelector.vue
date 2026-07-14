@@ -158,7 +158,7 @@ const emit = defineEmits(['update:modelValue', 'change', 'loaded'])
 
 const showDropdown = ref(false)
 const searchQuery = ref('')
-const loading = ref(false)
+const loading = ref(true)
 const internalNamespaces = ref([])
 
 // 系统命名空间列表

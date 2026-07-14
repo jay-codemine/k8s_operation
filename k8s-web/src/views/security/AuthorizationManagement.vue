@@ -238,7 +238,7 @@ const viewMode = ref('user')
 const clusters = ref([])
 const allUsers = ref([])
 const allRoles = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const submitting = ref(false)
 
 // 用户视角

@@ -374,7 +374,7 @@ const router = useRouter()
 
 const route = useRoute()
 const approvals = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const actionLoading = ref(false)
 const statusFilter = ref('')
 const pipelineIdFilter = ref(null)

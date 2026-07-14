@@ -302,7 +302,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 const { confirm: showConfirm } = useConfirmDialog()
 
 // 加载状态
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 const autoRefresh = ref(false)
 const batchMode = ref(false)

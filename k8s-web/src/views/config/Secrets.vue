@@ -721,7 +721,7 @@ const canOperate = computed(() => {
 })
 
 // ==================== 状态管理 ====================
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 const secrets = ref([])
 const total = ref(0)

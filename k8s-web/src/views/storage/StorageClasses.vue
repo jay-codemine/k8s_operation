@@ -434,7 +434,7 @@ const canOperate = computed(() => {
 
 // =============== 状态管理 ===============
 const storageClasses = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 
 // 搜索和过滤

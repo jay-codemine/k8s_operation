@@ -398,7 +398,7 @@ const router = useRouter()
 
 // 模板列表数据
 const pipelineTemplates = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 
 // 搜索和过滤

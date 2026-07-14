@@ -359,7 +359,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 const { confirm: showConfirm } = useConfirmDialog()
 
 // 数据状态
-const loading = ref(false)
+const loading = ref(true)
 const searchQuery = ref('')
 const roleTypeFilter = ref('')
 const namespaceFilter = ref('')

@@ -579,7 +579,7 @@ const { confirm: showConfirm } = useConfirmDialog()
 
 const activeSection = ref('basic')
 const showToast = ref(false)
-const loading = ref(false)
+const loading = ref(true)
 const toastMessage = ref('设置已保存')
 const toastType = ref('success') // success, error
 

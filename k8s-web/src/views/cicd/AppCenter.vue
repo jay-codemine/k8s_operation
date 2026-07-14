@@ -247,7 +247,7 @@ export default {
   name: 'AppCenter',
   setup() {
     const router = useRouter()
-    const loading = ref(false)
+    const loading = ref(true)
     const apps = ref([])
     const searchQuery = ref('')
     const envFilter = ref('')

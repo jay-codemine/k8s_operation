@@ -318,7 +318,7 @@ import { triggerGitOpsSync } from '@/api/cicd.js'
 const router = useRouter()
 
 // 状态
-const loading = ref(false)
+const loading = ref(true)
 const releases = ref([])
 const gitopsPipelines = ref([])
 const keyword = ref('')

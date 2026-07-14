@@ -304,7 +304,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 const { confirm: showConfirm } = useConfirmDialog()
 
 // ====== State ======
-const loading = ref(false)
+const loading = ref(true)
 const actionLoading = ref(false)
 const editLoading = ref(false)
 const list = ref([])

@@ -186,7 +186,7 @@ import { getInstallList, uninstallApp } from '@/api/platform/appstore.js'
 const router = useRouter()
 
 // ====== 状态 ======
-const loading = ref(false)
+const loading = ref(true)
 const records = ref([])
 const total = ref(0)
 const currentPage = ref(1)

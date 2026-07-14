@@ -479,7 +479,7 @@ const activeCRD = ref(null)
 
 // ========== CRD 列表 ==========
 const crds = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 const searchQuery = ref('')
 const scopeFilter = ref('')

@@ -644,7 +644,7 @@ const showToast = (msg, type = 'info') => {
 }
 
 // ====== 状态 ======
-const loading = ref(false)
+const loading = ref(true)
 const artifacts = ref([])
 const total = ref(0)
 const keyword = ref('')

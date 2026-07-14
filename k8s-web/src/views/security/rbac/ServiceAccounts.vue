@@ -300,7 +300,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 
 const { confirm: showConfirm } = useConfirmDialog()
 
-const loading = ref(false), submitting = ref(false)
+const loading = ref(true), submitting = ref(false)
 const searchQuery = ref(''), namespaceFilter = ref('')
 const serviceAccounts = ref([]), namespaces = ref([])
 const viewMode = ref('table'), autoRefresh = ref(false)

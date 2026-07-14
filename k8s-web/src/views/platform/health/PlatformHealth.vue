@@ -356,7 +356,7 @@ import { Message } from '@arco-design/web-vue'
 import http from '@/api/http'
 
 const health = ref(null)
-const loading = ref(false)
+const loading = ref(true)
 const error = ref(null)
 const lastUpdate = ref(null)
 const autoRefresh = ref(true)

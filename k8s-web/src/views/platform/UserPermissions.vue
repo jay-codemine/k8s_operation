@@ -195,7 +195,7 @@ import {
 } from '@/api/rbac'
 
 // 状态
-const loading = ref(false)
+const loading = ref(true)
 const saving = ref(false)
 const deleting = ref(false)
 

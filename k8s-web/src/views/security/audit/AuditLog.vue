@@ -359,7 +359,7 @@ const props = defineProps({
 })
 
 // ========== 状态 ==========
-const loading = ref(false)
+const loading = ref(true)
 const exporting = ref(false)
 const logs = ref([])
 const total = ref(0)

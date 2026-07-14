@@ -148,7 +148,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:visible'])
 
-const loading = ref(false)
+const loading = ref(true)
 const detail = ref(null)
 const durationVal = ref('1h')
 

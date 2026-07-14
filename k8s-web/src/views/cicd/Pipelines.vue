@@ -655,7 +655,7 @@ export default {
     const currentPage = ref(1)
     const pageSize = ref(12)
     const total = ref(0)
-    const loading = ref(false)
+    const loading = ref(true)
     const errorMsg = ref('')
     const activeMenu = ref(null)
     const jumpPage = ref(1)

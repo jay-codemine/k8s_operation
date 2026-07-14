@@ -196,7 +196,7 @@ import pvApi from '@/api/cluster/storage/pv'
 
 // =============== 状态管理 ===============
 const pvs = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 
 // 搜索和过滤

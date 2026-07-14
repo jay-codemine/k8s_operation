@@ -95,6 +95,12 @@ spec:
                 secretKeyRef:
                   name: jenkins-secret
                   key: gitee-password
+            - name: SONARQUBE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-secret
+                  key: sonarqube-url
+                  optional: true
             - name: MAVEN_REPO_USERNAME
               valueFrom:
                 secretKeyRef:

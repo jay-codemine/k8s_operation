@@ -753,7 +753,7 @@ import { getK8sClusterList } from '@/api/platform/cluster.js'
 const router = useRouter()
 
 // ====== 状态 ======
-const loading = ref(false)
+const loading = ref(true)
 const apps = ref([])
 const total = ref(0)
 const currentPage = ref(1)

@@ -627,7 +627,7 @@ const searchQuery = ref('')
 const statusFilter = ref('all') // all | ok | bad | pending
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
-const loading = ref(false)
+const loading = ref(true)
 const testingId = ref(null)
 
 // 筛选按钮配置

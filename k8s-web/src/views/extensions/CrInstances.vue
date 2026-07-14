@@ -479,7 +479,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', handleClickOutside
 
 // ===== CR 实例 =====
 const instances = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const namespace = ref('')
 const namespaces = ref([])
 const searchQuery = ref('')

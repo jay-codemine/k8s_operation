@@ -366,7 +366,7 @@ import {
 } from '@/api/cicd'
 
 const agents = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const keyword = ref('')
 const filters = ref({ category: '', scope: '', status: '' })
 

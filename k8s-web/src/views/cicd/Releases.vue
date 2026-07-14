@@ -777,7 +777,7 @@ export default {
   name: 'Releases',
   setup() {
     const router = useRouter()
-    const loading = ref(false)
+    const loading = ref(true)
     const releases = ref([])
     const searchKeyword = ref('')
     const searchFocused = ref(false)

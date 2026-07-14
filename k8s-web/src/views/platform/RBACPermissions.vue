@@ -484,7 +484,7 @@ import { getClusterList } from '@/api/cluster'
 
 // ==================== 状态 ====================
 const activeTab = ref('roles')
-const loading = ref(false)
+const loading = ref(true)
 const submitting = ref(false)
 
 // 角色数据

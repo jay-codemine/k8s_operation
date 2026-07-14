@@ -571,7 +571,7 @@ const canOperate = computed(() => {
 // ==================== 状态变量 ====================
 const services = ref([])
 const namespaces = ref(['default'])
-const loading = ref(false)
+const loading = ref(true)
 const errorMsg = ref('')
 
 // 过滤与搜索

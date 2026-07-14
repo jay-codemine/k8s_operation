@@ -103,6 +103,6 @@ data:
         buildWrapperEnabled: true
         installations:
           - name: "SonarQube"                         # Pipeline 中 withSonarQubeEnv('SonarQube') 引用的名称
-            serverUrl: "http://sonarqube.example.com:9000"  # ← 修改为你实际的 SonarQube 地址
+            serverUrl: "${SONARQUBE_URL:-}"  # ← 修改为你实际的 SonarQube 地址
             credentialsId: "sonarqube-token"           # Jenkins 凭证 ID（存储 SonarQube Token）
             webhookSecretId: ""                        # Quality Gate Webhook Secret（可选）

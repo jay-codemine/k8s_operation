@@ -198,7 +198,7 @@ import permissionStore from '@/stores/permission'
 const clusters = ref([])
 const selectedClusterId = ref('')
 const namespaces = ref([])
-const loading = ref(false)
+const loading = ref(true)
 
 // 检查表单
 const checkForm = ref({
