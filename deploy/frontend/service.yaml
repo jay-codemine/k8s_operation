@@ -1,5 +1,6 @@
 # ============================================================
-# K8sOperation 前端 - Service
+# K8sOperation 前端 Service（ClusterIP，不直接对外）
+# 对外暴露请用 service-nodeport.yaml 或 ingress.yaml
 # ============================================================
 apiVersion: v1
 kind: Service
