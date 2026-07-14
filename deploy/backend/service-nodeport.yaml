@@ -19,5 +19,5 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-      nodePort: 30081          # 避免与 Jenkins(30080)、前端(30007) 冲突
+      nodePort: 30083          # 避免与 Jenkins(30080)、前端(30007) 冲突
       protocol: TCP

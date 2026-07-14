@@ -11,12 +11,13 @@ resources:
   - namespace.yaml
   - secret.yaml
   - configmap.yaml
-  # - pv.yaml                # 按需取消注释                # PV 必须在 PVC 之前
-  # - pvc.yaml               # 按需取消注释
+  - pv.yaml                # PV 必须在 PVC 之前（hostPath 需节点上存在对应目录）
+  - pvc.yaml               # PVC 依赖 PV
   - service.yaml
   - deployment.yaml
-#  - service-nodeport.yaml  # 按需取消注释（NodePort 暴露
-  # - ingress.yaml           # 按需取消注释（Ingress 暴露）
+  # 对外暴露（二选一，生产环境推荐 Ingress）
+  # - service-nodeport.yaml  # NodePort（无需 Ingress Controller）
+  # - ingress.yaml           # Ingress（需 nginx-ingress）
 
 labels:
   - pairs:
