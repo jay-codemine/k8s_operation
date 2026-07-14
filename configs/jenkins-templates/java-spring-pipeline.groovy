@@ -36,11 +36,11 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '500m'
-        memory: '1Gi'
+        cpu: '100m'
+        memory: '384Mi'
       limits:
-        cpu: '2'
-        memory: '4Gi'
+        cpu: '500m'
+        memory: '1280Mi'
     env:
     - name: MAVEN_OPTS
       value: '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
@@ -57,11 +57,11 @@ spec:
       runAsUser: 0
     resources:
       requests:
-        cpu: '200m'
-        memory: '256Mi'
+        cpu: '100m'
+        memory: '128Mi'
       limits:
-        cpu: '1'
-        memory: '2Gi'
+        cpu: '400m'
+        memory: '1280Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent

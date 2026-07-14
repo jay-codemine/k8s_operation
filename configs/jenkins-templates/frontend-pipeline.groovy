@@ -30,11 +30,11 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '500m'
-        memory: '1Gi'
+        cpu: '100m'
+        memory: '384Mi'
       limits:
-        cpu: '2'
-        memory: '4Gi'
+        cpu: '500m'
+        memory: '1280Mi'
     env:
     - name: NPM_CONFIG_REGISTRY
       value: 'https://registry.npmmirror.com'
@@ -51,11 +51,11 @@ spec:
       runAsUser: 0
     resources:
       requests:
-        cpu: '200m'
-        memory: '256Mi'
+        cpu: '100m'
+        memory: '128Mi'
       limits:
-        cpu: '1'
-        memory: '1Gi'
+        cpu: '400m'
+        memory: '384Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
