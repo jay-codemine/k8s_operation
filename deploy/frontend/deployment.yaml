@@ -37,8 +37,13 @@ spec:
               containerPort: 80
               protocol: TCP
 
-          # 不设置 API_BACKEND_URL，ConfigMap 已包含正确的 nginx upstream 配置
-          env: []
+          # ConfigMap 提供 nginx upstream 配置
+          # docker-entrypoint.sh 默认后端地址（与 ConfigMap 中的 upstream 对应）
+          env:
+            - name: BACKEND_HOST
+              value: "k8soperation.k8soperation.svc"
+            - name: BACKEND_PORT
+              value: "8080"
 
           # 存活探针
           livenessProbe:
