@@ -78,7 +78,9 @@ func InitAll() error {
 	}
 	// 初始化K8s（失败不阻塞启动，登录/RBAC/CICD 等功能仍可用）
 	if err := initialize.SetupK8sBootstrap(); err != nil {
-		global.Logger.Warn("K8s 集群初始化失败，集群管理功能暂不可用，其他功能正常", zap.Error(err))
+		if global.LogControlSetting == nil || !global.LogControlSetting.SuppressK8sClusterInitWarn {
+			global.Logger.Warn("K8s 集群初始化失败，集群管理功能暂不可用，其他功能正常", zap.Error(err))
+		}
 	}
 
 	// 初始化 AppConfig CRD 客户端（依赖 K8s，失败不阻塞）
