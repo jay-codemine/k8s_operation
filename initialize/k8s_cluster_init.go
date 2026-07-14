@@ -19,7 +19,7 @@ func logK8sInitWarn(msg string, fields ...zap.Field) {
 	if global.LogControlSetting != nil && global.LogControlSetting.SuppressK8sClusterInitWarn {
 		return
 	}
-	logK8sInitWarn(msg, fields...)
+	global.Logger.Warn(msg, fields...)
 }
 
 // logK8sInitError K8s 启动 ERROR（可由 LogControl.SuppressK8sClusterInitError 抑制）
@@ -27,7 +27,7 @@ func logK8sInitError(msg string, fields ...zap.Field) {
 	if global.LogControlSetting != nil && global.LogControlSetting.SuppressK8sClusterInitError {
 		return
 	}
-	logK8sInitError(msg, fields...)
+	global.Logger.Error(msg, fields...)
 }
 
 // SetupK8sBootstrap 初始化 K8s 集群连接
