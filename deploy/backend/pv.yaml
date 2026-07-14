@@ -1,6 +1,6 @@
 # ============================================================
 # 后端 PV — NFS 共享存储
-# 使用前修改 NFS Server IP（当前占位 192.168.1.100）
+# 使用前修改 NFS Server IP（当前占位 10.0.16.2）
 # ============================================================
 
 apiVersion: v1
@@ -18,8 +18,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 192.168.1.100          # ← 改成你的 NFS Server IP
-    path: /nfs/k8soperation/artifacts
+    server: 10.0.16.2          # ← 改成你的 NFS Server IP
+    path: /data/nfs/k8soperation/artifacts
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -36,8 +36,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 192.168.1.100
-    path: /nfs/k8soperation/logs
+    server: 10.0.16.2
+    path: /data/nfs/k8soperation/logs
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -54,5 +54,5 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 192.168.1.100
-    path: /nfs/k8soperation/agents
+    server: 10.0.16.2
+    path: /data/nfs/k8soperation/agents

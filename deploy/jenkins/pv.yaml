@@ -1,6 +1,6 @@
 # ============================================================
 # Jenkins PV — NFS 共享存储
-# 使用前修改 NFS Server IP（当前占位 192.168.1.100）
+# 使用前修改 NFS Server IP（当前占位 10.0.16.2）
 # ============================================================
 
 apiVersion: v1
@@ -21,8 +21,8 @@ spec:
     namespace: devops
     name: jenkins-data
   nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/home
+    server: 10.0.16.2
+    path: /data/nfs/jenkins/home
 ---
 # Go 模块缓存
 apiVersion: v1
@@ -44,8 +44,8 @@ spec:
     namespace: devops
     name: jenkins-go-cache
   nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/go-cache
+    server: 10.0.16.2
+    path: /data/nfs/jenkins/go-cache
 ---
 # Maven 本地仓库缓存
 apiVersion: v1
@@ -67,8 +67,8 @@ spec:
     namespace: devops
     name: jenkins-maven-cache
   nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/maven-cache
+    server: 10.0.16.2
+    path: /data/nfs/jenkins/maven-cache
 ---
 # npm 缓存
 apiVersion: v1
@@ -90,8 +90,8 @@ spec:
     namespace: devops
     name: jenkins-npm-cache
   nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/npm-cache
+    server: 10.0.16.2
+    path: /data/nfs/jenkins/npm-cache
 ---
 # pip 缓存
 apiVersion: v1
@@ -113,5 +113,5 @@ spec:
     namespace: devops
     name: jenkins-pip-cache
   nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/pip-cache
+    server: 10.0.16.2
+    path: /data/nfs/jenkins/pip-cache
