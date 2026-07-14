@@ -125,23 +125,18 @@ func toMetricItem(nm *metricsv1beta1.NodeMetrics, node *corev1.Node) models.Node
 	}
 	// 计算CPU使用百分比
 	// 首先确定分母，优先使用分配量，如果分配量为0则使用限制值
-	denomCPU := allocMilli
-	if denomCPU == 0 {
-		denomCPU = capMilli
+t// CPU% = usage / capacity（与 kubectl top nodes 一致）
+	if capMilli > 0 {
+		m.CPUUsagePercent = float64(cpuMilli) * 100 / float64(capMilli)
 	}
-	// 如果分母大于0，则计算CPU使用百分比
-	if denomCPU > 0 {
-		m.CPUUsagePercent = float64(cpuMilli) * 100 / float64(denomCPU)
-	}
-	// 计算内存使用百分比
-	// 首先确定分母，优先使用分配量，如果分配量为0则使用限制值
+	// MEM% = usage / allocatable（与 kubectl top nodes 一致）
 	denomMem := allocMem
 	if denomMem == 0 {
 		denomMem = capMem
 	}
-	// 如果分母大于0，则计算内存使用百分比
 	if denomMem > 0 {
 		m.MemUsagePercent = float64(memBytes) * 100 / float64(denomMem)
+	}
 	}
 	// 返回填充好的NodeMetricItem结构体实例
 	return m

@@ -27,7 +27,7 @@ import (
 const (
 	// DefaultConnectTimeout 默认连接超时时间
 	// 生产环境建议 5-10 秒，避免单个集群拖慢整体
-	DefaultConnectTimeout = 5 * time.Second
+	DefaultConnectTimeout = 15 * time.Second
 
 	// MaxConnectTimeout 最大连接超时时间
 	MaxConnectTimeout = 30 * time.Second

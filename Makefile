@@ -75,7 +75,7 @@ SWAG_OUT     := $(strip $(SWAG_OUT))
 VOL_CONFIGS  := $(strip $(VOL_CONFIGS))
 VOL_DOCS     := $(strip $(VOL_DOCS))
 
-.PHONY: all build run run-local test fmt lint clean \
+.PHONY: all build run run-quick run-local test fmt lint clean \
         swag swag-clean swagger-ui swagger-ui-stop \
         docker-build docker-build-standalone docker-buildx docker-run docker-logs docker-stop docker-rm docker-push \
         help
@@ -93,6 +93,14 @@ build: swag
 run: build
 	@echo ">> Running $(BIN_FILE)"
 	APP_CONFIG="$(VOL_CONFIGS)/config.yaml" GIN_MODE=$(GIN_MODE) "$(BIN_FILE)"
+
+n# 快速启动（跳过 swagger 重新生成，适合日常开发）
+run-quick:
+	@echo ">> Building $(BIN_FILE) ($(GOOS)) [skip swag]"
+	@mkdir -p $(BIN_DIR)
+	$(GO) build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_FILE) $(PKG)
+	@echo ">> Running $(BIN_FILE)"
+	APP_CONFIG="configs/config.yaml" GIN_MODE=$(GIN_MODE) "$(BIN_FILE)"
 
 # 直接 go run（开发期）——先生成 swagger
 run-local: swag

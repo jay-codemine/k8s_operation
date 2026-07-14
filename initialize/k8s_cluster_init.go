@@ -14,6 +14,21 @@ import (
 )
 
 var ErrNoClusterConfig = errors.New("生产环境禁止空启动：无法加载 K8s 集群配置，请检查数据库或 kubeconfig 文件")
+n// logK8sInitWarn K8s 启动 WARN（可由 LogControl.SuppressK8sClusterInitWarn 抑制）
+func logK8sInitWarn(msg string, fields ...zap.Field) {
+	if global.LogControlSetting != nil && global.LogControlSetting.SuppressK8sClusterInitWarn {
+		return
+	}
+	logK8sInitWarn(msg, fields...)
+}
+
+// logK8sInitError K8s 启动 ERROR（可由 LogControl.SuppressK8sClusterInitError 抑制）
+func logK8sInitError(msg string, fields ...zap.Field) {
+	if global.LogControlSetting != nil && global.LogControlSetting.SuppressK8sClusterInitError {
+		return
+	}
+	logK8sInitError(msg, fields...)
+}
 
 // SetupK8sBootstrap 初始化 K8s 集群连接
 // 优化逻辑：
@@ -37,7 +52,7 @@ func SetupK8sBootstrap() error {
 	}
 
 	// 2) DB 无数据或初始化失败，尝试从本地 kubeconfig 文件加载
-	global.Logger.Warn("从数据库加载集群失败，尝试读取本地 kubeconfig...",
+	logK8sInitWarn("从数据库加载集群失败，尝试读取本地 kubeconfig...",
 		zap.Uint32("cluster_id", global.AppSetting.DefaultClusterID),
 		zap.Error(err))
 
@@ -51,13 +66,13 @@ func SetupK8sBootstrap() error {
 		// 本地文件也不存在
 		if !global.AppSetting.AllowEmptyStart {
 			// 生产环境不允许空启动，返回错误
-			global.Logger.Error("生产环境禁止空启动",
+			logK8sInitError("生产环境禁止空启动",
 				zap.String("path", localKubeConfig),
 				zap.Error(readErr))
 			return ErrNoClusterConfig
 		}
 		// 开发环境允许空启动
-		global.Logger.Warn("本地 kubeconfig 文件不存在，允许空启动（请通过界面添加集群）",
+		logK8sInitWarn("本地 kubeconfig 文件不存在，允许空启动（请通过界面添加集群）",
 			zap.String("path", localKubeConfig),
 			zap.Error(readErr))
 		printEmptyStartWarning()
@@ -67,11 +82,11 @@ func SetupK8sBootstrap() error {
 	kubeConfigStr := strings.TrimSpace(string(kubeConfigContent))
 	if kubeConfigStr == "" {
 		if !global.AppSetting.AllowEmptyStart {
-			global.Logger.Error("生产环境禁止空启动：kubeconfig 文件为空",
+			logK8sInitError("生产环境禁止空启动：kubeconfig 文件为空",
 				zap.String("path", localKubeConfig))
 			return ErrNoClusterConfig
 		}
-		global.Logger.Warn("本地 kubeconfig 文件为空，允许空启动（请通过界面添加集群）",
+		logK8sInitWarn("本地 kubeconfig 文件为空，允许空启动（请通过界面添加集群）",
 			zap.String("path", localKubeConfig))
 		printEmptyStartWarning()
 		return nil
@@ -90,7 +105,7 @@ func SetupK8sBootstrap() error {
 			printClusterInfo("数据库集群(default-cluster)")
 			return nil
 		}
-		global.Logger.Warn("复用 default-cluster 初始化失败，尝试更新 kubeconfig", zap.Error(initErr))
+		logK8sInitWarn("复用 default-cluster 初始化失败，尝试更新 kubeconfig", zap.Error(initErr))
 		// 更新 kubeconfig 后重试
 		_ = svc.K8sClusterUpdate(ctx, &requests.K8sClusterUpdateRequest{
 			ID: existing.ID, ClusterName: existing.ClusterName,
@@ -112,14 +127,14 @@ func SetupK8sBootstrap() error {
 	})
 	if createErr != nil {
 		// 入库失败，尝试直接用本地配置初始化
-		global.Logger.Warn("自动入库失败，尝试直接使用本地配置初始化", zap.Error(createErr))
+		logK8sInitWarn("自动入库失败，尝试直接使用本地配置初始化", zap.Error(createErr))
 		cli, buildErr := services.BuildClientsFromKubeconfig(kubeConfigStr)
 		if buildErr != nil {
 			if !global.AppSetting.AllowEmptyStart {
-				global.Logger.Error("生产环境禁止空启动：本地 kubeconfig 无法初始化", zap.Error(buildErr))
+				logK8sInitError("生产环境禁止空启动：本地 kubeconfig 无法初始化", zap.Error(buildErr))
 				return ErrNoClusterConfig
 			}
-			global.Logger.Warn("本地 kubeconfig 无法初始化，允许空启动", zap.Error(buildErr))
+			logK8sInitWarn("本地 kubeconfig 无法初始化，允许空启动", zap.Error(buildErr))
 			printEmptyStartWarning()
 			return nil
 		}
@@ -138,10 +153,10 @@ func SetupK8sBootstrap() error {
 	cli, initErr := svc.K8sClusterInit(ctx, &requests.K8sClusterInitRequest{ID: initID})
 	if initErr != nil {
 		if !global.AppSetting.AllowEmptyStart {
-			global.Logger.Error("生产环境禁止空启动：入库后初始化失败", zap.Error(initErr))
+			logK8sInitError("生产环境禁止空启动：入库后初始化失败", zap.Error(initErr))
 			return ErrNoClusterConfig
 		}
-		global.Logger.Warn("入库后初始化失败，允许空启动", zap.Error(initErr))
+		logK8sInitWarn("入库后初始化失败，允许空启动", zap.Error(initErr))
 		printEmptyStartWarning()
 		return nil
 	}
@@ -164,7 +179,7 @@ func setGlobalClients(cli *services.K8sClients) {
 	global.SupportsEventsV1 = cli.SupportsEvV1
 
 	if cli.Metrics == nil {
-		global.Logger.Warn("metrics client not initialized (metrics-server not installed?)")
+		logK8sInitWarn("metrics client not initialized (metrics-server not installed?)")
 	}
 }
 

@@ -11,7 +11,7 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - service.yaml
-  - service-nodeport.yaml  # 按需取消注释（NodePort 暴露）
+  # - service-nodeport.yaml  # NodePort 暴露（按需取消注释）  # 按需取消注释（NodePort 暴露）
   # - ingress.yaml           # 按需取消注释（Ingress 暴露）
 
 labels:

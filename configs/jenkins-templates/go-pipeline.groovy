@@ -145,6 +145,8 @@ spec:
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁失败策略: block(阻断) | warn(告警) | skip(跳过)')
 
         // 制品上传参数
+n        // APM 探针注入
+        booleanParam(name: 'ENABLE_TRACING', defaultValue: false, description: '启用 APM 探针自动注入（SkyWalking/OpenTelemetry）')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
