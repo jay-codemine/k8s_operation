@@ -1,9 +1,9 @@
 # ============================================================
-# Jenkins PVs - 静态 hostPath PV（单节点集群）
-# 包含：jenkins-data 主数据 + 4 个构建缓存
+# Jenkins PVs — NFS 共享存储
+# 使用前修改 NFS_SERVER 为你的实际 NFS 服务器地址
 # ============================================================
 
-# Jenkins 主数据 PV（/var/jenkins_home）
+# Jenkins 主数据（/var/jenkins_home：配置/插件/Job/构建历史）
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -17,15 +17,15 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""           # 静态绑定
+  storageClassName: ""
   claimRef:
     namespace: devops
     name: jenkins-data
-  hostPath:
-    path: /data/jenkins/home
-    type: DirectoryOrCreate
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/jenkins/home
 ---
-# Go 模块缓存 PV
+# Go 模块缓存
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -40,14 +40,15 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""          # 静态绑定，不使用 StorageClass 动态供给
-  claimRef:                     # 预绑定到指定 PVC，防止被其他 PVC 抢占
+  storageClassName: ""
+  claimRef:
     namespace: devops
     name: jenkins-go-cache
-  hostPath:
-    path: /data/jenkins/go-cache
-    type: DirectoryOrCreate
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/jenkins/go-cache
 ---
+# Maven 本地仓库缓存
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -66,10 +67,11 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-maven-cache
-  hostPath:
-    path: /data/jenkins/maven-cache
-    type: DirectoryOrCreate
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/jenkins/maven-cache
 ---
+# npm 缓存
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -88,10 +90,11 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-npm-cache
-  hostPath:
-    path: /data/jenkins/npm-cache
-    type: DirectoryOrCreate
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/jenkins/npm-cache
 ---
+# pip 缓存
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -110,6 +113,6 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-pip-cache
-  hostPath:
-    path: /data/jenkins/pip-cache
-    type: DirectoryOrCreate
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/jenkins/pip-cache
