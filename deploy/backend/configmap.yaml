@@ -35,9 +35,12 @@ data:
     Cache:
       Type: "${CACHE_TYPE}"
       Name: "${CACHE_NAME}"
-      Address: "${REDIS_ADDRESS}"
-      Addresses:
-        - redis-cluster.global.svc.cluster.local:6379
+      Address: "${REDIS_ADDRESS}"                   # 单节点模式（默认）
+      # 集群模式：取消下面注释，注释上面 Address
+      # Addresses:
+      #   - "${REDIS_CLUSTER_NODE_1}"
+      #   - "${REDIS_CLUSTER_NODE_2}"
+      #   - "${REDIS_CLUSTER_NODE_3}"
       Username: "${CACHE_USERNAME}"
       Password: "${REDIS_PASSWORD}"
       MaxConnect: "${CACHE_MAX_CONNECT}"
