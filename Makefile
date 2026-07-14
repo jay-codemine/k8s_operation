@@ -20,11 +20,14 @@ LDFLAGS     ?= -s -w
 PORT        ?= 8080
 GIN_MODE    ?= release
 
-# ====== Docker / nerdctl ======
-DOCKER      ?= docker                       # 切换为 nerdctl： DOCKER=nerdctl make docker-build
-IMAGE       ?= $(APP_NAME):latest
-DOCKERFILE  ?= Dockerfile                 # 纯运行时版；多阶段版：docs/dockerfile/Dockerfile.golang.prod
-CONTEXT     ?= .                            # 项目根作为 build context
+# ====== Docker / nerdctl（自动检测） ======
+# 优先使用 docker，不可用时回退到 nerdctl
+DOCKER ?= $(shell command -v docker >/dev/null 2>&1 && echo docker || (command -v nerdctl >/dev/null 2>&1 && echo nerdctl || echo docker))
+IMAGE_BE ?= $(APP_NAME)-be:latest           # 后端镜像
+IMAGE_FE ?= $(APP_NAME)-fe:latest           # 前端镜像
+DOCKERFILE_BE ?= docker/backend/Dockerfile  # 后端 Dockerfile
+DOCKERFILE_FE ?= docker/frontend/Dockerfile # 前端 Dockerfile
+CONTEXT     ?= .
 
 # ====== Swagger 配置 ======
 SWAG        ?= swag
@@ -77,7 +80,7 @@ VOL_DOCS     := $(strip $(VOL_DOCS))
 
 .PHONY: all build run run-quick run-local test fmt lint clean \
         swag swag-clean swagger-ui swagger-ui-stop \
-        docker-build docker-build-standalone docker-buildx docker-run docker-logs docker-stop docker-rm docker-push \
+        docker-build-be docker-build-fe docker-build-all docker-push-be docker-push-fe \
         help
 
 # ====== Go 基本命令 ======
@@ -94,7 +97,7 @@ run: build
 	@echo ">> Running $(BIN_FILE)"
 	APP_CONFIG="$(VOL_CONFIGS)/config.yaml" GIN_MODE=$(GIN_MODE) "$(BIN_FILE)"
 
-n# 快速启动（跳过 swagger 重新生成，适合日常开发）
+# 快速启动（跳过 swagger 重新生成，适合日常开发）
 run-quick:
 	@echo ">> Building $(BIN_FILE) ($(GOOS)) [skip swag]"
 	@mkdir -p $(BIN_DIR)
@@ -146,51 +149,99 @@ swagger-ui: swag
 swagger-ui-stop:
 	- $(DOCKER) rm -f $(APP_NAME)-swagger >/dev/null 2>&1 || true
 
-# ====== Docker 镜像 ======
-# ====== Docker 镜像（纯运行时模式：先编译，再打包） ======
-docker-build: build
-	@echo ">> Building image $(IMAGE) with $(DOCKER) [platform-compile mode]"
-	$(DOCKER) build -f $(DOCKERFILE) -t $(IMAGE) $(CONTEXT)
+# ====== 镜像构建（Docker / nerdctl 通用） ======
+# 使用方式：
+#   make docker-build-be             使用自动检测的运行时构建后端镜像
+#   make docker-build-fe             构建前端镜像
+#   make DOCKER=nerdctl docker-build-be  强制使用 nerdctl
+#   make docker-push REGISTRY=harbor.example.com/k8s
 
-# 使用多阶段构建 Dockerfile（独立构建，无需本地编译）
-docker-build-standalone:
-	@echo ">> Building image $(IMAGE) with multi-stage Dockerfile"
-	$(DOCKER) build -f docs/dockerfile/Dockerfile.golang.prod -t $(IMAGE) $(CONTEXT)
+# 构建后端镜像（多阶段，无需本地 Go 环境）
+docker-build-be: swag
+	@echo ">> Building backend image $(IMAGE_BE) with $(DOCKER)"
+	$(DOCKER) build -f $(DOCKERFILE_BE) -t $(IMAGE_BE) $(CONTEXT)
 
-# 多架构构建（amd64 + arm64）—— 需要 docker buildx
-docker-buildx: swag
-	@echo ">> Building multi-arch image $(IMAGE) (linux/amd64,linux/arm64)"
+# 构建前端镜像（多阶段，Node build → Nginx serve）
+docker-build-fe:
+	@echo ">> Building frontend image $(IMAGE_FE) with $(DOCKER)"
+	$(DOCKER) build -f $(DOCKERFILE_FE) -t $(IMAGE_FE) k8s-web/
+
+# 同时构建前后端
+docker-build-all: docker-build-be docker-build-fe
+
+# 多架构构建（amd64 + arm64）
+docker-buildx-be:
+	@echo ">> Building multi-arch backend $(IMAGE_BE)"
 	$(DOCKER) buildx build --platform linux/amd64,linux/arm64 \
-		-f $(DOCKERFILE) -t $(IMAGE) $(CONTEXT) --push
+		-f $(DOCKERFILE_BE) -t $(IMAGE_BE) $(CONTEXT) --push
 
-docker-run:
-	@echo ">> Running container $(APP_NAME)  (configs: $(VOL_CONFIGS))"
-	$(DOCKER_RUN_PREFIX) $(DOCKER) run -d --name $(APP_NAME) \
+docker-buildx-fe:
+	@echo ">> Building multi-arch frontend $(IMAGE_FE)"
+	$(DOCKER) buildx build --platform linux/amd64,linux/arm64 \
+		-f $(DOCKERFILE_FE) -t $(IMAGE_FE) k8s-web/ --push
+
+# 运行后端容器
+docker-run-be:
+	@echo ">> Running backend $(IMAGE_BE)"
+	$(DOCKER_RUN_PREFIX) $(DOCKER) run -d --name $(APP_NAME)-be \
 		-p $(PORT):8080 \
 		-v "$(VOL_CONFIGS):/app/configs:ro" \
 		-e APP_CONFIG=/app/configs/config.yaml \
 		-e GIN_MODE=$(GIN_MODE) \
 		--restart=always \
-		$(IMAGE)
+		$(IMAGE_BE)
 
-docker-logs:
-	$(DOCKER) logs -f $(APP_NAME)
+# 运行前端容器
+docker-run-fe:
+	@echo ">> Running frontend $(IMAGE_FE)"
+	$(DOCKER_RUN_PREFIX) $(DOCKER) run -d --name $(APP_NAME)-fe \
+		-p 80:80 \
+		-e API_BACKEND_URL=http://$(APP_NAME)-be:8080 \
+		--restart=always \
+		$(IMAGE_FE)
 
-docker-stop:
-	-$(DOCKER) stop $(APP_NAME) || true
+# nerdctl 别名（与 docker 完全相同，只是显式指定 runtime）
+nerdctl-build-be: DOCKER=nerdctl
+nerdctl-build-be: docker-build-be
+nerdctl-build-fe: DOCKER=nerdctl
+nerdctl-build-fe: docker-build-fe
+nerdctl-build-all: DOCKER=nerdctl
+nerdctl-build-all: docker-build-all
+nerdctl-run-be: DOCKER=nerdctl
+nerdctl-run-be: docker-run-be
+nerdctl-run-fe: DOCKER=nerdctl
+nerdctl-run-fe: docker-run-fe
 
-docker-rm: docker-stop
-	-$(DOCKER) rm $(APP_NAME) || true
+# 日志
+docker-logs-be:
+	$(DOCKER) logs -f $(APP_NAME)-be
+docker-logs-fe:
+	$(DOCKER) logs -f $(APP_NAME)-fe
 
-docker-push:
-	@test "$(REGISTRY)" != "" || (echo "REGISTRY not set, e.g. REGISTRY=registry.example.com/ns"; exit 1)
-	$(DOCKER) tag $(IMAGE) $(REGISTRY)/$(IMAGE)
-	$(DOCKER) push $(REGISTRY)/$(IMAGE)
+# 停止/删除
+docker-stop-be:
+	-$(DOCKER) stop $(APP_NAME)-be || true
+docker-stop-fe:
+	-$(DOCKER) stop $(APP_NAME)-fe || true
+docker-rm-be: docker-stop-be
+	-$(DOCKER) rm $(APP_NAME)-be || true
+docker-rm-fe: docker-stop-fe
+	-$(DOCKER) rm $(APP_NAME)-fe || true
+
+# 推送（Docker Registry）
+docker-push-be:
+	@test "$(REGISTRY)" != "" || (echo "REGISTRY not set, e.g. REGISTRY=harbor.example.com/k8s"; exit 1)
+	$(DOCKER) tag $(IMAGE_BE) $(REGISTRY)/$(IMAGE_BE)
+	$(DOCKER) push $(REGISTRY)/$(IMAGE_BE)
+docker-push-fe:
+	@test "$(REGISTRY)" != "" || (echo "REGISTRY not set, e.g. REGISTRY=harbor.example.com/k8s"; exit 1)
+	$(DOCKER) tag $(IMAGE_FE) $(REGISTRY)/$(IMAGE_FE)
+	$(DOCKER) push $(REGISTRY)/$(IMAGE_FE)
 
 help:
 	@echo "  build / run / run-local / test / fmt / lint / clean"
 	@echo "  swag / swag-clean / swagger-ui / swagger-ui-stop"
-	@echo "  docker-build / docker-build-standalone / docker-buildx / docker-run / docker-logs / docker-stop / docker-rm / docker-push"
+	@echo "  docker-build-be / docker-build-fe / docker-build-all / docker-run-be / docker-run-fe / docker-push-be / docker-push-fe"
 	@echo ""
 	@echo "Hints:"
 	@echo "  * docker-build           平台编译模式（先 go build 再 docker build，纯运行时镜像 < 20MB）"
@@ -198,4 +249,4 @@ help:
 	@echo "  * docker-buildx          多架构构建 (amd64 + arm64)，需 docker buildx + push"
 	@echo "  * swagger-ui             在 8081 端口起官方 UI（Windows Git Bash 路径已处理）"
 	@echo "  * 若未安装 swag，会自动 go install github.com/swaggo/swag/cmd/swag@latest"
-	@echo "  DOCKER=nerdctl make docker-build   # 使用 nerdctl"
+	@echo "  DOCKER=nerdctl-build-be / nerdctl-build-fe / nerdctl-build-all   # 使用 nerdctl"
