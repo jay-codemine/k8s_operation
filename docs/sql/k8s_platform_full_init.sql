@@ -323,7 +323,7 @@ CREATE TABLE `audit_log` (
   KEY `idx_audit_pipeline` (`pipeline_id`),
   KEY `idx_audit_status` (`status`),
   KEY `idx_audit_created` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=820 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
+) ENGINE=InnoDB AUTO_INCREMENT=822 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -676,8 +676,8 @@ CREATE TABLE `cicd_pipeline` (
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `cicd_pipeline_run` (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `pipeline_id` bigint NOT NULL COMMENT '流水线ID',
-  `build_number` int NOT NULL DEFAULT '0' COMMENT '构建号',
+  `pipeline_id` bigint DEFAULT NULL,
+  `build_number` bigint DEFAULT NULL,
   `status` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '状态:pending,running,success,failed,aborted',
   `trigger_type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manual' COMMENT '触发类型:manual,webhook,scheduled',
   `trigger_user_id` bigint NOT NULL DEFAULT '0' COMMENT '触发人ID',
@@ -697,6 +697,8 @@ CREATE TABLE `cicd_pipeline_run` (
   `image_digest` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '镜像摘要',
   `workflow_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'workflow name',
   `argo_app_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'argo app name',
+  `sync_revision` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'sync revision',
+  `sync_status` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'sync status',
   `callback_received` tinyint(1) DEFAULT '0' COMMENT '是否收到回调',
   PRIMARY KEY (`id`),
   KEY `idx_pipeline_id` (`pipeline_id`),
@@ -1825,4 +1827,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-14 16:33:50
+-- Dump completed on 2026-07-14 16:38:24
