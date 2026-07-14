@@ -134,7 +134,7 @@ const cronjobsApi = {
   events(params) {
     return http.get(`${K8S_BASE}/cronjob/events`, { params })
   },
-n  jobs(params) {
+ jobs(params) {
     return http.get(`${K8S_BASE}/cronjob/jobs`, { params })
   },
 }

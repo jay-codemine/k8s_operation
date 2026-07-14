@@ -87,7 +87,7 @@
         </tr>
       </tbody>
     </table>
-n    <!-- 分页 -->
+   <!-- 分页 -->
     <Pagination v-if="total > 0" v-model:currentPage="currentPage" v-model:itemsPerPage="itemsPerPage" :totalItems="total" />
 
     <!-- 创建/编辑弹窗 -->
