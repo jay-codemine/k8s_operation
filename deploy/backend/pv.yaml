@@ -1,9 +1,8 @@
 # ============================================================
-# PV：制品 + 日志 + 探针存储
-# 默认 hostPath，迁移 NFS 时取消 nfs 注释并注释 hostPath
+# 后端 PV — NFS 共享存储
+# 使用前修改 NFS Server IP（当前占位 192.168.1.100）
 # ============================================================
 
-# ---- 制品存储（构建产物 JAR/二进制/tar.gz）----
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -18,16 +17,10 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
-  hostPath:
-    path: /data/k8soperation/artifacts
-    type: DirectoryOrCreate
-  # ==== NFS 方式 ====
-  # nfs:
-  #   server: 192.168.1.100
-  #   path: /nfs/k8soperation/artifacts
-
+  nfs:
+    server: 192.168.1.100          # ← 改成你的 NFS Server IP
+    path: /nfs/k8soperation/artifacts
 ---
-# ---- 日志存储（应用运行日志）----
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -42,15 +35,10 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
-  hostPath:
-    path: /data/k8soperation/logs
-    type: DirectoryOrCreate
-  # nfs:
-  #   server: 192.168.1.100
-  #   path: /nfs/k8soperation/logs
-
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/k8soperation/logs
 ---
-# ---- 探针存储（SkyWalking Agent 等 APM 探针文件）----
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -65,9 +53,6 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
-  hostPath:
-    path: /data/k8soperation/agents
-    type: DirectoryOrCreate
-  # nfs:
-  #   server: 192.168.1.100
-  #   path: /nfs/k8soperation/agents
+  nfs:
+    server: 192.168.1.100
+    path: /nfs/k8soperation/agents
