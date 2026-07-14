@@ -85,6 +85,8 @@ func autoMigrateTables() error {
 		&models.CicdApproval{},
 		&models.CicdBuildAgent{},
 		&models.CicdEnvironment{},
+		&models.CicdPipelineRun{},
+		&models.CicdPipelineStage{},
 	); err != nil {
 		return fmt.Errorf("migrate base tables: %w", err)
 	}

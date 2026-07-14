@@ -323,7 +323,7 @@ CREATE TABLE `audit_log` (
   KEY `idx_audit_pipeline` (`pipeline_id`),
   KEY `idx_audit_status` (`status`),
   KEY `idx_audit_created` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=819 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
+) ENGINE=InnoDB AUTO_INCREMENT=820 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -696,6 +696,7 @@ CREATE TABLE `cicd_pipeline_run` (
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '构建镜像地址',
   `image_digest` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '镜像摘要',
   `workflow_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'workflow name',
+  `argo_app_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'argo app name',
   `callback_received` tinyint(1) DEFAULT '0' COMMENT '是否收到回调',
   PRIMARY KEY (`id`),
   KEY `idx_pipeline_id` (`pipeline_id`),
@@ -1824,4 +1825,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-14 16:28:24
+-- Dump completed on 2026-07-14 16:33:50
