@@ -109,6 +109,11 @@ func autoMigrateTables() error {
 		log.Printf("[AutoMigrate] monitor_notify_channel 字段补全失败: %v", err)
 	}
 
+	// cicd_pipeline_run 表字段补全（兼容旧版本初始化脚本缺少该列的情况）
+	if err := ensurePipelineRunColumns(); err != nil {
+		log.Printf("[AutoMigrate] cicd_pipeline_run 字段补全失败: %v", err)
+	}
+
 	// AI 助手模块（逐表迁移，确保每张表都成功）
 	aiModels := []struct {
 		name  string
@@ -406,6 +411,36 @@ func ensurePipelineColumns() error {
 				return fmt.Errorf("add column %s: %w", col.name, err)
 			}
 			log.Printf("[AutoMigrate] cicd_pipeline 补全列: %s", col.name)
+		}
+	}
+	return nil
+}
+
+// ensurePipelineRunColumns 检查并补全 cicd_pipeline_run 表缺失的列
+func ensurePipelineRunColumns() error {
+	var count int64
+	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline_run'").Scan(&count)
+	if count == 0 {
+		return nil
+	}
+	type colDef struct {
+		name string
+		sql  string
+	}
+	columns := []colDef{
+		{"workflow_name", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `workflow_name` varchar(200) NOT NULL DEFAULT '' COMMENT 'workflow name' AFTER `jenkins_build_url`"},
+		{"argo_app_name", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `argo_app_name` varchar(200) NOT NULL DEFAULT '' COMMENT 'argo app name' AFTER `workflow_name`"},
+		{"sync_revision", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `sync_revision` varchar(100) NOT NULL DEFAULT '' COMMENT 'sync revision' AFTER `argo_app_name`"},
+		{"sync_status", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `sync_status` varchar(50) NOT NULL DEFAULT '' COMMENT 'sync status' AFTER `sync_revision`"},
+	}
+	for _, col := range columns {
+		var exists int64
+		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline_run' AND column_name = ?", col.name).Scan(&exists)
+		if exists == 0 {
+			if err := global.DB.Exec(col.sql).Error; err != nil {
+				return fmt.Errorf("add column %s: %w", col.name, err)
+			}
+			log.Printf("[AutoMigrate] cicd_pipeline_run 补全列: %s", col.name)
 		}
 	}
 	return nil
