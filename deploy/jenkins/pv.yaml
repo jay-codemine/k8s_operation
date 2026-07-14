@@ -1,6 +1,7 @@
 # ============================================================
-# Jenkins PVs — NFS 共享存储
-# 使用前修改 NFS_SERVER 为你的实际 NFS 服务器地址
+# Jenkins PVs
+# 支持 hostPath（单机开发）和 NFS（多节点生产）
+# 初次部署默认使用 hostPath，迁移 NFS 时参考下方注释
 # ============================================================
 
 # Jenkins 主数据（/var/jenkins_home：配置/插件/Job/构建历史）
@@ -21,9 +22,17 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-data
-  nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/home
+  # ==== 方式一：hostPath（默认） ====
+  hostPath:
+    path: /data/jenkins/home
+    type: DirectoryOrCreate
+  # ==== 方式二：NFS（多节点集群）====
+  # 迁移步骤：先拷贝数据 → 再切换
+  #   cp -a /data/jenkins/home/* /nfs/jenkins/home/
+  #   然后注释上面 hostPath，取消下面 nfs 注释
+  # nfs:
+  #   server: 192.168.1.100
+  #   path: /nfs/jenkins/home
 ---
 # Go 模块缓存
 apiVersion: v1
@@ -44,9 +53,13 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-go-cache
-  nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/go-cache
+  hostPath:
+    path: /data/jenkins/go-cache
+    type: DirectoryOrCreate
+  # ==== NFS 方式 ====
+  # nfs:
+  #   server: 192.168.1.100
+  #   path: /nfs/jenkins/go-cache
 ---
 # Maven 本地仓库缓存
 apiVersion: v1
@@ -67,9 +80,12 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-maven-cache
-  nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/maven-cache
+  hostPath:
+    path: /data/jenkins/maven-cache
+    type: DirectoryOrCreate
+  # nfs:
+  #   server: 192.168.1.100
+  #   path: /nfs/jenkins/maven-cache
 ---
 # npm 缓存
 apiVersion: v1
@@ -90,9 +106,12 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-npm-cache
-  nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/npm-cache
+  hostPath:
+    path: /data/jenkins/npm-cache
+    type: DirectoryOrCreate
+  # nfs:
+  #   server: 192.168.1.100
+  #   path: /nfs/jenkins/npm-cache
 ---
 # pip 缓存
 apiVersion: v1
@@ -113,6 +132,9 @@ spec:
   claimRef:
     namespace: devops
     name: jenkins-pip-cache
-  nfs:
-    server: 192.168.1.100
-    path: /nfs/jenkins/pip-cache
+  hostPath:
+    path: /data/jenkins/pip-cache
+    type: DirectoryOrCreate
+  # nfs:
+  #   server: 192.168.1.100
+  #   path: /nfs/jenkins/pip-cache
