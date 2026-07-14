@@ -305,6 +305,24 @@ type LDAPSettingS struct {
 	GroupRoleMapping []LDAPGroupRoleMapping `mapstructure:"GroupRoleMapping"`
 }
 
+// CanarySettingS 金丝雀部署配置
+type CanarySettingS struct {
+	Enabled             bool  `mapstructure:"Enabled"`
+	DefaultReplicas     int32 `mapstructure:"DefaultReplicas"`
+	DefaultTrafficRatio int32 `mapstructure:"DefaultTrafficRatio"`
+	DefaultDurationSec  int32 `mapstructure:"DefaultDurationSec"`
+	AutoPromote         bool  `mapstructure:"AutoPromote"`
+	HealthCheckInterval int32 `mapstructure:"HealthCheckInterval"`
+	MaxTrafficRatio     int32 `mapstructure:"MaxTrafficRatio"`
+}
+
+// LogControlS 日志控制配置
+type LogControlS struct {
+	SuppressPrometheusQueryWarn bool `mapstructure:"SuppressPrometheusQueryWarn"`
+	SuppressK8sClusterInitWarn  bool `mapstructure:"SuppressK8sClusterInitWarn"`
+	SuppressK8sClusterInitError bool `mapstructure:"SuppressK8sClusterInitError"`
+}
+
 // LDAPGroupRoleMapping LDAP 组到平台角色的映射
 type LDAPGroupRoleMapping struct {
 	LDAPGroup     string `mapstructure:"LDAPGroup"`     // LDAP 组名（cn 值）

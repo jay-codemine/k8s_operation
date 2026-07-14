@@ -35,7 +35,6 @@ const (
 	LanguageTypeJava     = "java"     // Java Spring 项目
 	LanguageTypeFrontend = "frontend" // 前端项目 (Vue/React)
 	LanguageTypePython   = "python"   // Python 项目
-	LanguageTypeCustom   = "custom"   // 自定义（需手动指定 jenkins_job）
 )
 
 // DefaultJenkinsJobMap 语言类型 -> Jenkins 通用 Builder Job 名称
@@ -58,7 +57,7 @@ var DefaultScriptPathMap = map[string]string{
 
 // ValidLanguageTypes 合法的语言类型列表
 var ValidLanguageTypes = []string{
-	LanguageTypeGo, LanguageTypeJava, LanguageTypeFrontend, LanguageTypePython, LanguageTypeCustom,
+	LanguageTypeGo, LanguageTypeJava, LanguageTypeFrontend, LanguageTypePython,
 }
 
 // EnvVar 环境变量结构
@@ -182,6 +181,13 @@ type CicdPipeline struct {
 	TargetContainer    string `gorm:"column:target_container" json:"target_container"`         // 容器名称
 	DeployEnv          string `gorm:"column:deploy_env" json:"deploy_env"`                      // 部署环境(dev/staging/prod)
 	RequireApproval      bool   `gorm:"column:require_approval" json:"require_approval"`              // 是否需要审批
+n	// 金丝雀部署配置
+	EnableCanary       bool   `gorm:"column:enable_canary" json:"enable_canary"`
+	CanaryReplicas     int32  `gorm:"column:canary_replicas;default:1" json:"canary_replicas"`
+	CanaryTrafficRatio int32  `gorm:"column:canary_traffic_ratio;default:10" json:"canary_traffic_ratio"`
+	CanaryDurationSec  int32  `gorm:"column:canary_duration_sec;default:300" json:"canary_duration_sec"`
+	CanaryAutoPromote  bool   `gorm:"column:canary_auto_promote" json:"canary_auto_promote"`
+	CanaryAnalysisRules string `gorm:"column:canary_analysis_rules;type:text" json:"canary_analysis_rules"`
 	EnableSonar          bool   `gorm:"column:enable_sonar" json:"enable_sonar"`                        // 是否启用 SonarQube 代码扫描
 	EnableArtifactUpload bool   `gorm:"column:enable_artifact_upload" json:"enable_artifact_upload"`    // 是否启用制品上传
 
@@ -432,6 +438,13 @@ type PipelineListItem struct {
 	LastBuildNumber int    `json:"last_build_number"`
 	AutoDeploy      bool   `json:"auto_deploy"`
 	RequireApproval bool   `json:"require_approval"`
+n	// 金丝雀部署配置
+	EnableCanary       bool   `gorm:"column:enable_canary" json:"enable_canary"`
+	CanaryReplicas     int32  `gorm:"column:canary_replicas;default:1" json:"canary_replicas"`
+	CanaryTrafficRatio int32  `gorm:"column:canary_traffic_ratio;default:10" json:"canary_traffic_ratio"`
+	CanaryDurationSec  int32  `gorm:"column:canary_duration_sec;default:300" json:"canary_duration_sec"`
+	CanaryAutoPromote  bool   `gorm:"column:canary_auto_promote" json:"canary_auto_promote"`
+	CanaryAnalysisRules string `gorm:"column:canary_analysis_rules;type:text" json:"canary_analysis_rules"`
 	LastDeployStatus string `json:"last_deploy_status"`
 	CreatedAt       uint64 `json:"created_at"`
 }

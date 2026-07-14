@@ -70,6 +70,15 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 	}
 
 	// ==================== 发布单管理 ====================
+n	// ==================== 金丝雀部署 ====================
+	canaryCtrl := cicd.NewCanaryDeployController()
+	canary := rg.Group("/canary")
+	{
+		canary.POST("/promote", middlewares.RequireCICDPermission("cicd:deploy:dev"), canaryCtrl.Promote)
+		canary.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), canaryCtrl.Rollback)
+		canary.GET("/status", canaryCtrl.Status)
+		canary.POST("/traffic-split", middlewares.RequireCICDPermission("cicd:deploy:dev"), canaryCtrl.SetTrafficSplit)
+	}
 	// /api/v1/k8s/cicd/release/...
 	release := rg.Group("/release")
 	{

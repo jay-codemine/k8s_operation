@@ -25,6 +25,8 @@ var (
 	AISetting         *setting.AIAssistantSettingS // AI 助手配置
 	AIRegistry        *openai.Registry             // AI 多模型注册中心
 	LDAPSetting       *setting.LDAPSettingS        // LDAP 认证配置
+	LogControlSetting *setting.LogControlS          // 日志控制配置
+	CanarySetting     *setting.CanarySettingS       // 金丝雀部署配置        // LDAP 认证配置
 )
 
 // DefaultBranch 返回配置的默认 Git 分支，未配置时返回 "master"

@@ -189,6 +189,20 @@ func SetupSetting() error {
 			// LDAP 可选
 			log.Println("[LDAP] 配置块未找到")
 			global.LDAPSetting = nil
+n	// 读取 LogControl 配置
+	if err = s.ReadSection("LogControl", &global.LogControlSetting); err != nil || global.LogControlSetting == nil {
+		log.Println("[LogControl] 配置块未找到，使用默认值")
+		global.LogControlSetting = &setting.LogControlS{}
+	}
+
+	// 读取 Canary 配置
+	if err = s.ReadSection("Canary", &global.CanarySetting); err != nil || global.CanarySetting == nil {
+		log.Println("[Canary] 配置块未找到，使用默认值")
+		global.CanarySetting = &setting.CanarySettingS{
+			Enabled: true, DefaultReplicas: 1, DefaultTrafficRatio: 10,
+			DefaultDurationSec: 300, HealthCheckInterval: 30, MaxTrafficRatio: 50,
+		}
+	}
 		}
 
 		// 注入错误码配置到 errorcode 包

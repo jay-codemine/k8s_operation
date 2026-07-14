@@ -110,11 +110,11 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	// 模板化发布：根据 language_type 自动推导 JenkinsJob
 	languageType := req.LanguageType
 	if languageType == "" {
-		languageType = models.LanguageTypeCustom
+		languageType = models.LanguageTypeGo
 	}
 	jenkinsJob := req.JenkinsJob
 	// GitOps 模式不需要 JenkinsJob，Jenkins 模式下自动推导
-	if req.DeployMode == models.DeployModeJenkins && jenkinsJob == "" && languageType != models.LanguageTypeCustom {
+	if req.DeployMode == models.DeployModeJenkins && jenkinsJob == ""  {
 		// 从语言类型自动映射到通用构建 Job
 		if job, ok := models.DefaultJenkinsJobMap[languageType]; ok {
 			jenkinsJob = job
@@ -328,7 +328,7 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	if req.LanguageType != nil {
 		updates["language_type"] = *req.LanguageType
 		// 如果同时没有指定 jenkins_job，自动映射
-		if req.JenkinsJob == "" && *req.LanguageType != models.LanguageTypeCustom {
+		if req.JenkinsJob == ""  {
 			if job, ok := models.DefaultJenkinsJobMap[*req.LanguageType]; ok {
 				updates["jenkins_job"] = job
 			}
@@ -462,10 +462,10 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 		// 模板化推导
 		languageType := item.LanguageType
 		if languageType == "" {
-			languageType = models.LanguageTypeCustom
+			languageType = models.LanguageTypeGo
 		}
 		jenkinsJob := ""
-		if languageType != models.LanguageTypeCustom {
+		if _, ok := models.DefaultJenkinsJobMap[languageType]; ok {
 			if job, ok := models.DefaultJenkinsJobMap[languageType]; ok {
 				jenkinsJob = job
 			} else {
@@ -1798,7 +1798,11 @@ func (s *Services) autoDeployToK8sWithResult(ctx context.Context, pipeline *mode
 	}
 
 	// 启动异步部署，等待 Rollout 完成后发送钉钉通知
-	go s.executeAutoDeployAsync(context.Background(), pipeline, kubeClient, finalImage, workloadKind, runID)
+	if pipeline.EnableCanary {
+		go s.executeCanaryDeployAsync(context.Background(), pipeline, kubeClient, finalImage, workloadKind, runID)
+	} else {
+		go s.executeAutoDeployAsync(context.Background(), pipeline, kubeClient, finalImage, workloadKind, runID)
+	}
 
 	result.DeploySuccess = true
 	result.DeployMessage = fmt.Sprintf("部署已启动: %s/%s 正在更新...", pipeline.TargetNamespace, pipeline.TargetWorkloadName)
