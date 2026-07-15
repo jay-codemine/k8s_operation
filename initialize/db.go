@@ -751,5 +751,18 @@ func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
 		log.Printf("[InitData] create admin failed: %v", err)
 		return
 	}
-	log.Printf("[InitData] Admin user created: admin (ID=%d)", user.ID)
+
+	// 分配超级管理员角色
+	var roleID uint32
+	if err := global.DB.Raw("SELECT id FROM sys_role WHERE role_type = 'super_admin' AND is_del = 0 LIMIT 1").Scan(&roleID).Error; err != nil || roleID == 0 {
+		log.Printf("[InitData] super_admin role not found, admin has no role")
+		return
+	}
+	now := uint32(time.Now().Unix())
+	if err := global.DB.Exec("INSERT INTO sys_user_role (user_id, role_id, created_at, modified_at) VALUES (?, ?, ?, ?)",
+		user.ID, roleID, now, now).Error; err != nil {
+		log.Printf("[InitData] assign super_admin to admin failed: %v", err)
+		return
+	}
+	log.Printf("[InitData] Admin (ID=%d) assigned super_admin role", user.ID)
 }
