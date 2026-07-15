@@ -91,5 +91,19 @@ export default {
       method: 'patch',
       data
     })
+  },
+
+  /**
+   * 批量删除 PVC
+   */
+  batchDelete(items) {
+    const promises = items.map(item =>
+      request({
+        url: `${K8S_BASE}/pvc/delete`,
+        method: 'delete',
+        params: { namespace: item.namespace, name: item.name }
+      })
+    )
+    return Promise.all(promises)
   }
 }

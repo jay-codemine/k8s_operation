@@ -710,7 +710,29 @@
       </div>
     </div>
 
-    <!-- 批量删除预览（待补充）-->
+    <!-- 批量删除预览 -->
+    <div v-if="showBatchDelPreview" class="modal-mask" @click.self="showBatchDelPreview = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>批量删除确认</h2>
+          <button class="close" @click="showBatchDelPreview = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom:12px">即将删除以下 <b>{{ selectedPVCs.length }}</b> 个 PVC：</p>
+          <div class="batch-del-list">
+            <div v-for="pvc in selectedPVCs" :key="pvc.namespace + '/' + pvc.name" class="batch-del-item">
+              {{ pvc.namespace }} / {{ pvc.name }}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" @click="showBatchDelPreview = false">取消</button>
+          <button class="btn danger" @click="confirmBatchDelete" :disabled="batchDeleting">
+            {{ batchDeleting ? '删除中...' : '确认批量删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -969,13 +991,33 @@ const deleteSinglePVC = async (pvc) => {
   }
 }
 
+const showBatchDelPreview = ref(false)
+const batchDeleting = ref(false)
+
 // 批量删除预览
 const openBatchDeletePreview = () => {
   if (selectedPVCs.value.length === 0) {
     Message.warning({ content: '请先选择要删除的 PVC', duration: 2200 })
     return
   }
-  showBatchDeleteModal.value = true
+  showBatchDelPreview.value = true
+}
+
+const confirmBatchDelete = async () => {
+  batchDeleting.value = true
+  try {
+    const items = selectedPVCs.value.map(p => ({ namespace: p.namespace, name: p.name }))
+    await pvcApi.batchDelete(items)
+    Message.success({ content: `成功删除 ${items.length} 个 PVC`, duration: 2200 })
+    showBatchDelPreview.value = false
+    selectedPVCs.value = []
+    batchMode.value = false
+    loadList()
+  } catch (e) {
+    Message.error({ content: '批量删除失败: ' + (e?.message || e), duration: 4000 })
+  } finally {
+    batchDeleting.value = false
+  }
 }
 
 // ==========================
