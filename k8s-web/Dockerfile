@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1: Build
 # ============================================================
-FROM node:22-alpine AS build
+FROM docker.m.daocloud.io/library/node:22-alpine AS build
 
 WORKDIR /app
 
