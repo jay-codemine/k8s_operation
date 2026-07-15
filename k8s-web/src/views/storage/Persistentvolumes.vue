@@ -1637,7 +1637,22 @@ onUnmounted(() => {
 }
 
 .view-header {
-  margin-bottom: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: -24px -24px 20px -24px;
+  padding: 28px 32px;
+  color: #fff;
+  border-radius: 0;
+}
+.view-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+}
+.view-header p {
+  color: rgba(255,255,255,0.82);
+  font-size: 13px;
+  margin: 0;
 }
 
 .view-header h1 {
@@ -1692,14 +1707,24 @@ onUnmounted(() => {
 }
 
 .btn-filter {
-  padding: 8px 16px;
+  padding: 6px 14px;
   border: 1px solid #e2e8f0;
-  background: white;
-  border-radius: 6px;
-  cursor: pointer;
+  border-radius: 8px;
+  background: #fff;
   font-size: 13px;
-  transition: all 0.2s;
-  color: #4a5568;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+.btn-filter:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.btn-filter.active {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
 }
 
 .btn-filter:hover {
