@@ -12,37 +12,46 @@ import (
 
 // DeletePersistentVolumeClaim 删除指定 namespace/name 的 PVC，并轮询确认删除完成
 func DeletePersistentVolumeClaim(ctx context.Context, Kube kubernetes.Interface, namespace, name string) error {
-	// 一般使用 Foreground，让依赖对象先清理；PVC 带有 pvc-protection finalizer，K8s会保证安全删除
 	fg := metav1.DeletePropagationForeground
 	opts := metav1.DeleteOptions{PropagationPolicy: &fg}
 
-	// 发起删除
-	if err := Kube.CoreV1().
-		PersistentVolumeClaims(namespace).
-		Delete(ctx, name, opts); err != nil {
+	if err := Kube.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, name, opts); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil // 幂等
+			return nil
 		}
-		return fmt.Errorf("delete PersistentVolumeClaim %q in namespace %q failed: %w", name, namespace, err)
+		return fmt.Errorf("delete PersistentVolumeClaim %q failed: %w", name, err)
 	}
 
-	// 轮询直至确认删除；PVC 被 Pod 使用时会等待，直到 Pod 释放并移除 pvc-protection finalizer
-	return wait.PollUntilContextTimeout(
-		ctx,
-		2*time.Second,  // 每 2 秒检查一次
-		30*time.Second, // 最长等待 30 秒（可按需调大）
-		true,           // 立即执行第一次检查
+	return wait.PollUntilContextTimeout(ctx, 2*time.Second, 30*time.Second, true,
 		func(ctx context.Context) (bool, error) {
-			_, err := Kube.CoreV1().
-				PersistentVolumeClaims(namespace).
-				Get(ctx, name, metav1.GetOptions{})
+			_, err := Kube.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})
 			if apierrors.IsNotFound(err) {
-				return true, nil // 确认删除
+				return true, nil
 			}
 			if err != nil {
-				return false, err // 临时错误，继续轮询
+				return false, err
 			}
-			return false, nil // 仍存在，继续轮询
+			return false, nil
 		},
 	)
+}
+
+// GraceDeletePersistentVolumeClaim 强制删除 PVC（清除 finalizers，用于卡 Terminating 的 PVC）
+func GraceDeletePersistentVolumeClaim(ctx context.Context, Kube kubernetes.Interface, namespace, name string) error {
+	pvc, err := Kube.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get PVC %q failed: %w", name, err)
+	}
+
+	if len(pvc.Finalizers) > 0 {
+		pvc.Finalizers = nil
+		if _, err := Kube.CoreV1().PersistentVolumeClaims(namespace).Update(ctx, pvc, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("clear PVC %q finalizers failed: %w", name, err)
+		}
+	}
+
+	return DeletePersistentVolumeClaim(ctx, Kube, namespace, name)
 }
