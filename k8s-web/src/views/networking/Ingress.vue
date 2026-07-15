@@ -1355,7 +1355,7 @@ const executeBatchDelete = async () => {
 
     await Promise.all(deletePromises)
     
-    alert(`成功删除 ${selectedIngresses.value.length} 个 Ingress`)
+    Message.success({ content: `成功删除 ${selectedIngresses.value.length} 个 Ingress`, duration: 2200 })
     showBatchDeleteModal.value = false
     selectedIngresses.value = []
     refreshList()

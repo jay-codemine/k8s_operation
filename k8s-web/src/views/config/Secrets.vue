@@ -1094,7 +1094,7 @@ const executeBatchDelete = async () => {
   showBatchDeleteModal.value = false
   
   if (successCount > 0) {
-    alert(`成功删除 ${successCount} 个 Secret${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    if (failCount === 0) { Message.success({ content: `成功删除 ${successCount} 个 Secret`, duration: 2200 }) } else { Message.warning({ content: `成功 ${successCount} 个，失败 ${failCount} 个`, duration: 3000 }) }
   }
   
   exitBatchMode()

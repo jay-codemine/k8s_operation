@@ -2289,9 +2289,9 @@ const executeBatchDelete = async () => {
   deleteConfirmText.value = ''
 
   if (failCount === 0) {
-    alert(`成功删除 ${successCount} 个 CronJob`)
+    Message.success({ content: `成功删除 ${successCount} 个 CronJob`, duration: 2200 })
   } else {
-    alert(`成功 ${successCount} 个，失败 ${failCount} 个`)
+    Message.warning({ content: `成功 ${successCount} 个，失败 ${failCount} 个`, duration: 3000 })
   }
 
   exitBatchMode()
