@@ -45,7 +45,7 @@ type DatabaseSettingS struct {
 	ParseTime      bool          // 是否解析时间，true表示自动解析时间类型
 	MaxIdleConns   int           // 数据库连接池最大空闲连接数
 	MaxOpenConns   int           // MaxOpenConns 表示数据库连接池中最大打开的连接数
-	MaxLifeSeconds time.Duration // 数据库连接池中连接的最大生命周期，单位为秒
+	MaxLifeSeconds int // 数据库连接池中连接的最大生命周期，单位为秒
 }
 
 type AppSettingS struct {

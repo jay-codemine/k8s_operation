@@ -22,7 +22,7 @@ Database:
   ParseTime: true
   MaxIdleConns: 5
   MaxOpenConns: 100
-  MaxLifeSeconds: 300s
+  MaxLifeSeconds: 300
 
 Cache:
   Type: redis

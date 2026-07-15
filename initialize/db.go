@@ -46,7 +46,7 @@ func SetupDB() error {
 	// 连接池设置
 	global.SQLDB.SetMaxOpenConns(global.DatabaseSetting.MaxOpenConns)
 	global.SQLDB.SetMaxIdleConns(global.DatabaseSetting.MaxIdleConns)
-	global.SQLDB.SetConnMaxLifetime(global.DatabaseSetting.MaxLifeSeconds)
+	global.SQLDB.SetConnMaxLifetime(time.Duration(global.DatabaseSetting.MaxLifeSeconds) * time.Second)
 
 	// 快速 Ping 测试连接，最多等 1 秒
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
