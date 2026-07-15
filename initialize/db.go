@@ -193,6 +193,9 @@ func initDefaultData() error {
 	// RBAC v2: 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发）
 	backfillRBACScopes()
 
+	// 初始化默认管理员账号（首次启动自动创建）
+	initDefaultAdminUser(ctx, d)
+
 	// ⚠️ 管理员角色自修复（防止admin自锁后无法恢复）
 	repairAdminRole()
 
@@ -736,4 +739,17 @@ func seedCICDPermissions() {
 		}
 		log.Printf("[InitData] CICD 细粒度权限初始化完成，新增 %d 条权限", inserted)
 	}
+}
+
+// initDefaultAdminUser 首次启动自动创建默认管理员 admin/123456
+func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
+	if _, err := d.UserGetByName("admin"); err == nil {
+		return
+	}
+	user, err := d.UserCreate("admin", "123456")
+	if err != nil {
+		log.Printf("[InitData] create admin failed: %v", err)
+		return
+	}
+	log.Printf("[InitData] Admin user created: admin (ID=%d)", user.ID)
 }
