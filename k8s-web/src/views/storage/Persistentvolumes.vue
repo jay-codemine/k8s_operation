@@ -109,6 +109,12 @@
           🗑️ 批量删除
         </button>
       </div>
+    <div class="stats-bar" style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <div class="stat-card" style="flex:1;min-width:90px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e293b">{{ filteredPVs.length }}</div><div style="font-size:11px;color:#64748b;margin-top:2px">总计</div></div>
+      <div class="stat-card" style="flex:1;min-width:90px;background:#fff;border:1px solid #dcfce7;border-radius:10px;padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">{{ statusCounts.Available || 0 }}</div><div style="font-size:11px;color:#166534;margin-top:2px">Available</div></div>
+      <div class="stat-card" style="flex:1;min-width:90px;background:#fff;border:1px solid #dbeafe;border-radius:10px;padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e40af">{{ statusCounts.Bound || 0 }}</div><div style="font-size:11px;color:#1e40af;margin-top:2px">Bound</div></div>
+      <div class="stat-card" style="flex:1;min-width:90px;background:#fff;border:1px solid #fef3c7;border-radius:10px;padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:#92400e">{{ statusCounts.Released || 0 }}</div><div style="font-size:11px;color:#92400e;margin-top:2px">Released</div></div>
+    </div>
     </div>
 
     <!-- 表格视图 -->
@@ -1177,6 +1183,16 @@ const filteredPVs = computed(() => {
   }
 
   return result
+})
+
+// Status counts for stats bar
+const statusCounts = computed(() => {
+  const counts = {}
+  filteredPVs.value.forEach(pv => {
+    const s = pv.status || 'Unknown'
+    counts[s] = (counts[s] || 0) + 1
+  })
+  return counts
 })
 
 // 唯一 StorageClass 列表（用于下拉筛选）
@@ -3285,4 +3301,5 @@ onUnmounted(() => {
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
 }
+/* ======== Premium UI Overrides ======== */.resource-view {  max-width: 1400px;  margin: 0 auto;}.view-header {  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);  margin: -24px -24px 24px -24px;  padding: 32px 36px;  border-radius: 0;}.view-header h1 {  font-size: 24px;  font-weight: 700;  color: #f1f5f9;  margin: 0 0 8px 0;}.view-header p {  color: #94a3b8;  font-size: 14px;  margin: 0;}/* Stats bar */.stats-bar {  display: flex;  gap: 8px;  margin-bottom: 16px;  flex-wrap: wrap;}.stats-bar .stat-item {  background: #fff;  border: 1px solid #e2e8f0;  border-radius: 10px;  padding: 12px 20px;  flex: 1;  min-width: 100px;  text-align: center;}.stats-item .stat-value {  font-size: 24px;  font-weight: 700;  color: #1e293b;}.stats-item .stat-label {  font-size: 12px;  color: #64748b;  margin-top: 2px;}/* Action bar */.action-bar {  display: flex;  gap: 10px;  align-items: center;  flex-wrap: wrap;  margin-bottom: 16px;  padding: 12px 16px;  background: #f8fafc;  border: 1px solid #e2e8f0;  border-radius: 12px;}.action-bar .search-box input {  border: 1px solid #e2e8f0;  border-radius: 8px;  padding: 8px 14px;  font-size: 13px;  outline: none;  transition: border-color 0.15s;  width: 200px;}.action-bar .search-box input:focus {  border-color: #6366f1;  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);}.action-bar .filter-buttons {  display: flex;  gap: 4px;}.btn-filter {  padding: 6px 14px;  border: 1px solid #e2e8f0;  border-radius: 20px;  background: #fff;  font-size: 12px;  font-weight: 500;  color: #64748b;  cursor: pointer;  transition: all 0.15s;}.btn-filter:hover {  background: #f1f5f9;}.btn-filter.active {  background: #6366f1;  color: #fff;  border-color: #6366f1;  font-weight: 600;}/* Table */.resource-table {  width: 100%;  border-collapse: separate;  border-spacing: 0;  background: #fff;  border: 1px solid #e2e8f0;  border-radius: 12px;  overflow: hidden;}.resource-table thead th {  background: #f8fafc;  color: #475569;  font-size: 12px;  font-weight: 600;  text-transform: uppercase;  letter-spacing: 0.5px;  padding: 12px 16px;  border-bottom: 1px solid #e2e8f0;}.resource-table tbody tr {  transition: background 0.1s;}.resource-table tbody tr:hover {  background: #f1f5f9;}.resource-table tbody td {  padding: 12px 16px;  border-bottom: 1px solid #f1f5f9;  font-size: 13px;  color: #334155;}.row-selected {  background: #eff6ff !important;}/* Status badges */.status-badge {  display: inline-flex;  align-items: center;  gap: 5px;  padding: 4px 12px;  border-radius: 20px;  font-size: 12px;  font-weight: 600;}.status-badge.available { background: #dcfce7; color: #166534; }.status-badge.bound { background: #dbeafe; color: #1e40af; }.status-badge.released { background: #fef3c7; color: #92400e; }.status-badge.failed { background: #fee2e2; color: #991b1b; }.status-badge.pending { background: #fef3c7; color: #92400e; }.status-badge.lost { background: #fee2e2; color: #991b1b; }/* Buttons */.btn-primary {  padding: 8px 18px;  background: #6366f1;  color: #fff;  border: none;  border-radius: 8px;  font-size: 13px;  font-weight: 600;  cursor: pointer;  transition: background 0.15s;}.btn-primary:hover { background: #4f46e5; }.btn-secondary {  padding: 8px 18px;  background: #fff;  color: #475569;  border: 1px solid #e2e8f0;  border-radius: 8px;  font-size: 13px;  font-weight: 500;  cursor: pointer;}.btn-secondary:hover { background: #f1f5f9; }/* Pagination center */.pagination-wrapper {  display: flex;  justify-content: center;  margin-top: 20px;}/* Empty & Loading */.empty-state, .loading-indicator {  text-align: center;  padding: 60px 0;  color: #94a3b8;}.loading-spinner {  width: 40px;  height: 40px;  margin: 0 auto 16px;  border: 4px solid #e2e8f0;  border-top-color: #6366f1;  border-radius: 50%;  animation: spin 0.8s linear infinite;}@keyframes spin { to { transform: rotate(360deg); } }
 </style>
