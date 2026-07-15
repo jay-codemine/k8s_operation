@@ -192,6 +192,18 @@ func (s *Services) KubePVDelete(ctx context.Context, cli *K8sClients, param *req
 	return nil
 }
 
+func (s *Services) KubePVGraceDelete(ctx context.Context, cli *K8sClients, param *requests.KubePVDeleteRequest) error {
+	if err := pv.GraceDeletePersistentVolume(ctx, cli.Kube, param.Name); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		global.Logger.Errorf("grace delete PV %s failed: %v", param.Name, err)
+		return err
+	}
+	global.Logger.Infof("PersistentVolume %s grace deleted", param.Name)
+	return nil
+}
+
 // 修改回收策略
 func (s *Services) KubePVReclaim(ctx context.Context, cli *K8sClients, req *requests.KubePVReclaimRequest) (*corev1.PersistentVolume, error) {
 	return pv.ReclaimPersistentVolume(ctx, cli.Kube, req)

@@ -724,11 +724,15 @@
               {{ pvc.namespace }} / {{ pvc.name }}
             </div>
           </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:12px;color:#dc2626;cursor:pointer">
+            <input type="checkbox" v-model="forceDeleteMode" />
+            <span>强制删除（清除 finalizers，用于卡 Terminating 的资源）</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button class="btn" @click="showBatchDelPreview = false">取消</button>
           <button class="btn danger" @click="confirmBatchDelete" :disabled="batchDeleting">
-            {{ batchDeleting ? '删除中...' : '确认批量删除' }}
+            {{ batchDeleting ? '删除中...' : (forceDeleteMode ? '确认强制删除' : '确认批量删除') }}
           </button>
         </div>
       </div>
@@ -993,6 +997,7 @@ const deleteSinglePVC = async (pvc) => {
 
 const showBatchDelPreview = ref(false)
 const batchDeleting = ref(false)
+const forceDeleteMode = ref(false)
 
 // 批量删除预览
 const openBatchDeletePreview = () => {
@@ -1000,21 +1005,29 @@ const openBatchDeletePreview = () => {
     Message.warning({ content: '请先选择要删除的 PVC', duration: 2200 })
     return
   }
+  forceDeleteMode.value = false
   showBatchDelPreview.value = true
 }
 
 const confirmBatchDelete = async () => {
   batchDeleting.value = true
   try {
-    const items = selectedPVCs.value.map(p => ({ namespace: p.namespace, name: p.name }))
-    await pvcApi.batchDelete(items)
-    Message.success({ content: `成功删除 ${items.length} 个 PVC`, duration: 2200 })
+    if (forceDeleteMode.value) {
+      for (const p of selectedPVCs.value) {
+        try { await pvcApi.graceDelete({ namespace: p.namespace, name: p.name }) } catch {}
+      }
+      Message.success({ content: `已对 ${selectedPVCs.value.length} 个 PVC 执行强制删除`, duration: 2200 })
+    } else {
+      const items = selectedPVCs.value.map(p => ({ namespace: p.namespace, name: p.name }))
+      await pvcApi.batchDelete(items)
+      Message.success({ content: `成功删除 ${items.length} 个 PVC`, duration: 2200 })
+    }
     showBatchDelPreview.value = false
     selectedPVCs.value = []
     batchMode.value = false
     loadList()
   } catch (e) {
-    Message.error({ content: '批量删除失败: ' + (e?.message || e), duration: 4000 })
+    Message.error({ content: '删除失败: ' + (e?.message || e), duration: 4000 })
   } finally {
     batchDeleting.value = false
   }

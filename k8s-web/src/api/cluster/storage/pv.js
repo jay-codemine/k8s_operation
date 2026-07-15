@@ -131,6 +131,11 @@ const pvApi = {
     return Promise.all(promises)
   },
 
+  /** 强制删除 PV（清除 finalizers） */
+  graceDelete(params) {
+    return http.delete(`${K8S_BASE}/pv/grace-delete`, { params })
+  },
+
   /**
    * 下载 PersistentVolume YAML
    * @param {string} name - PV 名称

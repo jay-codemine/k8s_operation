@@ -854,11 +854,15 @@
               </li>
             </ul>
             <p class="warning-text">此操作不可恢复！请确认后再继续。</p>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:12px;color:#dc2626;cursor:pointer">
+              <input type="checkbox" v-model="forceDeleteMode" />
+              <span>强制删除（清除 finalizers，用于卡 Terminating 的资源）</span>
+            </label>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showBatchDeleteModal = false">取消</button>
-          <button class="btn btn-danger" @click="batchDeletePVs">确认批量删除</button>
+          <button class="btn btn-danger" @click="batchDeletePVs">{{ batchDeleting ? '删除中...' : (forceDeleteMode ? '确认强制删除' : '确认批量删除') }}</button>
         </div>
       </div>
     </div>
@@ -1294,20 +1298,34 @@ const clearSelection = () => {
   selectedPVs.value = []
 }
 
+const forceDeleteMode = ref(false)
+const batchDeleting = ref(false)
+
 const openBatchDeletePreview = () => {
+  forceDeleteMode.value = false
   showBatchDeleteModal.value = true
 }
 
 const batchDeletePVs = async () => {
+  batchDeleting.value = true
   try {
-    await pvApi.batchDelete(selectedPVs.value.map(pv => pv.name))
+    if (forceDeleteMode.value) {
+      for (const pv of selectedPVs.value) {
+        try { await pvApi.graceDelete({ name: pv.name }) } catch {}
+      }
+      Message.success({ content: `已强制删除 ${selectedPVs.value.length} 个 PV`, duration: 2200 })
+    } else {
+      await pvApi.batchDelete(selectedPVs.value.map(pv => pv.name))
+    }
     showBatchDeleteModal.value = false
     selectedPVs.value = []
     batchMode.value = false
     refreshList()
   } catch (error) {
     console.error('批量删除失败:', error)
-    alert('批量删除失败: ' + error.message)
+    Message.error({ content: '批量删除失败: ' + error.message, duration: 4000 })
+  } finally {
+    batchDeleting.value = false
   }
 }
 

@@ -20,6 +20,7 @@ func (r *KubePersistentVolumeRouter) Inject(router *gin.RouterGroup) {
 		router.GET("/detail", pv.Detail)                 // 获取 PV 详情
 		router.GET("/detail-enhanced", pv.DetailEnhanced) // 获取增强 PV 详情（含关联 PVC、事件）
 		router.DELETE("/delete", pv.Delete)              // 删除 PV
+router.DELETE("/grace-delete", pv.GraceDelete)  // 强制删除 PV（清除 finalizers）
 		router.PATCH("/reclaim", pv.Reclaim)             // 修改回收策略
 		router.POST("/expand", pv.Expand)                // PV 扩容
 		router.GET("/yaml", pv.GetYaml)                  // 获取 YAML

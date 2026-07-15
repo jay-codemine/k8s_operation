@@ -252,6 +252,18 @@ func (s *Services) KubePVCDelete(ctx context.Context, cli *K8sClients, param *re
 	return nil
 }
 
+func (s *Services) KubePVCGraceDelete(ctx context.Context, cli *K8sClients, param *requests.KubePVCDeleteRequest) error {
+	if err := pvc.GraceDeletePersistentVolumeClaim(ctx, cli.Kube, param.Namespace, param.Name); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		global.Logger.Errorf("grace delete PVC %s/%s failed: %v", param.Namespace, param.Name, err)
+		return err
+	}
+	global.Logger.Infof("PersistentVolumeClaim %s/%s grace deleted", param.Namespace, param.Name)
+	return nil
+}
+
 // 扩容 PVC：仅允许修改 spec.resources.requests.storage
 func (s *Services) KubePVCResize(ctx context.Context, cli *K8sClients, req *requests.KubePVCResizeRequest,
 ) (*corev1.PersistentVolumeClaim, error) {

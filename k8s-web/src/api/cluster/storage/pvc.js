@@ -105,5 +105,14 @@ export default {
       })
     )
     return Promise.all(promises)
+  },
+
+  /** 强制删除 PVC（清除 finalizers） */
+  graceDelete(params) {
+    return request({
+      url: `${K8S_BASE}/pvc/grace-delete`,
+      method: 'delete',
+      params
+    })
   }
 }

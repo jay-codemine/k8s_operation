@@ -21,7 +21,8 @@ func (r *KubePersistentVolumeClaimRouter) Inject(router *gin.RouterGroup) {
 		router.GET("/list", pvc.List)        // 获取 PVC 列表（支持 namespace、name 模糊、分页等）
 		router.GET("/detail", pvc.Detail)    // 获取 PVC 详情
 		router.GET("/detail-enhanced", pvc.DetailEnhanced) // 获取增强 PVC 详情（含关联 PV、事件）
-		router.DELETE("/delete", pvc.Delete) // 删除 PVC
+		router.DELETE("/delete", pvc.Delete)        // 删除 PVC
+router.DELETE("/grace-delete", pvc.GraceDelete) // 强制删除 PVC（清除 finalizers）
 		//
 		//// 常用改动
 		router.PATCH("/resize", pvc.Resize) // 扩容（更新 spec.resources.requests.storage）

@@ -203,6 +203,25 @@ func (ctl *KubePVController) Delete(ctx *gin.Context) {
 	})
 }
 
+// GraceDelete 强制删除 PV（清除 finalizers）
+func (ctl *KubePVController) GraceDelete(ctx *gin.Context) {
+	r := response.NewResponse(ctx)
+	param := requests.NewKubePVDeleteRequest()
+	if ok := valid.Validate(ctx, param, requests.ValidKubePVDeleteRequest); !ok {
+		return
+	}
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := services.NewServices()
+	if err := svc.KubePVGraceDelete(ctx.Request.Context(), cli, param); err != nil {
+		ctx.Error(err)
+		global.Logger.Error("service.KubePVGraceDelete error", zap.Error(err))
+		return
+	}
+	r.Success(gin.H{
+		"message": fmt.Sprintf("PersistentVolume %s 强制删除成功", param.Name),
+	})
+}
+
 // Reclaim godoc
 // @Summary 修改 PersistentVolume 回收策略
 // @Tags K8s PV 管理

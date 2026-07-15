@@ -208,6 +208,25 @@ func (ctl *KubePVCController) Delete(ctx *gin.Context) {
 	})
 }
 
+// GraceDelete 强制删除 PVC（清除 finalizers）
+func (ctl *KubePVCController) GraceDelete(ctx *gin.Context) {
+	r := response.NewResponse(ctx)
+	param := requests.NewKubePVCDeleteRequest()
+	if ok := valid.Validate(ctx, param, requests.ValidKubePVCDeleteRequest); !ok {
+		return
+	}
+	cli := middlewares.MustGetK8sClients(ctx)
+	svc := services.NewServices()
+	if err := svc.KubePVCGraceDelete(ctx.Request.Context(), cli, param); err != nil {
+		ctx.Error(err)
+		global.Logger.Error("service.KubePVCGraceDelete error", zap.Error(err))
+		return
+	}
+	r.Success(gin.H{
+		"message": fmt.Sprintf("PersistentVolumeClaim %s/%s 强制删除成功", param.Namespace, param.Name),
+	})
+}
+
 // @Summary 扩容 PersistentVolumeClaim（仅支持增大 storage）
 // @Description 将 PVC 的 spec.resources.requests.storage 扩大为指定值（需 StorageClass 允许扩容）
 // @Tags K8s PVC 管理
