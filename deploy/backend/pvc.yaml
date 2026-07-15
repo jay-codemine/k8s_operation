@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/component: artifact-storage
 spec:
   accessModes:
-    - ReadWriteOnce           # 单副本用 RWO；多副本需改为 ReadWriteMany + NFS/CephFS
+    - ReadWriteMany           # NFS 支持多副本同时读写
   storageClassName: ""        # 留空使用默认 StorageClass，或指定具体名称
   resources:
     requests:

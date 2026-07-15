@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/name: k8soperation
     app.kubernetes.io/component: backend
 spec:
-  replicas: 1                             # 制品存储为本地 PVC，建议单副本；多副本需 RWX 存储
+  replicas: 2                             # 多副本高可用；NFS 存储支持 ReadWriteMany
   revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
