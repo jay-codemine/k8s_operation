@@ -65,6 +65,13 @@ spec:
       mountPath: /home/jenkins/agent
   - name: jnlp
     image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk21
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
     imagePullPolicy: Always
   volumes:
   - name: pip-cache
