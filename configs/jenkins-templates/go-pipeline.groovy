@@ -38,7 +38,7 @@ spec:
   containers:
   - name: golang
     image: docker.m.daocloud.io/library/golang:1.24.6-bullseye
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -56,14 +56,20 @@ spec:
       value: 'linux'
     - name: GOARCH
       value: 'amd64'
+    - name: GOCACHE
+      value: '/root/.cache/go-build'
+    - name: GOFLAGS
+      value: '-buildvcs=false'
     volumeMounts:
     - name: go-cache
       mountPath: /go/pkg/mod
+    - name: go-build-cache
+      mountPath: /root/.cache/go-build
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: gcr.m.daocloud.io/kaniko-project/executor:debug
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     securityContext:
       runAsUser: 0
@@ -86,11 +92,14 @@ spec:
       limits:
         cpu: 200m
         memory: 256Mi
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: go-cache
     persistentVolumeClaim:
       claimName: jenkins-go-cache
+  - name: go-build-cache
+    persistentVolumeClaim:
+      claimName: jenkins-go-build-cache
   - name: workspace-volume
     emptyDir: {}
 """
@@ -335,7 +344,6 @@ spec:
                         sh '''
                             set -e
                             go version
-                            go mod tidy -e 2>/dev/null || true
                             go mod download || true
                         '''
                     }

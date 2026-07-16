@@ -38,6 +38,23 @@ spec:
     requests:
       storage: 10Gi
 ---
+# Go 编译缓存（GOCACHE）→ 绑定到静态 PV jenkins-go-build-cache-pv（见 pv.yaml）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-go-build-cache
+  namespace: devops
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""    # 匹配静态 PV jenkins-go-build-cache-pv
+  resources:
+    requests:
+      storage: 10Gi
+---
 # Maven 本地仓库缓存 → 绑定到静态 PV jenkins-maven-cache-pv（见 pv.yaml）
 apiVersion: v1
 kind: PersistentVolumeClaim

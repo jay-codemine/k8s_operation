@@ -26,7 +26,7 @@ spec:
   containers:
   - name: node
     image: docker.m.daocloud.io/library/node:18-alpine3.18
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -45,7 +45,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: gcr.m.daocloud.io/kaniko-project/executor:debug
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     securityContext:
       runAsUser: 0
@@ -68,7 +68,7 @@ spec:
       limits:
         cpu: 200m
         memory: 256Mi
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: npm-cache
     persistentVolumeClaim:

@@ -1786,25 +1786,45 @@ onUnmounted(() => {
 .status-indicator {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
 }
 
+.status-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
 .status-indicator.bound {
-  background-color: rgba(52, 211, 153, 0.1);
-  color: #34d399;
+  background-color: #dcfce7;
+  color: #166534;
 }
 
 .status-indicator.pending {
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background-color: #fef3c7;
+  color: #92400e;
 }
 
 .status-indicator.lost {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.status-indicator.available {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.status-indicator.failed {
+  background-color: #fee2e2;
+  color: #991b1b;
 }
 
 .pvc-name {

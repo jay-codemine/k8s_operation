@@ -1,6 +1,18 @@
 # ============================================================
 # Jenkins PV — NFS 共享存储
 # 使用前修改 NFS Server IP（当前占位 10.0.16.2）
+#
+# 【重要】应用本文件前，需在 NFS Server 上预先创建以下目录，
+# 否则 Pod 挂载时会报 "no such file or directory" 而无法启动：
+#   在 NFS Server 上执行（路径前缀 /data/jenkins 按实际 NFS 导出路径调整）：
+#     sudo mkdir -p /data/jenkins/home \
+#                   /data/jenkins/go-cache \
+#                   /data/jenkins/go-build-cache \
+#                   /data/jenkins/maven-cache \
+#                   /data/jenkins/npm-cache \
+#                   /data/jenkins/pip-cache
+#   授权（容器内构建用户可能非 root，放开写权限）：
+#     sudo chmod -R 777 /data/jenkins
 # ============================================================
 
 apiVersion: v1
@@ -46,6 +58,29 @@ spec:
   nfs:
     server: 10.0.16.2
     path: /data/jenkins/go-cache
+---
+# Go 编译缓存（GOCACHE，跨构建复用编译产物）
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-go-build-cache-pv
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: build-cache
+    cache-type: go-build
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: devops
+    name: jenkins-go-build-cache
+  nfs:
+    server: 10.0.16.2
+    path: /data/jenkins/go-build-cache
 ---
 # Maven 本地仓库缓存
 apiVersion: v1

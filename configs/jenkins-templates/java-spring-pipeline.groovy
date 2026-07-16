@@ -32,7 +32,7 @@ spec:
   containers:
   - name: maven
     image: docker.m.daocloud.io/library/maven:3.9.9-eclipse-temurin-${params.JAVA_VERSION ?: '17'}-noble
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -51,7 +51,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: gcr.m.daocloud.io/kaniko-project/executor:debug
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     securityContext:
       runAsUser: 0
@@ -74,7 +74,7 @@ spec:
       limits:
         cpu: 200m
         memory: 256Mi
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: maven-cache
     persistentVolumeClaim:

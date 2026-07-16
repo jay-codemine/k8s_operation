@@ -51,8 +51,17 @@ exportfs -ra
 # 后端（全新创建）
 mkdir -p /data/k8soperation/{artifacts,logs,agents}
 
-# Jenkins（已有数据，确认存在即可）
-ls /data/jenkins/{home,go-cache,maven-cache,npm-cache,pip-cache}
+# Jenkins 主数据 + 各语言构建缓存目录
+# 说明：go-build-cache 为 Go 编译缓存（GOCACHE），用于跨构建复用编译产物、
+#       加速增量构建，v16.7 新增，务必创建，否则对应 Pod 挂载会失败。
+mkdir -p /data/jenkins/{home,go-cache,go-build-cache,maven-cache,npm-cache,pip-cache}
+
+# 构建容器内可能以非 root 用户运行（如 Go 的 GOCACHE、前端 nginx 用户），
+# 放开写权限避免写缓存失败
+chmod -R 777 /data/jenkins
+
+# 确认目录已存在
+ls /data/jenkins/{home,go-cache,go-build-cache,maven-cache,npm-cache,pip-cache}
 ```
 
 ### 1.4 数据库初始化
@@ -210,8 +219,8 @@ Jenkins → New Item → Pipeline，创建以下 Job，每个选择 "Pipeline sc
 | `namespace.yaml` | 创建 `devops` namespace |
 | `secret.yaml` | Jenkins 凭证（admin/registry/gitee/maven/sonar） |
 | `configmap.yaml` | JCasC 自动配置（K8s Cloud + 凭证 + SonarQube） |
-| `pv.yaml` | NFS PersistentVolume × 5（主数据+4缓存） |
-| `pvc.yaml` | PersistentVolumeClaim × 5 |
+| `pv.yaml` | NFS PersistentVolume × 6（主数据+5缓存：go/go-build/maven/npm/pip） |
+| `pvc.yaml` | PersistentVolumeClaim × 6 |
 | `rbac.yaml` | ServiceAccount + ClusterRole（动态 Pod Agent 权限） |
 | `service.yaml` | ClusterIP :8080 + :50000 + NodePort 30080 |
 | `statefulset.yaml` | StatefulSet + 探针 + init container |

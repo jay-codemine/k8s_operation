@@ -26,7 +26,7 @@ spec:
   containers:
   - name: python
     image: docker.m.daocloud.io/library/python:3.11-slim
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
       requests:
@@ -49,7 +49,7 @@ spec:
       mountPath: /home/jenkins/agent
   - name: kaniko
     image: gcr.m.daocloud.io/kaniko-project/executor:debug
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     securityContext:
       runAsUser: 0
@@ -72,7 +72,7 @@ spec:
       limits:
         cpu: 200m
         memory: 256Mi
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   volumes:
   - name: pip-cache
     persistentVolumeClaim:
@@ -279,6 +279,8 @@ spec:
         }
 
         stage('Install Dependencies') {
+            // 仅在需要跑 Lint/Test 时安装依赖；SKIP_TESTS 时依赖会在 Kaniko 构建镜像阶段安装，避免重复安装
+            when { expression { return !params.SKIP_TESTS } }
             steps {
                 echo "=== 安装 Python 依赖 ==="
                 container('python') {
