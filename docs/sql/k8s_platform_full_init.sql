@@ -1834,4 +1834,24 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+-- ============================================================
+-- 默认种子数据（首次启动必需）
+-- ============================================================
+
+-- 默认角色
+INSERT IGNORE INTO `sys_role` (`name`, `role_type`, `description`, `created_at`, `modified_at`, `is_del`) VALUES
+('超级管理员', 'super_admin', '平台最高权限，所有功能可见', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0),
+('平台管理员', 'platform_admin', '用户/权限/审计等平台功能', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0),
+('DevOps', 'devops', '集群操作 + CICD 发布', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0);
+
+-- 默认管理员 admin/123456（bcrypt）
+INSERT IGNORE INTO `user` (`username`, `password`, `created_at`, `modified_at`, `is_del`) VALUES
+('admin', '$2a$10$1ouK5KV43TVOcP6GZeGUJ.AuxKpY9hPmeM5zlz0cgBN7R8OTA685G', UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0);
+
+-- 将 admin 分配为超级管理员
+INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`, `created_at`)
+SELECT u.id, r.id, UNIX_TIMESTAMP()
+FROM `user` u, `sys_role` r
+WHERE u.username = 'admin' AND r.role_type = 'super_admin';
+
 -- Dump completed on 2026-07-14 16:38:24
