@@ -42,11 +42,11 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '50m'
-        memory: '64Mi'
+        cpu: '250m'
+        memory: '512Mi'
       limits:
-        cpu: '200m'
-        memory: '384Mi'
+        cpu: '1500m'
+        memory: '1536Mi'
     env:
     - name: GOPROXY
       value: 'https://goproxy.cn,direct'
@@ -60,6 +60,8 @@ spec:
       value: '/root/.cache/go-build'
     - name: GOFLAGS
       value: '-buildvcs=false'
+    - name: GOMAXPROCS
+      value: '2'
     volumeMounts:
     - name: go-cache
       mountPath: /go/pkg/mod
