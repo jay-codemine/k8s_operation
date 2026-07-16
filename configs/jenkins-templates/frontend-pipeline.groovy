@@ -31,7 +31,7 @@ spec:
     resources:
       requests:
         cpu: '50m'
-        memory: '192Mi'
+        memory: '128Mi'
       limits:
         cpu: '200m'
         memory: '384Mi'
@@ -55,7 +55,7 @@ spec:
         memory: '64Mi'
       limits:
         cpu: '200m'
-        memory: '192Mi'
+        memory: '128Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
