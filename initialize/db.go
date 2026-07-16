@@ -193,6 +193,9 @@ func initDefaultData() error {
 	// RBAC v2: 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发）
 	backfillRBACScopes()
 
+	// 初始化默认角色（首次启动自动创建）
+	seedDefaultRoles()
+
 	// 初始化默认管理员账号（首次启动自动创建）
 	initDefaultAdminUser(ctx, d)
 
@@ -765,4 +768,30 @@ func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
 		return
 	}
 	log.Printf("[InitData] Admin (ID=%d) assigned super_admin role", user.ID)
+}
+
+// seedDefaultRoles 初始化默认角色（超级管理员/平台管理员/DevOps）
+func seedDefaultRoles() {
+	db := global.DB
+	now := uint32(time.Now().Unix())
+
+	roles := []struct {
+		name     string
+		roleType string
+		desc     string
+	}{
+		{"超级管理员", "super_admin", "平台最高权限，所有功能可见"},
+		{"平台管理员", "platform_admin", "用户/权限/审计等平台功能"},
+		{"DevOps", "devops", "集群操作 + CICD 发布"},
+	}
+
+	for _, r := range roles {
+		var count int64
+		db.Raw("SELECT COUNT(*) FROM sys_role WHERE role_type = ? AND is_del = 0", r.roleType).Scan(&count)
+		if count == 0 {
+			db.Exec("INSERT INTO sys_role (name, role_type, description, created_at, modified_at, is_del) VALUES (?, ?, ?, ?, ?, 0)",
+				r.name, r.roleType, r.desc, now, now)
+			log.Printf("[InitData] Role created: %s (%s)", r.name, r.roleType)
+		}
+	}
 }
