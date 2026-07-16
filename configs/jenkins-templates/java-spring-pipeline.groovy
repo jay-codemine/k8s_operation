@@ -37,10 +37,10 @@ spec:
     resources:
       requests:
         cpu: '100m'
-        memory: '384Mi'
+        memory: '256Mi'
       limits:
-        cpu: '500m'
-        memory: '1280Mi'
+        cpu: '300m'
+        memory: '512Mi'
     env:
     - name: MAVEN_OPTS
       value: '-Xmx1024m -Xms512m -XX:+TieredCompilation -XX:TieredStopAtLevel=1'
@@ -60,8 +60,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '400m'
-        memory: '1280Mi'
+        cpu: '300m'
+        memory: '512Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent

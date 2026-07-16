@@ -45,8 +45,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '500m'
-        memory: '1280Mi'
+        cpu: '300m'
+        memory: '512Mi'
     env:
     - name: GOPROXY
       value: 'https://goproxy.cn,direct'
@@ -72,8 +72,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '400m'
-        memory: '384Mi'
+        cpu: '300m'
+        memory: '256Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent

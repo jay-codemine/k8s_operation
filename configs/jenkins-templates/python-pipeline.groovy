@@ -33,8 +33,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '500m'
-        memory: '1280Mi'
+        cpu: '300m'
+        memory: '512Mi'
     env:
     - name: PIP_INDEX_URL
       value: 'https://pypi.tuna.tsinghua.edu.cn/simple'
@@ -58,8 +58,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '400m'
-        memory: '384Mi'
+        cpu: '300m'
+        memory: '256Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent

@@ -31,10 +31,10 @@ spec:
     resources:
       requests:
         cpu: '100m'
-        memory: '384Mi'
+        memory: '256Mi'
       limits:
-        cpu: '500m'
-        memory: '1280Mi'
+        cpu: '300m'
+        memory: '512Mi'
     env:
     - name: NPM_CONFIG_REGISTRY
       value: 'https://registry.npmmirror.com'
@@ -54,8 +54,8 @@ spec:
         cpu: '100m'
         memory: '128Mi'
       limits:
-        cpu: '400m'
-        memory: '384Mi'
+        cpu: '300m'
+        memory: '256Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
