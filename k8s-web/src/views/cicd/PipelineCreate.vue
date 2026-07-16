@@ -2278,7 +2278,7 @@ export default {
         }
       },
       // 自动部署配置
-      auto_deploy: true,
+      auto_deploy: false,
       target_cluster_id: 0,
       target_namespace: '',
       target_workload_kind: 'Deployment',
