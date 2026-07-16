@@ -323,7 +323,7 @@ spec:
                             // 验证所有 replace 路径是否存在
                             sh '''
                                 set -e
-                                grep -oP '(?<==> )(\.\./[^\s]+|\./[^\s]+)' go.mod | while read p; do
+                                grep -oP '(?<==> )(\\.\\./[^\\s]+|\\./[^\\s]+)' go.mod | while read p; do
                                     if [ ! -d "$p" ]; then
                                         echo "[ERROR] replace 路径不存在: $p（请配置 EXTRA_REPOS 参数克隆该依赖）"
                                         exit 1
