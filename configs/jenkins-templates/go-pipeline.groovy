@@ -323,12 +323,12 @@ spec:
                             // 验证所有 replace 路径是否存在
                             sh '''
                                 set -e
-                                grep -Eo '=>[[:space:]]*(\.\./[^[:space:]]+|\./[^[:space:]]+)' go.mod | sed 's/=>[[:space:]]*//' | while read p; do
-                                    if [ ! -d "$p" ]; then
-                                        echo "[ERROR] replace 路径不存在: $p（请配置 EXTRA_REPOS 参数克隆该依赖）"
+                                awk -F'=>' '{gsub(/[[:space:]]/,"",$2); print $2}' go.mod | while read p; do
+                                    if [ -n "$p" ] && [ ! -d "$p" ]; then
+                                        echo "[ERROR] replace path not found: $p"
                                         exit 1
                                     fi
-                                    echo "[Dependencies] ✅ $p 存在"
+                                    [ -n "$p" ] && echo "[Dependencies] OK: $p exists"
                                 done
                             '''
                         }
