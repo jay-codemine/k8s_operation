@@ -30,11 +30,11 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '100m'
-        memory: '128Mi'
+        cpu: '50m'
+        memory: '64Mi'
       limits:
-        cpu: '300m'
-        memory: '512Mi'
+        cpu: '200m'
+        memory: '384Mi'
     env:
     - name: PIP_INDEX_URL
       value: 'https://pypi.tuna.tsinghua.edu.cn/simple'
@@ -55,11 +55,11 @@ spec:
       runAsUser: 0
     resources:
       requests:
-        cpu: '100m'
-        memory: '128Mi'
+        cpu: '50m'
+        memory: '64Mi'
       limits:
-        cpu: '300m'
-        memory: '256Mi'
+        cpu: '200m'
+        memory: '192Mi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
