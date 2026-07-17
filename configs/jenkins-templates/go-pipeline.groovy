@@ -45,8 +45,8 @@ spec:
         cpu: '250m'
         memory: '512Mi'
       limits:
-        cpu: '1500m'
-        memory: '1536Mi'
+        cpu: '2000m'
+        memory: '2Gi'
     env:
     - name: GOPROXY
       value: 'https://goproxy.cn,direct'
