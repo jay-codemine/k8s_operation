@@ -30,7 +30,7 @@ metadata:
     app.kubernetes.io/component: log-storage
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   storageClassName: ""
   resources:
     requests:
@@ -49,7 +49,7 @@ metadata:
     app.kubernetes.io/component: agent-storage
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   storageClassName: ""
   resources:
     requests:

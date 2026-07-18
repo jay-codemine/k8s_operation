@@ -30,11 +30,11 @@ spec:
     command: ['sleep', '99d']
     resources:
       requests:
-        cpu: '50m'
-        memory: '64Mi'
+        cpu: '500m'
+        memory: '1Gi'
       limits:
-        cpu: '200m'
-        memory: '384Mi'
+        cpu: '4'
+        memory: '4Gi'
     env:
     - name: PIP_INDEX_URL
       value: 'https://pypi.tuna.tsinghua.edu.cn/simple'
@@ -55,11 +55,11 @@ spec:
       runAsUser: 0
     resources:
       requests:
-        cpu: '50m'
-        memory: '64Mi'
+        cpu: '500m'
+        memory: '1Gi'
       limits:
-        cpu: '200m'
-        memory: '192Mi'
+        cpu: '2'
+        memory: '4Gi'
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
@@ -67,11 +67,11 @@ spec:
     image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk21
     resources:
       requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        cpu: 200m
+        cpu: 100m
         memory: 256Mi
+      limits:
+        cpu: '1'
+        memory: 512Mi
     imagePullPolicy: IfNotPresent
   volumes:
   - name: pip-cache

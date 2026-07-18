@@ -18,7 +18,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.0.16.2          # ← 改成你的 NFS Server IP
+    server: 172.24.43.243      # ← 本地 WSL NFS Server IP
     path: /data/k8soperation/artifacts
 ---
 apiVersion: v1
@@ -36,7 +36,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.0.16.2
+    server: 172.24.43.243
     path: /data/k8soperation/logs
 ---
 apiVersion: v1
@@ -54,5 +54,5 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.0.16.2
+    server: 172.24.43.243
     path: /data/k8soperation/agents
