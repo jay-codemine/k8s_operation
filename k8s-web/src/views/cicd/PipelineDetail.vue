@@ -503,6 +503,7 @@
               @rollback="handleRollback"
               @view-logs="activeTab = 'logs'; loadLogs()"
               @view-pods="handleViewPods"
+              @refresh="loadPipeline"
             />
           </template>
 
