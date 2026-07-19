@@ -1,0 +1,558 @@
+<template>
+  <div class="promotion-panel">
+    <!-- 顶部工具栏 -->
+    <div class="promo-toolbar">
+      <div class="promo-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+        <span>镜像晋级链</span>
+        <span class="promo-subtitle">一次构建，跨环境晋级同一不可变镜像</span>
+      </div>
+      <div class="promo-actions">
+        <button class="promo-btn ghost" @click="loadAll" :disabled="loading">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          {{ loading ? '加载中...' : '刷新' }}
+        </button>
+        <button class="promo-btn primary" @click="openConfig">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          配置环境目标
+        </button>
+      </div>
+    </div>
+
+    <!-- 加载中 -->
+    <div v-if="loading && chain.length === 0" class="promo-loading">
+      <div class="promo-spinner"></div>
+      <p>正在加载晋级链...</p>
+    </div>
+
+    <!-- 空状态 -->
+    <div v-else-if="chain.length === 0" class="promo-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      </svg>
+      <p>尚未配置任何环境部署目标</p>
+      <span>为该流水线绑定 dev / test / staging / prod 等环境后，即可将同一镜像逐级晋级发布</span>
+      <button class="promo-btn primary" @click="openConfig">立即配置环境目标</button>
+    </div>
+
+    <!-- 晋级链 -->
+    <div v-else class="promo-chain">
+      <div v-for="(node, idx) in chain" :key="node.env" class="chain-item">
+        <div :class="['env-card', `env-${node.env}`, { deployed: !!node.current_release_id }]">
+          <div class="env-card-head">
+            <span :class="['env-badge', `env-${node.env}`]">{{ envLabel(node.env) }}</span>
+            <span v-if="node.require_approval" class="env-tag approval" title="晋级到该环境需要审批">需审批</span>
+            <span v-if="node.auto_deploy" class="env-tag auto" title="CI 成功后自动部署">自动</span>
+          </div>
+          <div class="env-target">
+            <div class="target-line">
+              <span class="tl-label">集群</span>
+              <span class="tl-value">{{ node.cluster_name || ('#' + node.cluster_id) }}</span>
+            </div>
+            <div class="target-line">
+              <span class="tl-label">工作负载</span>
+              <span class="tl-value mono">{{ node.namespace }}/{{ node.workload_kind }}/{{ node.workload_name }}</span>
+            </div>
+          </div>
+          <div class="env-current">
+            <template v-if="node.current_release_id">
+              <div class="cur-status">
+                <span :class="['cur-dot', `st-${(node.current_release_status || '').toLowerCase()}`]"></span>
+                <span class="cur-status-text">{{ releaseStatusText(node.current_release_status) }}</span>
+                <span class="cur-time">{{ formatTs(node.current_deploy_time) }}</span>
+              </div>
+              <div class="cur-image mono" :title="fullImage(node)">{{ fullImage(node) }}</div>
+            </template>
+            <div v-else class="cur-none">尚未部署</div>
+          </div>
+          <div class="env-card-foot">
+            <button class="promo-btn small primary" @click="openPromote(node)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+              晋级到此环境
+            </button>
+          </div>
+        </div>
+        <!-- 箭头连接线 -->
+        <div v-if="idx < chain.length - 1" class="chain-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 配置环境目标弹窗 ============ -->
+    <Teleport to="body">
+      <div v-if="showConfigModal" class="promo-modal-mask" @click.self="showConfigModal = false">
+        <div class="promo-modal wide">
+          <div class="pm-head">
+            <h3>配置环境部署目标</h3>
+            <button class="pm-close" @click="showConfigModal = false">✕</button>
+          </div>
+          <div class="pm-body">
+            <p class="pm-tip">为每个环境绑定部署目标；晋级时将复用已构建镜像发布到这里。生产/预发建议开启「需审批」。</p>
+            <div class="target-rows">
+              <div class="tr-header">
+                <span>环境</span><span>集群</span><span>命名空间</span><span>类型</span>
+                <span>工作负载</span><span>容器</span><span>来源</span><span>审批</span><span></span>
+              </div>
+              <div v-for="(row, i) in editTargets" :key="i" class="tr-row">
+                <select v-model="row.env" class="tr-input">
+                  <option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}({{ e.value }})</option>
+                </select>
+                <select v-model.number="row.cluster_id" class="tr-input">
+                  <option :value="0">选择集群</option>
+                  <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.cluster_name || c.name }}</option>
+                </select>
+                <input v-model="row.namespace" class="tr-input" placeholder="default" />
+                <select v-model="row.workload_kind" class="tr-input">
+                  <option value="Deployment">Deployment</option>
+                  <option value="StatefulSet">StatefulSet</option>
+                  <option value="DaemonSet">DaemonSet</option>
+                </select>
+                <input v-model="row.workload_name" class="tr-input" placeholder="工作负载名" />
+                <input v-model="row.container" class="tr-input" placeholder="容器(默认同名)" />
+                <select v-model="row.promote_from" class="tr-input">
+                  <option value="">首环境</option>
+                  <option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.value }}</option>
+                </select>
+                <label class="tr-check"><input type="checkbox" v-model="row.require_approval" /></label>
+                <button class="tr-del" @click="removeRow(i)" title="删除">✕</button>
+              </div>
+            </div>
+            <button class="promo-btn ghost add-row" @click="addRow">+ 添加环境</button>
+          </div>
+          <div class="pm-foot">
+            <button class="promo-btn ghost" @click="showConfigModal = false">取消</button>
+            <button class="promo-btn primary" @click="saveConfig" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ============ 晋级弹窗 ============ -->
+    <Teleport to="body">
+      <div v-if="showPromoteModal" class="promo-modal-mask" @click.self="showPromoteModal = false">
+        <div class="promo-modal">
+          <div class="pm-head">
+            <h3>镜像晋级 → {{ envLabel(promoteForm.target_env) }}({{ promoteForm.target_env }})</h3>
+            <button class="pm-close" @click="showPromoteModal = false">✕</button>
+          </div>
+          <div class="pm-body">
+            <div class="pm-field">
+              <label>镜像来源</label>
+              <div class="src-radios">
+                <label><input type="radio" value="run" v-model="promoteForm.source" /> 最新构建产物</label>
+                <label v-if="upstreamNode"><input type="radio" value="upstream" v-model="promoteForm.source" /> 从上游({{ promoteForm.promote_from }})晋级</label>
+                <label><input type="radio" value="manual" v-model="promoteForm.source" /> 手动指定</label>
+              </div>
+            </div>
+
+            <div v-if="promoteForm.source === 'run'" class="pm-field">
+              <label>运行记录 ID（构建产出镜像的 Run）</label>
+              <input v-model.number="promoteForm.source_run_id" class="pm-input" type="number" placeholder="留空使用最新一次构建" />
+            </div>
+
+            <div v-else-if="promoteForm.source === 'upstream'" class="pm-field">
+              <label>上游环境当前镜像</label>
+              <div class="pm-readonly mono">{{ upstreamNode ? fullImage(upstreamNode) : '上游环境暂无部署' }}</div>
+            </div>
+
+            <template v-else>
+              <div class="pm-field">
+                <label>镜像仓库</label>
+                <input v-model="promoteForm.image_repo" class="pm-input" placeholder="registry/app" />
+              </div>
+              <div class="pm-field-inline">
+                <div class="pm-field">
+                  <label>Tag</label>
+                  <input v-model="promoteForm.image_tag" class="pm-input" placeholder="v1.0.0" />
+                </div>
+                <div class="pm-field">
+                  <label>Digest（可选）</label>
+                  <input v-model="promoteForm.image_digest" class="pm-input" placeholder="sha256:..." />
+                </div>
+              </div>
+            </template>
+
+            <div class="pm-field">
+              <label>晋级说明</label>
+              <textarea v-model="promoteForm.reason" class="pm-input" rows="2" placeholder="例如：验收通过，晋级至生产"></textarea>
+            </div>
+            <p v-if="targetRequiresApproval" class="pm-warn">该环境已开启审批，提交后将进入审批流程，审批通过才会执行部署。</p>
+          </div>
+          <div class="pm-foot">
+            <button class="promo-btn ghost" @click="showPromoteModal = false">取消</button>
+            <button class="promo-btn primary" @click="submitPromote" :disabled="promoting">{{ promoting ? '提交中...' : '确认晋级' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed } from 'vue'
+import { getClusterList } from '@/api/cluster'
+import {
+  getPipelineTargets,
+  savePipelineTargets,
+  promotePipeline,
+  getPromotionChain
+} from '@/api/cicd'
+
+const props = defineProps({
+  pipelineId: { type: [String, Number], required: true },
+  pipeline: { type: Object, default: () => ({}) }
+})
+
+const ENV_OPTIONS = [
+  { value: 'dev', label: '开发', order: 1 },
+  { value: 'test', label: '测试', order: 2 },
+  { value: 'staging', label: '预发', order: 3 },
+  { value: 'prod', label: '生产', order: 4 }
+]
+
+const loading = ref(false)
+const saving = ref(false)
+const promoting = ref(false)
+const chain = ref([])
+const clusters = ref([])
+
+const showConfigModal = ref(false)
+const editTargets = ref([])
+
+const showPromoteModal = ref(false)
+const promoteForm = reactive({
+  target_env: '',
+  promote_from: '',
+  source: 'run',
+  source_run_id: null,
+  source_release_id: 0,
+  image_repo: '',
+  image_tag: '',
+  image_digest: '',
+  reason: ''
+})
+
+// ====== 轻量 Toast ======
+const showToast = (msg, type = 'info') => {
+  const colors = { success: '#38a169', error: '#e53e3e', info: '#3182ce', warning: '#dd6b20' }
+  const el = document.createElement('div')
+  el.textContent = msg
+  Object.assign(el.style, {
+    position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+    padding: '10px 24px', borderRadius: '8px', color: '#fff', fontSize: '14px',
+    background: colors[type] || colors.info, zIndex: '99999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    transition: 'opacity 0.3s', opacity: '1'
+  })
+  document.body.appendChild(el)
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300) }, 2500)
+}
+
+const pid = computed(() => Number(props.pipelineId))
+
+const envLabel = (env) => ENV_OPTIONS.find(e => e.value === env)?.label || env
+const releaseStatusText = (s) => {
+  const map = {
+    Pending: '待处理', AwaitingApproval: '待审批', Queued: '排队中', Running: '部署中',
+    Succeeded: '已部署', Failed: '失败', Canceled: '已取消', Rollback: '已回滚'
+  }
+  return map[s] || s || '-'
+}
+const fullImage = (node) => {
+  if (!node) return '-'
+  const repo = node.current_image_repo || ''
+  if (!repo) return '-'
+  if (node.current_image_digest) return `${repo}@${node.current_image_digest}`
+  return node.current_image_tag ? `${repo}:${node.current_image_tag}` : repo
+}
+const formatTs = (ts) => {
+  if (!ts) return ''
+  const d = new Date(Number(ts) * 1000)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+const targetRequiresApproval = computed(() => {
+  const n = chain.value.find(x => x.env === promoteForm.target_env)
+  return !!(n && n.require_approval)
+})
+const upstreamNode = computed(() => {
+  if (!promoteForm.promote_from) return null
+  return chain.value.find(x => x.env === promoteForm.promote_from && x.current_release_id) || null
+})
+
+// ====== 数据加载 ======
+const parseList = (res, key) => res?.data?.[key] || res?.data?.data?.[key] || []
+
+const loadClusters = async () => {
+  try {
+    const res = await getClusterList({ page: 1, limit: 1000 })
+    const data = res.data || res
+    clusters.value = data.list || data.items || data || []
+  } catch (e) {
+    console.warn('加载集群失败', e)
+  }
+}
+
+const loadChain = async () => {
+  if (!pid.value) return
+  loading.value = true
+  try {
+    const res = await getPromotionChain(pid.value)
+    chain.value = parseList(res, 'chain')
+  } catch (e) {
+    showToast('加载晋级链失败: ' + (e.message || ''), 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+const loadAll = async () => {
+  await Promise.all([loadClusters(), loadChain()])
+}
+
+// ====== 配置 ======
+const seedDefaults = () => {
+  const p = props.pipeline || {}
+  return ENV_OPTIONS.map((e, i) => ({
+    env: e.value,
+    cluster_id: p.target_cluster_id || 0,
+    namespace: p.target_namespace || 'default',
+    workload_kind: p.target_workload_kind || 'Deployment',
+    workload_name: p.target_workload_name || '',
+    container: p.target_container || '',
+    auto_deploy: e.value === 'dev',
+    require_approval: e.value === 'staging' || e.value === 'prod',
+    promote_from: i === 0 ? '' : ENV_OPTIONS[i - 1].value,
+    sort_order: e.order
+  }))
+}
+
+const openConfig = async () => {
+  if (clusters.value.length === 0) await loadClusters()
+  try {
+    const res = await getPipelineTargets(pid.value)
+    const list = parseList(res, 'list')
+    if (list.length > 0) {
+      editTargets.value = list.map(t => ({
+        env: t.env,
+        cluster_id: t.cluster_id,
+        namespace: t.namespace,
+        workload_kind: t.workload_kind || 'Deployment',
+        workload_name: t.workload_name,
+        container: t.container,
+        auto_deploy: !!t.auto_deploy,
+        require_approval: !!t.require_approval,
+        promote_from: t.promote_from || '',
+        sort_order: t.sort_order || 0
+      }))
+    } else {
+      editTargets.value = seedDefaults()
+    }
+  } catch {
+    editTargets.value = seedDefaults()
+  }
+  showConfigModal.value = true
+}
+
+const addRow = () => {
+  const used = editTargets.value.map(r => r.env)
+  const next = ENV_OPTIONS.find(e => !used.includes(e.value)) || ENV_OPTIONS[0]
+  editTargets.value.push({
+    env: next.value, cluster_id: props.pipeline?.target_cluster_id || 0,
+    namespace: 'default', workload_kind: 'Deployment', workload_name: '',
+    container: '', auto_deploy: false, require_approval: false,
+    promote_from: '', sort_order: editTargets.value.length + 1
+  })
+}
+const removeRow = (i) => editTargets.value.splice(i, 1)
+
+const saveConfig = async () => {
+  // 前端校验
+  const seen = new Set()
+  for (const row of editTargets.value) {
+    if (!row.env) { showToast('存在未选择环境的行', 'warning'); return }
+    if (seen.has(row.env)) { showToast(`环境 ${row.env} 重复`, 'warning'); return }
+    seen.add(row.env)
+    if (!row.cluster_id) { showToast(`环境 ${row.env} 未选择集群`, 'warning'); return }
+    if (!row.workload_name) { showToast(`环境 ${row.env} 未填写工作负载`, 'warning'); return }
+  }
+  saving.value = true
+  try {
+    const res = await savePipelineTargets({
+      pipeline_id: pid.value,
+      targets: editTargets.value.map((r, i) => ({ ...r, sort_order: r.sort_order || (i + 1) }))
+    })
+    if (res.code === 0) {
+      showToast('环境目标配置已保存', 'success')
+      showConfigModal.value = false
+      await loadChain()
+    } else {
+      showToast(res.msg || '保存失败', 'error')
+    }
+  } catch (e) {
+    showToast('保存失败: ' + (e.message || ''), 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ====== 晋级 ======
+const openPromote = (node) => {
+  promoteForm.target_env = node.env
+  promoteForm.promote_from = node.promote_from || ''
+  promoteForm.source = node.promote_from ? 'upstream' : 'run'
+  promoteForm.source_run_id = props.pipeline?.last_run_id || null
+  promoteForm.source_release_id = 0
+  promoteForm.image_repo = ''
+  promoteForm.image_tag = ''
+  promoteForm.image_digest = ''
+  promoteForm.reason = ''
+  // 无上游部署则回退到最新构建
+  if (promoteForm.source === 'upstream' && !upstreamNode.value) {
+    promoteForm.source = 'run'
+  }
+  showPromoteModal.value = true
+}
+
+const submitPromote = async () => {
+  const payload = {
+    pipeline_id: pid.value,
+    target_env: promoteForm.target_env,
+    reason: promoteForm.reason
+  }
+  if (promoteForm.source === 'run') {
+    if (promoteForm.source_run_id) payload.source_run_id = Number(promoteForm.source_run_id)
+  } else if (promoteForm.source === 'upstream') {
+    if (!upstreamNode.value) { showToast('上游环境暂无可晋级的镜像', 'warning'); return }
+    payload.source_release_id = upstreamNode.value.current_release_id
+  } else {
+    if (!promoteForm.image_repo) { showToast('请填写镜像仓库', 'warning'); return }
+    payload.image_repo = promoteForm.image_repo
+    payload.image_tag = promoteForm.image_tag
+    payload.image_digest = promoteForm.image_digest
+  }
+  promoting.value = true
+  try {
+    const res = await promotePipeline(payload)
+    if (res.code === 0) {
+      showToast(res.data?.message || '晋级已提交', 'success')
+      showPromoteModal.value = false
+      await loadChain()
+    } else {
+      showToast(res.msg || '晋级失败', 'error')
+    }
+  } catch (e) {
+    showToast('晋级失败: ' + (e.message || ''), 'error')
+  } finally {
+    promoting.value = false
+  }
+}
+
+loadAll()
+defineExpose({ refresh: loadAll })
+</script>
+
+<style scoped>
+.promotion-panel { padding: 4px 2px; }
+.promo-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.promo-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: #1f2937; }
+.promo-title svg { width: 20px; height: 20px; color: #6366f1; }
+.promo-subtitle { font-size: 12px; font-weight: 400; color: #9ca3af; margin-left: 4px; }
+.promo-actions { display: flex; gap: 8px; }
+.promo-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid transparent; transition: all .15s; }
+.promo-btn svg { width: 15px; height: 15px; }
+.promo-btn.primary { background: #6366f1; color: #fff; }
+.promo-btn.primary:hover { background: #4f46e5; }
+.promo-btn.ghost { background: #fff; color: #4b5563; border-color: #e5e7eb; }
+.promo-btn.ghost:hover { background: #f9fafb; }
+.promo-btn.small { padding: 5px 10px; font-size: 12px; }
+.promo-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.promo-loading, .promo-empty { text-align: center; padding: 48px 16px; color: #9ca3af; }
+.promo-empty svg { width: 46px; height: 46px; margin-bottom: 12px; color: #d1d5db; }
+.promo-empty p { font-size: 15px; color: #6b7280; margin: 0 0 6px; }
+.promo-empty span { display: block; font-size: 13px; margin-bottom: 16px; }
+.promo-spinner { width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #6366f1; border-radius: 50%; margin: 0 auto 12px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.promo-chain { display: flex; align-items: stretch; flex-wrap: wrap; gap: 4px; }
+.chain-item { display: flex; align-items: center; }
+.env-card { width: 250px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.env-card.deployed { border-color: #c7d2fe; }
+.env-card-head { display: flex; align-items: center; gap: 6px; }
+.env-badge { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 6px; color: #fff; }
+.env-badge.env-dev { background: #10b981; }
+.env-badge.env-test { background: #3b82f6; }
+.env-badge.env-staging { background: #f59e0b; }
+.env-badge.env-prod { background: #ef4444; }
+.env-tag { font-size: 11px; padding: 1px 7px; border-radius: 5px; }
+.env-tag.approval { background: #fef3c7; color: #b45309; }
+.env-tag.auto { background: #dbeafe; color: #1d4ed8; }
+.env-target { display: flex; flex-direction: column; gap: 5px; }
+.target-line { display: flex; gap: 6px; font-size: 12px; }
+.tl-label { color: #9ca3af; min-width: 48px; }
+.tl-value { color: #374151; word-break: break-all; }
+.mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11.5px; }
+.env-current { border-top: 1px dashed #eef0f2; padding-top: 10px; min-height: 44px; }
+.cur-status { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; }
+.cur-dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; }
+.cur-dot.st-succeeded { background: #10b981; }
+.cur-dot.st-running, .cur-dot.st-queued { background: #3b82f6; }
+.cur-dot.st-failed { background: #ef4444; }
+.cur-dot.st-awaitingapproval, .cur-dot.st-pending { background: #f59e0b; }
+.cur-status-text { color: #374151; }
+.cur-time { color: #9ca3af; margin-left: auto; font-size: 11px; }
+.cur-image { color: #4b5563; word-break: break-all; }
+.cur-none { font-size: 12px; color: #b0b6be; font-style: italic; }
+.env-card-foot { margin-top: auto; }
+.env-card-foot .promo-btn { width: 100%; justify-content: center; }
+.chain-arrow svg { width: 22px; height: 22px; color: #cbd5e1; margin: 0 2px; }
+
+/* Modal */
+.promo-modal-mask { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center; z-index: 9000; }
+.promo-modal { background: #fff; border-radius: 14px; width: 480px; max-width: 94vw; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.25); }
+.promo-modal.wide { width: 860px; }
+.pm-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #f0f1f3; }
+.pm-head h3 { margin: 0; font-size: 15px; color: #1f2937; }
+.pm-close { border: none; background: none; font-size: 16px; color: #9ca3af; cursor: pointer; }
+.pm-body { padding: 18px 20px; overflow-y: auto; }
+.pm-tip { font-size: 12.5px; color: #6b7280; margin: 0 0 14px; line-height: 1.5; }
+.pm-field { margin-bottom: 14px; }
+.pm-field-inline { display: flex; gap: 12px; }
+.pm-field-inline .pm-field { flex: 1; }
+.pm-field label { display: block; font-size: 12.5px; color: #4b5563; margin-bottom: 5px; }
+.pm-input { width: 100%; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.pm-input:focus { outline: none; border-color: #a5b4fc; }
+.pm-readonly { padding: 8px 10px; background: #f9fafb; border-radius: 8px; font-size: 12px; color: #4b5563; word-break: break-all; }
+.src-radios { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: #374151; }
+.src-radios label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.pm-warn { font-size: 12px; color: #b45309; background: #fef3c7; padding: 8px 10px; border-radius: 8px; margin: 4px 0 0; }
+.pm-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid #f0f1f3; }
+
+/* target rows */
+.target-rows { display: flex; flex-direction: column; gap: 6px; }
+.tr-header, .tr-row { display: grid; grid-template-columns: 84px 120px 96px 108px 1fr 96px 84px 44px 28px; gap: 6px; align-items: center; }
+.tr-header { font-size: 11px; color: #9ca3af; padding: 0 2px; }
+.tr-input { width: 100%; padding: 6px 7px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; box-sizing: border-box; }
+.tr-check { display: flex; justify-content: center; }
+.tr-del { border: none; background: #fef2f2; color: #ef4444; border-radius: 6px; cursor: pointer; padding: 5px; font-size: 12px; }
+.add-row { margin-top: 12px; }
+</style>

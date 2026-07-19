@@ -40,6 +40,11 @@ type CicdReleaseCreateRequest struct {
 
 	Message   string `json:"message"`   // 可选：发布说明/备注
 	RequestID string `json:"request_id"` // 可选，幂等校验用
+
+	// 镜像晋级链追踪（由 promote 服务填充，手动创建可不传）
+	Env         string `json:"env"`           // 目标环境(dev/test/staging/prod)
+	SourceEnv   string `json:"source_env"`   // 晋级来源环境
+	SourceRunID int64  `json:"source_run_id"` // 构建镜像的流水线运行ID
 }
 
 func ValidCicdReleaseCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {

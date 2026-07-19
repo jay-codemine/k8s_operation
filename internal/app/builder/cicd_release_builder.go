@@ -38,6 +38,12 @@ func BuildCicdRelease(
 		ImageTag:      imageTag,
 		ImageDigest:   utils.NullString(imageDigest),
 
+		// 镜像晋级链追踪
+		PipelineID:  req.PipelineID,
+		Env:         req.Env,
+		SourceEnv:   req.SourceEnv,
+		SourceRunID: req.SourceRunID,
+
 		CreatedAt:  now,
 		ModifiedAt: now,
 	}

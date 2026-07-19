@@ -785,6 +785,35 @@ CREATE TABLE `cicd_pipeline_template` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `cicd_pipeline_target`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cicd_pipeline_target` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `pipeline_id` bigint NOT NULL DEFAULT '0' COMMENT '关联流水线ID',
+  `env` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '环境标识(dev/test/staging/prod)',
+  `cluster_id` bigint NOT NULL DEFAULT '0' COMMENT '目标集群ID',
+  `namespace` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '目标命名空间',
+  `workload_kind` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Deployment' COMMENT '工作负载类型',
+  `workload_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '工作负载名称',
+  `container` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '容器名称',
+  `auto_deploy` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'CI构建成功后是否自动部署到本环境',
+  `require_approval` tinyint(1) NOT NULL DEFAULT '0' COMMENT '晋级到本环境是否需要审批',
+  `promote_from` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '本环境镜像上游来源环境',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '晋级/展示顺序',
+  `created_user_id` bigint NOT NULL DEFAULT '0',
+  `created_at` bigint unsigned NOT NULL DEFAULT '0',
+  `modified_at` bigint unsigned NOT NULL DEFAULT '0',
+  `deleted_at` bigint unsigned NOT NULL DEFAULT '0',
+  `is_del` tinyint unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_pt_pipeline_env` (`pipeline_id`,`env`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='流水线多环境部署目标映射';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `cicd_release`
 --
 
@@ -808,6 +837,10 @@ CREATE TABLE `cicd_release` (
   `image_repo` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '镜像仓库',
   `image_tag` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '镜像标签',
   `image_digest` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '镜像摘要',
+  `pipeline_id` bigint NOT NULL DEFAULT '0' COMMENT '关联流水线ID(镜像晋级)',
+  `env` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '目标环境(dev/test/staging/prod)',
+  `source_env` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '晋级来源环境(首次部署为空)',
+  `source_run_id` bigint NOT NULL DEFAULT '0' COMMENT '构建该镜像的流水线运行记录ID',
   `created_at` bigint unsigned NOT NULL DEFAULT '0',
   `modified_at` bigint unsigned NOT NULL DEFAULT '0',
   `deleted_at` bigint unsigned NOT NULL DEFAULT '0',
@@ -820,7 +853,8 @@ CREATE TABLE `cicd_release` (
   KEY `idx_status` (`status`),
   KEY `idx_build_id` (`build_id`),
   KEY `idx_modified_at` (`modified_at`),
-  KEY `idx_is_del` (`is_del`)
+  KEY `idx_is_del` (`is_del`),
+  KEY `idx_release_pipeline_env` (`pipeline_id`,`env`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CI/CD发布单表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 

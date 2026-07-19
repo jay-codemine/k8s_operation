@@ -18,6 +18,7 @@ type CicdRouter struct {
 	artifactCtrl    *cicd.ArtifactController
 	agentCtrl       *cicd.BuildAgentController
 	onboardCtrl     *cicd.QuickOnboardController
+	promoteCtrl     *cicd.PromoteController
 }
 
 func NewCicdRouter() *CicdRouter {
@@ -33,6 +34,7 @@ func NewCicdRouter() *CicdRouter {
 		artifactCtrl:    cicd.NewArtifactController(),
 		agentCtrl:       cicd.NewBuildAgentController(),
 		onboardCtrl:     cicd.NewQuickOnboardController(),
+		promoteCtrl:     cicd.NewPromoteController(),
 	}
 }
 
@@ -230,4 +232,16 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 
 	// ==================== 快速接入 ====================
 	rg.POST("/quick-onboard", middlewares.RequireCICDPermission("cicd:pipeline:create"), r.onboardCtrl.Onboard)
+
+	// ==================== 镜像晋级 / 环境目标配置 ====================
+	// /api/v1/k8s/cicd/promote/...
+	// build once, promote everywhere：一次构建、跨环境晋级已构建的不可变镜像
+	promote := rg.Group("/promote")
+	{
+		promote.GET("/targets", r.promoteCtrl.Targets)
+		promote.GET("/chain", r.promoteCtrl.Chain)
+		promote.POST("/targets/save", middlewares.RequireCICDPermission("cicd:pipeline:edit"), r.promoteCtrl.SaveTargets)
+		promote.POST("/targets/delete", middlewares.RequireCICDPermission("cicd:pipeline:edit"), r.promoteCtrl.DeleteTarget)
+		promote.POST("/run", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.promoteCtrl.Promote)
+	}
 }

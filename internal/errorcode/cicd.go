@@ -30,6 +30,10 @@ var (
 	// ========== CICD Git（仓库操作）==========
 	ErrorGitBranchesFail *Error // 获取Git分支失败
 	ErrorGitValidateFail *Error // 验证Git仓库失败
+
+	// ========== CICD Promote（镜像晋级/环境目标）==========
+	ErrorCicdPromoteFail        *Error // 镜像晋级失败
+	ErrorCicdPipelineTargetFail *Error // 流水线环境目标配置失败
 )
 
 func register_cicd() {
@@ -62,4 +66,8 @@ func register_cicd() {
 	// 50015x：Git仓库操作
 	ErrorGitBranchesFail = NewError(500150, "获取Git分支列表失败")
 	ErrorGitValidateFail = NewError(500151, "验证Git仓库连接失败")
+
+	// 50016x：Promote（镜像晋级/环境目标）
+	ErrorCicdPromoteFail = NewError(500160, "镜像晋级发布失败")
+	ErrorCicdPipelineTargetFail = NewError(500161, "流水线环境目标配置失败")
 }

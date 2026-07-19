@@ -85,6 +85,53 @@ export const quickOnboard = (data) => {
   return http.post(`${API_BASE}/k8s/cicd/quick-onboard`, data)
 }
 
+// =======================
+// CI/CD 镜像晋级 / 环境目标配置（build once, promote everywhere）
+// 对应后端路由: /api/v1/k8s/cicd/promote/*
+// =======================
+
+const PROMOTE_BASE = `${API_BASE}/k8s/cicd/promote`
+
+/**
+ * 获取某条流水线的环境部署目标列表
+ * @param {number} pipelineId - 流水线ID
+ */
+export const getPipelineTargets = (pipelineId) => {
+  return http.get(`${PROMOTE_BASE}/targets`, { params: { pipeline_id: pipelineId } })
+}
+
+/**
+ * 全量保存某条流水线的环境部署目标
+ * @param {Object} data - { pipeline_id, targets: [{ env, cluster_id, namespace, workload_kind, workload_name, container, auto_deploy, require_approval, promote_from, sort_order }] }
+ */
+export const savePipelineTargets = (data) => {
+  return http.post(`${PROMOTE_BASE}/targets/save`, data)
+}
+
+/**
+ * 删除单个环境部署目标
+ * @param {number} id - 目标ID
+ */
+export const deletePipelineTarget = (id) => {
+  return http.post(`${PROMOTE_BASE}/targets/delete`, { id })
+}
+
+/**
+ * 镜像晋级：将已构建的不可变镜像发布到目标环境
+ * @param {Object} data - { pipeline_id, target_env, source_run_id?, source_release_id?, image_repo?, image_tag?, image_digest?, reason? }
+ */
+export const promotePipeline = (data) => {
+  return http.post(`${PROMOTE_BASE}/run`, data)
+}
+
+/**
+ * 获取流水线的晋级链视图（各环境当前部署镜像/状态）
+ * @param {number} pipelineId - 流水线ID
+ */
+export const getPromotionChain = (pipelineId) => {
+  return http.get(`${PROMOTE_BASE}/chain`, { params: { pipeline_id: pipelineId } })
+}
+
 // 获取部署历史（兼容旧接口）
 export { getPipelineHistory as getDeploymentHistory } from './platform/pipeline'
 

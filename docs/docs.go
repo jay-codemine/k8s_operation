@@ -4207,6 +4207,166 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/promote/chain": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Promote"
+                ],
+                "summary": "获取流水线的晋级链视图（各环境当前部署镜像/状态）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "pipeline_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/promote/run": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Promote"
+                ],
+                "summary": "镜像晋级：将已构建镜像发布到目标环境",
+                "parameters": [
+                    {
+                        "description": "晋级参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelinePromoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/promote/targets": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Promote"
+                ],
+                "summary": "获取流水线的环境部署目标列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "流水线ID",
+                        "name": "pipeline_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/promote/targets/delete": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Promote"
+                ],
+                "summary": "删除单个环境部署目标",
+                "parameters": [
+                    {
+                        "description": "删除参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineTargetDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/k8s/cicd/promote/targets/save": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD Promote"
+                ],
+                "summary": "全量保存流水线的环境部署目标",
+                "parameters": [
+                    {
+                        "description": "环境目标配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/requests.PipelineTargetSaveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/quick-onboard": {
             "post": {
                 "description": "支持 5 种工作负载类型: Deployment/StatefulSet/DaemonSet/CronJob/Job",
@@ -19090,6 +19250,10 @@ const docTemplate = `{
                 "container_name": {
                     "type": "string"
                 },
+                "env": {
+                    "description": "镜像晋级链追踪（由 promote 服务填充，手动创建可不传）",
+                    "type": "string"
+                },
                 "image_digest": {
                     "type": "string"
                 },
@@ -19113,6 +19277,14 @@ const docTemplate = `{
                 "request_id": {
                     "description": "可选，幂等校验用",
                     "type": "string"
+                },
+                "source_env": {
+                    "description": "晋级来源环境",
+                    "type": "string"
+                },
+                "source_run_id": {
+                    "description": "构建镜像的流水线运行ID",
+                    "type": "integer"
                 },
                 "strategy": {
                     "type": "string"
@@ -21259,6 +21431,43 @@ const docTemplate = `{
                 }
             }
         },
+        "requests.PipelinePromoteRequest": {
+            "type": "object",
+            "properties": {
+                "image_digest": {
+                    "description": "显式镜像digest",
+                    "type": "string"
+                },
+                "image_repo": {
+                    "description": "显式镜像仓库",
+                    "type": "string"
+                },
+                "image_tag": {
+                    "description": "显式镜像tag",
+                    "type": "string"
+                },
+                "pipeline_id": {
+                    "description": "流水线ID",
+                    "type": "integer"
+                },
+                "reason": {
+                    "description": "晋级说明",
+                    "type": "string"
+                },
+                "source_release_id": {
+                    "description": "已有发布单ID（从其它环境晋级）",
+                    "type": "integer"
+                },
+                "source_run_id": {
+                    "description": "镜像来源（三选一，优先级：显式镜像 \u003e source_release_id \u003e source_run_id）",
+                    "type": "integer"
+                },
+                "target_env": {
+                    "description": "目标环境(dev/test/staging/prod)",
+                    "type": "string"
+                }
+            }
+        },
         "requests.PipelineRunRequest": {
             "type": "object",
             "properties": {
@@ -21315,6 +21524,73 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                }
+            }
+        },
+        "requests.PipelineTargetDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "requests.PipelineTargetItem": {
+            "type": "object",
+            "properties": {
+                "auto_deploy": {
+                    "description": "是否自动部署",
+                    "type": "boolean"
+                },
+                "cluster_id": {
+                    "description": "目标集群ID",
+                    "type": "integer"
+                },
+                "container": {
+                    "description": "容器名称",
+                    "type": "string"
+                },
+                "env": {
+                    "description": "环境标识(dev/test/staging/prod)",
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "目标命名空间",
+                    "type": "string"
+                },
+                "promote_from": {
+                    "description": "上游来源环境",
+                    "type": "string"
+                },
+                "require_approval": {
+                    "description": "是否需要审批",
+                    "type": "boolean"
+                },
+                "sort_order": {
+                    "description": "顺序",
+                    "type": "integer"
+                },
+                "workload_kind": {
+                    "description": "工作负载类型",
+                    "type": "string"
+                },
+                "workload_name": {
+                    "description": "工作负载名称",
+                    "type": "string"
+                }
+            }
+        },
+        "requests.PipelineTargetSaveRequest": {
+            "type": "object",
+            "properties": {
+                "pipeline_id": {
+                    "type": "integer"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/requests.PipelineTargetItem"
+                    }
                 }
             }
         },

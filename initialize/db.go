@@ -85,6 +85,7 @@ func autoMigrateTables() error {
 		&models.CicdApproval{},
 		&models.CicdBuildAgent{},
 		&models.CicdEnvironment{},
+		&models.CicdPipelineTarget{},
 	); err != nil {
 		return fmt.Errorf("migrate base tables: %w", err)
 	}
@@ -112,6 +113,11 @@ func autoMigrateTables() error {
 	// cicd_pipeline_run 表字段补全（兼容旧版本初始化脚本缺少该列的情况）
 	if err := ensurePipelineRunColumns(); err != nil {
 		log.Printf("[AutoMigrate] cicd_pipeline_run 字段补全失败: %v", err)
+	}
+
+	// cicd_release 表字段补全（镜像晋级链追踪字段，兼容旧初始化脚本）
+	if err := ensureReleaseColumns(); err != nil {
+		log.Printf("[AutoMigrate] cicd_release 字段补全失败: %v", err)
 	}
 
 	// AI 助手模块（逐表迁移，确保每张表都成功）
@@ -447,6 +453,37 @@ func ensurePipelineRunColumns() error {
 				return fmt.Errorf("add column %s: %w", col.name, err)
 			}
 			log.Printf("[AutoMigrate] cicd_pipeline_run 补全列: %s", col.name)
+		}
+	}
+	return nil
+}
+
+// ensureReleaseColumns 检查并补全 cicd_release 表缺失的镜像晋级链追踪列
+// cicd_release 由 init.sql 建表，这里幂等补齐新增列，避免旧库缺列导致写入报错
+func ensureReleaseColumns() error {
+	var count int64
+	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_release'").Scan(&count)
+	if count == 0 {
+		return nil
+	}
+	type colDef struct {
+		name string
+		sql  string
+	}
+	columns := []colDef{
+		{"pipeline_id", "ALTER TABLE `cicd_release` ADD COLUMN `pipeline_id` bigint NOT NULL DEFAULT 0 COMMENT '关联流水线ID' AFTER `image_digest`"},
+		{"env", "ALTER TABLE `cicd_release` ADD COLUMN `env` varchar(32) NOT NULL DEFAULT '' COMMENT '目标环境' AFTER `pipeline_id`"},
+		{"source_env", "ALTER TABLE `cicd_release` ADD COLUMN `source_env` varchar(32) NOT NULL DEFAULT '' COMMENT '晋级来源环境' AFTER `env`"},
+		{"source_run_id", "ALTER TABLE `cicd_release` ADD COLUMN `source_run_id` bigint NOT NULL DEFAULT 0 COMMENT '构建镜像的流水线运行ID' AFTER `source_env`"},
+	}
+	for _, col := range columns {
+		var exists int64
+		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_release' AND column_name = ?", col.name).Scan(&exists)
+		if exists == 0 {
+			if err := global.DB.Exec(col.sql).Error; err != nil {
+				return fmt.Errorf("add column %s: %w", col.name, err)
+			}
+			log.Printf("[AutoMigrate] cicd_release 补全列: %s", col.name)
 		}
 	}
 	return nil
