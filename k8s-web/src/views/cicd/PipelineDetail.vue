@@ -2082,8 +2082,22 @@ export default {
       return durations[stageType] || '-'
     }
 
+    // 校验流水线 ID 是否有效（避免路由切走后 route.params.id 变 undefined 导致 id=NaN 的无效请求）
+    const isValidPipelineId = () => {
+      const pid = Number(pipelineId.value)
+      return Number.isInteger(pid) && pid > 0
+    }
+
     // 加载流水线详情
     const loadPipeline = async () => {
+      // 守卫：id 非法时不发请求，并停止一切轮询
+      if (!isValidPipelineId()) {
+        stopPolling()
+        stopDeployPolling()
+        errorMsg.value = '无效的流水线ID'
+        loading.value = false
+        return
+      }
       loading.value = true
       errorMsg.value = ''
       try {
@@ -2119,6 +2133,11 @@ export default {
 
       // 每 1.5 秒轮询状态和阶段（更快响应，实时体验）
       statusPollingTimer = setInterval(async () => {
+        // 守卫：路由已切走或 id 失效时立即停止轮询，避免 status?id=NaN 的无效请求
+        if (!isValidPipelineId()) {
+          stopPolling()
+          return
+        }
         try {
           const response = await getPipelineStatus(pipelineId.value)
           if (response.code === 0) {
@@ -2188,6 +2207,10 @@ export default {
 
       // 每 2 秒轮询日志（如果在日志 Tab 或有选中阶段）
       logsPollingTimer = setInterval(async () => {
+        if (!isValidPipelineId()) {
+          stopPolling()
+          return
+        }
         if (pipeline.value.status === 'running') {
           // 在日志 Tab 或选中了阶段时加载日志
           if (activeTab.value === 'logs' || (selectedStage.value && stageDetailExpanded.value)) {
@@ -2744,6 +2767,11 @@ export default {
 
       // 每 3 秒轮询部署状态
       deployPollingTimer = setInterval(async () => {
+        // 守卫：id 失效时停止部署轮询，避免向 stages 发送 id=NaN 请求
+        if (!isValidPipelineId()) {
+          stopDeployPolling()
+          return
+        }
         try {
           await loadStages()
 
