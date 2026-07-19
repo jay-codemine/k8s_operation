@@ -637,6 +637,8 @@ import {
   runPipeline as triggerPipeline,
   stopPipeline as cancelPipeline,
   deletePipeline as removePipeline,
+  batchRunPipelines as batchRunPipelinesApi,
+  batchStopPipelines as batchStopPipelinesApi,
   getJenkinsConfig
 } from '@/api/platform/pipeline'
 import permissionStore from '@/stores/permission'
@@ -914,7 +916,7 @@ export default {
       Message.info({ content: `正在启动 ${toRun.length} 条流水线...` })
       
       try {
-        const response = await batchRunPipelines(selectedIds.value)
+        const response = await batchRunPipelinesApi(toRun.map(p => p.id))
         if (response.code === 0) {
           const successCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
@@ -953,7 +955,7 @@ export default {
       Message.info({ content: `正在停止 ${toStop.length} 条流水线...` })
       
       try {
-        const response = await batchStopPipelines(selectedIds.value)
+        const response = await batchStopPipelinesApi(toStop.map(p => p.id))
         if (response.code === 0) {
           const successCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
