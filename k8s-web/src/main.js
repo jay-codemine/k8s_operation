@@ -35,10 +35,7 @@ ChartJS.register(
   Filler
 )
 
-import AppIcon from '@/components/AppIcon.vue'
-
 const app = createApp(App)
-app.component('AppIcon', AppIcon)
 
 // 2. 注册 Arco 组件（核心）
 app.use(ArcoVue)
