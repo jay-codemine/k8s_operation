@@ -148,6 +148,7 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 		stage.POST("/cancel", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.stageCtrl.CancelDeploy)
 		stage.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.stageCtrl.RollbackDeploy)
 		stage.GET("/history", r.stageCtrl.GetDeployHistory)
+		stage.GET("/deploy-status", r.stageCtrl.DeployStatus)
 	}
 
 	// ==================== 流水线模板 ====================

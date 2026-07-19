@@ -273,6 +273,16 @@ export const getDeployHistory = (stageId) => {
   return http.get(`${STAGE_URL}/history`, { params: { stage_id: Number(stageId) } })
 }
 
+/**
+ * 获取部署阶段的真实状态与 Pod 列表
+ * 服务端根据部署阶段/流水线配置解析目标集群（无需 X-Cluster-ID），
+ * 返回真实的工作负载 Rollout 状态与 Pod 列表，并修正卡住的部署阶段。
+ * @param {number} stageId - 阶段ID
+ */
+export const getDeployStatus = (stageId) => {
+  return http.get(`${STAGE_URL}/deploy-status`, { params: { stage_id: Number(stageId) } })
+}
+
 // ==================== Jenkins 配置信息 ====================
 
 /**

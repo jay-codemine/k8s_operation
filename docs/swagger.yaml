@@ -6787,6 +6787,26 @@ paths:
       summary: 执行部署阶段
       tags:
       - CICD-Stage
+  /api/v1/k8s/cicd/stage/deploy-status:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: 阶段ID
+        in: query
+        name: stage_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 查询部署阶段实时状态与 Pod 列表
+      tags:
+      - CICD-Stage
   /api/v1/k8s/cicd/stage/history:
     get:
       consumes:

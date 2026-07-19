@@ -273,6 +273,34 @@ func (c *StageController) RollbackDeploy(ctx *gin.Context) {
 	rsp.Success(result)
 }
 
+// DeployStatus 查询部署阶段的真实状态与 Pod 列表（服务端解析集群，免 X-Cluster-ID）
+// @Summary 查询部署阶段实时状态与 Pod 列表
+// @Tags CICD-Stage
+// @Accept json
+// @Produce json
+// @Param stage_id query int true "阶段ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/k8s/cicd/stage/deploy-status [get]
+func (c *StageController) DeployStatus(ctx *gin.Context) {
+	rsp := response.NewResponse(ctx)
+
+	idStr := ctx.Query("stage_id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的阶段ID"))
+		return
+	}
+
+	svc := services.NewServices()
+	result, err := svc.GetDeployStatus(ctx.Request.Context(), id)
+	if err != nil {
+		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
+		return
+	}
+
+	rsp.Success(result)
+}
+
 // GetDeployHistory 获取部署历史版本列表
 // @Summary 获取部署历史版本列表
 // @Tags CICD-Stage

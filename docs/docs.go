@@ -5319,6 +5319,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/k8s/cicd/stage/deploy-status": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CICD-Stage"
+                ],
+                "summary": "查询部署阶段实时状态与 Pod 列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "阶段ID",
+                        "name": "stage_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/k8s/cicd/stage/history": {
             "get": {
                 "consumes": [
