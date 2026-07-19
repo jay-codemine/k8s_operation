@@ -3313,6 +3313,7 @@ export default {
     })
 
     return {
+      pipelineId,
       pipeline,
       loading,
       errorMsg,
