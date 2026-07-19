@@ -190,7 +190,19 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 			imageDigest = run.ImageDigest
 		}
 	default:
-		return 0, fmt.Errorf("请指定镜像来源：source_run_id / source_release_id / image_repo 三选一")
+		// 未显式指定来源：回退到「最新一次已构建产物」，对应前端「留空使用最新一次构建」
+		run, runErr := s.dao.PipelineRunGetLatestBuilt(ctx, req.PipelineID)
+		if runErr != nil {
+			return 0, fmt.Errorf("流水线暂无可晋级的构建产物，请先成功执行一次构建后再晋级")
+		}
+		if run.ImageURL == "" {
+			return 0, fmt.Errorf("最新构建（#%d）无产物镜像，无法晋级（请确认构建/推送阶段已成功）", run.ID)
+		}
+		imageRepo, imageTag = splitImageRepoTag(run.ImageURL)
+		if run.ImageDigest != "" {
+			imageDigest = run.ImageDigest
+		}
+		sourceRunID = run.ID
 	}
 
 	if imageRepo == "" {

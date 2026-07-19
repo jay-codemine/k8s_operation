@@ -50,48 +50,62 @@
     <div v-else class="promo-chain">
       <div v-for="(node, idx) in chain" :key="node.env" class="chain-item">
         <div :class="['env-card', `env-${node.env}`, { deployed: !!node.current_release_id }]">
+          <div class="env-accent"></div>
           <div class="env-card-head">
             <span :class="['env-badge', `env-${node.env}`]">{{ envLabel(node.env) }}</span>
-            <span v-if="node.require_approval" class="env-tag approval" title="晋级到该环境需要审批">需审批</span>
-            <span v-if="node.auto_deploy" class="env-tag auto" title="CI 成功后自动部署">自动</span>
+            <span class="env-code">{{ node.env }}</span>
+            <span v-if="node.require_approval" class="env-tag approval" title="晋级到该环境需要审批">🔒 需审批</span>
+            <span v-if="node.auto_deploy" class="env-tag auto" title="CI 成功后自动部署">⚡ 自动</span>
           </div>
+
+          <!-- 当前运行的不可变镜像（大厂风格：突出版本 chip） -->
+          <div class="env-version">
+            <template v-if="node.current_release_id">
+              <div class="ver-row">
+                <span :class="['ver-dot', `st-${(node.current_release_status || '').toLowerCase()}`]"></span>
+                <span class="ver-tag mono" :title="fullImage(node)">{{ node.current_image_tag || node.current_image_digest || '—' }}</span>
+                <span class="ver-status">{{ releaseStatusText(node.current_release_status) }}</span>
+              </div>
+              <div class="ver-time">{{ formatTs(node.current_deploy_time) }}</div>
+            </template>
+            <div v-else class="ver-none">尚未部署</div>
+          </div>
+
           <div class="env-target">
             <div class="target-line">
               <span class="tl-label">集群</span>
               <span class="tl-value">{{ node.cluster_name || ('#' + node.cluster_id) }}</span>
             </div>
             <div class="target-line">
-              <span class="tl-label">工作负载</span>
-              <span class="tl-value mono">{{ node.namespace }}/{{ node.workload_kind }}/{{ node.workload_name }}</span>
+              <span class="tl-label">负载</span>
+              <span class="tl-value mono" :title="`${node.namespace}/${node.workload_kind}/${node.workload_name}`">{{ node.namespace }}/{{ node.workload_name }}</span>
             </div>
           </div>
-          <div class="env-current">
-            <template v-if="node.current_release_id">
-              <div class="cur-status">
-                <span :class="['cur-dot', `st-${(node.current_release_status || '').toLowerCase()}`]"></span>
-                <span class="cur-status-text">{{ releaseStatusText(node.current_release_status) }}</span>
-                <span class="cur-time">{{ formatTs(node.current_deploy_time) }}</span>
-              </div>
-              <div class="cur-image mono" :title="fullImage(node)">{{ fullImage(node) }}</div>
-            </template>
-            <div v-else class="cur-none">尚未部署</div>
-          </div>
+
           <div class="env-card-foot">
-            <button class="promo-btn small primary" @click="openPromote(node)">
+            <button class="promo-btn block promote" @click="openPromote(node)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="5" y1="12" x2="19" y2="12"/>
                 <polyline points="12 5 19 12 12 19"/>
               </svg>
-              晋级到此环境
+              晋级到{{ envLabel(node.env) }}
             </button>
           </div>
         </div>
-        <!-- 箭头连接线 -->
+        <!-- 晋级连接线：同一镜像流转 + 审批门禁 -->
         <div v-if="idx < chain.length - 1" class="chain-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="5" y1="12" x2="19" y2="12"/>
-            <polyline points="12 5 19 12 12 19"/>
-          </svg>
+          <div class="ca-line"></div>
+          <div :class="['ca-node', { gated: chain[idx + 1].require_approval }]" :title="chain[idx + 1].require_approval ? '晋级到下一环境需审批' : '同一镜像逐级晋级'">
+            <svg v-if="chain[idx + 1].require_approval" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
+          <div class="ca-line"></div>
         </div>
       </div>
     </div>
@@ -154,6 +168,12 @@
             <button class="pm-close" @click="showPromoteModal = false">✕</button>
           </div>
           <div class="pm-body">
+            <!-- 晋级流转横幅：明确「哪个镜像、从哪来、到哪去」 -->
+            <div class="promote-flow">
+              <span class="pf-from">{{ promoteForm.source === 'upstream' && promoteForm.promote_from ? envLabel(promoteForm.promote_from) : (promoteForm.source === 'manual' ? '手动镜像' : '最新构建') }}</span>
+              <svg class="pf-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              <span :class="['pf-to', `env-${promoteForm.target_env}`]">{{ envLabel(promoteForm.target_env) }}</span>
+            </div>
             <div class="pm-field">
               <label>镜像来源</label>
               <div class="src-radios">
@@ -165,7 +185,8 @@
 
             <div v-if="promoteForm.source === 'run'" class="pm-field">
               <label>运行记录 ID（构建产出镜像的 Run）</label>
-              <input v-model.number="promoteForm.source_run_id" class="pm-input" type="number" placeholder="留空使用最新一次构建" />
+              <input v-model.number="promoteForm.source_run_id" class="pm-input" type="number" placeholder="留空 = 自动使用最新一次成功构建" />
+              <p class="pm-hint">留空时后端自动选取该流水线最近一次已构建的镜像进行晋级。</p>
             </div>
 
             <div v-else-if="promoteForm.source === 'upstream'" class="pm-field">
@@ -493,38 +514,56 @@ defineExpose({ refresh: loadAll })
 .promo-spinner { width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #6366f1; border-radius: 50%; margin: 0 auto 12px; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.promo-chain { display: flex; align-items: stretch; flex-wrap: wrap; gap: 4px; }
-.chain-item { display: flex; align-items: center; }
-.env-card { width: 250px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.promo-chain { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+.chain-item { display: flex; align-items: stretch; }
+.env-card { position: relative; width: 236px; border: 1px solid #e5e7eb; border-radius: 14px; padding: 0 14px 14px; background: #fff; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; transition: box-shadow .18s, transform .18s; }
+.env-card:hover { box-shadow: 0 8px 24px rgba(79,70,229,0.14); transform: translateY(-2px); }
 .env-card.deployed { border-color: #c7d2fe; }
-.env-card-head { display: flex; align-items: center; gap: 6px; }
-.env-badge { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 6px; color: #fff; }
+.env-accent { position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+.env-card.env-dev .env-accent { background: #10b981; }
+.env-card.env-test .env-accent { background: #3b82f6; }
+.env-card.env-staging .env-accent { background: #f59e0b; }
+.env-card.env-prod .env-accent { background: #ef4444; }
+.env-card-head { display: flex; align-items: center; gap: 6px; padding-top: 16px; flex-wrap: wrap; }
+.env-badge { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 6px; color: #fff; }
 .env-badge.env-dev { background: #10b981; }
 .env-badge.env-test { background: #3b82f6; }
 .env-badge.env-staging { background: #f59e0b; }
 .env-badge.env-prod { background: #ef4444; }
-.env-tag { font-size: 11px; padding: 1px 7px; border-radius: 5px; }
-.env-tag.approval { background: #fef3c7; color: #b45309; }
+.env-code { font-size: 11px; color: #9ca3af; font-family: 'SFMono-Regular', Consolas, monospace; }
+.env-tag { font-size: 10.5px; padding: 1px 7px; border-radius: 5px; }
+.env-tag.approval { background: #fef3c7; color: #b45309; margin-left: auto; }
 .env-tag.auto { background: #dbeafe; color: #1d4ed8; }
+
+.env-version { background: #f8fafc; border: 1px solid #eef2f7; border-radius: 10px; padding: 9px 10px; min-height: 46px; }
+.ver-row { display: flex; align-items: center; gap: 7px; }
+.ver-dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
+.ver-dot.st-succeeded { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
+.ver-dot.st-running, .ver-dot.st-queued { background: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+.ver-dot.st-failed { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+.ver-dot.st-awaitingapproval, .ver-dot.st-pending { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.15); }
+.ver-tag { font-weight: 600; color: #3730a3; background: #eef2ff; padding: 1px 8px; border-radius: 6px; max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ver-status { font-size: 11px; color: #6b7280; margin-left: auto; white-space: nowrap; }
+.ver-time { font-size: 10.5px; color: #9ca3af; margin-top: 5px; }
+.ver-none { font-size: 12px; color: #b0b6be; font-style: italic; }
+
 .env-target { display: flex; flex-direction: column; gap: 5px; }
 .target-line { display: flex; gap: 6px; font-size: 12px; }
-.tl-label { color: #9ca3af; min-width: 48px; }
+.tl-label { color: #9ca3af; min-width: 34px; }
 .tl-value { color: #374151; word-break: break-all; }
 .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11.5px; }
-.env-current { border-top: 1px dashed #eef0f2; padding-top: 10px; min-height: 44px; }
-.cur-status { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; }
-.cur-dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; }
-.cur-dot.st-succeeded { background: #10b981; }
-.cur-dot.st-running, .cur-dot.st-queued { background: #3b82f6; }
-.cur-dot.st-failed { background: #ef4444; }
-.cur-dot.st-awaitingapproval, .cur-dot.st-pending { background: #f59e0b; }
-.cur-status-text { color: #374151; }
-.cur-time { color: #9ca3af; margin-left: auto; font-size: 11px; }
-.cur-image { color: #4b5563; word-break: break-all; }
-.cur-none { font-size: 12px; color: #b0b6be; font-style: italic; }
+
 .env-card-foot { margin-top: auto; }
-.env-card-foot .promo-btn { width: 100%; justify-content: center; }
-.chain-arrow svg { width: 22px; height: 22px; color: #cbd5e1; margin: 0 2px; }
+.promo-btn.block { width: 100%; justify-content: center; }
+.promo-btn.promote { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,.28); }
+.promo-btn.promote:hover { background: linear-gradient(135deg, #4f46e5, #4338ca); box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+
+/* 晋级连接线 */
+.chain-arrow { display: flex; flex-direction: row; align-items: center; align-self: center; padding: 0 3px; }
+.ca-line { width: 14px; height: 2px; background: repeating-linear-gradient(90deg, #cbd5e1 0 5px, transparent 5px 9px); }
+.ca-node { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #eef2ff; color: #6366f1; flex-shrink: 0; }
+.ca-node.gated { background: #fef3c7; color: #d97706; }
+.ca-node svg { width: 15px; height: 15px; }
 
 /* Modal */
 .promo-modal-mask { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center; z-index: 9000; }
@@ -545,6 +584,15 @@ defineExpose({ refresh: loadAll })
 .src-radios { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: #374151; }
 .src-radios label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .pm-warn { font-size: 12px; color: #b45309; background: #fef3c7; padding: 8px 10px; border-radius: 8px; margin: 4px 0 0; }
+.pm-hint { font-size: 11.5px; color: #9ca3af; margin: 6px 0 0; }
+.promote-flow { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px; margin-bottom: 16px; background: linear-gradient(135deg,#f5f7ff,#eef2ff); border: 1px solid #e0e7ff; border-radius: 10px; }
+.pf-from { font-size: 13px; font-weight: 600; color: #64748b; padding: 3px 12px; background: #fff; border-radius: 7px; border: 1px solid #e2e8f0; }
+.pf-arrow { width: 22px; height: 22px; color: #6366f1; }
+.pf-to { font-size: 13px; font-weight: 700; color: #fff; padding: 3px 14px; border-radius: 7px; }
+.pf-to.env-dev { background: #10b981; }
+.pf-to.env-test { background: #3b82f6; }
+.pf-to.env-staging { background: #f59e0b; }
+.pf-to.env-prod { background: #ef4444; }
 .pm-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid #f0f1f3; }
 
 /* target rows */

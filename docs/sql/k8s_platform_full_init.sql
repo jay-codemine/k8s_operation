@@ -671,7 +671,8 @@ CREATE TABLE `cicd_pipeline` (
   KEY `idx_auto_deploy` (`auto_deploy`),
   KEY `idx_target_cluster` (`target_cluster_id`),
   KEY `idx_created_at` (`created_at`),
-  KEY `idx_is_del` (`is_del`)
+  KEY `idx_is_del` (`is_del`),
+  KEY `idx_pipeline_deploy_mode` (`deploy_mode`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CI/CD流水线表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -711,7 +712,8 @@ CREATE TABLE `cicd_pipeline_run` (
   KEY `idx_pipeline_id` (`pipeline_id`),
   KEY `idx_build_number` (`build_number`),
   KEY `idx_status` (`status`),
-  KEY `idx_started_at` (`started_at`)
+  KEY `idx_started_at` (`started_at`),
+  KEY `idx_run_sync_status` (`sync_status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='流水线运行记录表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
