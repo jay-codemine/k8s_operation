@@ -25,7 +25,7 @@ metadata:
 spec:
   containers:
   - name: node
-    image: docker.m.daocloud.io/library/node:18-alpine3.18
+    image: docker.m.daocloud.io/library/node:22-alpine
     imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
@@ -101,7 +101,7 @@ spec:
         string(name: 'PLATFORM_CALLBACK_URL', defaultValue: '', description: '平台回调地址')
 
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
-        string(name: 'NODE_VERSION', defaultValue: '18', description: 'Node.js 版本')
+        string(name: 'NODE_VERSION', defaultValue: '22', description: 'Node.js 版本')
         string(name: 'BUILD_COMMAND', defaultValue: 'npm run build', description: '构建命令')
         string(name: 'BUILD_OUTPUT_DIR', defaultValue: 'dist', description: '构建产物目录')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')

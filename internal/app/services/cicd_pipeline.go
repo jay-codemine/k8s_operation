@@ -2212,7 +2212,7 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 		setDefault(params, "SONAR_JAVA_BINARIES", "target/classes")
 		setDefault(params, "SONAR_EXCLUSIONS", "**/test/**,**/generated/**")
 	case models.LanguageTypeFrontend:
-		setDefault(params, "NODE_VERSION", "18")
+		setDefault(params, "NODE_VERSION", "22")
 		setDefault(params, "BUILD_COMMAND", "npm run build")
 		setDefault(params, "BUILD_OUTPUT_DIR", "dist")
 		setDefault(params, "SKIP_TESTS", "false")
@@ -2317,7 +2317,7 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			TemplateFile: "configs/jenkins-templates/frontend-pipeline.groovy",
 			Stages:       []string{"checkout", "dependencies", "test", "compile", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
-				"NODE_VERSION":    "18",
+				"NODE_VERSION":    "22",
 				"BUILD_COMMAND":   "npm run build",
 				"BUILD_OUTPUT_DIR": "dist",
 			},
