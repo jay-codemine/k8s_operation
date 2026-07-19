@@ -1912,6 +1912,13 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 				"error_message": err.Error(),
 			})
 		}
+		// 同步流水线运行记录与最新运行状态为失败
+		// 说明：last_run_status 此前只被 Jenkins 构建结果写为 success，若不在此处回写，
+		// 部署失败后流水线仍显示「发布中」，与阶段的「部署失败」不一致。
+		if runID > 0 {
+			_ = s.dao.PipelineRunUpdateError(ctx, runID, models.PipelineRunStatusFailed, err.Error())
+			_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
+		}
 		// Rollout 失败后发送通知
 		notifyInfo.Success = false
 		notifyInfo.ErrMsg = err.Error()

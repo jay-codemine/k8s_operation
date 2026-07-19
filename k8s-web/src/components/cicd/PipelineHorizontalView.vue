@@ -251,6 +251,20 @@
                     <div class="banner-text">
                       <div class="banner-title">{{ realStatusText }}</div>
                       <div class="banner-desc">{{ deployStatus.message }}</div>
+                      <!-- 部署目标：命名空间 + 工作负载，方便开发人员定位 -->
+                      <div v-if="workload && (workload.namespace || workload.name)" class="banner-target">
+                        <span v-if="workload.namespace" class="bt-item" title="命名空间">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                          </svg>
+                          <span class="bt-label">命名空间</span>
+                          <b class="bt-ns">{{ workload.namespace }}</b>
+                        </span>
+                        <span v-if="workload.name" class="bt-item" title="工作负载">
+                          <span class="bt-kind">{{ workload.kind || 'Deployment' }}</span>
+                          <b class="bt-name">{{ workload.name }}</b>
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div v-if="workload" class="banner-metrics">
@@ -397,7 +411,6 @@ const deployStatus = ref(null)
 const pods = computed(() => deployStatus.value?.pods || [])
 const workload = computed(() => deployStatus.value?.workload || null)
 const realStatus = computed(() => deployStatus.value?.real_status || '')
-const podCount = computed(() => pods.value.length)
 
 // 真实部署状态展示
 const realStatusText = computed(() => {
@@ -405,18 +418,6 @@ const realStatusText = computed(() => {
   return map[realStatus.value] || '状态未知'
 })
 const realStatusClass = computed(() => `banner-${realStatus.value || 'unknown'}`)
-
-// 从 stage.deploy_info 或 pipeline 配置提取部署目标（用于展示与跳转）
-const deployTarget = computed(() => {
-  const stage = selectedStage.value
-  const p = props.pipeline
-  const stageInfo = stage?.deploy_info || {}
-  return {
-    namespace: stageInfo.namespace || p?.target_namespace || '',
-    name: stageInfo.workload_name || stageInfo.WorkloadName || p?.target_workload_name || '',
-    kind: stageInfo.workload_kind || stageInfo.WorkloadKind || p?.target_workload_kind || 'Deployment',
-  }
-})
 
 // 是否可获取部署详情（部署已触发，即非 pending 的部署阶段）
 const canFetchDeployStatus = computed(() => {
@@ -473,23 +474,30 @@ function formatAge(ts) {
   return `${Math.floor(secs / 86400)}天`
 }
 
-// 跳转 Pod 详情
+// 跳转 Pod 详情（namespace 优先取 Pod 自身，缺失时回退到当前部署工作负载的命名空间）
 function viewPodDetail(pod) {
   if (!props.clusterId) return
+  const namespace = pod.namespace || workload.value?.namespace || ''
   router.push({
     path: `/c/${props.clusterId}/workloads/pods`,
-    query: { namespace: pod.namespace, name: pod.name }
+    query: { namespace, name: pod.name }
   })
 }
 
-// 跳转 Pod 日志（通过 emit）
+// 跳转 Pod 日志（通过 emit，补全命名空间回退）
 function viewPodLogs(pod) {
-  emit('view-pods', { type: 'logs', pod })
+  emit('view-pods', { type: 'logs', pod: withNamespace(pod) })
 }
 
-// 跳转 Pod 终端（通过 emit）
+// 跳转 Pod 终端（通过 emit，补全命名空间回退）
 function viewPodTerminal(pod) {
-  emit('view-pods', { type: 'terminal', pod })
+  emit('view-pods', { type: 'terminal', pod: withNamespace(pod) })
+}
+
+// 保证传给父组件的 pod 带上命名空间（缺失时回退到当前部署工作负载）
+function withNamespace(pod) {
+  if (pod.namespace) return pod
+  return { ...pod, namespace: workload.value?.namespace || '' }
 }
 
 // 选中阶段时自动重置详情面板
@@ -1486,6 +1494,58 @@ watch(runningStage, (stage) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 360px;
+}
+
+/* 部署目标：命名空间 + 工作负载 */
+.banner-target {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bt-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.bt-item svg {
+  width: 13px;
+  height: 13px;
+  color: #059669;
+  flex-shrink: 0;
+}
+
+.bt-label {
+  color: #9ca3af;
+}
+
+.bt-ns {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #f0fdf4;
+  color: #059669;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-weight: 600;
+}
+
+.bt-kind {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.bt-name {
+  color: #374151;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-weight: 600;
 }
 
 .banner-metrics {

@@ -1902,6 +1902,11 @@ export default {
       const approvalStages = stages.filter(s => (s.type || s.stage_type) === 'approval')
       // 如果没有部署/审批阶段，直接返回原状态
       if (deployStages.length === 0 && approvalStages.length === 0) return rawStatus
+      // 任一部署阶段失败 / 审批被拒绝 → 整体视为失败（避免一直卡在「发布中」）
+      if (deployStages.some(s => s.status === 'failed') ||
+          approvalStages.some(s => s.status === 'failed' || s.status === 'rejected')) {
+        return 'failed'
+      }
       // 检查最后一个部署阶段是否已完成
       const lastDeploy = deployStages[deployStages.length - 1]
       if (lastDeploy && lastDeploy.status === 'success') return 'success'

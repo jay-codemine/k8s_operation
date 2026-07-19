@@ -1066,8 +1066,10 @@ export default {
     const getEffectiveRunStatus = (pipeline) => {
       const rawStatus = pipeline.lastRunStatus
       if (rawStatus !== 'success') return rawStatus
-      // 有部署/审批阶段且最后部署未成功 → 发布中
+      // 有部署/审批阶段，根据部署结果修正整体状态
       if (pipeline.autoDeploy || pipeline.requireApproval) {
+        // 部署失败 → 整体失败（避免一直卡在「发布中」，与详情页阶段状态一致）
+        if (pipeline.lastDeployStatus === 'failed') return 'failed'
         if (pipeline.lastDeployStatus !== 'success') {
           return 'publishing'
         }
