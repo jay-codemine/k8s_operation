@@ -15,10 +15,10 @@
 
 | 语言类型 | Jenkins Job 名称 | 模板文件（平台侧） | 项目侧需要什么 |
 |---------|-----------------|-------------------|---------------|
-| Java | `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` | Dockerfile + pom.xml |
-| Go | `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` | Dockerfile + go.mod |
-| Frontend | `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` | Dockerfile + package.json |
-| Python | `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` | Dockerfile + requirements.txt |
+| Java | `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` | Dockerfile + pom.xml |
+| Go | `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` | Dockerfile + go.mod |
+| Frontend | `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` | Dockerfile + package.json |
+| Python | `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` | Dockerfile + requirements.txt |
 
 ### 1.2 模板存放位置
 
@@ -51,7 +51,7 @@ K8sOperation 平台仓库（本仓库）
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  开发者在平台创建流水线                                                   │
-│    ├── language_type: "java"              ← 自动映射 k8s-builder-java    │
+│    ├── language_type: "java"              ← 自动映射 java-spring-pipeline│
 │    ├── git_repo: 业务项目仓库地址                                        │
 │    ├── git_branch: "main"                                               │
 │    └── 部署配置: namespace/deployment/container                          │
@@ -108,7 +108,7 @@ K8sOperation 平台仓库（本仓库）
 
 1. 登录 Jenkins 管理界面（如 `http://your-jenkins:8080`）
 2. 点击左侧菜单 **新建任务（New Item）**
-3. 输入任务名称：**`k8s-builder-java`**（必须与平台映射名一致）
+3. 输入任务名称：**`java-spring-pipeline`**（必须与平台映射名一致）
 4. 选择类型：**Pipeline**
 5. 点击 **确定（OK）**
 
@@ -136,10 +136,10 @@ K8sOperation 平台仓库（本仓库）
 
 | 语言 | Job 名称（必须一致） | Script Path | 附加说明 |
 |------|---------------------|-------------|----------|
-| **Java** | `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 含 SonarQube 代码扫描 + Quality Gate 质量门禁 |
-| **Go** | `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` | 含 golangci-lint 代码检查 |
-| **Frontend** | `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` | 支持 Vue/React/Angular/Next.js |
-| **Python** | `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` | 含 flake8 + pytest 检查 |
+| **Java** | `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 含 SonarQube 代码扫描 + Quality Gate 质量门禁 |
+| **Go** | `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` | 含 golangci-lint 代码检查 |
+| **Frontend** | `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` | 支持 Vue/React/Angular/Next.js |
+| **Python** | `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` | 含 flake8 + pytest 检查 |
 
 > 以上 4 个 Job 的 Repository URL、Credentials、Branch Specifier **完全相同**，只有 **Script Path** 不同。
 
@@ -272,7 +272,7 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
 | 字段 | 必填 | 示例 | 说明 |
 |------|------|------|------|
 | Jenkins 服务器地址 | 可选 | 留空 | 留空则使用 `config.yaml` 中的全局配置 |
-| Jenkins Job 名称 | **留空即可** | 留空 | 后端根据语言类型自动推导为 `k8s-builder-java` |
+| Jenkins Job 名称 | **留空即可** | 留空 | 后端根据语言类型自动推导为 `java-spring-pipeline` |
 | 服务类型（语言） | 推荐选择 | `Java` | **必须选择正确的语言类型**，关系到 Jenkins Job 自动映射 |
 | SonarQube 扫描 | 可选 | ✅ 开启 | Java 项目选择后自动开启，标记「Java 推荐」 |
 | 环境变量 | 可选 | `JAVA_VERSION=17` | 可展开添加自定义变量，覆盖自动注入的默认值 |
@@ -280,10 +280,10 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
 > **自动映射规则**：选择语言类型后，后端自动从 `DefaultJenkinsJobMap` 映射：
 > | 选择的语言类型 | 自动映射的 Jenkins Job | Jenkins 使用的模板（SCM 拉取） |
 > |--------------|----------------------|-----------------------------|
-> | Java | `k8s-builder-java` | `java-spring-pipeline.groovy` |
-> | Go | `k8s-builder-go` | `go-pipeline.groovy` |
-> | Frontend | `k8s-builder-frontend` | `frontend-pipeline.groovy` |
-> | Python | `k8s-builder-python` | `python-pipeline.groovy` |
+> | Java | `java-spring-pipeline` | `java-spring-pipeline.groovy` |
+> | Go | `go-pipeline` | `go-pipeline.groovy` |
+> | Frontend | `frontend-pipeline` | `frontend-pipeline.groovy` |
+> | Python | `python-pipeline` | `python-pipeline.groovy` |
 > | Custom | **必须手动填写** | 自定义 |
 
 > 💡 **Java 项目特有**：选择 Java 后，SonarQube 开关自动开启，并自动注入以下参数：
@@ -345,7 +345,7 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
     │
     ├── 模板化推导：
     │      language_type="java" + jenkins_job=""
-    │      → jenkins_job = DefaultJenkinsJobMap["java"] = "k8s-builder-java"
+    │      → jenkins_job = DefaultJenkinsJobMap["java"] = "java-spring-pipeline"
     │
     ├── injectLanguageParams() 自动注入语言参数
     │      JAVA_VERSION=17, MAVEN_GOALS=..., ENABLE_SONAR=true ...
@@ -378,7 +378,7 @@ curl -X POST http://platform:8080/api/v1/k8s/cicd/pipeline/create \
   }'
 ```
 
-**注意**：`language_type` 设为 `"java"` 后，**不需要填 `jenkins_job`**，平台自动映射为 `k8s-builder-java`。
+**注意**：`language_type` 设为 `"java"` 后，**不需要填 `jenkins_job`**，平台自动映射为 `java-spring-pipeline`。
 
 ### 2.5 创建流水线字段说明（必填 vs 选填）
 
@@ -395,7 +395,7 @@ curl -X POST http://platform:8080/api/v1/k8s/cicd/pipeline/create \
 |------|---------|--------|----------|
 | Git 分支 | `git_branch` | `"main"` | `NewPipelineCreateRequest()` 构造函数设置默认值 |
 | 语言类型 | `language_type` | `"custom"` | 构造函数设置默认值；选择具体语言后自动推导 Jenkins Job |
-| Jenkins Job | `jenkins_job` | 由 `language_type` 自动映射 | **模板化核心**：选择 `java` → 自动映射 `k8s-builder-java`，无需手动填写 |
+| Jenkins Job | `jenkins_job` | 由 `language_type` 自动映射 | **模板化核心**：选择 `java` → 自动映射 `java-spring-pipeline`，无需手动填写 |
 | Jenkins URL | `jenkins_url` | 使用全局 `config.yaml` 中的配置 | 仅在需要覆盖全局 Jenkins 地址时才填 |
 
 > **为什么 `jenkins_job` 是选填？**
@@ -405,17 +405,17 @@ curl -X POST http://platform:8080/api/v1/k8s/cicd/pipeline/create \
 > // internal/app/services/cicd_pipeline.go
 > if jenkinsJob == "" && languageType != models.LanguageTypeCustom {
 >     if job, ok := models.DefaultJenkinsJobMap[languageType]; ok {
->         jenkinsJob = job  // java → k8s-builder-java
+>         jenkinsJob = job  // java → java-spring-pipeline
 >     }
 > }
 > ```
 > 映射表定义在 `internal/app/models/cicd_pipeline.go`：
 > ```go
 > var DefaultJenkinsJobMap = map[string]string{
->     "go":       "k8s-builder-go",
->     "java":     "k8s-builder-java",
->     "frontend": "k8s-builder-frontend",
->     "python":   "k8s-builder-python",
+>     "go":       "go-pipeline",
+>     "java":     "java-spring-pipeline",
+>     "frontend": "frontend-pipeline",
+>     "python":   "python-pipeline",
 > }
 > ```
 > 只有 `language_type: "custom"` 时才需要手动指定 `jenkins_job`。
@@ -749,7 +749,7 @@ EXPOSE 8080
 CMD ["./server"]
 ```
 
-**平台创建**：`language_type: "go"` → 自动映射 `k8s-builder-go`
+**平台创建**：`language_type: "go"` → 自动映射 `go-pipeline`
 
 ### 3.2 前端项目（Vue/React）
 
@@ -776,7 +776,7 @@ COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
 ```
 
-**平台创建**：`language_type: "frontend"` → 自动映射 `k8s-builder-frontend`
+**平台创建**：`language_type: "frontend"` → 自动映射 `frontend-pipeline`
 
 ### 3.3 Python 项目
 
@@ -798,7 +798,7 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**平台创建**：`language_type: "python"` → 自动映射 `k8s-builder-python`
+**平台创建**：`language_type: "python"` → 自动映射 `python-pipeline`
 
 ---
 
@@ -885,7 +885,7 @@ curl http://platform:8080/api/v1/k8s/cicd/pipeline/template-verify \
 
 不会。每次触发时传入不同的 `GIT_REPO`、`IMAGE_REPO` 等参数，Jenkins Pipeline 是无状态的，每次构建独立。
 Jenkins 通过 `disableConcurrentBuilds()` 防止同一 Job 并发，多个项目会排队执行。
-如果需要并发，可以创建多个同名 Job 的副本（如 `k8s-builder-java-1`、`k8s-builder-java-2`）。
+如果需要并发，可以创建多个同名 Job 的副本（如 `java-spring-pipeline-1`、`java-spring-pipeline-2`）。
 
 ---
 
@@ -905,10 +905,10 @@ Jenkins 通过 `disableConcurrentBuilds()` 防止同一 Job 并发，多个项�
 - [ ] 配置 config.yaml（数据库、Redis、Jenkins）
 - [ ] 导入数据库（`docs/sql/k8s_platform_full_init.sql`）
 - [ ] 在 Jenkins 创建 4 个通用 Job（Pipeline script from SCM 模式）
-  - [ ] `k8s-builder-java` ← Script Path: `configs/jenkins-templates/java-spring-pipeline.groovy`
-  - [ ] `k8s-builder-go` ← Script Path: `configs/jenkins-templates/go-pipeline.groovy`
-  - [ ] `k8s-builder-frontend` ← Script Path: `configs/jenkins-templates/frontend-pipeline.groovy`
-  - [ ] `k8s-builder-python` ← Script Path: `configs/jenkins-templates/python-pipeline.groovy`
+  - [ ] `java-spring-pipeline` ← Script Path: `configs/jenkins-templates/java-spring-pipeline.groovy`
+  - [ ] `go-pipeline` ← Script Path: `configs/jenkins-templates/go-pipeline.groovy`
+  - [ ] `frontend-pipeline` ← Script Path: `configs/jenkins-templates/frontend-pipeline.groovy`
+  - [ ] `python-pipeline` ← Script Path: `configs/jenkins-templates/python-pipeline.groovy`
 - [ ] 在 Jenkins 配置 3 个凭证（harbor-registry、gitee-id、hmac-secret）
 - [ ] 在平台添加 K8s 集群
 - [ ] 验证模板配置：`GET /api/v1/k8s/cicd/pipeline/template-verify`

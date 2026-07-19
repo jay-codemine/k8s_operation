@@ -24,14 +24,14 @@
 
 | 语言类型 | Job 名称 | Script Path |
 |---------|---------|-------------|
-| Go | `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` |
-| Java | `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` |
-| 前端 | `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` |
-| Python | `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` |
+| Go | `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` |
+| Java | `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` |
+| 前端 | `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` |
+| Python | `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` |
 
 **创建步骤：**
 1. Jenkins → New Item → Pipeline
-2. 命名为对应 Job 名称（如 `k8s-builder-go`）
+2. 命名为对应 Job 名称（如 `go-pipeline`）
 3. Pipeline → Definition: **Pipeline script from SCM**
 4. SCM: Git → Repository URL: 平台仓库地址
 5. Script Path: 填入对应路径
@@ -232,7 +232,7 @@ Pending → Queued → Running → Succeeded
 ### 基础设施
 
 - [ ] Jenkins 服务可访问，config.yaml 中 Jenkins URL / APIToken 正确
-- [ ] Jenkins 中已创建对应语言的 Builder Job（如 `k8s-builder-go`）
+- [ ] Jenkins 中已创建对应语言的 Builder Job（如 `go-pipeline`）
 - [ ] Jenkins 凭证已配置：`gitee-id`（Git）、`harbor-registry`（镜像仓库）、`hmac-secret`（签名）
 - [ ] 平台已接入目标 K8s 集群（kubeconfig 有效）
 - [ ] 回调地址 `CallbackURL` 正确（Jenkins 网络能访问到平台后端）

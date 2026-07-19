@@ -23,19 +23,19 @@
                     ┌─────────────────┴────────────────────────┐
                     │  Jenkins（只需创建 4 个 Job，一次性配置）    │
                     │                                          │
-                    │  k8s-builder-java     ← Script Path:     │
+                    │  java-spring-pipeline ← Script Path:     │
                     │    configs/jenkins-templates/             │
                     │    java-spring-pipeline.groovy            │
                     │                                          │
-                    │  k8s-builder-go       ← Script Path:     │
+                    │  go-pipeline          ← Script Path:     │
                     │    configs/jenkins-templates/             │
                     │    go-pipeline.groovy                     │
                     │                                          │
-                    │  k8s-builder-frontend ← Script Path:     │
+                    │  frontend-pipeline    ← Script Path:     │
                     │    configs/jenkins-templates/             │
                     │    frontend-pipeline.groovy               │
                     │                                          │
-                    │  k8s-builder-python   ← Script Path:     │
+                    │  python-pipeline      ← Script Path:     │
                     │    configs/jenkins-templates/             │
                     │    python-pipeline.groovy                 │
                     └──────────────────────────────────────────┘
@@ -80,7 +80,7 @@
        │
        ▼
   ② 平台调用 Jenkins REST API 触发构建
-     HTTP POST → http://jenkins:8080/job/k8s-builder-java/buildWithParameters
+     HTTP POST → http://jenkins:8080/job/java-spring-pipeline/buildWithParameters
      Body: GIT_REPO=https://gitee.com/org/order-service.git&GIT_BRANCH=main&...
      Auth: Basic Auth（Jenkins Username + API Token）
        │
@@ -149,7 +149,7 @@ go s.triggerJenkinsBuild(ctx, pipeline, run, params)
 // pkg/jenkins/client.go → TriggerBuild()
 
 // 调用 Jenkins REST API
-path = "/job/k8s-builder-java/buildWithParameters"
+path = "/job/java-spring-pipeline/buildWithParameters"
 values := url.Values{}
 for k, v := range params {
     values.Set(k, v)    // GIT_REPO=xxx&GIT_BRANCH=main&PIPELINE_ID=15&...
@@ -234,10 +234,10 @@ my-frontend/                    ← 你的前端项目
 
 | 语言 | Job 名称 | Script Path | 服务项目数 |
 |------|---------|-------------|-----------|
-| Java | `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 所有 Java 项目 |
-| Go | `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` | 所有 Go 项目 |
-| Frontend | `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` | 所有前端项目 |
-| Python | `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` | 所有 Python 项目 |
+| Java | `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 所有 Java 项目 |
+| Go | `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` | 所有 Go 项目 |
+| Frontend | `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` | 所有前端项目 |
+| Python | `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` | 所有 Python 项目 |
 
 4 个 Job 的 SCM 配置**完全相同**（同一个平台仓库、同一个分支），只有 Script Path 不同。
 
@@ -297,7 +297,7 @@ Script Path:    configs/jenkins-templates/java-spring-pipeline.groovy
 
 不会。Jenkins 每次触发构建都是独立的 Build，参数不同（`GIT_REPO`、`IMAGE_REPO` 不同）。
 同一个 Job 通过 `disableConcurrentBuilds()` 防止并发，多个项目会排队。
-如需并行构建，可以创建 Job 副本（如 `k8s-builder-java-1`、`k8s-builder-java-2`）。
+如需并行构建，可以创建 Job 副本（如 `java-spring-pipeline-1`、`java-spring-pipeline-2`）。
 
 ### Q4: 模板更新后怎么生效？
 

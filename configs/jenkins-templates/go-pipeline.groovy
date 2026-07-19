@@ -15,7 +15,7 @@
 //
 // ======================== Jenkins Job 配置方式 ========================
 // 推荐使用 "Pipeline script from SCM"（版本化管理，自动同步更新）：
-//   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-go
+//   1. Jenkins → New Item → Pipeline → 命名为 go-pipeline
 //   2. Pipeline → Definition: Pipeline script from SCM
 //   3. SCM: Git → Repository URL: 平台仓库地址
 //   4. Script Path: configs/jenkins-templates/go-pipeline.groovy

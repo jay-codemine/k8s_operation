@@ -303,7 +303,7 @@ return jenkins.GetOrCreateClient(
 POST /api/v1/k8s/cicd/stage/callback
 X-Signature: <HMAC-SHA256(secret, "${JOB_NAME}:${BUILD_NUMBER}:${stage_type}")>
 {
-    "job_name": "k8s-builder-go",
+    "job_name": "go-pipeline",
     "build_number": 42,
     "pipeline_id": 15,
     "stage_type": "compile",
@@ -317,7 +317,7 @@ X-Signature: <HMAC-SHA256(secret, "${JOB_NAME}:${BUILD_NUMBER}:${stage_type}")>
 POST /api/v1/k8s/cicd/pipeline/callback
 X-Signature: <HMAC-SHA256(secret, "${JOB_NAME}:${BUILD_NUMBER}:${status}")>
 {
-    "job_name": "k8s-builder-go",
+    "job_name": "go-pipeline",
     "build_number": 42,
     "pipeline_id": 15,
     "status": "SUCCESS",            // SUCCESS/FAILURE/ABORTED
@@ -326,7 +326,7 @@ X-Signature: <HMAC-SHA256(secret, "${JOB_NAME}:${BUILD_NUMBER}:${status}")>
     "git_commit": "abc1234",
     "git_branch": "main",
     "duration_sec": 180,
-    "build_url": "http://jenkins/job/k8s-builder-go/42/"
+    "build_url": "http://jenkins/job/go-pipeline/42/"
 }
 ```
 

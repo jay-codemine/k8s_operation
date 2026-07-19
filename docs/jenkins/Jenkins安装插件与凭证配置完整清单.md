@@ -338,21 +338,23 @@ kubectl -n devops exec jenkins-0 -- sh -c "ls /var/jenkins_home/plugins/ | grep 
 
 > ⚠️ 注意：`blueocean` 依赖树过大（100+ 子依赖），已从列表移除，避免 init container 安装失败。
 
-| # | 插件 ID（安装名） | 插件全称 | 用途说明 | 被哪些模板使用 |
-|---|---------|---------|----------|----------------|
-| 1 | `kubernetes` | Kubernetes | K8s Cloud 集成，动态创建 Pod Agent 执行构建 | 全部 |
-| 2 | `workflow-aggregator` | Pipeline (Workflow Aggregator) | Pipeline 核心语法（`pipeline{}`、`stage`、`steps` 等） | 全部 |
-| 3 | `git` | Git | Git SCM 支持，拉取源代码（`checkout` 步骤） | 全部 |
-| 4 | `configuration-as-code` | Configuration as Code (JCasC) | 通过 YAML 自动化配置 Jenkins（K8s Cloud、凭证等） | 系统级 |
-| 5 | `credentials-binding` | Credentials Binding | Pipeline 中 `credentials()` 凭证注入 | 全部 |
-| 6 | `http_request` | HTTP Request | `httpRequest()` 步骤，用于阶段回调和最终回调 | 全部 |
-| 7 | `pipeline-utility-steps` | Pipeline Utility Steps | `readJSON`、`writeFile`、`fileExists` 等工具步骤 | Go / Java |
-| 8 | `junit` | JUnit | `junit` 步骤解析测试报告（`**/surefire-reports/*.xml`） | Java |
-| 9 | `sonar` | SonarQube Scanner | `withSonarQubeEnv()` + `waitForQualityGate()`（可选启用） | 全部（可选） |
+| #  | 插件 ID（安装名） | 插件全称 | 用途说明 | 被哪些模板使用 |
+|----|---------|---------|----------|----------------|
+| 1  | `kubernetes` | Kubernetes | K8s Cloud 集成，动态创建 Pod Agent 执行构建 | 全部 |
+| 2  | `workflow-aggregator` | Pipeline (Workflow Aggregator) | Pipeline 核心语法（`pipeline{}`、`stage`、`steps` 等） | 全部 |
+| 3  | `git` | Git | Git SCM 支持，拉取源代码（`checkout` 步骤） | 全部 |
+| 4  | `configuration-as-code` | Configuration as Code (JCasC) | 通过 YAML 自动化配置 Jenkins（K8s Cloud、凭证等） | 系统级 |
+| 5  | `credentials-binding` | Credentials Binding | Pipeline 中 `credentials()` 凭证注入 | 全部 |
+| 6  | `http_request` | HTTP Request | `httpRequest()` 步骤，用于阶段回调和最终回调 | 全部 |
+| 7  | `pipeline-utility-steps` | Pipeline Utility Steps | `readJSON`、`writeFile`、`fileExists` 等工具步骤 | Go / Java |
+| 8  | `junit` | JUnit | `junit` 步骤解析测试报告（`**/surefire-reports/*.xml`） | Java |
+| 9  | `sonar` | SonarQube Scanner | `withSonarQubeEnv()` + `waitForQualityGate()`（可选启用） | 全部（可选） |
 | 10 | `pipeline-stage-view` | Pipeline: Stage View | 流水线阶段可视化图，构建历史看板 | 系统级 |
 | 11 | `timestamper` | Timestamper | 构建日志每行添加时间戳 | 全部 |
 | 12 | `ws-cleanup` | Workspace Cleanup | 工作空间清理（`cleanWs()` / `deleteDir()` 步骤） | 全部 |
 | 13 | `ansicolor` | AnsiColor | 日志支持 ANSI 彩色输出（Maven/Go 构建日志更易读） | 全部 |
+| 14 | `throttle-concurrents` | Throttle Concurrent Builds | 限制 Jenkins 构建并发数量，避免多个任务同时执行导致资源竞争 | 全部 |
+
 
 ### 7.2 插件分类说明
 
@@ -780,16 +782,16 @@ kubectl exec -it jenkins-0 -n devops -- go clean -modcache
 
 | # | Job 名称 | Script Path | 语言 | 说明 |
 |---|----------|-------------|------|------|
-| 1 | `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` | Go | Go 项目通用构建 |
-| 2 | `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` | Java | Java/Spring Boot 通用构建 |
-| 3 | `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` | 前端 | Vue/React/Angular 通用构建 |
-| 4 | `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` | Python | Flask/FastAPI/Django 通用构建 |
+| 1 | `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` | Go | Go 项目通用构建 |
+| 2 | `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` | Java | Java/Spring Boot 通用构建 |
+| 3 | `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` | 前端 | Vue/React/Angular 通用构建 |
+| 4 | `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` | Python | Flask/FastAPI/Django 通用构建 |
 
 ### 12.1 Job 创建步骤（每个 Job 重复以下操作）
 
 ```
 1. Jenkins → New Item
-2. 输入 Job 名称（如 k8s-builder-java）
+2. 输入 Job 名称（如 java-spring-pipeline）
 3. 选择 "Pipeline" 类型 → OK
 4. Pipeline 区域：
    - Definition: Pipeline script from SCM
@@ -1067,7 +1069,7 @@ kubectl -n devops logs jenkins-0 -c jenkins -f
 | 3 | K8s Cloud | Manage Jenkins → Clouds → Kubernetes | 连接测试成功 |
 | 4 | 凭证就绪 | Manage Jenkins → Credentials | 3 个凭证（gitee-id, harbor-registry, hmac-secret） |
 | 5 | Job 创建 | Dashboard | 4 个 Pipeline Job 存在 |
-| 6 | 试跑构建 | 手动触发 k8s-builder-go（填写测试参数） | Pod Agent 自动创建并执行 |
+| 6 | 试跑构建 | 手动触发 go-pipeline（填写测试参数） | Pod Agent 自动创建并执行 |
 | 7 | 平台联通 | 平台 CICD 页面创建流水线并触发 | 构建状态回调正常 |
 
 ---

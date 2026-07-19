@@ -64,16 +64,16 @@ K8sOperation CI/CD 平台提供从代码提交到生产部署的全链路能力�
 | 字段 | 说明 | 可选值 |
 |------|------|--------|
 | 语言类型 | 决定使用哪个构建模板 | `go` / `java` / `frontend` / `python` / `custom` |
-| Jenkins Job | 非 custom 类型可留空自动推导 | `k8s-builder-go` |
+| Jenkins Job | 非 custom 类型可留空自动推导 | `go-pipeline` |
 | Jenkins URL | Jenkins 服务地址（可选） | `http://jenkins.example.com` |
 
 **语言类型与 Jenkins Job 映射表：**
 | 语言类型 | 自动映射 Job | 构建模板 |
 |---------|-------------|---------|
-| go | `k8s-builder-go` | go-pipeline.groovy |
-| java | `k8s-builder-java` | java-spring-pipeline.groovy |
-| frontend | `k8s-builder-frontend` | frontend-pipeline.groovy |
-| python | `k8s-builder-python` | python-pipeline.groovy |
+| go | `go-pipeline` | go-pipeline.groovy |
+| java | `java-spring-pipeline` | java-spring-pipeline.groovy |
+| frontend | `frontend-pipeline` | frontend-pipeline.groovy |
+| python | `python-pipeline` | python-pipeline.groovy |
 | custom | 需手动指定 | 自定义 |
 
 #### 步骤四：部署配置（可选）
@@ -536,17 +536,17 @@ curl -X POST http://平台地址/api/v1/k8s/cicd/release/create \
 ```go
 // 代码位置：internal/app/models/cicd_pipeline.go
 var DefaultJenkinsJobMap = map[string]string{
-    "go":       "k8s-builder-go",        // Go 项目 → 对应 Jenkins Job
-    "java":     "k8s-builder-java",      // Java 项目 → 对应 Jenkins Job
-    "frontend": "k8s-builder-frontend",  // 前端项目 → 对应 Jenkins Job
-    "python":   "k8s-builder-python",    // Python 项目 → 对应 Jenkins Job
+    "go":       "go-pipeline",           // Go 项目 → 对应 Jenkins Job
+    "java":     "java-spring-pipeline",  // Java 项目 → 对应 Jenkins Job
+    "frontend": "frontend-pipeline",     // 前端项目 → 对应 Jenkins Job
+    "python":   "python-pipeline",       // Python 项目 → 对应 Jenkins Job
 }
 ```
 
 **工作流程：**
 1. 用户在平台创建流水线，选择 `language_type = go`
-2. 平台自动填充 `jenkins_job = k8s-builder-go`（用户无需手动填写）
-3. 运行流水线时，平台调用 Jenkins API 触发 `k8s-builder-go` 这个 Job
+2. 平台自动填充 `jenkins_job = go-pipeline`（用户无需手动填写）
+3. 运行流水线时，平台调用 Jenkins API 触发 `go-pipeline` 这个 Job
 4. Jenkins Job 配置为 "Pipeline script from SCM"，自动拉取 `configs/jenkins-templates/go-pipeline.groovy`
 5. 模板中的参数（GIT_REPO、IMAGE_REPO 等）全部由平台自动注入
 
@@ -608,10 +608,10 @@ var DefaultJenkinsJobMap = map[string]string{
 
 每个 Job 的创建步骤完全相同，只有 **名称** 和 **Script Path** 不同。
 
-##### Job ①：k8s-builder-go（Go 项目）
+##### Job ①：go-pipeline（Go 项目）
 
 1. Jenkins 首页 → 左侧 **New Item**
-2. 输入名称：`k8s-builder-go`
+2. 输入名称：`go-pipeline`
 3. 选择类型：**Pipeline** → 点击 OK
 4. 配置页面：
 
@@ -629,12 +629,12 @@ var DefaultJenkinsJobMap = map[string]string{
 
 5. 点击 **Save** 保存
 
-##### Job ②：k8s-builder-java（Java/Spring Boot 项目）
+##### Job ②：java-spring-pipeline（Java/Spring Boot 项目）
 
 完全同上步骤，仅以下不同：
 | 字段 | 值 |
 |------|----|
-| 名称 | `k8s-builder-java` |
+| 名称 | `java-spring-pipeline` |
 | Description | K8s 平台 Java/Spring Boot 通用构建模板 |
 | Script Path | `configs/jenkins-templates/java-spring-pipeline.groovy` |
 
@@ -642,23 +642,23 @@ var DefaultJenkinsJobMap = map[string]string{
 > - Maven: 名称 `Maven-3.9`，路径 `/opt/apache-maven-3.9.9`
 > - JDK: 名称 `JDK-21`，路径 `/usr/lib/jvm/java-21`
 
-##### Job ③：k8s-builder-frontend（前端 Vue/React 项目）
+##### Job ③：frontend-pipeline（前端 Vue/React 项目）
 
 完全同上步骤，仅以下不同：
 | 字段 | 值 |
 |------|----|
-| 名称 | `k8s-builder-frontend` |
+| 名称 | `frontend-pipeline` |
 | Description | K8s 平台前端项目通用构建模板（Vue/React/Angular） |
 | Script Path | `configs/jenkins-templates/frontend-pipeline.groovy` |
 
 > 额外要求：Jenkins 服务器需安装 Node.js 18+
 
-##### Job ④：k8s-builder-python（Python 项目）
+##### Job ④：python-pipeline（Python 项目）
 
 完全同上步骤，仅以下不同：
 | 字段 | 值 |
 |------|----|
-| 名称 | `k8s-builder-python` |
+| 名称 | `python-pipeline` |
 | Description | K8s 平台 Python 项目通用构建模板 |
 | Script Path | `configs/jenkins-templates/python-pipeline.groovy` |
 
@@ -671,10 +671,10 @@ var DefaultJenkinsJobMap = map[string]string{
 ```bash
 # 1. 确认 4 个 Job 都已创建
 打开 Jenkins 首页，应看到：
-  - k8s-builder-go
-  - k8s-builder-java
-  - k8s-builder-frontend
-  - k8s-builder-python
+  - go-pipeline
+  - java-spring-pipeline
+  - frontend-pipeline
+  - python-pipeline
 
 # 2. 确认凭证
 Jenkins → Manage Jenkins → Credentials，应看到：
@@ -758,7 +758,7 @@ Jenkins 构建完成后会自动回调平台接口：
 
 ```
 1. 创建流水线 → 选择语言类型（如 go）→ 填写 Git 地址 → 保存
-   ✅ Jenkins Job 自动映射为 k8s-builder-go（无需手动填写）
+   ✅ Jenkins Job 自动映射为 go-pipeline（无需手动填写）
 
 2. 点击「运行」按钮
    ✅ 平台自动调用 Jenkins API，注入所有必要参数

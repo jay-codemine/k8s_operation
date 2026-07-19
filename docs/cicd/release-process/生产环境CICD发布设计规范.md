@@ -496,7 +496,7 @@ feature/zzz ──┘              │                 │                  │
 ---
 🔗 [查看流水线详情](http://k8s-web:30851/cicd/pipelines/1?tab=stages)
 
-🛠 [查看 Jenkins 构建](http://jenkins:8080/job/k8s-builder-java/42/console)
+🛠 [查看 Jenkins 构建](http://jenkins:8080/job/java-spring-pipeline/42/console)
 ```
 
 ---

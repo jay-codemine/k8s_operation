@@ -91,7 +91,7 @@ X-Signature: <HMAC-SHA256(secret, "job_name:build_number:stage_type")>
 Content-Type: application/json
 
 {
-    "job_name": "k8s-builder-go",
+    "job_name": "go-pipeline",
     "build_number": 42,
     "pipeline_id": 15,
     "stage_type": "compile",
@@ -109,7 +109,7 @@ X-Signature: <HMAC-SHA256(secret, "job_name:build_number:status")>
 Content-Type: application/json
 
 {
-    "job_name": "k8s-builder-go",
+    "job_name": "go-pipeline",
     "build_number": 42,
     "pipeline_id": 15,
     "status": "SUCCESS",
@@ -118,7 +118,7 @@ Content-Type: application/json
     "git_commit": "abc1234",
     "git_branch": "main",
     "duration_sec": 180,
-    "build_url": "http://jenkins/job/k8s-builder-go/42/"
+    "build_url": "http://jenkins/job/go-pipeline/42/"
 }
 ```
 
@@ -196,13 +196,13 @@ jenkins:
 
 | Job 名称 | Script Path | 服务项目 |
 |----------|-------------|---------|
-| `k8s-builder-go` | `configs/jenkins-templates/go-pipeline.groovy` | 所有 Go 项目 |
-| `k8s-builder-java` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 所有 Java/Spring 项目 |
-| `k8s-builder-frontend` | `configs/jenkins-templates/frontend-pipeline.groovy` | 所有前端项目 |
-| `k8s-builder-python` | `configs/jenkins-templates/python-pipeline.groovy` | 所有 Python 项目 |
+| `go-pipeline` | `configs/jenkins-templates/go-pipeline.groovy` | 所有 Go 项目 |
+| `java-spring-pipeline` | `configs/jenkins-templates/java-spring-pipeline.groovy` | 所有 Java/Spring 项目 |
+| `frontend-pipeline` | `configs/jenkins-templates/frontend-pipeline.groovy` | 所有前端项目 |
+| `python-pipeline` | `configs/jenkins-templates/python-pipeline.groovy` | 所有 Python 项目 |
 
 **创建步骤：**
-1. Jenkins → New Item → Pipeline → 命名为 `k8s-builder-go`
+1. Jenkins → New Item → Pipeline → 命名为 `go-pipeline`
 2. Pipeline → Definition: **Pipeline script from SCM**
 3. SCM: Git → Repository URL: 平台仓库地址
 4. Credentials: 选择 `gitee-id`
@@ -437,7 +437,7 @@ kubectl logs statefulset/jenkins -n devops
 
 # 进入 Jenkins 容器
 kubectl exec -it jenkins-0 -n devops -- bash
-cat /var/jenkins_home/jobs/k8s-builder-go/builds/42/log  # 特定构建日志
+cat /var/jenkins_home/jobs/go-pipeline/builds/42/log  # 特定构建日志
 ```
 
 ### 7.5 当前存储是否适合排查错误？
@@ -471,7 +471,7 @@ cat /var/jenkins_home/jobs/k8s-builder-go/builds/42/log  # 特定构建日志
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  2. 用户点击"运行流水线"                                                  │
-│     - 平台自动推导 Jenkins Job 名（如 k8s-builder-go）                    │
+│     - 平台自动推导 Jenkins Job 名（如 go-pipeline）                    │
 │     - 自动组装 20+ 参数（Git/镜像/回调/凭证/SonarQube...）                │
 │     - 调用 Jenkins REST API 触发构建                                     │
 └──────────────────────────────────────────┬──────────────────────────────┘
@@ -556,10 +556,10 @@ cat /var/jenkins_home/jobs/k8s-builder-go/builds/42/log  # 特定构建日志
 |------|--------|---------|
 | 1 | 创建 Git 凭证 | Jenkins → Manage Credentials → Add → Username/Password → ID: `gitee-id` |
 | 2 | 创建镜像仓库凭证 | Jenkins → Manage Credentials → Add → Username/Password → ID: `harbor-registry` |
-| 3 | 创建 Go 构建 Job | New Item → Pipeline → Name: `k8s-builder-go` → SCM → Script Path: `configs/jenkins-templates/go-pipeline.groovy` |
-| 4 | 创建 Java 构建 Job | 同上 → Name: `k8s-builder-java` → Script Path: `configs/jenkins-templates/java-spring-pipeline.groovy` |
-| 5 | 创建前端构建 Job | 同上 → Name: `k8s-builder-frontend` → Script Path: `configs/jenkins-templates/frontend-pipeline.groovy` |
-| 6 | 创建 Python 构建 Job | 同上 → Name: `k8s-builder-python` → Script Path: `configs/jenkins-templates/python-pipeline.groovy` |
+| 3 | 创建 Go 构建 Job | New Item → Pipeline → Name: `go-pipeline` → SCM → Script Path: `configs/jenkins-templates/go-pipeline.groovy` |
+| 4 | 创建 Java 构建 Job | 同上 → Name: `java-spring-pipeline` → Script Path: `configs/jenkins-templates/java-spring-pipeline.groovy` |
+| 5 | 创建前端构建 Job | 同上 → Name: `frontend-pipeline` → Script Path: `configs/jenkins-templates/frontend-pipeline.groovy` |
+| 6 | 创建 Python 构建 Job | 同上 → Name: `python-pipeline` → Script Path: `configs/jenkins-templates/python-pipeline.groovy` |
 | 7 | 创建 Go 缓存 PVC | `kubectl apply -f` 创建 `jenkins-go-cache` PVC（可选） |
 
 ### 10.3 生成 API Token

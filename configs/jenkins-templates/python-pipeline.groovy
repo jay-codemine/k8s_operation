@@ -7,7 +7,7 @@
 // 支持框架：Flask, FastAPI, Django, Celery 等
 //
 // ======================== Jenkins Job 配置方式 ========================
-//   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-python
+//   1. Jenkins → New Item → Pipeline → 命名为 python-pipeline
 //   2. Pipeline → Definition: Pipeline script from SCM
 //   3. SCM: Git → Repository URL: 平台仓库地址
 //   4. Script Path: configs/jenkins-templates/python-pipeline.groovy

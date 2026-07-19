@@ -7,7 +7,7 @@
 // 支持框架：Vue.js, React, Angular, Next.js, Nuxt.js 等
 //
 // ======================== Jenkins Job 配置方式 ========================
-//   1. Jenkins → New Item → Pipeline → 命名为 k8s-builder-frontend
+//   1. Jenkins → New Item → Pipeline → 命名为 frontend-pipeline
 //   2. Pipeline → Definition: Pipeline script from SCM
 //   3. SCM: Git → Repository URL: 平台仓库地址
 //   4. Script Path: configs/jenkins-templates/frontend-pipeline.groovy
