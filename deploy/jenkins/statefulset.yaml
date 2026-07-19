@@ -55,9 +55,13 @@ spec:
               containerPort: 50000
               protocol: TCP
           env:
+            # 容器 OS 时区，保证系统时间与日志时间为北京时间
+            - name: TZ
+              value: Asia/Shanghai
             - name: JAVA_OPTS
               value: >-
                 -Xms512m -Xmx2g
+                -Duser.timezone=Asia/Shanghai
                 -Djenkins.install.runSetupWizard=false
                 -Dcasc.jenkins.config=/var/jenkins_home/casc_configs
             - name: JENKINS_ADMIN_PASSWORD

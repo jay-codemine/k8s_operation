@@ -32,6 +32,14 @@ spec:
         - name: devops-fe
           image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v16.14
           imagePullPolicy: IfNotPresent
+
+          # 以 root 运行：标准 nginx 镜像 master 进程需 root 才能绑定 80 端口、
+          # 写 PID/缓存目录及 entrypoint 生成 config.js，非 root 会 CrashLoopBackOff。
+          # 固化在此避免被 kubectl apply / CI 重新发布覆盖。
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+
           ports:
             - name: http
               containerPort: 80
