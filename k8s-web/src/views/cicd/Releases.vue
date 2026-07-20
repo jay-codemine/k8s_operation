@@ -9,7 +9,8 @@
           </div>
           <div>
             <h1 class="banner-title">发布单中心</h1>
-            <p class="banner-desc">统一管理应用发布全生命周期：构建 → 审批 → 部署 → 回滚</p>
+            <p class="banner-desc">直接发布：选定镜像并指定集群（开发 / 测试 / 生产）一键部署，覆盖审批 → 部署 → 回滚全流程</p>
+            <p class="banner-hint">需要一次构建、跨环境逐级晋级同一镜像？请使用<router-link class="banner-inline-link" to="/cicd/promotion">镜像晋级</router-link></p>
           </div>
         </div>
         <div class="banner-actions">
@@ -1352,6 +1353,9 @@ export default {
 .banner-icon svg { width: 26px; height: 26px; color: #67d5b5; }
 .banner-title { margin: 0; font-size: 22px; font-weight: 600; color: #fff; letter-spacing: 0.5px; }
 .banner-desc { margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,0.55); }
+.banner-hint { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.4); }
+.banner-inline-link { color: #7dd3fc; text-decoration: none; margin-left: 2px; }
+.banner-inline-link:hover { color: #bae6fd; text-decoration: underline; }
 .banner-actions { display: flex; gap: 10px; }
 .btn-banner-refresh, .btn-banner-create, .btn-banner-sync, .btn-banner-new-app {
   display: flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px;
