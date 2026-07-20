@@ -102,6 +102,7 @@ spec:
 
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
         string(name: 'NODE_VERSION', defaultValue: '22', description: 'Node.js 版本')
+        string(name: 'NPM_INSTALL_ARGS', defaultValue: '', description: 'npm 安装额外参数（留空即可；npm ci 失败会自动回退 npm install --legacy-peer-deps。特殊项目可填 --force 等）')
         string(name: 'BUILD_COMMAND', defaultValue: 'npm run build', description: '构建命令')
         string(name: 'BUILD_OUTPUT_DIR', defaultValue: 'dist', description: '构建产物目录')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
@@ -285,7 +286,19 @@ spec:
                 container('node') {
                     script {
                         if (!fileExists('package.json')) { echo "未检测到 package.json，跳过"; return }
-                        sh 'npm ci --prefer-offline || npm install --prefer-offline'
+                        def extraArgs = params.NPM_INSTALL_ARGS?.trim() ?: ''
+                        echo "[依赖安装] 额外参数: '${extraArgs ?: '(无)'}'"
+                        // 优先 npm ci（严格忠于 package-lock.json，可复现）；失败自动回退
+                        // npm install --legacy-peer-deps（吃掉 peer 依赖冲突 / lock 不同步），
+                        // 保证不同 Vue2/Vue3/Vite/webpack 老项目都能装上依赖。
+                        sh """
+                            if npm ci ${extraArgs} --prefer-offline; then
+                                echo '[依赖安装] npm ci 成功'
+                            else
+                                echo '[依赖安装] npm ci 失败，回退 npm install --legacy-peer-deps'
+                                npm install ${extraArgs} --legacy-peer-deps --prefer-offline
+                            fi
+                        """
                     }
                 }
             }
