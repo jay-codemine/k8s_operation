@@ -63,6 +63,7 @@
             <td>
               <span v-if="env.require_approval" class="tag approval">🔒 需审批</span>
               <span v-else class="tag free">自动</span>
+              <span v-if="env.auto_rollback_on_fail" class="tag rollback" title="部署失败时自动回滚到上一版本">↩ 失败自动回滚</span>
             </td>
             <td class="muted">{{ formatTs(env.modified_at) }}</td>
             <td>
@@ -128,6 +129,13 @@
                 <span>晋级到该环境需要审批（建议生产/预发开启）</span>
               </label>
             </div>
+            <div class="field">
+              <label class="check">
+                <input type="checkbox" v-model="form.auto_rollback_on_fail" />
+                <span>部署失败时自动回滚到上一版本（建议生产环境开启）</span>
+              </label>
+              <p class="hint">开启后，该环境发布/晋级失败将自动下发一个回滚发布单（跳过审批），将工作负载恢复至部署前镜像。</p>
+            </div>
           </div>
           <div class="m-foot">
             <button class="btn ghost" @click="showModal = false">取消</button>
@@ -183,7 +191,8 @@ const form = reactive({
   namespace: 'default',
   color: '#6366f1',
   sort_order: 0,
-  require_approval: false
+  require_approval: false,
+  auto_rollback_on_fail: false
 })
 
 const showDelete = ref(false)
@@ -249,6 +258,7 @@ const resetForm = () => {
   form.color = '#6366f1'
   form.sort_order = list.value.length > 0 ? Math.max(...list.value.map(e => e.sort_order || 0)) + 1 : 1
   form.require_approval = false
+  form.auto_rollback_on_fail = false
 }
 
 const openCreate = async () => {
@@ -270,6 +280,7 @@ const openEdit = async (env) => {
   form.color = env.color || '#6366f1'
   form.sort_order = env.sort_order || 0
   form.require_approval = !!env.require_approval
+  form.auto_rollback_on_fail = !!env.auto_rollback_on_fail
   if (clusters.value.length === 0) await loadClusters()
   showModal.value = true
 }
@@ -289,7 +300,8 @@ const save = async () => {
       namespace: form.namespace || 'default',
       color: form.color,
       sort_order: form.sort_order || 0,
-      require_approval: form.require_approval
+      require_approval: form.require_approval,
+      auto_rollback_on_fail: form.auto_rollback_on_fail
     }
     let res
     if (editing.value) {
@@ -407,6 +419,7 @@ code.mono { background: #f7fafc; padding: 2px 8px; border-radius: 5px; color: #4
 .tag { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; }
 .tag.approval { background: #fef3c7; color: #b45309; }
 .tag.free { background: #d1fae5; color: #047857; }
+.tag.rollback { display: inline-block; margin-top: 4px; background: #f5f3ff; color: #7c3aed; }
 .act {
   padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
   border: 1px solid #e2e8f0; background: #fff; margin-right: 6px; transition: all 0.15s;

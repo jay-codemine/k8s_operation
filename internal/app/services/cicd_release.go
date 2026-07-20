@@ -460,21 +460,23 @@ func (s *Services) CicdReleaseRollback(ctx context.Context, releaseID int64, use
 		return 0, fmt.Errorf("获取发布单失败: %w", err)
 	}
 
-	// 2. 检查发布单状态（只有成功或运行中的发布单才能回滚）
-	if rel.Status != models.CicdReleaseStatusSucceeded && rel.Status != models.CicdReleaseStatusRunning {
-		return 0, fmt.Errorf("发布单状态不支持回滚: %s，仅支持 Succeeded/Running 状态", rel.Status)
+	// 2. 检查发布单状态（成功/运行中可回滚；失败的发布单也允许回滚到部署前版本）
+	if rel.Status != models.CicdReleaseStatusSucceeded &&
+		rel.Status != models.CicdReleaseStatusRunning &&
+		rel.Status != models.CicdReleaseStatusFailed {
+		return 0, fmt.Errorf("发布单状态不支持回滚: %s，仅支持 Succeeded/Running/Failed 状态", rel.Status)
 	}
 
-	// 3. 获取已执行成功的任务（有 PrevImage 的任务）
+	// 3. 获取任务列表
 	tasks, err := s.dao.CicdTasksByReleaseID(ctx, releaseID)
 	if err != nil {
 		return 0, fmt.Errorf("获取任务列表失败: %w", err)
 	}
 
-	// 4. 筛选有 PrevImage 的任务（说明已经执行过）
+	// 4. 筛选已执行过（有部署前镜像记录）的任务：成功任务可回滚，失败任务也可回滚到部署前版本
 	var rollbackTasks []*models.CicdReleaseTask
 	for _, t := range tasks {
-		if t.PrevImage != "" && t.Status == models.CicdTaskStatusSucceeded {
+		if t.PrevImage != "" {
 			rollbackTasks = append(rollbackTasks, t)
 		}
 	}
@@ -520,12 +522,118 @@ func (s *Services) CicdReleaseRollback(ctx context.Context, releaseID int64, use
 	_, _ = s.dao.CicdReleaseUpdateStatusCAS(
 		ctx,
 		releaseID,
-		[]string{models.CicdReleaseStatusSucceeded, models.CicdReleaseStatusRunning},
+		[]string{models.CicdReleaseStatusSucceeded, models.CicdReleaseStatusRunning, models.CicdReleaseStatusFailed},
 		models.CicdReleaseStatusRollback,
 		fmt.Sprintf("rolled back to release %d", newID),
 	)
 
 	return newID, nil
+}
+
+// maybeAutoRollbackOnFail 发布失败后，若目标环境开启了“失败自动回滚”，则自动将工作负载恢复至部署前版本
+// 由 tryFinalizeRelease 在将发布单置 Failed 后调用（best-effort，任何错误只记日志不中断主流程）
+func (s *Services) maybeAutoRollbackOnFail(ctx context.Context, releaseID int64) {
+	rel, err := s.dao.CicdReleaseGetByID(ctx, releaseID)
+	if err != nil {
+		return
+	}
+	// 回滚单本身失败时不再触发回滚，避免递归
+	if strings.HasSuffix(rel.AppName, "-rollback") {
+		return
+	}
+
+	// 查环境配置：优先按 namespace，找不到再按环境名（rel.Env / namespace）
+	env, envErr := s.dao.EnvironmentGetByNamespace(ctx, rel.Namespace)
+	if envErr != nil || env == nil {
+		if rel.Env != "" {
+			env, _ = s.dao.EnvironmentGetByName(ctx, rel.Env)
+		}
+		if env == nil {
+			env, _ = s.dao.EnvironmentGetByName(ctx, rel.Namespace)
+		}
+	}
+	if env == nil || !env.AutoRollbackOnFail {
+		return
+	}
+
+	s.autoRollbackFailedRelease(ctx, rel)
+}
+
+// autoRollbackFailedRelease 将失败发布单回滚到部署前镜像（紧急恢复：跳过审批直接入队）
+func (s *Services) autoRollbackFailedRelease(ctx context.Context, rel *models.CicdRelease) {
+	tasks, err := s.dao.CicdTasksByReleaseID(ctx, rel.ID)
+	if err != nil {
+		global.Logger.Warn("[自动回滚] 获取任务失败，跳过", zap.Int64("release_id", rel.ID), zap.Error(err))
+		return
+	}
+
+	// 筛选已执行过（有部署前镜像记录）的任务
+	var rollbackTasks []*models.CicdReleaseTask
+	for _, t := range tasks {
+		if t.PrevImage != "" {
+			rollbackTasks = append(rollbackTasks, t)
+		}
+	}
+	if len(rollbackTasks) == 0 {
+		global.Logger.Warn("[自动回滚] 无可回滚任务（缺少部署前镜像记录），跳过", zap.Int64("release_id", rel.ID))
+		return
+	}
+
+	rollbackImage := rollbackTasks[0].PrevImage
+	clusterIDs := make([]int64, 0, len(rollbackTasks))
+	for _, t := range rollbackTasks {
+		clusterIDs = append(clusterIDs, t.ClusterID)
+	}
+	imageRepo, imageTag := parseImage(rollbackImage)
+
+	now := uint64(time.Now().Unix())
+	rollbackReq := &requests.CicdReleaseCreateRequest{
+		AppName:       rel.AppName + "-rollback",
+		Namespace:     rel.Namespace,
+		WorkloadKind:  rel.WorkloadKind,
+		WorkloadName:  rel.WorkloadName,
+		ContainerName: rel.ContainerName,
+		Strategy:      rel.Strategy,
+		TimeoutSec:    rel.TimeoutSec,
+		Concurrency:   rel.Concurrency,
+		ImageRepo:     imageRepo,
+		ImageTag:      imageTag,
+		ClusterIDs:    clusterIDs,
+		Env:           rel.Env,
+		Message:       fmt.Sprintf("自动回滚：发布单 #%d 部署失败，恢复至上一版本", rel.ID),
+	}
+
+	target := builder.BuildTargetImage(imageRepo, imageTag, "")
+	newRel := builder.BuildCicdRelease(rollbackReq, rel.CreatedUserID, now, imageRepo, imageTag, "")
+
+	var newTasks []*models.CicdReleaseTask
+	if err := s.dao.WithTx(ctx, func(tx *dao.Dao) error {
+		if err := tx.CicdReleaseCreate(ctx, newRel); err != nil {
+			return err
+		}
+		newTasks = builder.BuildCicdReleaseTasks(newRel.ID, clusterIDs, target, now)
+		return tx.CicdTasksCreate(ctx, newTasks)
+	}); err != nil {
+		global.Logger.Error("[自动回滚] 创建回滚发布单失败", zap.Int64("release_id", rel.ID), zap.Error(err))
+		return
+	}
+
+	// 紧急恢复：跳过审批，直接入队部署
+	if _, err := s.releaseEnqueue(ctx, newRel.ID, newTasks); err != nil {
+		global.Logger.Error("[自动回滚] 回滚发布单入队失败", zap.Int64("rollback_release_id", newRel.ID), zap.Error(err))
+		return
+	}
+
+	// 标记原失败单：已触发自动回滚（保留 Failed 状态，仅追加说明便于排查）
+	_ = s.dao.CicdReleaseUpdate(ctx, rel.ID, map[string]any{
+		"message": fmt.Sprintf("%s（已自动回滚至发布单 #%d）", rel.Message, newRel.ID),
+	})
+
+	global.Logger.Info("[自动回滚] 已触发失败自动回滚",
+		zap.Int64("failed_release_id", rel.ID),
+		zap.Int64("rollback_release_id", newRel.ID),
+		zap.String("rollback_image", rollbackImage),
+	)
 }
 
 // parseImage 解析镜像地址为 repo 和 tag

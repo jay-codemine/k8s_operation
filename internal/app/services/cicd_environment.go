@@ -54,6 +54,7 @@ func (s *Services) EnvironmentCreate(ctx context.Context, param *requests.Enviro
 		Color:           param.Color,
 		SortOrder:       param.SortOrder,
 		RequireApproval: param.RequireApproval,
+		AutoRollbackOnFail: param.AutoRollbackOnFail,
 		ApprovalUsers:   approvalUsers,
 		ApprovalLevels:  approvalLevels,
 		CreatedUserID:   userID,
@@ -114,6 +115,9 @@ func (s *Services) EnvironmentUpdate(ctx context.Context, param *requests.Enviro
 	}
 	if param.RequireApproval != nil {
 		env.RequireApproval = *param.RequireApproval
+	}
+	if param.AutoRollbackOnFail != nil {
+		env.AutoRollbackOnFail = *param.AutoRollbackOnFail
 	}
 	if len(param.ApprovalUserIDs) > 0 {
 		approvalUsers := models.JSONMap{"user_ids": param.ApprovalUserIDs}

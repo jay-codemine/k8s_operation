@@ -366,7 +366,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               重发
             </button>
-            <button v-if="normalizeStatus(rel.status) === 'success'" class="rc-act-btn warning" @click="rollbackRelease(rel)" title="回滚">
+            <button v-if="normalizeStatus(rel.status) === 'success' || rel.status === 'Failed'" class="rc-act-btn warning" @click="rollbackRelease(rel)" :title="rel.status === 'Failed' ? '回滚到部署前版本' : '回滚'">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
               回滚
             </button>
@@ -475,7 +475,7 @@
                   <button v-if="normalizeStatus(rel.status) === 'deploying'" class="act-btn cancel" @click="cancelRelease(rel)" title="取消">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                   </button>
-                  <button v-if="normalizeStatus(rel.status) === 'success'" class="act-btn rollback" @click="rollbackRelease(rel)" title="回滚">
+                  <button v-if="normalizeStatus(rel.status) === 'success' || rel.status === 'Failed'" class="act-btn rollback" @click="rollbackRelease(rel)" :title="rel.status === 'Failed' ? '回滚到部署前版本' : '回滚'">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                   </button>
                   <button v-if="normalizeStatus(rel.status) === 'success' || normalizeStatus(rel.status) === 'failed' || normalizeStatus(rel.status) === 'rollback'" class="act-btn retry" @click="retryRelease(rel)" :title="normalizeStatus(rel.status) === 'failed' ? '重试' : '重新部署'">
@@ -1150,9 +1150,13 @@ export default {
       })
     }
     const rollbackRelease = (rel) => {
-      openConfirm('回滚发布', `确定要回滚 "${rel.app_name || rel.name}" 吗？将恢复到上一个稳定版本。`, '确认回滚', 'warning', async () => {
+      const isFailed = rel.status === 'Failed'
+      const msg = isFailed
+        ? `发布单 "${rel.app_name || rel.name}" 部署失败，确定回滚吗？将工作负载恢复到本次部署前的镜像。`
+        : `确定要回滚 "${rel.app_name || rel.name}" 吗？将恢复到上一个稳定版本。`
+      openConfirm('回滚发布', msg, '确认回滚', 'warning', async () => {
         const r = await rollbackReleaseApi(rel.id)
-        if (r.code === 0) { Message.success({ content: '回滚成功' }); loadAll() } else { throw new Error(r.msg || '回滚失败') }
+        if (r.code === 0) { Message.success({ content: '回滚已提交' }); loadAll() } else { throw new Error(r.msg || '回滚失败') }
       })
     }
     const retryRelease = (rel) => {

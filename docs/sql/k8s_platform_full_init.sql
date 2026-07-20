@@ -565,6 +565,7 @@ CREATE TABLE `cicd_environment` (
   `color` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `sort_order` bigint DEFAULT NULL,
   `require_approval` tinyint(1) DEFAULT NULL,
+  `auto_rollback_on_fail` tinyint(1) NOT NULL DEFAULT '0' COMMENT '部署失败时自动回滚到上一版本(建议生产环境开启)',
   `approval_users` json DEFAULT NULL,
   `created_user_id` bigint DEFAULT NULL,
   `created_at` bigint unsigned DEFAULT NULL,

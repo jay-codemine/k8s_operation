@@ -70,6 +70,7 @@ type CicdEnvironment struct {
 	Color           string         `gorm:"column:color;size:20" json:"color"`                     // 环境颜色标识
 	SortOrder       int            `gorm:"column:sort_order" json:"sort_order"`           // 排序
 	RequireApproval bool           `gorm:"column:require_approval" json:"require_approval"` // 是否需要审批
+	AutoRollbackOnFail bool        `gorm:"column:auto_rollback_on_fail" json:"auto_rollback_on_fail"` // 部署失败时自动回滚到上一版本（建议生产环境开启）
 	ApprovalUsers   JSONMap        `gorm:"column:approval_users;type:json" json:"approval_users"` // 审批人员列表（兼容旧逻辑）
 	ApprovalLevels  ApprovalLevels `gorm:"column:approval_levels;type:json" json:"approval_levels"` // 多级审批配置（新）
 	CreatedUserID   int64          `gorm:"column:created_user_id" json:"created_user_id"`

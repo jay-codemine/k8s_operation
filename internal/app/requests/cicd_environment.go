@@ -19,6 +19,7 @@ type EnvironmentCreateRequest struct {
 	Color           string                 `json:"color"`                             // 环境颜色标识
 	SortOrder       int                    `json:"sort_order"`                        // 排序
 	RequireApproval bool                   `json:"require_approval"`                  // 是否需要审批
+	AutoRollbackOnFail bool             `json:"auto_rollback_on_fail"`             // 部署失败时自动回滚
 	ApprovalUserIDs []int64                `json:"approval_user_ids"`                 // 审批人员ID列表（兼容旧接口）
 	ApprovalLevels  []models.ApprovalLevel `json:"approval_levels"`                   // 多级审批配置
 }
@@ -48,6 +49,7 @@ type EnvironmentUpdateRequest struct {
 	Color           string                 `json:"color"`
 	SortOrder       *int                   `json:"sort_order"`
 	RequireApproval *bool                  `json:"require_approval"`
+	AutoRollbackOnFail *bool               `json:"auto_rollback_on_fail"`
 	ApprovalUserIDs []int64                `json:"approval_user_ids"`
 	ApprovalLevels  []models.ApprovalLevel `json:"approval_levels"` // 多级审批配置
 }

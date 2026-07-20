@@ -27,6 +27,8 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 		)
 		// 发送部署失败通知
 		s.sendReleaseFinalizeNotification(ctx, releaseID, false, failMsg)
+		// 若目标环境开启「失败自动回滚」，紧急恢复至部署前版本（best-effort）
+		s.maybeAutoRollbackOnFail(ctx, releaseID)
 		return
 	}
 

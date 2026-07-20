@@ -235,7 +235,8 @@ import {
   savePipelineTargets,
   promotePipeline,
   getPromotionChain,
-  getK8sEnvironments
+  getK8sEnvironments,
+  getReleaseDetail
 } from '@/api/cicd'
 
 const props = defineProps({
@@ -278,7 +279,7 @@ const promoteForm = reactive({
 })
 
 // ====== 轻量 Toast ======
-const showToast = (msg, type = 'info') => {
+const showToast = (msg, type = 'info', duration = 2500) => {
   const colors = { success: '#38a169', error: '#e53e3e', info: '#3182ce', warning: '#dd6b20' }
   const el = document.createElement('div')
   el.textContent = msg
@@ -289,7 +290,65 @@ const showToast = (msg, type = 'info') => {
     transition: 'opacity 0.3s', opacity: '1'
   })
   document.body.appendChild(el)
-  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300) }, 2500)
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300) }, duration)
+}
+
+// ====== 桌面通知（浏览器 Notification API，权限惰性申请）======
+const ensureNotifyPermission = () => {
+  try {
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission === 'default') Notification.requestPermission().catch(() => {})
+  } catch { /* 忽略：部分浏览器/非 HTTPS 环境不支持 */ }
+}
+const notifyDesktop = (title, body) => {
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      const n = new Notification(title, { body, tag: 'cicd-promote', icon: '/favicon.ico' })
+      setTimeout(() => { try { n.close() } catch { /* noop */ } }, 6000)
+    }
+  } catch { /* 忽略通知异常，不影响主流程 */ }
+}
+
+// ====== 晋级完成轮询：拿到 release_id 后轮询发布单状态到终态再通知 ======
+// 终态：Succeeded / Failed / Canceled / Rollback；AwaitingApproval 为待审批（仅提示一次，继续轮询）
+const pollPromotion = (releaseId, envText) => {
+  if (!releaseId) return
+  const maxAttempts = 60 // 60 次 * 3s ≈ 3 分钟（客户端尽力而为，页面关闭即停止）
+  let attempts = 0
+  let approvalNotified = false
+  const finish = async (msg, type, title, body, duration) => {
+    showToast(msg, type, duration)
+    notifyDesktop(title, body)
+    await loadChain()
+  }
+  const tick = async () => {
+    attempts++
+    try {
+      const res = await getReleaseDetail(releaseId)
+      const rel = res?.data?.release || res?.data?.data?.release
+      const status = rel?.status
+      if (status === 'Succeeded') {
+        await finish(`✅ ${envText} 晋级完成`, 'success', '镜像晋级完成', `${envText} 已成功部署`, 5000)
+        return
+      }
+      if (status === 'Failed' || status === 'Canceled') {
+        const tip = rel?.message ? `：${rel.message}` : ''
+        await finish(`❌ ${envText} 晋级失败${tip}`, 'error', '镜像晋级失败', `${envText} 部署失败${tip}`, 6000)
+        return
+      }
+      if (status === 'Rollback') {
+        await finish(`⚠️ ${envText} 已回滚`, 'warning', '镜像晋级已回滚', `${envText} 已回滚`, 5000)
+        return
+      }
+      if (status === 'AwaitingApproval' && !approvalNotified) {
+        approvalNotified = true
+        showToast(`⏳ ${envText} 等待审批中，审批通过后将自动部署`, 'info', 5000)
+        notifyDesktop('镜像晋级待审批', `${envText} 正在等待审批`)
+      }
+    } catch { /* 忽略单次轮询失败，继续重试 */ }
+    if (attempts < maxAttempts) setTimeout(tick, 3000)
+  }
+  setTimeout(tick, 3000)
 }
 
 const pid = computed(() => Number(props.pipelineId))
@@ -499,11 +558,16 @@ const submitPromote = async () => {
   }
   promoting.value = true
   try {
+    ensureNotifyPermission()
+    const envText = envLabel(promoteForm.target_env)
     const res = await promotePipeline(payload)
     if (res.code === 0) {
+      const rid = res.data?.release_id || res.data?.data?.release_id
       showToast(res.data?.message || '晋级已提交', 'success')
       showPromoteModal.value = false
       await loadChain()
+      // 异步轮询该发布单直到部署完成/失败，届时弹出完成通知
+      if (rid) pollPromotion(rid, envText)
     } else {
       showToast(res.msg || '晋级失败', 'error')
     }
