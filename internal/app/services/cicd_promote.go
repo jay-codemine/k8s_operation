@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gorm.io/gorm"
@@ -117,6 +118,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 
 	target, tErr := s.dao.PipelineTargetGetByPipelineAndEnv(ctx, req.PipelineID, targetEnv)
 	if tErr == nil && target != nil {
+		// 优先：该流水线为此环境单独配置的部署目标（按需覆盖）
 		clusterID = target.ClusterID
 		namespace = target.Namespace
 		workloadKind = target.WorkloadKind
@@ -130,8 +132,16 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		workloadKind = pipeline.TargetWorkloadKind
 		workloadName = pipeline.TargetWorkloadName
 		container = pipeline.TargetContainer
+	} else if env, eErr := s.dao.EnvironmentGetByName(ctx, targetEnv); eErr == nil && env != nil && env.ClusterID > 0 {
+		// 回退：继承全局环境(cicd_environment)默认集群/命名空间 + 流水线默认工作负载，
+		// 这样无需为每条流水线单独配置环境目标即可晋级（build once, promote everywhere）
+		clusterID = env.ClusterID
+		namespace = firstNonEmpty(env.Namespace, pipeline.TargetNamespace, "default")
+		workloadKind = firstNonEmpty(pipeline.TargetWorkloadKind, "Deployment")
+		workloadName = firstNonEmpty(pipeline.TargetWorkloadName, pipeline.Name)
+		container = firstNonEmpty(pipeline.TargetContainer, workloadName)
 	} else {
-		return 0, fmt.Errorf("环境[%s]未配置部署目标，请先在「环境目标配置」中绑定集群/命名空间/工作负载", targetEnv)
+		return 0, fmt.Errorf("环境[%s]未配置部署目标：请在「环境管理」中为该环境设置默认集群/命名空间，或在流水线中单独绑定工作负载", targetEnv)
 	}
 
 	if clusterID <= 0 {
@@ -241,20 +251,78 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 	return s.CicdReleaseCreate(ctx, releaseReq, userID)
 }
 
-// PipelinePromotionChain 构建晋级链视图：各环境的部署目标 + 当前部署的镜像/发布单
+// PipelinePromotionChain 构建晋级链视图：以全局环境(cicd_environment)为基线，
+// 叠加该流水线为各环境单独配置的部署目标(cicd_pipeline_target，按需覆盖)，
+// 再附加各环境当前部署的镜像/发布单。
+//
+// 这样即使流水线未逐环境配置，也能展示完整的 dev→test→staging→prod 晋级链，
+// 环境的增删改统一在「环境管理」中维护，无需每条流水线重复配置。
 func (s *Services) PipelinePromotionChain(ctx context.Context, pipelineID int64) ([]*models.PromotionEnvNode, error) {
 	// 校验流水线
-	if _, err := s.dao.PipelineGetByID(ctx, pipelineID); err != nil {
+	pipeline, err := s.dao.PipelineGetByID(ctx, pipelineID)
+	if err != nil {
 		return nil, fmt.Errorf("关联流水线不存在(id=%d): %w", pipelineID, err)
 	}
 
+	// 全局环境作为基线
+	envs, _, envErr := s.dao.EnvironmentList(ctx, 1, 1000, "")
+	if envErr != nil {
+		return nil, envErr
+	}
+
+	// 该流水线单独配置的环境目标（覆盖全局默认）
 	targets, err := s.dao.PipelineTargetListByPipeline(ctx, pipelineID)
 	if err != nil {
 		return nil, err
 	}
-
-	nodes := make([]*models.PromotionEnvNode, 0, len(targets))
+	targetByEnv := make(map[string]*models.CicdPipelineTargetView, len(targets))
 	for _, t := range targets {
+		targetByEnv[t.Env] = t
+	}
+
+	nodes := make([]*models.PromotionEnvNode, 0, len(envs)+len(targets))
+	seen := make(map[string]struct{}, len(envs))
+
+	// 1) 遍历全局环境，构建基线节点（有单独配置则覆盖，否则继承环境默认）
+	for _, e := range envs {
+		seen[e.Name] = struct{}{}
+		node := &models.PromotionEnvNode{
+			Env:             e.Name,
+			SortOrder:       e.SortOrder,
+			RequireApproval: e.RequireApproval,
+		}
+		if t, ok := targetByEnv[e.Name]; ok {
+			node.ClusterID = t.ClusterID
+			node.ClusterName = t.ClusterName
+			node.Namespace = t.Namespace
+			node.WorkloadKind = t.WorkloadKind
+			node.WorkloadName = t.WorkloadName
+			node.Container = t.Container
+			node.AutoDeploy = t.AutoDeploy
+			node.RequireApproval = t.RequireApproval
+			node.PromoteFrom = t.PromoteFrom
+			node.Configured = true
+		} else {
+			// 继承全局环境默认集群/命名空间 + 流水线默认工作负载
+			node.ClusterID = e.ClusterID
+			node.ClusterName = e.ClusterName
+			node.Namespace = firstNonEmpty(e.Namespace, pipeline.TargetNamespace, "default")
+			node.WorkloadKind = firstNonEmpty(pipeline.TargetWorkloadKind, "Deployment")
+			node.WorkloadName = firstNonEmpty(pipeline.TargetWorkloadName, pipeline.Name)
+			node.Container = firstNonEmpty(pipeline.TargetContainer, node.WorkloadName)
+			node.Configured = node.ClusterID > 0 && node.WorkloadName != ""
+		}
+		if err := s.attachLatestRelease(ctx, pipelineID, node); err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+
+	// 2) 兼容历史：流水线单独配置但不在全局环境列表中的环境，也追加展示
+	for _, t := range targets {
+		if _, ok := seen[t.Env]; ok {
+			continue
+		}
 		node := &models.PromotionEnvNode{
 			Env:             t.Env,
 			ClusterID:       t.ClusterID,
@@ -269,26 +337,34 @@ func (s *Services) PipelinePromotionChain(ctx context.Context, pipelineID int64)
 			SortOrder:       t.SortOrder,
 			Configured:      true,
 		}
-
-		// 该环境最新一条发布单
-		rel, relErr := s.dao.CicdReleaseLatestByPipelineEnv(ctx, pipelineID, t.Env)
-		if relErr == nil && rel != nil {
-			node.CurrentReleaseID = rel.ID
-			node.CurrentImageRepo = rel.ImageRepo
-			node.CurrentImageTag = rel.ImageTag
-			if rel.ImageDigest != nil {
-				node.CurrentImageDigest = *rel.ImageDigest
-			}
-			node.CurrentReleaseStatus = rel.Status
-			node.CurrentDeployTime = rel.ModifiedAt
-		} else if relErr != nil && !errors.Is(relErr, gorm.ErrRecordNotFound) {
-			return nil, relErr
+		if err := s.attachLatestRelease(ctx, pipelineID, node); err != nil {
+			return nil, err
 		}
-
 		nodes = append(nodes, node)
 	}
 
+	// 按 sort_order 升序稳定排序，保证 dev→test→staging→prod 展示顺序
+	sort.SliceStable(nodes, func(i, j int) bool { return nodes[i].SortOrder < nodes[j].SortOrder })
+
 	return nodes, nil
+}
+
+// attachLatestRelease 为晋级链节点附加该环境的最新一条发布单信息
+func (s *Services) attachLatestRelease(ctx context.Context, pipelineID int64, node *models.PromotionEnvNode) error {
+	rel, relErr := s.dao.CicdReleaseLatestByPipelineEnv(ctx, pipelineID, node.Env)
+	if relErr == nil && rel != nil {
+		node.CurrentReleaseID = rel.ID
+		node.CurrentImageRepo = rel.ImageRepo
+		node.CurrentImageTag = rel.ImageTag
+		if rel.ImageDigest != nil {
+			node.CurrentImageDigest = *rel.ImageDigest
+		}
+		node.CurrentReleaseStatus = rel.Status
+		node.CurrentDeployTime = rel.ModifiedAt
+	} else if relErr != nil && !errors.Is(relErr, gorm.ErrRecordNotFound) {
+		return relErr
+	}
+	return nil
 }
 
 // splitImageRepoTag 将 registry/repo:tag 拆分为 repo 与 tag（忽略 digest 部分）

@@ -278,6 +278,8 @@ const menuPermissions = {
   '/cicd/build-records': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/artifacts': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/releases': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
+  '/cicd/promotion': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
+  '/cicd/environments': ['super_admin', 'platform_admin', 'cicd_admin'],
   '/cicd/release-history': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer', 'tester', 'viewer'],
   '/cicd/approvals': ['super_admin', 'platform_admin', 'cicd_admin', 'cluster_admin', 'developer'],
   '/cicd/approval-policy': ['super_admin', 'platform_admin'],
@@ -365,7 +367,7 @@ const menuGroupsConfig = reactive([
   {
     name: 'CI/CD',
     icon: '⚡',
-    count: 12,
+    count: 14,
     collapsed: true,
     match: ['/cicd'],
     items: [
@@ -382,10 +384,12 @@ const menuGroupsConfig = reactive([
       // ── 发布中心 (CD) ──
       { section: '发布中心 · CD' },
       { path: '/cicd/releases', label: '发布管理', icon: '🚀' },
+      { path: '/cicd/promotion', label: '镜像晋级', icon: '🎯' },
       { path: '/cicd/release-history', label: '发布历史', icon: '📅' },
       { path: '/cicd/approvals', label: '审批工单', icon: '✅' },
       // ── 规则中心 (Policy) ──
       { section: '规则中心' },
+      { path: '/cicd/environments', label: '环境管理', icon: '🌐' },
       { path: '/cicd/approval-policy', label: '审批策略', icon: '📐' },
       { path: '/cicd/templates', label: '流水线模板', icon: '📝' },
       { path: '/cicd/agents', label: '构建节点', icon: '🖥️' },

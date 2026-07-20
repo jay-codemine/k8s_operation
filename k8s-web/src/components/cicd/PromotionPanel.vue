@@ -50,9 +50,9 @@
     <div v-else class="promo-chain">
       <div v-for="(node, idx) in chain" :key="node.env" class="chain-item">
         <div :class="['env-card', `env-${node.env}`, { deployed: !!node.current_release_id }]">
-          <div class="env-accent"></div>
+          <div class="env-accent" :style="{ background: envColor(node.env) }"></div>
           <div class="env-card-head">
-            <span :class="['env-badge', `env-${node.env}`]">{{ envLabel(node.env) }}</span>
+            <span :class="['env-badge', `env-${node.env}`]" :style="{ background: envColor(node.env) }">{{ envLabel(node.env) }}</span>
             <span class="env-code">{{ node.env }}</span>
             <span v-if="node.require_approval" class="env-tag approval" title="晋级到该环境需要审批">🔒 需审批</span>
             <span v-if="node.auto_deploy" class="env-tag auto" title="CI 成功后自动部署">⚡ 自动</span>
@@ -127,7 +127,7 @@
               </div>
               <div v-for="(row, i) in editTargets" :key="i" class="tr-row">
                 <select v-model="row.env" class="tr-input">
-                  <option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.label }}({{ e.value }})</option>
+                  <option v-for="e in envOptions" :key="e.value" :value="e.value">{{ e.label }}({{ e.value }})</option>
                 </select>
                 <select v-model.number="row.cluster_id" class="tr-input">
                   <option :value="0">选择集群</option>
@@ -143,7 +143,7 @@
                 <input v-model="row.container" class="tr-input" placeholder="容器(默认同名)" />
                 <select v-model="row.promote_from" class="tr-input">
                   <option value="">首环境</option>
-                  <option v-for="e in ENV_OPTIONS" :key="e.value" :value="e.value">{{ e.value }}</option>
+                  <option v-for="e in envOptions" :key="e.value" :value="e.value">{{ e.value }}</option>
                 </select>
                 <label class="tr-check"><input type="checkbox" v-model="row.require_approval" /></label>
                 <button class="tr-del" @click="removeRow(i)" title="删除">✕</button>
@@ -234,7 +234,8 @@ import {
   getPipelineTargets,
   savePipelineTargets,
   promotePipeline,
-  getPromotionChain
+  getPromotionChain,
+  getK8sEnvironments
 } from '@/api/cicd'
 
 const props = defineProps({
@@ -242,12 +243,17 @@ const props = defineProps({
   pipeline: { type: Object, default: () => ({}) }
 })
 
-const ENV_OPTIONS = [
-  { value: 'dev', label: '开发', order: 1 },
-  { value: 'test', label: '测试', order: 2 },
-  { value: 'staging', label: '预发', order: 3 },
-  { value: 'prod', label: '生产', order: 4 }
+// 内置回退环境（当全局环境表为空或加载失败时保底，兼容旧数据）
+const FALLBACK_ENVS = [
+  { value: 'dev', label: '开发', order: 1, color: '#10b981', cluster_id: 0, namespace: 'default' },
+  { value: 'test', label: '测试', order: 2, color: '#3b82f6', cluster_id: 0, namespace: 'default' },
+  { value: 'staging', label: '预发', order: 3, color: '#f59e0b', cluster_id: 0, namespace: 'default' },
+  { value: 'prod', label: '生产', order: 4, color: '#ef4444', cluster_id: 0, namespace: 'default' }
 ]
+const ENV_FALLBACK_COLORS = { dev: '#10b981', test: '#3b82f6', staging: '#f59e0b', prod: '#ef4444' }
+
+// 全局环境选项（来自 cicd_environment 表，可在「环境管理」中增删改）
+const envOptions = ref([])
 
 const loading = ref(false)
 const saving = ref(false)
@@ -288,7 +294,8 @@ const showToast = (msg, type = 'info') => {
 
 const pid = computed(() => Number(props.pipelineId))
 
-const envLabel = (env) => ENV_OPTIONS.find(e => e.value === env)?.label || env
+const envLabel = (env) => envOptions.value.find(e => e.value === env)?.label || env
+const envColor = (env) => envOptions.value.find(e => e.value === env)?.color || ENV_FALLBACK_COLORS[env] || '#6366f1'
 const releaseStatusText = (s) => {
   const map = {
     Pending: '待处理', AwaitingApproval: '待审批', Queued: '排队中', Running: '部署中',
@@ -332,6 +339,26 @@ const loadClusters = async () => {
   }
 }
 
+// 加载全局环境（替换写死的四环境，支持在「环境管理」中自由增删改）
+const loadEnvOptions = async () => {
+  try {
+    const res = await getK8sEnvironments({ page: 1, page_size: 1000 })
+    const list = res?.data?.list || res?.data?.data?.list || (Array.isArray(res?.data) ? res.data : [])
+    const mapped = (Array.isArray(list) ? list : []).map(e => ({
+      value: e.name,
+      label: e.display_name || e.name,
+      order: e.sort_order || 0,
+      color: e.color || '',
+      cluster_id: e.cluster_id || 0,
+      namespace: e.namespace || 'default',
+      require_approval: !!e.require_approval
+    })).sort((a, b) => a.order - b.order)
+    envOptions.value = mapped.length > 0 ? mapped : FALLBACK_ENVS
+  } catch (e) {
+    envOptions.value = FALLBACK_ENVS
+  }
+}
+
 const loadChain = async () => {
   if (!pid.value) return
   loading.value = true
@@ -346,23 +373,23 @@ const loadChain = async () => {
 }
 
 const loadAll = async () => {
-  await Promise.all([loadClusters(), loadChain()])
+  await Promise.all([loadClusters(), loadEnvOptions(), loadChain()])
 }
 
 // ====== 配置 ======
 const seedDefaults = () => {
   const p = props.pipeline || {}
-  return ENV_OPTIONS.map((e, i) => ({
+  return envOptions.value.map((e, i) => ({
     env: e.value,
-    cluster_id: p.target_cluster_id || 0,
-    namespace: p.target_namespace || 'default',
+    cluster_id: e.cluster_id || p.target_cluster_id || 0,
+    namespace: e.namespace || p.target_namespace || 'default',
     workload_kind: p.target_workload_kind || 'Deployment',
     workload_name: p.target_workload_name || '',
     container: p.target_container || '',
     auto_deploy: e.value === 'dev',
-    require_approval: e.value === 'staging' || e.value === 'prod',
-    promote_from: i === 0 ? '' : ENV_OPTIONS[i - 1].value,
-    sort_order: e.order
+    require_approval: e.require_approval || e.value === 'staging' || e.value === 'prod',
+    promote_from: i === 0 ? '' : envOptions.value[i - 1].value,
+    sort_order: e.order || (i + 1)
   }))
 }
 
@@ -395,11 +422,11 @@ const openConfig = async () => {
 
 const addRow = () => {
   const used = editTargets.value.map(r => r.env)
-  const next = ENV_OPTIONS.find(e => !used.includes(e.value)) || ENV_OPTIONS[0]
+  const next = envOptions.value.find(e => !used.includes(e.value)) || envOptions.value[0] || FALLBACK_ENVS[0]
   editTargets.value.push({
-    env: next.value, cluster_id: props.pipeline?.target_cluster_id || 0,
-    namespace: 'default', workload_kind: 'Deployment', workload_name: '',
-    container: '', auto_deploy: false, require_approval: false,
+    env: next.value, cluster_id: next.cluster_id || props.pipeline?.target_cluster_id || 0,
+    namespace: next.namespace || 'default', workload_kind: 'Deployment', workload_name: '',
+    container: '', auto_deploy: false, require_approval: !!next.require_approval,
     promote_from: '', sort_order: editTargets.value.length + 1
   })
 }

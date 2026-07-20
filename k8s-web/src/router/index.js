@@ -146,6 +146,10 @@ const router = createRouter({
         {path: 'cicd/agents', component: () => import('@/views/cicd/BuildAgents.vue')},
         // CICD 快速接入
         {path: 'cicd/quick-onboard', component: () => import('@/views/cicd/QuickOnboard.vue')},
+        // CICD 镜像晋级（独立顶层页：选流水线看晋级链，build once promote everywhere）
+        {path: 'cicd/promotion', component: () => import('@/views/cicd/Promotion.vue')},
+        // CICD 环境管理（全局环境 cicd_environment 增删改，统一维护晋级目标环境）
+        {path: 'cicd/environments', component: () => import('@/views/cicd/CicdEnvironments.vue')},
 
         {
           path: 'images/repositories',
