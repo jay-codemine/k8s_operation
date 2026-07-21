@@ -688,6 +688,16 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 		zap.Duration("timeout", triggerTimeout),
 	)
 
+	// 首次构建参数预注册："Pipeline script from SCM" 的 parameters{} 块需成功构建一次后才注册，
+	// 否则首次构建时 GIT_REPO 等参数会被 Jenkins 丢弃。此处预注入参数定义（幂等，已参数化则跳过）。
+	// best-effort：失败仅告警不阻断后续触发。
+	if err := client.EnsureJobParameters(ctx, pipeline.JenkinsJob, params, jenkins.PipelineBoolParams); err != nil {
+		global.Logger.Warn("[流水线] 预注册 Job 参数失败（首次构建可能丢参），继续尝试触发构建",
+			zap.String("job_name", pipeline.JenkinsJob),
+			zap.Error(err),
+		)
+	}
+
 	// 触发构建并等待获取构建号
 	result, err := client.TriggerBuildAndWait(ctx, pipeline.JenkinsJob, params, triggerTimeout)
 	if err != nil {

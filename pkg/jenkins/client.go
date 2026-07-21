@@ -704,6 +704,128 @@ func (c *Client) UpdateJobScriptPath(ctx context.Context, jobName string, newScr
 	return nil
 }
 
+// PipelineBoolParams 平台流水线模板中以 booleanParam 定义的参数名集合。
+// 首次构建预注入参数定义时用于区分布尔/字符串类型：
+// 若把布尔参数注成 StringParameterDefinition，值 "false" 在 Groovy 中会被判为真，导致误判。
+var PipelineBoolParams = map[string]bool{
+	"SKIP_TESTS":             true,
+	"USE_PROJECT_DOCKERFILE": true,
+	"ENABLE_SONAR":           true,
+	"SONAR_QUALITY_GATE":     true,
+	"ENABLE_ARTIFACT_UPLOAD": true,
+	"ENABLE_TRACING":         true,
+}
+
+// xmlEscaper 用于转义注入 config.xml 的参数默认值（仓库地址/分支可能含 & < > 等字符）
+var xmlEscaper = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	"\"", "&quot;",
+	"'", "&apos;",
+)
+
+// buildParamDefsXML 根据待传参数构造 <parameterDefinitions> 片段
+func buildParamDefsXML(params map[string]string, boolKeys map[string]bool) string {
+	var sb strings.Builder
+	sb.WriteString("<hudson.model.ParametersDefinitionProperty><parameterDefinitions>")
+	for k, v := range params {
+		if boolKeys[k] {
+			b := "false"
+			if v == "true" {
+				b = "true"
+			}
+			sb.WriteString(fmt.Sprintf("<hudson.model.BooleanParameterDefinition><name>%s</name><defaultValue>%s</defaultValue></hudson.model.BooleanParameterDefinition>", xmlEscaper.Replace(k), b))
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("<hudson.model.StringParameterDefinition><name>%s</name><defaultValue>%s</defaultValue><trim>false</trim></hudson.model.StringParameterDefinition>", xmlEscaper.Replace(k), xmlEscaper.Replace(v)))
+	}
+	sb.WriteString("</parameterDefinitions></hudson.model.ParametersDefinitionProperty>")
+	return sb.String()
+}
+
+// EnsureJobParameters 确保 Pipeline SCM Job 在"首次构建"前已注册参数定义。
+// 背景："Pipeline script from SCM" 的 parameters{} 块只有在成功执行过一次后才会注册到 Job，
+// 导致首次构建时 buildWithParameters 传入的 GIT_REPO 等被 Jenkins 静默丢弃，
+// groovy 校验随即报 "GIT_REPO 不能为空"。
+// 本方法在 config.xml 中预注入这些参数定义（幂等：已参数化则直接跳过），
+// 使首次构建即可正确接收参数；首次成功后 Jenkinsfile 自身的 parameters{} 块会接管覆盖。
+func (c *Client) EnsureJobParameters(ctx context.Context, jobName string, params map[string]string, boolKeys map[string]bool) error {
+	if len(params) == 0 {
+		return nil
+	}
+
+	// 1. 获取 Job 的 config.xml
+	configPath := fmt.Sprintf("/job/%s/config.xml", url.PathEscape(jobName))
+	resp, err := c.doRequest(ctx, http.MethodGet, configPath, nil)
+	if err != nil {
+		return fmt.Errorf("获取Job配置失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("Job不存在: %s", jobName)
+		}
+		return fmt.Errorf("获取Job配置失败: HTTP %d", resp.StatusCode)
+	}
+
+	configBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("读取Job配置失败: %w", err)
+	}
+	configStr := string(configBytes)
+
+	// 2. 已存在参数定义属性 → 说明已参数化（首次构建已过或用户手动配过），无需注入
+	if strings.Contains(configStr, "<hudson.model.ParametersDefinitionProperty>") {
+		return nil
+	}
+
+	// 3. 构造并注入参数定义到 <properties> 节点
+	block := buildParamDefsXML(params, boolKeys)
+	var newConfigStr string
+	switch {
+	case strings.Contains(configStr, "<properties/>"):
+		newConfigStr = strings.Replace(configStr, "<properties/>", "<properties>"+block+"</properties>", 1)
+	case strings.Contains(configStr, "</properties>"):
+		newConfigStr = strings.Replace(configStr, "</properties>", block+"</properties>", 1)
+	default:
+		return fmt.Errorf("config.xml 缺少 <properties> 节点，无法预注入参数")
+	}
+
+	// 4. 获取 CSRF Crumb 并 POST 更新 config.xml
+	crumbField, crumbValue, _ := c.getCrumb(ctx)
+	updateReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+configPath, strings.NewReader(newConfigStr))
+	if err != nil {
+		return fmt.Errorf("创建更新请求失败: %w", err)
+	}
+	if c.Username != "" && c.APIToken != "" {
+		updateReq.SetBasicAuth(c.Username, c.APIToken)
+	}
+	updateReq.Header.Set("Content-Type", "application/xml")
+	if crumbField != "" && crumbValue != "" {
+		updateReq.Header.Set(crumbField, crumbValue)
+	}
+
+	updateResp, err := c.HTTPClient.Do(updateReq)
+	if err != nil {
+		return fmt.Errorf("更新Job配置失败: %w", err)
+	}
+	defer updateResp.Body.Close()
+
+	if updateResp.StatusCode != http.StatusOK && updateResp.StatusCode != http.StatusFound {
+		bodyBytes, _ := io.ReadAll(updateResp.Body)
+		return fmt.Errorf("更新Job配置失败: HTTP %d, %s", updateResp.StatusCode, extractJenkinsError(string(bodyBytes)))
+	}
+
+	// 5. 使 Job 信息缓存失效，避免后续误用旧的"未参数化"判断
+	c.jobInfoCacheMu.Lock()
+	delete(c.jobInfoCache, jobName)
+	c.jobInfoCacheMu.Unlock()
+
+	return nil
+}
+
 // GetNodeLog 获取 Pipeline 节点日志
 func (c *Client) GetNodeLog(ctx context.Context, jobName string, buildNumber int, nodeID string) (string, error) {
 	path := fmt.Sprintf("/job/%s/%d/execution/node/%s/wfapi/log", url.PathEscape(jobName), buildNumber, nodeID)
