@@ -56,25 +56,14 @@ func WaitDeploymentRollout(ctx context.Context, client kubernetes.Interface, nam
 			dp.Status.UpdatedReplicas, dp.Status.ReadyReplicas,
 			dp.Status.AvailableReplicas, dp.Status.ObservedGeneration, dp.Generation)
 
-		// 检查 Rollout 是否超过 ProgressDeadline
-		for _, cond := range dp.Status.Conditions {
-			if cond.Type == appv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse {
-				return nil, fmt.Errorf("rollout 失败: %s", cond.Message)
-			}
-			if cond.Reason == "ProgressDeadlineExceeded" {
-				return nil, fmt.Errorf("rollout 进度超时: %s", cond.Message)
-			}
-		}
+		// 控制器是否已处理最新一代配置（ObservedGeneration 追上 Generation）
+		generationSynced := dp.Status.ObservedGeneration >= dp.Generation
 
-		// Pod 级别故障检测
-		if dp.Spec.Selector != nil {
-			if err := checkPodErrors(ctx, client, namespace, dp.Spec.Selector, logs); err != nil {
-				return nil, err
-			}
-		}
-
-		// 5 条件全部满足
-		if dp.Status.ObservedGeneration >= dp.Generation &&
+		// ① 优先判定成功：本代已就绪则立即返回。
+		//    必须放在失败判定之前——否则上一次 rollout 遗留的
+		//    Progressing=False / ProgressDeadlineExceeded 陈旧条件，
+		//    会把「新副本其实已经全部就绪」的部署误判为失败。
+		if generationSynced &&
 			dp.Status.UpdatedReplicas == replicas &&
 			dp.Status.Replicas == dp.Status.UpdatedReplicas &&
 			dp.Status.ReadyReplicas == replicas &&
@@ -86,6 +75,25 @@ func WaitDeploymentRollout(ctx context.Context, client kubernetes.Interface, nam
 				Total:     replicas,
 				Available: dp.Status.AvailableReplicas,
 			}, nil
+		}
+
+		// ② 失败判定：仅当条件反映的是「当前代」时才采信。
+		//    generationSynced 之前的 Progressing=False 可能来自上一次
+		//    已被覆盖的 rollout（RS 哈希已变），不能据此判定当前部署失败。
+		if generationSynced {
+			for _, cond := range dp.Status.Conditions {
+				if cond.Type == appv1.DeploymentProgressing &&
+					(cond.Status == corev1.ConditionFalse || cond.Reason == "ProgressDeadlineExceeded") {
+					return nil, fmt.Errorf("rollout 失败: %s", cond.Message)
+				}
+			}
+		}
+
+		// ③ Pod 级别故障检测（ImagePullBackOff / CrashLoopBackOff）
+		if dp.Spec.Selector != nil {
+			if err := checkPodErrors(ctx, client, namespace, dp.Spec.Selector, logs); err != nil {
+				return nil, err
+			}
 		}
 
 		time.Sleep(interval)

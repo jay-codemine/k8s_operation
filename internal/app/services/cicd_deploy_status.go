@@ -159,15 +159,42 @@ func (s *Services) GetDeployStatus(ctx context.Context, stageID int64) (*DeployS
 	result.RealStatus = realStatus
 	result.Message = msg
 
-	// reconcile：DB 阶段仍处于运行中，但真实状态已达终态时，回写修正
-	if (stage.Status == models.StageStatusRunning || stage.Status == "deploying") &&
-		(realStatus == models.StageStatusSuccess || realStatus == models.StageStatusFailed) {
+	// reconcile：
+	// ① DB 阶段仍处于运行中（后端重启丢 goroutine），但真实状态已达终态 → 回写终态；
+	// ② DB 阶段已置失败，但集群实际全部就绪（rollout 等待期陈旧条件误判 /
+	//    超时后新副本才就绪）→ 仅当就绪 Pod 运行的是目标镜像时纠正为成功，
+	//    镜像校验用于避免「部署失败后回滚到旧版且旧版已就绪」被误纠正为成功。
+	needReconcile := false
+	switch {
+	case (stage.Status == models.StageStatusRunning || stage.Status == "deploying") &&
+		(realStatus == models.StageStatusSuccess || realStatus == models.StageStatusFailed):
+		needReconcile = true
+	case stage.Status == models.StageStatusFailed && realStatus == models.StageStatusSuccess &&
+		s.deployImageMatches(stage.DeployImage, pods):
+		needReconcile = true
+	}
+	if needReconcile {
 		s.reconcileStuckDeployStage(ctx, stage, run, realStatus, msg)
 		result.Reconciled = true
 		result.StageStatus = realStatus
 	}
 
 	return result, nil
+}
+
+// deployImageMatches 判断当前就绪 Pod 是否运行目标镜像。
+// 用于 failed → success 的纠正场景：只有至少一个就绪 Pod 跑的是目标镜像，
+// 才确认部署真正生效，避免回滚到旧版本也被当成新部署成功。
+func (s *Services) deployImageMatches(targetImage string, pods []DeployStatusPod) bool {
+	if targetImage == "" {
+		return false // 无目标镜像信息，保守不纠正
+	}
+	for _, p := range pods {
+		if p.Ready && p.Image == targetImage {
+			return true
+		}
+	}
+	return false
 }
 
 // getWorkloadRollout 获取工作负载的选择器与副本数快照
