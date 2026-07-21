@@ -289,7 +289,7 @@ spec:
                         def extraArgs = params.NPM_INSTALL_ARGS?.trim() ?: ''
                         echo "[依赖安装] 额外参数: '${extraArgs ?: '(无)'}'"
                         // PVC 缓存 .npm 加速，--prefer-offline 优先走缓存
-                        sh "npm install ${extraArgs} --prefer-offline"
+                        sh "npm install --legacy-peer-deps --prefer-offline ${extraArgs}"
                     }
                 }
             }
