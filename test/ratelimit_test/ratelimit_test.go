@@ -54,9 +54,10 @@ func TestRateLimit_NormalRate_NoThrottle(t *testing.T) {
 func TestRateLimit_Burst_Triggers429(t *testing.T) {
 	r := newTestEngine(middlewares.RateLimit())
 
-	total := 300 // 超过 burst=200
+	total := 1000 // 远超 burst=200
 	var success, throttled int32
 
+	start := time.Now()
 	for i := 0; i < total; i++ {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -68,13 +69,17 @@ func TestRateLimit_Burst_Triggers429(t *testing.T) {
 			atomic.AddInt32(&throttled, 1)
 		}
 	}
+	elapsed := time.Since(start)
 
-	t.Logf("✅ 爆发测试：总请求=%d  成功=%d  被限流(429)=%d", total, success, throttled)
+	t.Logf("✅ 爆发测试：总请求=%d  成功=%d  被限流(429)=%d  耗时=%v", total, success, throttled, elapsed)
 	if throttled == 0 {
 		t.Errorf("❌ 期望触发 429 限流，但未触发（burst=200，总请求=%d）", total)
 	}
-	if int(success) > 200 {
-		t.Errorf("❌ 成功次数 %d 超过 burst 200", success)
+	// 令牌桶在请求期间会按 100 令牌/秒 持续补充，故允许上限 = burst(200) + 期间补充量，
+	// 再 +1 容忍边界取整误差。仅当明显超过此上限（如限流失效导致接近 1000）才判定失败。
+	maxAllowed := 200 + int(100*elapsed.Seconds()) + 1
+	if int(success) > maxAllowed {
+		t.Errorf("❌ 成功次数 %d 超过允许上限 %d（burst 200 + 期间补充，耗时 %v）", success, maxAllowed, elapsed)
 	}
 }
 
