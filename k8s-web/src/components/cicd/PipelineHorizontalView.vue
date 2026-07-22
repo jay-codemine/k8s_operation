@@ -412,14 +412,11 @@ const pods = computed(() => deployStatus.value?.pods || [])
 const workload = computed(() => deployStatus.value?.workload || null)
 const realStatus = computed(() => deployStatus.value?.real_status || '')
 
-// “查看全部”跳转：带上当前应用的命名空间 + 工作负载名（name 作为 Pod 名称前缀过滤），而非展示全部命名空间
+// “查看全部”跳转：仅按当前应用的命名空间过滤，展示该命名空间下的全部 Pod（不再叠加工作负载名前缀过滤）
 const viewAllPodsLink = computed(() => {
   const ns = workload.value?.namespace
   if (!props.clusterId || !ns) return ''
-  let to = `/c/${props.clusterId}/workloads/pods?namespace=${encodeURIComponent(ns)}`
-  const name = workload.value?.name
-  if (name) to += `&name=${encodeURIComponent(name)}`
-  return to
+  return `/c/${props.clusterId}/workloads/pods?namespace=${encodeURIComponent(ns)}`
 })
 
 // 真实部署状态展示
