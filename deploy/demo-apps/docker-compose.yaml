@@ -1,0 +1,74 @@
+# ============================================================
+# 本地验证用的 Docker Compose
+# 用法：docker compose up -d
+# ============================================================
+
+version: "3.8"
+
+services:
+  # ==================== Vue 前端 ====================
+  vue-frontend:
+    build:
+      context: ./vue-frontend
+      dockerfile: Dockerfile
+    image: registry.cn-hangzhou.aliyuncs.com/your-ns/vue-frontend:v1
+    ports:
+      - "3000:80"
+    depends_on:
+      java-backend:
+        condition: service_healthy
+    networks:
+      - demo-net
+
+  # ==================== Java 后端 ====================
+  java-backend:
+    build:
+      context: ./java-backend
+      dockerfile: Dockerfile
+    image: registry.cn-hangzhou.aliyuncs.com/your-ns/java-backend:v1
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: k8s
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SERVER_PORT: "8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - demo-net
+
+  # ==================== MySQL 数据库 ====================
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: db
+      MYSQL_USER: root
+      MYSQL_PASSWORD: 123456
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - demo-net
+
+volumes:
+  mysql-data:
+
+networks:
+  demo-net:
+    driver: bridge
