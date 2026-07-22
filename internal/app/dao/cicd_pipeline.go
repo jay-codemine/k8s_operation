@@ -80,6 +80,7 @@ type PipelineListFilter struct {
 	Status    string
 	Language  string // language_type
 	DeployEnv string // dev/test/staging/prod，兼容旧数据同时匹配 target_namespace
+	EnvironmentID int64 // 关联环境ID（>0 精确过滤，优先于 DeployEnv 模糊匹配）
 	CreatorID int64  // created_user_id
 	StartTime int64  // created_at >= （unix 秒）
 	EndTime   int64  // created_at <= （unix 秒）
@@ -104,7 +105,9 @@ func (d *Dao) PipelineList(ctx context.Context, f PipelineListFilter) ([]*models
 	if f.Language != "" {
 		query = query.Where("language_type = ?", f.Language)
 	}
-	if f.DeployEnv != "" {
+	if f.EnvironmentID > 0 {
+		query = query.Where("environment_id = ?", f.EnvironmentID)
+	} else if f.DeployEnv != "" {
 		// 兼容旧数据：deploy_env 为空时按 target_namespace 模糊匹配环境关键字
 		query = query.Where("deploy_env = ? OR (COALESCE(deploy_env, '') = '' AND target_namespace LIKE ?)", f.DeployEnv, "%"+f.DeployEnv+"%")
 	}

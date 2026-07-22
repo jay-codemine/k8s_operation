@@ -228,6 +228,9 @@ func initDefaultData() error {
 	// 默认部署环境种子数据
 	seedDefaultEnvironments()
 
+	// 存量回填：把未绑定环境的旧流水线按 target_namespace 匹配 cicd_environment.namespace 回填 environment_id
+	backfillPipelineEnvironmentID()
+
 	return nil
 }
 
@@ -413,6 +416,7 @@ func ensurePipelineColumns() error {
 		{"last_deploy_time", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_time` bigint DEFAULT NULL COMMENT '最新部署时间' AFTER `last_deploy_digest`"},
 		{"last_deploy_status", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_status` varchar(32) DEFAULT '' COMMENT '最新部署状态' AFTER `last_deploy_time`"},
 		{"last_deploy_version", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_version` varchar(100) DEFAULT '' COMMENT '最新部署版本' AFTER `last_deploy_status`"},
+		{"environment_id", "ALTER TABLE `cicd_pipeline` ADD COLUMN `environment_id` bigint NOT NULL DEFAULT 0 COMMENT '关联环境ID(cicd_environment)，0=未绑定' AFTER `auto_deploy`"},
 	}
 
 	for _, col := range columns {
@@ -426,6 +430,40 @@ func ensurePipelineColumns() error {
 		}
 	}
 	return nil
+}
+
+// backfillPipelineEnvironmentID 将未绑定环境（environment_id=0）的存量流水线，
+// 按 target_namespace 匹配 cicd_environment.namespace 回填 environment_id（幂等，不覆盖已绑定的）
+func backfillPipelineEnvironmentID() {
+	// 两表均需存在且 cicd_pipeline 已有 environment_id 列
+	var colCount int64
+	global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline' AND column_name = 'environment_id'").Scan(&colCount)
+	if colCount == 0 {
+		return
+	}
+	var envTbl int64
+	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_environment'").Scan(&envTbl)
+	if envTbl == 0 {
+		return
+	}
+
+	// 相关子查询：相同命名空间取 id 最小的环境；仅处理 environment_id=0 且命名空间非空且能匹配到环境的记录
+	result := global.DB.Exec(`
+UPDATE cicd_pipeline p
+SET p.environment_id = (
+  SELECT e.id FROM cicd_environment e
+  WHERE e.namespace = p.target_namespace AND e.is_del = 0
+  ORDER BY e.id LIMIT 1
+)
+WHERE p.environment_id = 0 AND p.is_del = 0 AND COALESCE(p.target_namespace, '') <> ''
+  AND EXISTS (SELECT 1 FROM cicd_environment e2 WHERE e2.namespace = p.target_namespace AND e2.is_del = 0)`)
+	if result.Error != nil {
+		log.Printf("[InitData] 流水线 environment_id 存量回填失败: %v", result.Error)
+		return
+	}
+	if result.RowsAffected > 0 {
+		log.Printf("[InitData] 流水线 environment_id 存量回填完成，影响 %d 条", result.RowsAffected)
+	}
 }
 
 // ensurePipelineRunColumns 检查并补全 cicd_pipeline_run 表缺失的列

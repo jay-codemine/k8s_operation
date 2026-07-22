@@ -1463,6 +1463,35 @@
 
               <!-- 自动部署配置详情 -->
               <div v-if="pipelineData.auto_deploy" class="auto-deploy-config">
+                <!-- 关联环境（绑定后命名空间/集群/审批以环境为准，实现强隔离） -->
+                <div class="form-group">
+                  <label class="form-label">
+                    关联环境
+                    <span class="optional-badge">可选</span>
+                  </label>
+                  <div class="select-wrapper">
+                    <select
+                      v-model="pipelineData.environment_id"
+                      class="form-select"
+                      @change="onCicdEnvironmentChange"
+                      :disabled="loadingCicdEnvs"
+                    >
+                      <option :value="0">不绑定（手动配置命名空间/集群）</option>
+                      <option v-for="env in cicdEnvironments" :key="env.id" :value="env.id">
+                        {{ env.display_name || env.name }}（{{ env.namespace || '-' }}）
+                      </option>
+                    </select>
+                    <button type="button" class="btn-refresh" @click="loadCicdEnvironments" :disabled="loadingCicdEnvs">
+                      <svg v-if="!loadingCicdEnvs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                      <span v-else class="loading-spinner-sm"></span>
+                    </button>
+                  </div>
+                  <div class="input-hint">绑定环境后，命名空间/集群/审批策略将以环境定义为准（强隔离）</div>
+                </div>
+
                 <!-- 部署环境选择 -->
                 <div class="form-group">
                   <label class="form-label">
@@ -1964,6 +1993,7 @@ import {
 } from '@/api/cicd.js'
 import { checkPipelineName, getJenkinsConfig, runPipeline } from '@/api/platform/pipeline.js'
 import { getClusterList } from '@/api/cluster.js'
+import { getEnvironmentList } from '@/api/cicd/environment.js'
 import { getNamespaces } from '@/api/namespace.js'
 import namespaceApi from '@/api/cluster/namespaces'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
@@ -2279,6 +2309,7 @@ export default {
       },
       // 自动部署配置
       auto_deploy: true,
+      environment_id: 0,   // 关联环境ID（>0 时命名空间/集群/审批以环境为准）
       target_cluster_id: 0,
       target_namespace: '',
       target_workload_kind: 'Deployment',
@@ -2729,6 +2760,7 @@ export default {
               deploy_config: data.deploy_config || pipelineData.value.deploy_config,
               // 自动部署配置
               auto_deploy: data.auto_deploy || false,
+              environment_id: data.environment_id || 0,
               target_cluster_id: data.target_cluster_id || 0,
               target_namespace: data.target_namespace || '',
               target_workload_kind: data.target_workload_kind || 'Deployment',
@@ -2800,6 +2832,7 @@ export default {
           git_branch: pipelineData.value.git_branch || 'main',
           language_type: pipelineData.value.language_type || 'go',
           auto_deploy: pipelineData.value.auto_deploy,
+          environment_id: pipelineData.value.environment_id || 0,
           target_cluster_id: pipelineData.value.target_cluster_id || 0,
           target_namespace: pipelineData.value.target_namespace || '',
           target_workload_kind: pipelineData.value.target_workload_kind || 'Deployment',
@@ -3165,6 +3198,45 @@ export default {
       selectedResourceTemplate.value = ''
       loadResourceTemplates()
       doValidateResource()
+    }
+
+    // ==================== 关联环境（cicd_environment）强隔离 ====================
+    const cicdEnvironments = ref([])
+    const loadingCicdEnvs = ref(false)
+
+    // 加载环境定义列表
+    const loadCicdEnvironments = async () => {
+      loadingCicdEnvs.value = true
+      try {
+        const res = await getEnvironmentList({ page: 1, page_size: 100 })
+        if (res.code === 0 && res.data) {
+          cicdEnvironments.value = res.data.list || res.data || []
+        }
+      } catch (error) {
+        console.error('加载环境列表失败:', error)
+      } finally {
+        loadingCicdEnvs.value = false
+      }
+    }
+
+    // 绑定环境变化：以环境定义为准回填集群/命名空间/部署环境/审批
+    const onCicdEnvironmentChange = async () => {
+      const envId = Number(pipelineData.value.environment_id) || 0
+      if (!envId) return // 不绑定：保留用户现有手动配置
+      const env = cicdEnvironments.value.find(e => e.id === envId)
+      if (!env) return
+      // 部署环境 / 审批策略
+      if (env.name) pipelineData.value.deploy_env = env.name
+      pipelineData.value.require_approval = !!env.require_approval
+      // 集群 + 命名空间（集群变更后需重新拉取命名空间列表）
+      if (env.cluster_id) {
+        pipelineData.value.target_cluster_id = env.cluster_id
+        await loadNamespaces()
+      }
+      if (env.namespace) {
+        pipelineData.value.target_namespace = env.namespace
+        loadWorkloads()
+      }
     }
     
     // 选择工作负载类型
@@ -3536,6 +3608,7 @@ export default {
 
     onMounted(async () => {
       loadTemplates()
+      loadCicdEnvironments() // 加载环境定义供关联选择
       await loadClusters() // 加载集群列表并自动选择默认集群 + 自动加载命名空间
       // 加载默认镜像仓库前缀
       try {
@@ -3612,6 +3685,11 @@ export default {
       onNamespaceChange,
       onWorkloadChange,
       selectDeployEnv,
+      // 关联环境（强隔离）
+      cicdEnvironments,
+      loadingCicdEnvs,
+      loadCicdEnvironments,
+      onCicdEnvironmentChange,
       selectWorkloadKind,
       getClusterName,
       getEnvLabel,

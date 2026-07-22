@@ -3330,6 +3330,18 @@ export default {
       }
     }, { immediate: true })
 
+    // 详情页在不同流水线间切换时，同一路由组件会被复用，onMounted 不会再次触发。
+    // 若不监听 route.params.id，切换后仍显示上一条流水线的数据（表现为"点详情打不开/内容不对"）。
+    watch(pipelineId, (newId, oldId) => {
+      if (!newId || newId === oldId) return
+      // 停掉旧流水线的轮询并重置状态，按新 ID 重新加载
+      stopPolling()
+      stopDeployPolling()
+      selectedStage.value = null
+      pipelineStages.value = []
+      loadPipeline()
+    })
+
     onMounted(() => {
       loadPipeline()
     })

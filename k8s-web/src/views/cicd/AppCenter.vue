@@ -297,7 +297,7 @@
           </div>
         </div>
         <div class="col-env">
-          <span class="env-badge" :style="{ color: getEnvColor(app.envKey), background: getEnvColor(app.envKey) + '14' }">{{ getEnvLabel(app.envKey) }}</span>
+          <span class="env-badge" :style="{ color: getEnvColor(resolveEnvKey(app)), background: getEnvColor(resolveEnvKey(app)) + '14' }">{{ getEnvLabel(resolveEnvKey(app)) }}</span>
         </div>
         <div class="col-status">
           <span class="status-pill" :class="getAppStatus(app)">
@@ -455,6 +455,8 @@ export default {
             target_workload_name: p.target_workload_name || '',
             target_workload_kind: p.target_workload_kind || 'Deployment',
             target_cluster_id: p.target_cluster_id || 0,
+            // 关联环境ID（强隔离：优先于 deploy_env/命名空间猜测）
+            environment_id: p.environment_id || 0,
             // 归一化环境（优先 deploy_env，回退命名空间猜测）
             envKey: normalizeEnv(p.deploy_env || p.target_namespace || ''),
             // 最近一次运行摘要（后端 join 填充）
@@ -536,6 +538,30 @@ export default {
       return DEFAULT_ENVS
     })
 
+    // 命名空间 → 环境key 映射（来自后端 cicd_environment 定义）
+    // 用于把 target_namespace（如 demo/k8soperation）解析成标准环境（dev/test/staging/prod）
+    const nsEnvMap = computed(() => {
+      const m = {}
+      environments.value.forEach(e => {
+        const key = normalizeEnv(e.name || e.code || e.env || '')
+        if (e.namespace && key) m[e.namespace] = key
+      })
+      return m
+    })
+
+    // 解析应用环境：environment_id 强绑定优先 → deploy_env → 命名空间匹配环境定义 → 命名空间自身归一化
+    const resolveEnvKey = (app) => {
+      if (app.environment_id) {
+        const env = environments.value.find(e => e.id === app.environment_id)
+        if (env) return normalizeEnv(env.name || env.code || env.env || '')
+      }
+      const de = normalizeEnv(app.deploy_env || '')
+      if (de) return de
+      const ns = app.target_namespace || ''
+      if (nsEnvMap.value[ns]) return nsEnvMap.value[ns]
+      return normalizeEnv(ns)
+    }
+
     // 高级筛选选项
     const statusOptions = [
       { key: 'healthy', label: '运行正常' },
@@ -578,7 +604,7 @@ export default {
         )
       }
       if (envFilter.value) {
-        result = result.filter(a => a.envKey === envFilter.value)
+        result = result.filter(a => resolveEnvKey(a) === envFilter.value)
       }
       if (langFilter.value) {
         result = result.filter(a => a.language === langFilter.value)
@@ -672,7 +698,7 @@ export default {
       const cfg = app.deploy_config || {}
       releaseForm.value = {
         branch: app.branch || 'main',
-        deploy_env: app.envKey || (envOptions.value[0] && envOptions.value[0].key) || '',
+        deploy_env: resolveEnvKey(app) || (envOptions.value[0] && envOptions.value[0].key) || '',
         strategy: cfg.strategy || 'rolling',
         replicas: Number(cfg.replicas) || 1,
       }
@@ -738,7 +764,7 @@ export default {
       langOptions, statusOptions, userOptions, timeOptions, activeFilterCount, resetFilters,
       loadApps, refreshAll, getLanguageLabel, getLanguageClass, getAppStatus, getAppStatusText,
       getAppStatusClass, getBuildStatusText, formatGitRepo, formatTime,
-      getEnvColor, getEnvLabel, shortCommit, formatDuration, copyImage,
+      getEnvColor, getEnvLabel, shortCommit, formatDuration, copyImage, resolveEnvKey,
       viewApp, editApp, viewReleases, runApp,
       releaseVisible, releaseApp, releaseSubmitting, releaseForm, strategyOptions,
       closeRelease, submitRelease

@@ -26,6 +26,7 @@ type PipelineCreateRequest struct {
 	
 	// 部署配置
 	AutoDeploy         bool   `json:"auto_deploy"`          // 是否自动部署
+	EnvironmentID      int64  `json:"environment_id"`       // 关联环境ID（>0 时命名空间/集群/审批以环境为准）
 	TargetClusterID    int64  `json:"target_cluster_id"`    // 目标集群ID
 	TargetNamespace    string `json:"target_namespace"`     // 目标命名空间
 	TargetWorkloadKind string `json:"target_workload_kind"` // 工作负载类型
@@ -128,6 +129,7 @@ type PipelineUpdateRequest struct {
 	
 	// 部署配置
 	AutoDeploy         *bool   `json:"auto_deploy"`          // 是否自动部署
+	EnvironmentID      *int64  `json:"environment_id"`       // 关联环境ID（>0 时命名空间/集群/审批以环境为准，=0 解除绑定）
 	TargetClusterID    *int64  `json:"target_cluster_id"`    // 目标集群ID
 	TargetNamespace    *string `json:"target_namespace"`     // 目标命名空间
 	TargetWorkloadKind *string `json:"target_workload_kind"` // 工作负载类型
@@ -196,6 +198,7 @@ type PipelineListRequest struct {
 	// 发布中心高级筛选（全部可选）
 	Language  string `form:"language"`   // 语言/应用类型：go/java/frontend/python/custom
 	DeployEnv string `form:"deploy_env"` // 部署环境：dev/test/staging/prod
+	EnvironmentID int64 `form:"environment_id"` // 关联环境ID（>0 精确过滤）
 	CreatorID int64  `form:"creator_id"` // 创建人用户ID
 	StartTime int64  `form:"start_time"` // 创建时间起（unix 秒）
 	EndTime   int64  `form:"end_time"`   // 创建时间止（unix 秒）

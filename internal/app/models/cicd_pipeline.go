@@ -174,6 +174,7 @@ type CicdPipeline struct {
 
 	// 部署配置（构建成功后自动部署）
 	AutoDeploy         bool   `gorm:"column:auto_deploy" json:"auto_deploy"`                    // 是否自动部署
+	EnvironmentID      int64  `gorm:"column:environment_id;index" json:"environment_id"`       // 关联环境ID(cicd_environment)，0=未绑定；绑定后命名空间/集群/审批以环境为准
 	TargetClusterID    int64  `gorm:"column:target_cluster_id" json:"target_cluster_id"`        // 目标集群ID
 	TargetNamespace    string `gorm:"column:target_namespace" json:"target_namespace"`          // 目标命名空间
 	TargetWorkloadKind string `gorm:"column:target_workload_kind" json:"target_workload_kind"` // 工作负载类型(Deployment/StatefulSet/DaemonSet)
@@ -440,6 +441,7 @@ type PipelineListItem struct {
 	RequireApproval bool   `json:"require_approval"`
 	// 部署目标（用于发布中心环境维度展示与筛选）
 	DeployEnv          string `json:"deploy_env"`
+	EnvironmentID      int64  `json:"environment_id"`
 	TargetClusterID    int64  `json:"target_cluster_id"`
 	TargetNamespace    string `json:"target_namespace"`
 	TargetWorkloadKind string `json:"target_workload_kind"`
@@ -480,6 +482,7 @@ func (p *CicdPipeline) ToPipelineListItem() *PipelineListItem {
 		AutoDeploy:      p.AutoDeploy,
 		RequireApproval: p.RequireApproval,
 		DeployEnv:          p.DeployEnv,
+		EnvironmentID:      p.EnvironmentID,
 		TargetClusterID:    p.TargetClusterID,
 		TargetNamespace:    p.TargetNamespace,
 		TargetWorkloadKind: p.TargetWorkloadKind,

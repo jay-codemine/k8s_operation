@@ -168,6 +168,26 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		deployEnv = "dev"
 	}
 
+	// 强隔离：绑定环境时以 cicd_environment 为单一事实来源，回填命名空间/集群/部署环境/审批策略
+	targetClusterID := req.TargetClusterID
+	requireApproval := req.RequireApproval
+	if req.EnvironmentID > 0 {
+		env, eerr := s.dao.EnvironmentGetByID(ctx, req.EnvironmentID)
+		if eerr != nil || env == nil {
+			return 0, nil, errors.New("绑定的环境不存在")
+		}
+		if env.Namespace != "" {
+			targetNamespace = env.Namespace
+		}
+		if env.ClusterID > 0 {
+			targetClusterID = env.ClusterID
+		}
+		if env.Name != "" {
+			deployEnv = env.Name
+		}
+		requireApproval = env.RequireApproval
+	}
+
 	pipeline := &models.CicdPipeline{
 		DeployMode:   req.DeployMode,
 		GitOpsConfig: gitOpsConfigJSON,
@@ -181,15 +201,16 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		Status:             models.PipelineStatusIdle,
 		EnvVars:            models.EnvVars(req.EnvVars),
 		DeployConfig:       models.JSONMap(req.DeployConfig),
-		// 部署配置（含智能默认值）
+		// 部署配置（含智能默认值/环境回填）
 		AutoDeploy:         req.AutoDeploy,
-		TargetClusterID:    req.TargetClusterID,
+		EnvironmentID:      req.EnvironmentID,
+		TargetClusterID:    targetClusterID,
 		TargetNamespace:    targetNamespace,
 		TargetWorkloadKind: workloadKind,
 		TargetWorkloadName: workloadName,
 		TargetContainer:    containerName,
 		DeployEnv:          deployEnv,
-		RequireApproval:    req.RequireApproval,
+		RequireApproval:    requireApproval,
 		EnableSonar:        req.EnableSonar,
 		EnableArtifactUpload: req.EnableArtifactUpload,
 		// 发布联动告警静默
@@ -225,6 +246,7 @@ func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListR
 		Status:    req.Status,
 		Language:  req.Language,
 		DeployEnv: req.DeployEnv,
+		EnvironmentID: req.EnvironmentID,
 		CreatorID: req.CreatorID,
 		StartTime: req.StartTime,
 		EndTime:   req.EndTime,
@@ -360,6 +382,27 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 			if job, ok := models.DefaultJenkinsJobMap[*req.LanguageType]; ok {
 				updates["jenkins_job"] = job
 			}
+		}
+	}
+
+	// 强隔离：环境绑定变更。>0 时以环境为准回填命名空间/集群/部署环境/审批；=0 解除绑定（保留现有目标配置）
+	if req.EnvironmentID != nil {
+		updates["environment_id"] = *req.EnvironmentID
+		if *req.EnvironmentID > 0 {
+			env, eerr := s.dao.EnvironmentGetByID(ctx, *req.EnvironmentID)
+			if eerr != nil || env == nil {
+				return errors.New("绑定的环境不存在")
+			}
+			if env.Namespace != "" {
+				updates["target_namespace"] = env.Namespace
+			}
+			if env.ClusterID > 0 {
+				updates["target_cluster_id"] = env.ClusterID
+			}
+			if env.Name != "" {
+				updates["deploy_env"] = env.Name
+			}
+			updates["require_approval"] = env.RequireApproval
 		}
 	}
 

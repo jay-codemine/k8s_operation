@@ -1,7 +1,8 @@
 # ============================================================
 # K8s 部署清单：多模块 Spring Boot 后端
-# 项目：Designing-Hexagonal-Architecture-with-Java-SpringBoot
+# 项目：educostadev/Designing-Hexagonal-Architecture-with-Java-SpringBoot
 # 模块：domain / application / infrastructure / bootstrap
+# 配置：bootstrap/src/main/resources/application.yml
 # ============================================================
 
 ---
@@ -11,11 +12,11 @@ metadata:
   name: java-backend-config
   namespace: demo
 data:
-  SPRING_PROFILES_ACTIVE: "k8s"
-  SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-svc:3306/hexagonal_db?useSSL=false&allowPublicKeyRetrieval=true"
-  SPRING_DATASOURCE_USERNAME: "app_user"
+  # 不设 spring.profiles.active，走默认 application.yml
+  # 指向集群已有 MySQL（外部地址，如用 K8s 内部 MySQL 则改为 mysql-svc:3306）
+  SPRING_DATASOURCE_URL: "jdbc:mysql://1.117.227.207:30306/db?useSSL=false&allowPublicKeyRetrieval=true"
+  SPRING_DATASOURCE_USERNAME: "root"
   SERVER_PORT: "8080"
-  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics"
 
 ---
 apiVersion: v1
@@ -25,7 +26,7 @@ metadata:
   namespace: demo
 type: Opaque
 stringData:
-  SPRING_DATASOURCE_PASSWORD: "your-password-here"
+  SPRING_DATASOURCE_PASSWORD: "123456"
 
 ---
 apiVersion: apps/v1
@@ -68,6 +69,8 @@ spec:
             limits:
               memory: "768Mi"
               cpu: "1000m"
+          # 优先用 HTTP 探针（如果项目有 Actuator）
+          # 否则会自动回退到 TCP 探针
           livenessProbe:
             httpGet:
               path: /actuator/health
@@ -101,13 +104,12 @@ spec:
   type: ClusterIP
 
 ---
+# Ingress 可选：如果集群没有 nginx-ingress-controller 请删掉
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: java-backend-ingress
   namespace: demo
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:

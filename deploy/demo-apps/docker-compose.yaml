@@ -30,9 +30,9 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: k8s
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hexagonal_db?useSSL=false&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: app_user
-      SPRING_DATASOURCE_PASSWORD: your-password-here
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: "P@ssw0rd"
       SERVER_PORT: "8080"
     depends_on:
       mysql:
@@ -53,9 +53,9 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: hexagonal_db
-      MYSQL_USER: app_user
-      MYSQL_PASSWORD: your-password-here
+      MYSQL_DATABASE: db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: "P@ssw0rd"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:

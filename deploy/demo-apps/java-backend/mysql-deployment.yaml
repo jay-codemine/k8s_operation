@@ -10,7 +10,7 @@ metadata:
   namespace: demo
 data:
   init.sql: |
-    CREATE DATABASE IF NOT EXISTS hexagonal_db
+    CREATE DATABASE IF NOT EXISTS db
       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ---
@@ -22,8 +22,8 @@ metadata:
 type: Opaque
 stringData:
   MYSQL_ROOT_PASSWORD: "root123"
-  MYSQL_USER: "app_user"
-  MYSQL_PASSWORD: "your-password-here"
+  MYSQL_USER: "user"
+  MYSQL_PASSWORD: "P@ssw0rd"
 
 ---
 apiVersion: apps/v1
@@ -54,7 +54,7 @@ spec:
                 name: mysql-secret
           env:
             - name: MYSQL_DATABASE
-              value: hexagonal_db
+              value: db
           resources:
             requests:
               memory: "512Mi"

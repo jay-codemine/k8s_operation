@@ -627,6 +627,7 @@ CREATE TABLE `cicd_pipeline` (
   `jenkins_credential_id` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'Jenkins凭证ID',
   `language_type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'custom' COMMENT '语言类型:go/java/frontend/python/custom',
   `auto_deploy` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否自动部署',
+  `environment_id` bigint NOT NULL DEFAULT '0' COMMENT '关联环境ID(cicd_environment)，0=未绑定',
   `target_cluster_id` bigint DEFAULT NULL COMMENT '目标集群ID',
   `target_namespace` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '目标命名空间',
   `target_workload_kind` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '工作负载类型',
@@ -671,6 +672,7 @@ CREATE TABLE `cicd_pipeline` (
   KEY `idx_status` (`status`),
   KEY `idx_auto_deploy` (`auto_deploy`),
   KEY `idx_target_cluster` (`target_cluster_id`),
+  KEY `idx_cicd_pipeline_environment_id` (`environment_id`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_is_del` (`is_del`),
   KEY `idx_pipeline_deploy_mode` (`deploy_mode`)

@@ -2189,6 +2189,9 @@ definitions:
         items:
           $ref: '#/definitions/models.EnvVar'
         type: array
+      environment_id:
+        description: 关联环境ID（>0 时命名空间/集群/审批以环境为准）
+        type: integer
       git_branch:
         type: string
       git_repo:
@@ -2387,6 +2390,9 @@ definitions:
         items:
           $ref: '#/definitions/models.EnvVar'
         type: array
+      environment_id:
+        description: 关联环境ID（>0 时命名空间/集群/审批以环境为准，=0 解除绑定）
+        type: integer
       git_branch:
         type: string
       git_repo:

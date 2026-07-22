@@ -21369,6 +21369,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.EnvVar"
                     }
                 },
+                "environment_id": {
+                    "description": "关联环境ID（\u003e0 时命名空间/集群/审批以环境为准）",
+                    "type": "integer"
+                },
                 "git_branch": {
                     "type": "string"
                 },
@@ -21648,6 +21652,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.EnvVar"
                     }
+                },
+                "environment_id": {
+                    "description": "关联环境ID（\u003e0 时命名空间/集群/审批以环境为准，=0 解除绑定）",
+                    "type": "integer"
                 },
                 "git_branch": {
                     "type": "string"
