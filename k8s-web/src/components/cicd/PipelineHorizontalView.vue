@@ -118,8 +118,8 @@
             </div>
           </div>
 
-          <!-- 错误信息 -->
-          <div v-if="selectedStage.error_message" class="error-section">
+          <!-- 错误信息：仅在阶段未成功时展示，避免重新部署成功后仍显示上一次失败的残留错误 -->
+          <div v-if="selectedStage.error_message && selectedStage.status !== 'success' && realStatus !== 'success'" class="error-section">
             <div class="section-title error">错误信息</div>
             <div class="error-content">{{ selectedStage.error_message }}</div>
           </div>
@@ -298,7 +298,7 @@
                     <button class="refresh-link" @click="fetchDeployStatus">刷新</button>
                     <router-link
                       v-if="props.clusterId && workload?.namespace"
-                      :to="`/c/${props.clusterId}/workloads/pods?namespace=${encodeURIComponent(workload.namespace)}`"
+                      :to="viewAllPodsLink"
                       class="view-all-link"
                     >
                       查看全部 →
@@ -411,6 +411,16 @@ const deployStatus = ref(null)
 const pods = computed(() => deployStatus.value?.pods || [])
 const workload = computed(() => deployStatus.value?.workload || null)
 const realStatus = computed(() => deployStatus.value?.real_status || '')
+
+// “查看全部”跳转：带上当前应用的命名空间 + 工作负载名（name 作为 Pod 名称前缀过滤），而非展示全部命名空间
+const viewAllPodsLink = computed(() => {
+  const ns = workload.value?.namespace
+  if (!props.clusterId || !ns) return ''
+  let to = `/c/${props.clusterId}/workloads/pods?namespace=${encodeURIComponent(ns)}`
+  const name = workload.value?.name
+  if (name) to += `&name=${encodeURIComponent(name)}`
+  return to
+})
 
 // 真实部署状态展示
 const realStatusText = computed(() => {

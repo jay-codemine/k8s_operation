@@ -2503,13 +2503,20 @@ const submitPatchImage = async () => {
 };
 
 onMounted(async () => {
+  // 先加载命名空间列表：loadNamespaces 内部会重置 selectedNamespace，
+  // 若在此之前设置 namespaceFilter 会被其通过 watch 冲回“全部”，因此必须在其之后再应用跳转参数
+  await fetchNamespaces();
   // 若来自“查看全部”等带命名空间的跳转（如发布详情的关联 Pod），优先按该命名空间过滤，只展示该空间下的 Pod
   const qsNs = route.query.namespace
   if (qsNs && typeof qsNs === 'string') {
     namespaceFilter.value = qsNs
   }
-  // 并行获取名称空间列表和 Pod 列表
-  await Promise.all([fetchNamespaces(), fetchPods()]);
+  // 带工作负载名时（如 Deployment 名），按名称前缀过滤，只展示该工作负载的 Pod
+  const qsName = route.query.name
+  if (qsName && typeof qsName === 'string') {
+    searchQuery.value = qsName
+  }
+  await fetchPods();
   document.addEventListener('click', handleClickOutside);
 });
 
