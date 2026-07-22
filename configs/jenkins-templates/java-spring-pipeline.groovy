@@ -766,6 +766,7 @@ DOCKERFILE_EOF
                                 --label artifact.version=${env.FINAL_TAG} \
                                 --label build.mode=k8s-kaniko \
                                 --snapshot-mode=redo \
+                                --push-retry=3 \
                                 --use-new-run
                         """
 

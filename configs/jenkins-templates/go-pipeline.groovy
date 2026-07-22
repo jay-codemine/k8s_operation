@@ -700,9 +700,14 @@ ENTRYPOINT ["/app/${appName}"]
 
                         // 配置镜像仓库认证
                         def registryHost = params.IMAGE_REPO.split('/')[0]
+                        def dockerConfigJson = groovy.json.JsonOutput.toJson([
+                            auths: [(registryHost): [username: env.REGISTRY_CREDS_USR, password: env.REGISTRY_CREDS_PSW]]
+                        ])
+                        writeFile file: '.docker-config.json', text: dockerConfigJson
                         sh """
                             mkdir -p /kaniko/.docker
-                            echo '{"auths":{"${registryHost}":{"username":"${REGISTRY_CREDS_USR}","password":"${REGISTRY_CREDS_PSW}"}}}' > /kaniko/.docker/config.json
+                            cp .docker-config.json /kaniko/.docker/config.json
+                            rm -f .docker-config.json
                         """
 
                         // Kaniko 构建 + 推送（一步完成）
@@ -717,6 +722,7 @@ ENTRYPOINT ["/app/${appName}"]
                                 --label build.timestamp=${env.BUILD_TS} \
                                 --label build.mode=k8s-kaniko \
                                 --snapshot-mode=redo \
+                                --push-retry=3 \
                                 --use-new-run
                         """
 

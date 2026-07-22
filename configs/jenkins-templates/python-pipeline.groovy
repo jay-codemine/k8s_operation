@@ -123,6 +123,7 @@ spec:
         string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '重复率阈值')
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁策略: block | warn | skip')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传')
+        booleanParam(name: 'ENABLE_TRACING', defaultValue: false, description: '启用 APM 探针自动注入')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
         string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
@@ -427,9 +428,14 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]
+                        def dockerConfigJson = groovy.json.JsonOutput.toJson([
+                            auths: [(registryHost): [username: env.REGISTRY_CREDS_USR, password: env.REGISTRY_CREDS_PSW]]
+                        ])
+                        writeFile file: '.docker-config.json', text: dockerConfigJson
                         sh """
                             mkdir -p /kaniko/.docker
-                            echo '{"auths":{"${registryHost}":{"username":"${REGISTRY_CREDS_USR}","password":"${REGISTRY_CREDS_PSW}"}}}' > /kaniko/.docker/config.json
+                            cp .docker-config.json /kaniko/.docker/config.json
+                            rm -f .docker-config.json
                             /kaniko/executor \
                                 --context=. \
                                 --dockerfile=${dockerfile} \
@@ -438,6 +444,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.mode=k8s-kaniko \
                                 --snapshot-mode=redo \
+                                --push-retry=3 \
                                 --use-new-run
                         """
                         env.IMAGE_DIGEST = ''; env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
@@ -460,12 +467,17 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 }
 
 // ==================== 回调函数 ====================
+def getCallbackUrl() {
+    return params.PLATFORM_CALLBACK_URL?.trim() ?: env.PLATFORM_CALLBACK_URL?.trim() ?: ''
+}
+
 def stageCallback(String stageType, String status) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) return
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) return
     try {
         def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0, run_id: params.RUN_ID ? params.RUN_ID as Long : 0, stage_type: stageType, status: status]
         def body = groovy.json.JsonOutput.toJson(payload)
-        def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/stage/callback')
+        def stageUrl = callbackUrl.replace('/pipeline/callback', '/stage/callback')
         def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}") : ''
         def headers = signature ? [[name: 'X-Signature', value: signature]] : []
         httpRequest(url: stageUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '100:599', timeout: 10)
@@ -473,7 +485,8 @@ def stageCallback(String stageType, String status) {
 }
 
 def callbackPlatform(String status, String message) {
-    if (!params.PLATFORM_CALLBACK_URL?.trim()) { echo "未配置回调地址"; return }
+    def callbackUrl = getCallbackUrl()
+    if (!callbackUrl) { echo "未配置回调地址"; return }
     def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, status: status,
         pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
         run_id: params.RUN_ID ? params.RUN_ID as Long : 0,
@@ -483,7 +496,7 @@ def callbackPlatform(String status, String message) {
     def body = groovy.json.JsonOutput.toJson(payload)
     def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${status}") : ''
     def headers = signature ? [[name: 'X-Signature', value: signature]] : []
-    httpRequest(url: params.PLATFORM_CALLBACK_URL, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
+    httpRequest(url: callbackUrl, httpMode: 'POST', contentType: 'APPLICATION_JSON', requestBody: body, customHeaders: headers, validResponseCodes: '200:299', consoleLogResponseBody: true)
 }
 
 def hmacSha256(String secret, String data) {

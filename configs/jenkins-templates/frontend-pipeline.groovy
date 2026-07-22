@@ -122,6 +122,7 @@ spec:
         string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '代码重复率阈值（%）')
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁失败策略: block | warn | skip')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
+        booleanParam(name: 'ENABLE_TRACING', defaultValue: false, description: '启用 APM 探针自动注入（SkyWalking/OpenTelemetry）')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
         string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
@@ -501,9 +502,14 @@ CMD ["nginx", "-g", "daemon off;"]
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]
+                        def dockerConfigJson = groovy.json.JsonOutput.toJson([
+                            auths: [(registryHost): [username: env.REGISTRY_CREDS_USR, password: env.REGISTRY_CREDS_PSW]]
+                        ])
+                        writeFile file: '.docker-config.json', text: dockerConfigJson
                         sh """
                             mkdir -p /kaniko/.docker
-                            echo '{"auths":{"${registryHost}":{"username":"${REGISTRY_CREDS_USR}","password":"${REGISTRY_CREDS_PSW}"}}}' > /kaniko/.docker/config.json
+                            cp .docker-config.json /kaniko/.docker/config.json
+                            rm -f .docker-config.json
                             /kaniko/executor \
                                 --context=. \
                                 --dockerfile=${dockerfile} \
@@ -512,6 +518,7 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.mode=k8s-kaniko \
                                 --snapshot-mode=redo \
+                                --push-retry=3 \
                                 --use-new-run
                         """
                         env.IMAGE_DIGEST = ''; env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
