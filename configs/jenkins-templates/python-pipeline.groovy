@@ -434,8 +434,6 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --context=. \
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
-                                --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache/python \
                                 --label git.commit=${env.GIT_COMMIT_FULL} \
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.mode=k8s-kaniko \

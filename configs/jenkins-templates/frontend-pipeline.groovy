@@ -508,8 +508,6 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --context=. \
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
-                                --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache/frontend \
                                 --label git.commit=${env.GIT_COMMIT_FULL} \
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.mode=k8s-kaniko \

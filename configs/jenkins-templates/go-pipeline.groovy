@@ -711,8 +711,6 @@ ENTRYPOINT ["/app/${appName}"]
                                 --context=. \
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
-                                --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache/go \
                                 --label git.commit=${env.GIT_COMMIT_FULL} \
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
                                 --label build.number=${env.BUILD_NUMBER} \

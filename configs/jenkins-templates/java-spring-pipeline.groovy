@@ -759,8 +759,6 @@ DOCKERFILE_EOF
                                 --dockerfile=${dockerfile} \
                                 --destination=${env.FULL_IMAGE} \
                                 --customPlatform=linux/amd64 \
-                                --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache/java \
                                 --build-arg JAVA_VERSION=${javaVersion} \
                                 --label git.commit=${env.GIT_COMMIT_FULL} \
                                 --label git.branch=${env.GIT_BRANCH_NAME} \
