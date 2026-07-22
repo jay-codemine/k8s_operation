@@ -19529,6 +19529,10 @@ const docTemplate = `{
                         "type": "integer"
                     }
                 },
+                "auto_rollback_on_fail": {
+                    "description": "部署失败时自动回滚",
+                    "type": "boolean"
+                },
                 "cluster_id": {
                     "description": "关联集群ID",
                     "type": "integer"
@@ -19586,6 +19590,9 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                },
+                "auto_rollback_on_fail": {
+                    "type": "boolean"
                 },
                 "cluster_id": {
                     "type": "integer"
@@ -22082,6 +22089,10 @@ const docTemplate = `{
                 },
                 "pipeline_id": {
                     "description": "流水线ID",
+                    "type": "integer"
+                },
+                "run_id": {
+                    "description": "运行记录ID（优先精确匹配，避免 build_number 重用/多流水线共用 Job 定位到旧记录）",
                     "type": "integer"
                 },
                 "stage_type": {

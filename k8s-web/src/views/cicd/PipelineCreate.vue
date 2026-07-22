@@ -2618,7 +2618,7 @@ export default {
         pipelineData.value.image_repo = existingImageRepo.value
       }
       // 重组 env_vars：默认推荐变量（排除 IMAGE_REPO 等已有独立字段的） + 用户自定义
-      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
+      const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'GIT_CREDENTIAL_ID', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'USE_PROJECT_DOCKERFILE', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
       const newEnvVars = defaults
         .filter(d => !promotedKeys.includes(d.name))
         .map(d => ({ name: d.name, value: d.value }))
@@ -2691,10 +2691,20 @@ export default {
               const found = envArr.find(e => e.name === key)
               return found ? found.value : def
             }
-            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
+            const promotedKeys = ['IMAGE_REPO', 'IMAGE_TAG', 'SKIP_TESTS', 'DOCKERFILE_PATH', 'USE_PROJECT_DOCKERFILE', 'GIT_CREDENTIAL_ID', 'JAVA_VERSION', 'BUILD_DIR', 'MAVEN_PRIVATE_REPO_URL']
             const filteredEnvVars = envArr.filter(e => !promotedKeys.includes(e.name))
-            // 回显 Dockerfile 策略模式（统一使用平台生成）
-            dockerfileMode.value = 'platform'
+            // 回显 Dockerfile 策略模式：以 DOCKERFILE_PATH / USE_PROJECT_DOCKERFILE 推导
+            // __PLATFORM_GENERATE__ 是平台统一生成的显式标记，优先级最高（忽略残留的 USE_PROJECT_DOCKERFILE）
+            const storedDockerfilePath = getEnv('DOCKERFILE_PATH', '')
+            const storedUseProject = getEnv('USE_PROJECT_DOCKERFILE', 'false') === 'true'
+            if (storedDockerfilePath === '__PLATFORM_GENERATE__') {
+              dockerfileMode.value = 'platform'
+            } else if (storedDockerfilePath || storedUseProject) {
+              dockerfileMode.value = 'project'
+              customDockerfilePath.value = storedDockerfilePath || ''
+            } else {
+              dockerfileMode.value = 'platform'
+            }
             selectedServiceType.value = langType
             pipelineData.value = {
               name: data.name || '',
@@ -2888,8 +2898,9 @@ export default {
           injectEnv('DOCKERFILE_PATH', dfPath)
           injectEnv('USE_PROJECT_DOCKERFILE', 'true')
         } else {
-          // 平台统一生成
+          // 平台统一生成：显式关闭项目自带开关，避免编辑切换时残留 USE_PROJECT_DOCKERFILE=true 静默覆盖用户意图
           injectEnv('DOCKERFILE_PATH', '__PLATFORM_GENERATE__')
+          injectEnv('USE_PROJECT_DOCKERFILE', 'false')
         }
         // 依赖仓库 → EXTRA_REPOS
         const extraRepos = buildExtraRepos()

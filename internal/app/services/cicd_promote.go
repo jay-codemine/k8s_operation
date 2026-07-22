@@ -215,6 +215,14 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		sourceRunID = run.ID
 	}
 
+	// 补全晋级来源环境：来源是构建产物(run) 且未显式指定上游环境时，
+	// 反查该镜像当前所处环境作为 source_env，保证晋级链 dev→test→staging→prod 不断裂
+	if sourceEnv == "" && sourceRunID > 0 {
+		if srcRel, sErr := s.dao.CicdReleaseLatestBySourceRunID(ctx, req.PipelineID, sourceRunID); sErr == nil && srcRel != nil {
+			sourceEnv = srcRel.Env
+		}
+	}
+
 	if imageRepo == "" {
 		return 0, fmt.Errorf("无法解析镜像仓库地址，晋级已阻断")
 	}

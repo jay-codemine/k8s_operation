@@ -414,6 +414,7 @@ type StageCallbackRequest struct {
 	JobName     string `json:"job_name" valid:"job_name"`         // Jenkins Job 名称
 	BuildNumber int    `json:"build_number" valid:"build_number"` // 构建号
 	PipelineID  int64  `json:"pipeline_id" valid:"pipeline_id"`   // 流水线ID
+	RunID       int64  `json:"run_id"`                            // 运行记录ID（优先精确匹配，避免 build_number 重用/多流水线共用 Job 定位到旧记录）
 	StageType   string `json:"stage_type" valid:"stage_type"`     // 阶段类型: checkout/dependencies/compile/test/lint/build/push/approval/deploy
 	Status      string `json:"status" valid:"status"`             // 阶段状态: running/success/failed/waiting
 }

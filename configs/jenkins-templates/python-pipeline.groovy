@@ -399,7 +399,7 @@ spec:
                         // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带
                         // 3. 平台自动生成生产级 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            if (params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                            if (dockerfile != '__PLATFORM_GENERATE__' && params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
                                 dockerfile = 'Dockerfile'
                                 echo "[Build Image] 使用项目自带 Dockerfile"
                             } else {
@@ -465,7 +465,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 def stageCallback(String stageType, String status) {
     if (!params.PLATFORM_CALLBACK_URL?.trim()) return
     try {
-        def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0, stage_type: stageType, status: status]
+        def payload = [job_name: env.JOB_NAME, build_number: env.BUILD_NUMBER as Integer, pipeline_id: params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0, run_id: params.RUN_ID ? params.RUN_ID as Long : 0, stage_type: stageType, status: status]
         def body = groovy.json.JsonOutput.toJson(payload)
         def stageUrl = params.PLATFORM_CALLBACK_URL.replace('/pipeline/callback', '/stage/callback')
         def signature = env.HMAC_SECRET?.trim() ? hmacSha256(env.HMAC_SECRET, "${env.JOB_NAME}:${env.BUILD_NUMBER}:${stageType}") : ''

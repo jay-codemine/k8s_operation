@@ -262,7 +262,14 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 	// 1. 查找流水线和运行记录
 	var runID int64
 	
-	if req.PipelineID > 0 {
+	// 优先用 run_id 精确匹配（避免 build_number 重用/多流水线共用同一 Jenkins Job 定位到旧记录）
+	if req.RunID > 0 {
+		if run, err := s.dao.PipelineRunGetByID(ctx, req.RunID); err == nil && run != nil {
+			runID = run.ID
+		}
+	}
+	
+	if runID == 0 && req.PipelineID > 0 {
 		// 根据 pipeline_id + build_number 查找
 		run, err := s.dao.PipelineRunGetByBuildNumber(ctx, req.PipelineID, req.BuildNumber)
 		if err == nil && run != nil {

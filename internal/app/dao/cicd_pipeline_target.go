@@ -101,3 +101,17 @@ func (d *Dao) CicdReleaseLatestByPipelineEnv(ctx context.Context, pipelineID int
 	}
 	return &rel, nil
 }
+
+// CicdReleaseLatestBySourceRunID 获取由某次构建(run)产出镜像的最新一条已定环境的发布单
+// 用于镜像晋级时反查该镜像当前所处环境，补全晋级链 source_env（避免链路断裂）
+func (d *Dao) CicdReleaseLatestBySourceRunID(ctx context.Context, pipelineID, sourceRunID int64) (*models.CicdRelease, error) {
+	var rel models.CicdRelease
+	err := d.db.WithContext(ctx).
+		Where("pipeline_id = ? AND source_run_id = ? AND env <> '' AND is_del = 0", pipelineID, sourceRunID).
+		Order("id DESC").
+		First(&rel).Error
+	if err != nil {
+		return nil, err
+	}
+	return &rel, nil
+}

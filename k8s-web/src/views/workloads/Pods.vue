@@ -1143,6 +1143,9 @@ import { Message } from '@arco-design/web-vue'
 import { useFilteredNamespaces } from '@/composables/useFilteredNamespaces'
 import permissionStore from '@/stores/permission'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
 
 const { confirm: showConfirm } = useConfirmDialog()
 
@@ -2500,6 +2503,11 @@ const submitPatchImage = async () => {
 };
 
 onMounted(async () => {
+  // 若来自“查看全部”等带命名空间的跳转（如发布详情的关联 Pod），优先按该命名空间过滤，只展示该空间下的 Pod
+  const qsNs = route.query.namespace
+  if (qsNs && typeof qsNs === 'string') {
+    namespaceFilter.value = qsNs
+  }
   // 并行获取名称空间列表和 Pod 列表
   await Promise.all([fetchNamespaces(), fetchPods()]);
   document.addEventListener('click', handleClickOutside);

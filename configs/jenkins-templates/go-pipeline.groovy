@@ -667,7 +667,7 @@ spec:
                         // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带（需先复制二进制到正确位置）
                         // 3. 平台自动生成纯运行时 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            if (params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                            if (dockerfile != '__PLATFORM_GENERATE__' && params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
                                 dockerfile = 'Dockerfile'
                                 // 项目自带 Dockerfile 可能期望二进制在根目录（如 COPY ./foxess.hub ./）
                                 // 复制编译产物到项目 Dockerfile 期望的位置
@@ -771,6 +771,7 @@ def stageCallback(String stageType, String status) {
             job_name     : env.JOB_NAME,
             build_number : env.BUILD_NUMBER as Integer,
             pipeline_id  : params.PIPELINE_ID ? params.PIPELINE_ID as Long : 0,
+            run_id       : params.RUN_ID ? params.RUN_ID as Long : 0,
             stage_type   : stageType,
             status       : status
         ]
