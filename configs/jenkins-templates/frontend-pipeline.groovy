@@ -485,7 +485,7 @@ fi
 
                             writeFile file: dockerfile, text: """\
 FROM nginx:1.25-alpine
-RUN apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.huaweicloud.com#g' /etc/apk/repositories && apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
 COPY nginx-app.conf /etc/nginx/conf.d/default.conf
 COPY backend-url-entrypoint.sh /docker-entrypoint.d/90-backend-url.sh
