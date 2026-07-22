@@ -193,6 +193,12 @@ type PipelineListRequest struct {
 	PageSize int    `form:"page_size" valid:"page_size"`
 	Keyword  string `form:"keyword" valid:"keyword"`
 	Status   string `form:"status" valid:"status"`
+	// 发布中心高级筛选（全部可选）
+	Language  string `form:"language"`   // 语言/应用类型：go/java/frontend/python/custom
+	DeployEnv string `form:"deploy_env"` // 部署环境：dev/test/staging/prod
+	CreatorID int64  `form:"creator_id"` // 创建人用户ID
+	StartTime int64  `form:"start_time"` // 创建时间起（unix 秒）
+	EndTime   int64  `form:"end_time"`   // 创建时间止（unix 秒）
 }
 
 func NewPipelineListRequest() *PipelineListRequest {
@@ -221,6 +227,11 @@ type PipelineRunRequest struct {
 	TargetWorkloadKind *string `json:"target_workload_kind"` // 工作负载类型
 	TargetWorkloadName *string `json:"target_workload_name"` // 工作负载名称
 	TargetContainer    *string `json:"target_container"`     // 容器名称
+
+	// 发布策略（发布中心透传，记录发布意图到 deploy_config，可选）
+	Strategy  *string `json:"strategy"`   // 发布策略：rolling / blue-green / canary
+	Replicas  *int32  `json:"replicas"`   // 目标副本数
+	DeployEnv *string `json:"deploy_env"` // 目标环境：dev/test/staging/prod
 }
 
 func ValidPipelineRunRequest(data interface{}, ctx *gin.Context) map[string][]string {

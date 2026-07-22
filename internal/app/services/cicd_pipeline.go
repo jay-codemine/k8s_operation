@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"k8soperation/global"
+	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/pkg/cache"
@@ -219,15 +220,42 @@ func (s *Services) PipelineDetail(ctx context.Context, id int64) (*models.CicdPi
 
 // PipelineList 获取流水线列表
 func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListRequest) ([]*models.PipelineListItem, int64, error) {
-	list, total, err := s.dao.PipelineList(ctx, req.Keyword, req.Status, req.Page, req.PageSize)
+	list, total, err := s.dao.PipelineList(ctx, dao.PipelineListFilter{
+		Keyword:   req.Keyword,
+		Status:    req.Status,
+		Language:  req.Language,
+		DeployEnv: req.DeployEnv,
+		CreatorID: req.CreatorID,
+		StartTime: req.StartTime,
+		EndTime:   req.EndTime,
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询流水线列表失败: %w", err)
 	}
 
-	// 转换为列表项
+	// 转换为列表项，并补充最近一次运行的镜像/提交/发布人/耗时（发布中心列表展示用）
 	items := make([]*models.PipelineListItem, 0, len(list))
+	userNameCache := make(map[int64]string) // 局部缓存，避免同一发布人重复查库
 	for _, p := range list {
-		items = append(items, p.ToPipelineListItem())
+		item := p.ToPipelineListItem()
+		if run, rerr := s.dao.PipelineRunGetLatestBuilt(ctx, p.ID); rerr == nil && run != nil {
+			item.LastRunImage = run.ImageURL
+			item.LastRunTag = extractImageTag(run.ImageURL)
+			item.LastCommit = run.GitCommit
+			item.LastCommitMsg = run.GitCommitMessage
+			item.LastDuration = run.DurationSec
+			if run.TriggerUserID > 0 {
+				name, ok := userNameCache[run.TriggerUserID]
+				if !ok {
+					name = s.getUsernameByID(run.TriggerUserID)
+					userNameCache[run.TriggerUserID] = name
+				}
+				item.LastTriggerUser = name
+			}
+		}
+		items = append(items, item)
 	}
 
 	return items, total, nil
@@ -577,6 +605,32 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 	branch := pipeline.GitBranch
 	if req.Branch != "" {
 		branch = req.Branch
+	}
+
+	// 发布策略透传：记录本次发布意图（策略/副本/环境）到流水线 deploy_config
+	// 说明：仅持久化发布意图，实际部署编排仍走既有链路，不在此改变部署行为
+	if req.Strategy != nil || req.Replicas != nil || req.DeployEnv != nil {
+		cfg := pipeline.DeployConfig
+		if cfg == nil {
+			cfg = models.JSONMap{}
+		}
+		if req.Strategy != nil && *req.Strategy != "" {
+			cfg["strategy"] = *req.Strategy
+		}
+		if req.Replicas != nil {
+			cfg["replicas"] = *req.Replicas
+		}
+		if req.DeployEnv != nil && *req.DeployEnv != "" {
+			cfg["deploy_env"] = *req.DeployEnv
+		}
+		if err := s.dao.PipelineUpdate(ctx, pipeline.ID, map[string]interface{}{"deploy_config": cfg}); err != nil {
+			global.Logger.Warn("[流水线] 更新发布策略配置失败（不影响本次构建）",
+				zap.Int64("pipeline_id", pipeline.ID),
+				zap.Error(err),
+			)
+		} else {
+			pipeline.DeployConfig = cfg
+		}
 	}
 
 	// 创建运行记录

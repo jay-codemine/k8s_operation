@@ -103,6 +103,9 @@ export const deletePipeline = (id) => {
  * @param {Object} options - 可选参数
  * @param {string} options.branch - 覆盖默认分支
  * @param {Object} options.env_vars - 覆盖环境变量 {KEY: VALUE}
+ * @param {string} options.strategy - 发布策略：rolling / blue-green / canary
+ * @param {number} options.replicas - 目标副本数
+ * @param {string} options.deploy_env - 目标环境：dev/test/staging/prod
  */
 export const runPipeline = (id, options = {}) => {
   return http.post(`${BASE_URL}/run`, { id: Number(id), ...options })

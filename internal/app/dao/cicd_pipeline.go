@@ -74,19 +74,48 @@ func (d *Dao) PipelineGetByWorkload(ctx context.Context, clusterID int64, namesp
 }
 
 // PipelineList 获取流水线列表
-func (d *Dao) PipelineList(ctx context.Context, keyword, status string, page, pageSize int) ([]*models.CicdPipeline, int64, error) {
+// PipelineListFilter 流水线列表筛选条件（发布中心高级筛选）
+type PipelineListFilter struct {
+	Keyword   string
+	Status    string
+	Language  string // language_type
+	DeployEnv string // dev/test/staging/prod，兼容旧数据同时匹配 target_namespace
+	CreatorID int64  // created_user_id
+	StartTime int64  // created_at >= （unix 秒）
+	EndTime   int64  // created_at <= （unix 秒）
+	Page      int
+	PageSize  int
+}
+
+func (d *Dao) PipelineList(ctx context.Context, f PipelineListFilter) ([]*models.CicdPipeline, int64, error) {
 	var list []*models.CicdPipeline
 	var total int64
 
 	query := d.db.WithContext(ctx).Model(&models.CicdPipeline{}).Where("is_del = 0")
 
 	// 关键字搜索（名称、描述、Git仓库）
-	if keyword != "" {
-		likeKeyword := "%" + keyword + "%"
+	if f.Keyword != "" {
+		likeKeyword := "%" + f.Keyword + "%"
 		query = query.Where("name LIKE ? OR description LIKE ? OR git_repo LIKE ?", likeKeyword, likeKeyword, likeKeyword)
 	}
-	if status != "" {
-		query = query.Where("status = ?", status)
+	if f.Status != "" {
+		query = query.Where("status = ?", f.Status)
+	}
+	if f.Language != "" {
+		query = query.Where("language_type = ?", f.Language)
+	}
+	if f.DeployEnv != "" {
+		// 兼容旧数据：deploy_env 为空时按 target_namespace 模糊匹配环境关键字
+		query = query.Where("deploy_env = ? OR (COALESCE(deploy_env, '') = '' AND target_namespace LIKE ?)", f.DeployEnv, "%"+f.DeployEnv+"%")
+	}
+	if f.CreatorID > 0 {
+		query = query.Where("created_user_id = ?", f.CreatorID)
+	}
+	if f.StartTime > 0 {
+		query = query.Where("created_at >= ?", f.StartTime)
+	}
+	if f.EndTime > 0 {
+		query = query.Where("created_at <= ?", f.EndTime)
 	}
 
 	// 先查询总数
@@ -95,8 +124,8 @@ func (d *Dao) PipelineList(ctx context.Context, keyword, status string, page, pa
 	}
 
 	// 再查询分页数据
-	offset := (page - 1) * pageSize
-	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&list).Error; err != nil {
+	offset := (f.Page - 1) * f.PageSize
+	if err := query.Order("id DESC").Offset(offset).Limit(f.PageSize).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
 

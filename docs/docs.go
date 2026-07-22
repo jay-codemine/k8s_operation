@@ -21486,6 +21486,10 @@ const docTemplate = `{
                     "description": "可选：覆盖默认分支",
                     "type": "string"
                 },
+                "deploy_env": {
+                    "description": "目标环境：dev/test/staging/prod",
+                    "type": "string"
+                },
                 "env_vars": {
                     "description": "可选：覆盖环境变量",
                     "type": "object",
@@ -21499,6 +21503,14 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "replicas": {
+                    "description": "目标副本数",
+                    "type": "integer"
+                },
+                "strategy": {
+                    "description": "发布策略（发布中心透传，记录发布意图到 deploy_config，可选）",
+                    "type": "string"
                 },
                 "target_cluster_id": {
                     "description": "目标集群ID",

@@ -438,6 +438,12 @@ type PipelineListItem struct {
 	LastBuildNumber int    `json:"last_build_number"`
 	AutoDeploy      bool   `json:"auto_deploy"`
 	RequireApproval bool   `json:"require_approval"`
+	// 部署目标（用于发布中心环境维度展示与筛选）
+	DeployEnv          string `json:"deploy_env"`
+	TargetClusterID    int64  `json:"target_cluster_id"`
+	TargetNamespace    string `json:"target_namespace"`
+	TargetWorkloadKind string `json:"target_workload_kind"`
+	TargetWorkloadName string `json:"target_workload_name"`
 	// 金丝雀部署配置
 	EnableCanary       bool   `gorm:"column:enable_canary" json:"enable_canary"`
 	CanaryReplicas     int32  `gorm:"column:canary_replicas;default:1" json:"canary_replicas"`
@@ -446,6 +452,13 @@ type PipelineListItem struct {
 	CanaryAutoPromote  bool   `gorm:"column:canary_auto_promote" json:"canary_auto_promote"`
 	CanaryAnalysisRules string `gorm:"column:canary_analysis_rules;type:text" json:"canary_analysis_rules"`
 	LastDeployStatus string `json:"last_deploy_status"`
+	// 最近一次运行摘要（由 service 层 join cicd_pipeline_run 填充，用于发布中心列表展示）
+	LastRunImage    string `json:"last_run_image"`    // 最近构建产出的完整镜像地址
+	LastRunTag      string `json:"last_run_tag"`      // 镜像标签（从镜像地址提取）
+	LastCommit      string `json:"last_commit"`       // 最近一次 Git 提交哈希
+	LastCommitMsg   string `json:"last_commit_msg"`   // 最近一次 Git 提交消息
+	LastDuration    int    `json:"last_duration"`     // 最近一次构建耗时(秒)
+	LastTriggerUser string `json:"last_trigger_user"` // 最近一次发布人
 	CreatedAt       uint64 `json:"created_at"`
 }
 
@@ -466,6 +479,11 @@ func (p *CicdPipeline) ToPipelineListItem() *PipelineListItem {
 		LastBuildNumber: p.LastBuildNumber,
 		AutoDeploy:      p.AutoDeploy,
 		RequireApproval: p.RequireApproval,
+		DeployEnv:          p.DeployEnv,
+		TargetClusterID:    p.TargetClusterID,
+		TargetNamespace:    p.TargetNamespace,
+		TargetWorkloadKind: p.TargetWorkloadKind,
+		TargetWorkloadName: p.TargetWorkloadName,
 		LastDeployStatus: p.LastDeployStatus,
 		CreatedAt:       p.CreatedAt,
 	}

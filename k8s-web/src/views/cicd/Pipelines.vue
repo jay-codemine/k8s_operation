@@ -7,11 +7,19 @@
           <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
           </svg>
-          流水线管理
+          流水线配置
         </h1>
-        <p class="page-desc">管理和监控 CI/CD 流水线，实现自动化构建、测试和部署</p>
+        <p class="page-desc">配置与维护 CI/CD 流水线（Jenkins / GitOps）；应用发布请前往「应用中心」</p>
       </div>
       <div class="header-right">
+        <button class="btn btn-outline" @click="$router.push('/cicd/apps')" title="前往应用发布中心">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          应用中心
+        </button>
         <button class="btn btn-outline" @click="loadPipelines" :disabled="loading">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"/>
@@ -311,14 +319,16 @@
                 <span class="checkmark"></span>
               </label>
             </th>
-            <th style="width: 200px;">流水线名称</th>
+            <th style="width: 180px;">流水线名称</th>
             <th>描述</th>
-            <th style="width: 100px;">状态</th>
-            <th style="width: 100px;">上次运行</th>
-            <th style="width: 140px;">运行时间</th>
-            <th style="width: 200px;">Git 仓库</th>
-            <th style="width: 100px;">分支</th>
-            <th style="width: 200px;">操作</th>
+            <th style="width: 88px;">环境</th>
+            <th style="width: 88px;">状态</th>
+            <th style="width: 100px;">部署模式</th>
+            <th style="width: 90px;">上次运行</th>
+            <th style="width: 130px;">运行时间</th>
+            <th style="width: 180px;">Git 仓库</th>
+            <th style="width: 90px;">分支</th>
+            <th style="width: 220px;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -337,6 +347,11 @@
             </td>
             <td>
               <span class="table-desc">{{ pipeline.description || '-' }}</span>
+            </td>
+            <td>
+              <span class="env-badge" :style="{ color: getEnvColor(pipeline.deployEnv), background: getEnvColor(pipeline.deployEnv) + '14' }">
+                {{ getEnvLabel(pipeline.deployEnv) }}
+              </span>
             </td>
             <td>
               <span :class="['status-tag', `status-${pipeline.status}`]">
@@ -434,6 +449,9 @@
               <h3 class="pipeline-name" @click="viewPipeline(pipeline.id)">
                 {{ pipeline.name }}
               </h3>
+              <span class="env-badge" :style="{ color: getEnvColor(pipeline.deployEnv), background: getEnvColor(pipeline.deployEnv) + '14' }">
+                {{ getEnvLabel(pipeline.deployEnv) }}
+              </span>
             </div>
             <p class="pipeline-desc">{{ pipeline.description || '暂无描述' }}</p>
           </div>
@@ -625,6 +643,73 @@
         <input type="number" v-model.number="jumpPage" min="1" :max="localTotalPages" @keyup.enter="goToPage" />
       </div>
     </div>
+
+    <!-- 发布弹窗（环境/版本/策略/副本，与应用中心一致） -->
+    <transition name="modal-fade">
+      <div v-if="releaseVisible" class="release-mask" @click.self="closeRelease">
+        <div class="release-dialog">
+          <div class="release-head">
+            <div class="release-title">
+              <span class="release-app-dot"></span>
+              发布 · {{ releaseTarget.name }}
+            </div>
+            <button class="release-close" @click="closeRelease">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="release-body">
+            <div class="release-field">
+              <label class="release-label">目标环境</label>
+              <div class="release-chips">
+                <button
+                  v-for="env in envOptions"
+                  :key="env.key"
+                  :class="['release-chip', { active: releaseForm.deploy_env === env.key }]"
+                  :style="releaseForm.deploy_env === env.key ? { color: env.color, borderColor: env.color, background: env.color + '14' } : {}"
+                  @click="releaseForm.deploy_env = env.key"
+                >
+                  <span class="release-chip-dot" :style="{ background: env.color }"></span>
+                  {{ env.label }}
+                </button>
+              </div>
+            </div>
+            <div class="release-field">
+              <label class="release-label">版本 / 分支</label>
+              <input v-model="releaseForm.branch" type="text" class="release-input" placeholder="如 main、release/v1.2.0" />
+            </div>
+            <div class="release-field">
+              <label class="release-label">发布策略</label>
+              <div class="release-strategies">
+                <button
+                  v-for="opt in strategyOptions"
+                  :key="opt.key"
+                  :class="['release-strategy', { active: releaseForm.strategy === opt.key }]"
+                  @click="releaseForm.strategy = opt.key"
+                >
+                  <span class="release-strategy-name">{{ opt.label }}</span>
+                  <span class="release-strategy-desc">{{ opt.desc }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="release-field">
+              <label class="release-label">副本数</label>
+              <div class="release-stepper">
+                <button class="stepper-btn" @click="releaseForm.replicas = Math.max(1, releaseForm.replicas - 1)">−</button>
+                <input v-model.number="releaseForm.replicas" type="number" min="1" class="stepper-input" />
+                <button class="stepper-btn" @click="releaseForm.replicas = releaseForm.replicas + 1">+</button>
+              </div>
+            </div>
+          </div>
+          <div class="release-foot">
+            <button class="release-btn cancel" @click="closeRelease">取消</button>
+            <button class="release-btn confirm" :disabled="releaseSubmitting" @click="submitRelease">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              {{ releaseSubmitting ? '发布中...' : '确认发布' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -643,6 +728,7 @@ import {
 } from '@/api/platform/pipeline'
 import permissionStore from '@/stores/permission'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { getEnvColor, getEnvLabel, normalizeEnv, DEFAULT_ENVS } from '@/utils/cicdEnv'
 
 export default {
   name: 'Pipelines',
@@ -662,6 +748,18 @@ export default {
     const activeMenu = ref(null)
     const jumpPage = ref(1)
     const selectedIds = ref([])
+
+    // ===== 发布弹窗（采集 环境/版本/策略/副本，与应用中心一致） =====
+    const releaseVisible = ref(false)
+    const releaseTarget = ref({})
+    const releaseSubmitting = ref(false)
+    const releaseForm = ref({ branch: 'main', deploy_env: '', strategy: 'rolling', replicas: 1 })
+    const envOptions = DEFAULT_ENVS
+    const strategyOptions = [
+      { key: 'rolling', label: '滚动更新', desc: '逐步替换旧实例，零停机' },
+      { key: 'blue-green', label: '蓝绿发布', desc: '新旧环境并存，一键切换' },
+      { key: 'canary', label: '灰度发布', desc: '按比例放量，稳步验证' },
+    ]
 
     // ===== Jenkins 配置面板 =====
     const jenkinsConfig = ref({ configured: false })
@@ -806,7 +904,10 @@ export default {
             deployMode: item.deploy_mode || 'jenkins',
             autoDeploy: item.auto_deploy || false,
             requireApproval: item.require_approval || false,
-            lastDeployStatus: item.last_deploy_status || ''
+            lastDeployStatus: item.last_deploy_status || '',
+            // 归一化环境（优先 deploy_env，回退命名空间猜测）
+            deployEnv: normalizeEnv(item.deploy_env || item.target_namespace || ''),
+            deployConfig: item.deploy_config || {}
           }))
           total.value = response.data?.total || 0
         } else {
@@ -822,17 +923,42 @@ export default {
       }
     }
 
-    // 运行流水线
-    const handleRunPipeline = async (pipeline) => {
+    // 运行流水线：打开发布弹窗采集 环境/版本/策略/副本
+    const handleRunPipeline = (pipeline) => {
       if (!pipeline || !pipeline.id) {
         Message.error({ content: '流水线 ID 无效' })
         return
       }
+      activeMenu.value = null
+      releaseTarget.value = pipeline
+      const cfg = pipeline.deployConfig || {}
+      releaseForm.value = {
+        branch: pipeline.branch || 'main',
+        deploy_env: pipeline.deployEnv || (envOptions[0] && envOptions[0].key) || '',
+        strategy: cfg.strategy || 'rolling',
+        replicas: Number(cfg.replicas) || 1,
+      }
+      releaseVisible.value = true
+    }
+
+    const closeRelease = () => { releaseVisible.value = false }
+
+    // 提交发布：透传 环境/版本/策略/副本 到 runPipeline
+    const submitRelease = async () => {
+      const pipeline = releaseTarget.value
+      if (!pipeline || !pipeline.id) return
+      releaseSubmitting.value = true
       try {
         Message.info({ content: `正在启动流水线 "${pipeline.name}"...` })
-        const response = await triggerPipeline(pipeline.id)
+        const response = await triggerPipeline(pipeline.id, {
+          branch: releaseForm.value.branch,
+          deploy_env: releaseForm.value.deploy_env,
+          strategy: releaseForm.value.strategy,
+          replicas: releaseForm.value.replicas,
+        })
         if (response.code === 0) {
           Message.success({ content: '流水线启动成功，构建完成后将自动创建发布记录' })
+          releaseVisible.value = false
           // 发布成功后跳转到详情页执行阶段 Tab，实时查看构建进度
           router.push(`/cicd/pipelines/${pipeline.id}?tab=stages`)
         } else {
@@ -840,8 +966,9 @@ export default {
         }
       } catch (error) {
         Message.error({ content: error.message || '启动流水线失败' })
+      } finally {
+        releaseSubmitting.value = false
       }
-      activeMenu.value = null
     }
 
     // 取消/停止构建
@@ -1151,7 +1278,17 @@ export default {
       formatDate,
       formatRepoUrl,
       runStatusText,
-      getEffectiveRunStatus
+      getEffectiveRunStatus,
+      releaseVisible,
+      releaseTarget,
+      releaseSubmitting,
+      releaseForm,
+      envOptions,
+      strategyOptions,
+      closeRelease,
+      submitRelease,
+      getEnvColor,
+      getEnvLabel
     }
   }
 }
@@ -2642,4 +2779,216 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== 环境徒章 ===== */
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.pipeline-name-row .env-badge { margin-left: 8px; }
+
+/* ===== 发布 Modal ===== */
+.release-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(29, 33, 41, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.release-dialog {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.release-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid #f2f3f5;
+}
+
+.release-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.release-app-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #4299e1;
+}
+
+.release-close {
+  display: flex;
+  border: none;
+  background: transparent;
+  color: #86909c;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.release-close:hover { background: #f2f3f5; color: #4e5969; }
+.release-close svg { width: 18px; height: 18px; }
+
+.release-body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.release-field { display: flex; flex-direction: column; gap: 8px; }
+
+.release-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4e5969;
+}
+
+.release-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.release-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.release-chip:hover { border-color: #c9cdd4; }
+.release-chip.active { font-weight: 600; }
+.release-chip-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.release-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1d2129;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.release-input:focus { outline: none; border-color: #4299e1; }
+
+.release-strategies {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.release-strategy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.release-strategy:hover { border-color: #c9cdd4; }
+.release-strategy.active {
+  border-color: #4299e1;
+  background: #4299e10d;
+}
+.release-strategy-name { font-size: 13px; font-weight: 600; color: #1d2129; }
+.release-strategy-desc { font-size: 11px; color: #86909c; line-height: 1.4; }
+
+.release-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.stepper-btn {
+  width: 36px;
+  height: 38px;
+  border: none;
+  background: #f7f8fa;
+  color: #4e5969;
+  font-size: 18px;
+  cursor: pointer;
+}
+.stepper-btn:hover { background: #e5e6eb; }
+
+.stepper-input {
+  width: 64px;
+  height: 38px;
+  border: none;
+  border-left: 1px solid #e5e6eb;
+  border-right: 1px solid #e5e6eb;
+  text-align: center;
+  font-size: 14px;
+  color: #1d2129;
+}
+.stepper-input:focus { outline: none; }
+
+.release-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 22px;
+  border-top: 1px solid #f2f3f5;
+}
+
+.release-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.release-btn svg { width: 15px; height: 15px; }
+.release-btn.cancel {
+  border: 1px solid #e5e6eb;
+  background: #fff;
+  color: #4e5969;
+}
+.release-btn.cancel:hover { background: #f7f8fa; }
+.release-btn.confirm {
+  border: 1px solid #4299e1;
+  background: #4299e1;
+  color: #fff;
+}
+.release-btn.confirm:hover { background: #3182ce; }
+.release-btn.confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 </style>
