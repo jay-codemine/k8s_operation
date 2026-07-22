@@ -37,7 +37,7 @@ metadata:
 spec:
   containers:
   - name: golang
-    image: docker.m.daocloud.io/library/golang:1.24.6-bullseye
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:1.24.6-bullseye
     imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
@@ -70,7 +70,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.m.daocloud.io/kaniko-project/executor:debug
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/gcr.io/kaniko-project/executor:debug
     imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     securityContext:
@@ -86,7 +86,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: jnlp
-    image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk21
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk21
     resources:
       requests:
         cpu: 100m
