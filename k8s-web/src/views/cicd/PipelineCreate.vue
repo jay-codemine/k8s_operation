@@ -459,14 +459,14 @@
                 </label>
                 <div class="java-version-selector">
                   <div
-                    v-for="ver in ['17', '21', '11']"
+                    v-for="ver in ['21', '17', '11']"
                     :key="ver"
                     :class="['java-ver-chip', { selected: pipelineData.java_version === ver }]"
                     @click="pipelineData.java_version = ver"
                   >
                     <span class="ver-number">{{ ver }}</span>
-                    <span v-if="ver === '17'" class="ver-badge">推荐</span>
-                    <span v-else-if="ver === '21'" class="ver-badge new">LTS</span>
+                    <span v-if="ver === '21'" class="ver-badge new">推荐 LTS</span>
+                    <span v-else-if="ver === '17'" class="ver-badge">GA</span>
                   </div>
                 </div>
                 <div class="input-hint">决定构建环境 JDK 版本（maven:3.9-eclipse-temurin-<strong>{{ pipelineData.java_version }}</strong>）和运行时基础镜像</div>
@@ -2249,7 +2249,7 @@ export default {
     const languageEnvDefaults = {
       java: [
         { name: 'IMAGE_REPO', value: 'harbor.example.com/project/app-name', _hint: '镜像仓库地址（必填）' },
-        { name: 'JAVA_VERSION', value: '17', _hint: 'Java 版本' },
+        { name: 'JAVA_VERSION', value: '21', _hint: 'Java 版本' },
         { name: 'MAVEN_GOALS', value: 'clean package -DskipTests -B', _hint: 'Maven 构建命令' },
         { name: 'MAVEN_THREADS', value: '1C', _hint: 'Maven 并行构建线程数' },
         { name: 'GIT_CREDENTIAL_ID', value: 'gitee-id', _hint: 'Git 凭证 ID' },
@@ -2289,7 +2289,7 @@ export default {
       // 构建核心参数（独立字段，不混入 env_vars）
       image_repo: '',       // 镜像仓库地址（必填），如 harbor.example.com/project/app
       image_tag: 'latest',  // 镜像标签，默认 latest；留空则 Jenkins 自动生成
-      java_version: '17',   // Java 版本选择（仅 language_type=java 时生效）
+      java_version: '21',   // Java 版本选择（仅 language_type=java 时生效）
       build_dir: '',          // 构建目录（多模块 Maven 项目指定子模块目录，仅 Java 生效）
       maven_private_repo_url: '', // 私有 Maven 仓库地址（用于拉取公司内部依赖包）
       skip_tests: false,    // 跳过单元测试
@@ -2749,7 +2749,7 @@ export default {
               // 构建核心参数（从 env_vars 提取到独立字段）
               image_repo: getEnv('IMAGE_REPO', ''),
               image_tag: getEnv('IMAGE_TAG', ''),
-              java_version: getEnv('JAVA_VERSION', '17'),
+              java_version: getEnv('JAVA_VERSION', '21'),
               build_dir: getEnv('BUILD_DIR', ''),
               maven_private_repo_url: getEnv('MAVEN_PRIVATE_REPO_URL', ''),
               skip_tests: getEnv('SKIP_TESTS', 'false') === 'true',
@@ -2851,7 +2851,7 @@ export default {
         }
         // 注入 JAVA_VERSION（仅 Java 项目）
         if (pipelineData.value.language_type === 'java') {
-          submitData.env_vars.push({ name: 'JAVA_VERSION', value: pipelineData.value.java_version || '17' })
+          submitData.env_vars.push({ name: 'JAVA_VERSION', value: pipelineData.value.java_version || '21' })
           // 注入 BUILD_DIR（多模块 Maven 项目）
           if (pipelineData.value.build_dir) {
             submitData.env_vars.push({ name: 'BUILD_DIR', value: pipelineData.value.build_dir })

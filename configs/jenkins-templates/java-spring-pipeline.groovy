@@ -108,7 +108,7 @@ spec:
 
         // 构建参数
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过单元测试')
-        choice(name: 'JAVA_VERSION', choices: ['17', '21', '11', '8'], description: 'Java 版本（同时决定构建 JDK 和运行时镜像：8/11/17/21）')
+        choice(name: 'JAVA_VERSION', choices: ['21', '17', '11', '8'], description: 'Java 版本（构建 JDK 和运行时镜像，默认 21 LTS）')
         string(name: 'MAVEN_GOALS', defaultValue: 'clean package -DskipTests -B', description: 'Maven 构建命令（如 clean package / clean install / verify）')
         string(name: 'MAVEN_THREADS', defaultValue: '1C', description: 'Maven 并行构建线程数（如 1C=每核1线程, 2C, 4=4线程）')
         string(name: 'BUILD_DIR', defaultValue: '', description: '构建目录（pom.xml 所在路径，留空则自动检测。支持：根目录、子目录如 backend/、多模块如 services/user-service/）')
