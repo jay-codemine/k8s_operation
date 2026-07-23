@@ -79,7 +79,7 @@
       </div>
       <div class="toolbar-right">
         <button class="rbac-btn rbac-btn-secondary" @click="loadRoles" :disabled="loading">
-          {{ loading ? '⏳' : '🔄' }} 刷新
+          {{ loading ? '⏳' : 'sync' }} 刷新
         </button>
         <button class="rbac-btn rbac-btn-secondary" @click="openTemplateModal">
           📋 使用模板
@@ -458,7 +458,7 @@ const roleTemplates = ref([
   {
     id: 'edit',
     name: '编辑权限',
-    icon: '✏️',
+    icon: 'edit',
     description: '允许查看和编辑大部分资源',
     rules: [{ apiGroups: ['', 'apps'], resources: ['pods', 'deployments', 'services', 'configmaps'], verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete'] }]
   },
@@ -472,7 +472,7 @@ const roleTemplates = ref([
   {
     id: 'pod-reader',
     name: 'Pod 只读',
-    icon: '📦',
+    icon: 'apps',
     description: '只能查看 Pod',
     rules: [{ apiGroups: [''], resources: ['pods', 'pods/log', 'pods/status'], verbs: ['get', 'list', 'watch'] }]
   }

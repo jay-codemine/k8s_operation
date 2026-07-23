@@ -551,7 +551,7 @@ const getRoleIcon = (type) => {
     cluster_admin: '🛡️',
     developer: '💻',
     viewer: '👁️',
-    custom: '⚙️'
+    custom: 'settings'
   }
   return icons[type] || '👤'
 }

@@ -3061,18 +3061,18 @@ const applyMultiResourceYaml = async () => {
 // 获取资源图标
 const getResourceIcon = (kind) => {
   const icons = {
-    'Job': '⚙️',
-    'ConfigMap': '📋',
-    'Secret': '🔒',
+    'Job': 'settings',
+    'ConfigMap': 'file',
+    'Secret': 'lock',
     'PersistentVolumeClaim': '💾',
-    'Service': '🌐',
+    'Service': 'language',
     'Deployment': '🚢',
     'StatefulSet': '🔢',
     'DaemonSet': '👾',
     'Ingress': '🚪',
     'Namespace': '📂'
   }
-  return icons[kind] || '📄'
+  return icons[kind] || 'file'
 }
 
 // 获取资源种类样式类

@@ -32,7 +32,7 @@
             <span class="collapse-icon">
               <span class="arrow" :class="{ expanded: !group.collapsed }"></span>
             </span>
-            <span class="group-icon">{{ group.icon }}</span>
+            <span class="group-icon"><AppIcon :name="group.icon" :size="18" /></span>
             <span class="group-name">{{ group.name }}</span>
           </div>
 
@@ -50,7 +50,7 @@
                 class="nav-item"
                 active-class="nav-item-active"
               >
-                <span class="nav-icon">{{ item.icon || '📄' }}</span>
+                <span class="nav-icon"><AppIcon :name="item.icon || 'file'" :size="16" /></span>
                 <span class="nav-text">{{ item.label }}</span>
               </router-link>
             </template>
@@ -344,7 +344,7 @@ const menuGroupsConfig = reactive([
   // 首页
   {
     name: '首页',
-    icon: '🏠',
+    icon: 'home',
     count: 0,
     collapsed: false,
     match: ['/dashboard'],
@@ -353,7 +353,7 @@ const menuGroupsConfig = reactive([
   // 资源中心
   {
     name: '资源中心',
-    icon: '🖥️',
+    icon: 'desktop',
     count: 3,
     collapsed: true,
     match: ['/dashboard', '/clusters', '/platform/health', '/platform/aiops'],
@@ -366,39 +366,39 @@ const menuGroupsConfig = reactive([
   // CI/CD（企业级四中心架构：应用中心 / 流水线(CI) / 发布中心(CD) / 规则中心(Policy)）
   {
     name: 'CI/CD',
-    icon: '⚡',
+    icon: 'thunderbolt',
     count: 14,
     collapsed: true,
     match: ['/cicd'],
     items: [
       // ── 应用中心 ──
       { section: '应用中心' },
-      { path: '/cicd/apps', label: '应用总览', icon: '🏠' },
-      { path: '/cicd/quick-onboard', label: '快速接入', icon: '⚡' },
+      { path: '/cicd/apps', label: '应用总览', icon: 'home' },
+      { path: '/cicd/quick-onboard', label: '快速接入', icon: 'thunderbolt' },
       // ── 流水线 (CI) ──
       { section: '流水线 · CI' },
-      { path: '/cicd/pipelines', label: '流水线管理', icon: '⚙️' },
-      { path: '/cicd/gitops/releases', label: 'GitOps 发布', icon: '🔄' },
-      { path: '/cicd/build-records', label: '构建记录', icon: '📋' },
-      { path: '/cicd/artifacts', label: '制品库', icon: '📦' },
+      { path: '/cicd/pipelines', label: '流水线管理', icon: 'settings' },
+      { path: '/cicd/gitops/releases', label: 'GitOps 发布', icon: 'sync' },
+      { path: '/cicd/build-records', label: '构建记录', icon: 'file' },
+      { path: '/cicd/artifacts', label: '制品库', icon: 'apps' },
       // ── 发布中心 (CD) ──
       { section: '发布中心 · CD' },
-      { path: '/cicd/releases', label: '发布管理', icon: '🚀' },
-      { path: '/cicd/promotion', label: '镜像晋级', icon: '🎯' },
-      { path: '/cicd/release-history', label: '发布历史', icon: '📅' },
-      { path: '/cicd/approvals', label: '审批工单', icon: '✅' },
+      { path: '/cicd/releases', label: '发布管理', icon: 'rocket' },
+      { path: '/cicd/promotion', label: '镜像晋级', icon: 'send' },
+      { path: '/cicd/release-history', label: '发布历史', icon: 'calendar' },
+      { path: '/cicd/approvals', label: '审批工单', icon: 'check-circle' },
       // ── 规则中心 (Policy) ──
       { section: '规则中心' },
-      { path: '/cicd/environments', label: '环境管理', icon: '🌐' },
-      { path: '/cicd/approval-policy', label: '审批策略', icon: '📐' },
-      { path: '/cicd/templates', label: '流水线模板', icon: '📝' },
-      { path: '/cicd/agents', label: '构建节点', icon: '🖥️' },
+      { path: '/cicd/environments', label: '环境管理', icon: 'language' },
+      { path: '/cicd/approval-policy', label: '审批策略', icon: 'edit' },
+      { path: '/cicd/templates', label: '流水线模板', icon: 'file' },
+      { path: '/cicd/agents', label: '构建节点', icon: 'desktop' },
     ],
   },
   // 镜像管理
   {
     name: '镜像管理',
-    icon: '📦',
+    icon: 'apps',
     count: 3,
     collapsed: true,
     match: ['/images'],
@@ -411,7 +411,7 @@ const menuGroupsConfig = reactive([
   // 监控中心
   {
     name: '监控中心',
-    icon: '📊',
+    icon: 'dashboard',
     count: 4,
     collapsed: true,
     match: ['/monitoring'],
@@ -425,7 +425,7 @@ const menuGroupsConfig = reactive([
   // CRD 扩展
   {
     name: 'CRD 扩展',
-    icon: '🧩',
+    icon: 'tool',
     count: 3,
     collapsed: true,
     match: ['/extensions'],
@@ -438,7 +438,7 @@ const menuGroupsConfig = reactive([
   // 平台管理（IAM 统一收口）
   {
     name: '平台管理',
-    icon: '⚙️',
+    icon: 'settings',
     count: 7,
     collapsed: true,
     match: ['/admin'],

@@ -687,7 +687,7 @@ const defaultForm = () => ({
 const form = reactive(defaultForm())
 
 function getTypeIcon(type) {
-  return channelTypes.find(t => t.value === type)?.icon || '📡'
+  return channelTypes.find(t => t.value === type)?.icon || 'wifi'
 }
 function getTypeLabel(type) {
   return channelTypes.find(t => t.value === type)?.label || type

@@ -113,7 +113,7 @@ const activeTab = ref('k8s-sa')
 
 const tabs = [
   { key: 'k8s-sa', label: 'K8s ServiceAccount', icon: '☸️', status: 'active', statusText: '可用' },
-  { key: 'jenkins', label: 'Jenkins', icon: '🔧', status: 'active', statusText: '已连接' },
+  { key: 'jenkins', label: 'Jenkins', icon: 'tool', status: 'active', statusText: '已连接' },
   { key: 'harbor', label: 'Harbor', icon: '🐳', status: 'active', statusText: '已连接' },
   { key: 'api-token', label: 'API Token', icon: '🔑', status: null, statusText: '' },
 ]

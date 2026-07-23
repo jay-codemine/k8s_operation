@@ -4097,7 +4097,7 @@ const serviceTypes = [
   { 
     value: 'NodePort', 
     label: 'NodePort', 
-    icon: '🌐',
+    icon: 'language',
     description: '节点端口访问'
   },
   { 

@@ -588,11 +588,11 @@ const truncatePath = (path) => {
 
 const getModuleIcon = (module) => {
   const map = {
-    auth: '🔐', cluster: '☸️', workload: '📦', network: '🌐',
-    config: '⚙️', storage: '💾', cicd: '🚀', rbac: '🛡️',
-    platform: '🏛️', ai: '🤖', monitoring: '📡', image: '🐳'
+    auth: '🔐', cluster: '☸️', workload: 'apps', network: 'language',
+    config: 'settings', storage: '💾', cicd: 'send', rbac: '🛡️',
+    platform: '🏛️', ai: 'robot', monitoring: 'wifi', image: '🐳'
   }
-  return map[module] || '📋'
+  return map[module] || 'file'
 }
 
 const getModuleLabel = (module) => {

@@ -63,9 +63,9 @@ const rbacActiveTab = ref('k8s-roles')
 
 const tabs = [
   { key: 'roles', label: '角色管理', icon: '👥' },
-  { key: 'authorization', label: '权限矩阵', icon: '📊' },
+  { key: 'authorization', label: '权限矩阵', icon: 'dashboard' },
   { key: 'rbac', label: 'RBAC 管理', icon: '🔐' },
-  { key: 'diagnosis', label: '权限诊断', icon: '🔍' },
+  { key: 'diagnosis', label: '权限诊断', icon: 'search' },
 ]
 
 const rbacSubTabs = [

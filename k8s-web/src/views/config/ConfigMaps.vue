@@ -1598,18 +1598,18 @@ const applyMultiResourceYaml = async () => {
 
 const getResourceIcon = (kind) => {
   const icons = {
-    'ConfigMap': '📋',
-    'Secret': '🔒',
-    'Service': '🌐',
-    'Deployment': '🚀',
+    'ConfigMap': 'file',
+    'Secret': 'lock',
+    'Service': 'language',
+    'Deployment': 'send',
     'StatefulSet': '🏛️',
     'DaemonSet': '🔁',
-    'Job': '⚙️',
+    'Job': 'settings',
     'CronJob': '⏰',
     'PersistentVolumeClaim': '💾',
     'Namespace': '📂'
   }
-  return icons[kind] || '📦'
+  return icons[kind] || 'apps'
 }
 
 const getResourceKindClass = (kind) => {

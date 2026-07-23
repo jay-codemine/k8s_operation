@@ -111,7 +111,7 @@
         <div class="card-body">
           <div class="result-display">
             <div class="result-icon">
-              {{ checkResult.allowed ? '✅' : '❌' }}
+              {{ checkResult.allowed ? 'check-circle' : '❌' }}
             </div>
             <div class="result-content">
               <h3>{{ checkResult.allowed ? '允许访问' : '拒绝访问' }}</h3>

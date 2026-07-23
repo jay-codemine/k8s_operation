@@ -34,11 +34,11 @@ const route = useRoute()
 const alertCount = ref(0)
 
 const tabs = ref([
-  { path: '/monitoring', label: '监控总览', icon: '📊', badge: null },
-  { path: '/monitoring/datasources', label: '数据源管理', icon: '🔌', badge: null },
-  { path: '/monitoring/alert-rules', label: '告警规则', icon: '📋', badge: null },
+  { path: '/monitoring', label: '监控总览', icon: 'dashboard', badge: null },
+  { path: '/monitoring/datasources', label: '数据源管理', icon: 'link', badge: null },
+  { path: '/monitoring/alert-rules', label: '告警规则', icon: 'file', badge: null },
   { path: '/monitoring/alert-events', label: '告警事件', icon: '🔔', badge: null },
-  { path: '/monitoring/notify-channels', label: '通知渠道', icon: '📡', badge: null },
+  { path: '/monitoring/notify-channels', label: '通知渠道', icon: 'wifi', badge: null },
   { path: '/monitoring/silence-rules', label: '告警降噪', icon: '🔇', badge: null },
 ])
 

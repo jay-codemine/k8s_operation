@@ -10,6 +10,9 @@ import '@arco-design/web-vue/dist/arco.css'
 import './styles/theme-variables.css'
 import {pinia} from '@/stores'
 
+// 引入全局图标组件
+import AppIcon from '@/components/AppIcon.vue'
+
 // 引入权限插件
 import { setupPermission } from '@/directives/permission'
 
@@ -48,6 +51,7 @@ setupPermission(app)
 
 app.use(router)
 app.use(pinia)
+app.component('AppIcon', AppIcon)
 
 // ================================================================
 // 全局 Vue 错误处理：防止组件渲染错误导致白屏

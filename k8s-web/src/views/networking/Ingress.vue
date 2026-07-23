@@ -89,7 +89,7 @@
             <td>{{ ing.paths || '-' }}</td>
             <td>{{ ing.services || '-' }}</td>
             <td>{{ ing.ingress_class || '-' }}</td>
-            <td>{{ ing.tls ? '✅' : '-' }}</td>
+            <td>{{ ing.tls ? 'check-circle' : '-' }}</td>
             <td>{{ ing.address || '-' }}</td>
             <td>{{ getAge(ing.created_at) }}</td>
             <td>

@@ -388,15 +388,15 @@ const notifyResults = ref([])
 const metricsCards = [
   { key: 'today_analysis', label: '今日分析', icon: '🧠', color: 'purple' },
   { key: 'firing_alerts', label: '活跃告警', icon: '🔥', color: 'red' },
-  { key: 'week_analysis', label: '本周分析', icon: '📈', color: 'blue' },
-  { key: 'total_analysis', label: '累计分析', icon: '📊', color: 'green' },
+  { key: 'week_analysis', label: '本周分析', icon: 'dashboard', color: 'blue' },
+  { key: 'total_analysis', label: '累计分析', icon: 'dashboard', color: 'green' },
 ]
 
 // 四维度配置
 const dimensions = [
   { key: 'cluster', icon: '☁️', title: '集群', total: d => d.clusters_total, healthy: d => d.clusters_healthy },
-  { key: 'node', icon: '🖥️', title: '节点', total: d => d.nodes_total, healthy: d => d.nodes_ready },
-  { key: 'workload', icon: '⚙️', title: '工作负载', total: d => d.workloads_total, healthy: d => d.workloads_healthy },
+  { key: 'node', icon: 'desktop', title: '节点', total: d => d.nodes_total, healthy: d => d.nodes_ready },
+  { key: 'workload', icon: 'settings', title: '工作负载', total: d => d.workloads_total, healthy: d => d.workloads_healthy },
   { key: 'alert', icon: '🚨', title: '告警', total: d => d.alerts_firing, healthy: d => 0 },
 ]
 
@@ -534,8 +534,8 @@ function formatTime(ts) {
 }
 function statusText(s) { return { running: '运行中', completed: '已完成', failed: '失败' }[s] || s }
 function levelText(l) { return { healthy: '健康', warning: '警告', critical: '严重' }[l] || '未知' }
-function typeIcon(t) { return { alert_analysis: '⚡', log_diagnosis: '📋', inspection: '🔍' }[t] || '🧠' }
-function channelIcon(t) { return { dingtalk: '🔷', feishu: '🟦', wechat: '🟩', email: '📧', webhook: '🔗' }[t] || '📡' }
+function typeIcon(t) { return { alert_analysis: 'thunderbolt', log_diagnosis: 'file', inspection: 'search' }[t] || '🧠' }
+function channelIcon(t) { return { dingtalk: '🔷', feishu: '🟦', wechat: '🟩', email: '📧', webhook: '🔗' }[t] || 'wifi' }
 
 function dimPercent(dim) {
   if (!reportDetails.value) return 0

@@ -34,7 +34,7 @@
         <label class="auto-ref"><input type="checkbox" v-model="autoRefresh" /><span>自动刷新</span><span v-if="autoRefresh" class="ref-dot">●</span></label>
       </div>
       <div class="toolbar-right">
-        <button class="sa-btn sec" @click="loadServiceAccounts" :disabled="loading">{{ loading?'⏳':'🔄' }} 刷新</button>
+        <button class="sa-btn sec" @click="loadServiceAccounts" :disabled="loading">{{ loading?'⏳':'sync' }} 刷新</button>
         <button class="sa-btn pri" @click="openCreateModal">＋ 创建 ServiceAccount</button>
       </div>
     </div>

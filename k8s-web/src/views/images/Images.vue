@@ -408,7 +408,7 @@ export default {
     }
     
     // 工具函数
-    const getTypeIcon = (type) => typeConfig[type] || '📦'
+    const getTypeIcon = (type) => typeConfig[type] || 'apps'
     
     const formatSize = (bytes) => {
       if (!bytes) return '-'

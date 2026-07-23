@@ -75,7 +75,7 @@
       </div>
       <div class="toolbar-right">
         <button class="rbac-btn rbac-btn-secondary" @click="loadBindings" :disabled="loading">
-          {{ loading ? '⏳' : '🔄' }} 刷新
+          {{ loading ? '⏳' : 'sync' }} 刷新
         </button>
         <button class="rbac-btn rbac-btn-primary" @click="openCreateModal">
           + 创建绑定
@@ -489,7 +489,7 @@ const closeCreateModal = () => { showCreateModal.value = false }
 const closeSubjectsModal = () => { showSubjectsModal.value = false; currentBinding.value = null }
 
 const getSubjectKindText = (kind) => ({ User: '用户', Group: '用户组', ServiceAccount: '服务账户' }[kind] || kind)
-const getSubjectIcon = (kind) => ({ User: '👤', Group: '👥', ServiceAccount: '🤖' }[kind] || '❓')
+const getSubjectIcon = (kind) => ({ User: '👤', Group: '👥', ServiceAccount: 'robot' }[kind] || '❓')
 const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : '-'
 
 onMounted(() => { loadClusters() })

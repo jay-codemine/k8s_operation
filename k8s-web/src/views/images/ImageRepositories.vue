@@ -157,7 +157,7 @@
             <td class="col-actions">
               <div class="action-group">
                 <button class="action-btn check" @click="checkConnection(registry)" :disabled="registry.checking" title="检测连接">
-                  {{ registry.checking ? '⏳' : '🔌' }}
+                  {{ registry.checking ? '⏳' : 'link' }}
                 </button>
                 <button class="action-btn edit" @click="openEditModal(registry)" title="编辑">✏️</button>
                 <button class="action-btn delete" @click="handleDelete(registry)" title="删除">🗑️</button>
@@ -593,7 +593,7 @@ export default {
     }
     
     // 工具函数
-    const getTypeIcon = (type) => typeConfig[type]?.icon || '📦'
+    const getTypeIcon = (type) => typeConfig[type]?.icon || 'apps'
     const getTypeName = (type) => typeConfig[type]?.name || type
     
     const getStatusText = (status) => {

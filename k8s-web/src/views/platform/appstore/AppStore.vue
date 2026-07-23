@@ -1302,10 +1302,10 @@ function statusColor(s) {
   return map[s] || 'gray'
 }
 const categoryIconMap = {
-  '网络': '🌐', '监控': '📊', '日志': '📝', '存储': '💾',
-  '安全': '🔒', 'GitOps': '🔄', '数据库': '🗄️', '消息队列': '📨'
+  '网络': 'language', '监控': 'dashboard', '日志': 'file', '存储': '💾',
+  '安全': 'lock', 'GitOps': 'sync', '数据库': '🗄️', '消息队列': '📨'
 }
-function getCategoryIcon(cat) { return categoryIconMap[cat] || '📦' }
+function getCategoryIcon(cat) { return categoryIconMap[cat] || 'apps' }
 
 const iconColorMap = {
   'ingress': 'icon-blue', 'nginx': 'icon-green', 'prometheus': 'icon-orange',

@@ -10,7 +10,7 @@
           <div class="vsel" :class="{ open: clusterSelOpen }" @click.stop="toggleClusterSel">
             <div class="vsel-label"><span class="vsl-icon">☸️</span>监控集群</div>
             <button class="vsel-btn">
-              <span class="vsel-icon">{{ vistaClusterId === 0 ? '🌐' : '☸️' }}</span>
+              <span class="vsel-icon">{{ vistaClusterId === 0 ? 'language' : '☸️' }}</span>
               <span class="vsel-name">{{ currentVistaClusterName }}</span>
               <span class="vsel-meta">{{ vistaClusterId === 0 ? globalDsCount : clusterDsCount(vistaClusterId) }} 个数据源</span>
               <span class="vsel-arrow">▾</span>
@@ -181,7 +181,7 @@
         </div>
         <!-- 视图模式标签 -->
         <div class="view-mode-tag" :class="currentViewMode">
-          <span class="view-mode-icon">{{ currentViewMode === 'metrics' ? '📈' : '📜' }}</span>
+          <span class="view-mode-icon">{{ currentViewMode === 'metrics' ? 'dashboard' : '📜' }}</span>
           <span>{{ currentViewMode === 'metrics' ? 'Metrics' : 'Logs' }}</span>
         </div>
         <a class="targets-link" :href="prometheusTargetsURL" target="_blank" v-if="prometheusTargetsURL && healthy">
@@ -613,8 +613,8 @@ const dsGroups = computed(() => {
 })
 
 function getDsIcon(type) {
-  const map = { prometheus: '🔥', loki: '📜', alertmanager: '🚨', victoriametrics: '📈', grafana: '📊', n9e: '🦉', thanos: '♾️' }
-  return map[type] || '📡'
+  const map = { prometheus: '🔥', loki: '📜', alertmanager: '🚨', victoriametrics: 'dashboard', grafana: 'dashboard', n9e: '🦉', thanos: '♾️' }
+  return map[type] || 'wifi'
 }
 
 function getDsTypeName(type) {
@@ -689,9 +689,9 @@ const abnormalPods = ref([])
 const namespaceMetrics = ref([])
 const scopeView = ref('nodes')
 const scopeTabs = [
-  { key: 'nodes', label: '主机视角', icon: '🖥️' },
-  { key: 'pods', label: 'Pod 视角', icon: '📦' },
-  { key: 'namespaces', label: 'Namespace 视角', icon: '🗂️' },
+  { key: 'nodes', label: '主机视角', icon: 'desktop' },
+  { key: 'pods', label: 'Pod 视角', icon: 'apps' },
+  { key: 'namespaces', label: 'Namespace 视角', icon: 'layers' },
 ]
 const scoreLevelText = computed(() => {
   const map = { excellent: '优秀', good: '良好', warning: '需关注', critical: '严重' }
@@ -758,11 +758,11 @@ const metricCards = computed(() => [
   { icon: '💻', label: 'CPU 使用率',  value: overview.cpu_usage.toFixed(1) + '%',    sub: '所有节点平均',         color: '#4f46e5' },
   { icon: '🧠', label: '内存使用率', value: overview.memory_usage.toFixed(1) + '%', sub: '所有节点平均',         color: '#ec4899' },
   { icon: '💾', label: '磁盘使用率', value: overview.disk_usage.toFixed(1) + '%',   sub: '根分区最大值',         color: '#0ea5e9' },
-  { icon: '🖥️', label: '节点数量',   value: String(overview.node_count),            sub: 'Ready 状态',          color: '#10b981' },
-  { icon: '📦', label: 'Pod 数量',    value: String(overview.pod_count),             sub: 'Running 总数',        color: '#f59e0b' },
+  { icon: 'desktop', label: '节点数量',   value: String(overview.node_count),            sub: 'Ready 状态',          color: '#10b981' },
+  { icon: 'apps', label: 'Pod 数量',    value: String(overview.pod_count),             sub: 'Running 总数',        color: '#f59e0b' },
   { icon: '🔔', label: '活跃告警',   value: String(overview.alert_count),           sub: 'Firing/Pending',  color: '#ef4444' },
-  { icon: '📥', label: '入站流量',   value: formatBytes(overview.network_in) + '/s',  sub: '集群聚合',           color: '#8b5cf6' },
-  { icon: '📤', label: '出站流量',   value: formatBytes(overview.network_out) + '/s', sub: '集群聚合',           color: '#f97316' },
+  { icon: 'import', label: '入站流量',   value: formatBytes(overview.network_in) + '/s',  sub: '集群聚合',           color: '#8b5cf6' },
+  { icon: 'export', label: '出站流量',   value: formatBytes(overview.network_out) + '/s', sub: '集群聚合',           color: '#f97316' },
 ])
 
 // ===== 工具函数 =====
