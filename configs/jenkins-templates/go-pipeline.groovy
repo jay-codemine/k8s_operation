@@ -722,8 +722,22 @@ ENTRYPOINT ["/app/${appName}"]
                                 --label build.timestamp=${env.BUILD_TS} \
                                 --label build.mode=k8s-kaniko \
                                 --snapshot-mode=redo \
-                                --push-retry=3 \
-                                --use-new-run
+                                --push-retry=5 \
+                                --use-new-run \
+                                --cache=false \
+                                --compressed-caching=false
+                        """
+
+                        // 推送后完整性校验：缺层立即失败，杜绝损坏镜像流入部署（crane 在则强校验，不在则告警跳过）
+                        sh """
+                            export DOCKER_CONFIG=/kaniko/.docker
+                            if command -v crane >/dev/null 2>&1; then
+                                echo '[Verify] 校验镜像完整性: ${env.FULL_IMAGE}'
+                                crane validate --remote ${env.FULL_IMAGE} || { echo '❌ 镜像层不完整（推送损坏），构建失败'; exit 1; }
+                                echo '[Verify] ✅ 镜像完整性校验通过'
+                            else
+                                echo '[Verify] ⚠️ 未检测到 crane，跳过完整性校验（如需强制校验请在 kaniko 镜像预置 crane）'
+                            fi
                         """
 
                         // Kaniko 完成后镜像已推送，获取 digest
