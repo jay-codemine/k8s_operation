@@ -56,7 +56,7 @@
         <!-- 移动端顶部 Logo（品牌区收起时展示） -->
         <div class="mobile-brand">
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 100 100">
-            <g fill="#165DFF">
+            <g fill="#3A84FF">
               <path
                 d="M39.971 5.05c-3.607-.418-7.152.532-9.957 2.694l-1.315 1.035 1.703 2.17 1.227-1.006c1.946-1.606 4.387-2.537 6.984-2.537 3.97 0 7.513 2.053 9.616 5.298l1.127 1.629 2.012-1.388-1.217-1.772c-2.563-3.722-6.534-6.13-10.984-6.23z"
               />
@@ -467,8 +467,8 @@ const handleSubmit = async () => {
   display: flex;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #f5f7fb;
-  color: #1d2129;
+  background: #0a1128;
+  color: #e4e8ee;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -602,7 +602,7 @@ const handleSubmit = async () => {
   margin-bottom: 28px;
   font-size: 20px;
   font-weight: 700;
-  color: #165DFF;
+  color: #3A84FF;
 }
 
 .form-header {
@@ -612,14 +612,14 @@ const handleSubmit = async () => {
 .form-header h2 {
   font-size: 28px;
   font-weight: 700;
-  color: #1d2129;
+  color: #e4e8ee;
   margin: 0;
 }
 
 .form-header p {
   margin-top: 8px;
   font-size: 14px;
-  color: #86909c;
+  color: #7b8699;
 }
 
 .login-form {
@@ -635,7 +635,7 @@ const handleSubmit = async () => {
 }
 
 .form-group label {
-  color: #4e5969;
+  color: #9da5b3;
   font-size: 13px;
   font-weight: 500;
 }
@@ -644,27 +644,28 @@ const handleSubmit = async () => {
   width: 100%;
   height: 46px;
   padding: 0 14px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #dcdfe6;
-  color: #1d2129;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e4e8ee;
   font-size: 14px;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .form-group input::placeholder {
-  color: #c0c4cc;
+  color: #5a6273;
 }
 
 .form-group input:hover {
-  border-color: #c0c4cc;
+  border-color: rgba(58,132,255,0.4);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #165DFF;
-  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.12);
+  border-color: #3A84FF;
+  box-shadow: 0 0 0 3px rgba(58,132,255,0.15);
+  background: rgba(255,255,255,0.08);
 }
 
 .password-wrapper {
@@ -692,7 +693,7 @@ const handleSubmit = async () => {
 }
 
 .toggle-password:hover {
-  color: #165DFF;
+  color: #3A84FF;
 }
 
 .form-options {
@@ -711,25 +712,25 @@ const handleSubmit = async () => {
 .remember-me input {
   width: 15px;
   height: 15px;
-  accent-color: #165DFF;
+  accent-color: #3A84FF;
   cursor: pointer;
 }
 
 .remember-me label {
-  color: #4e5969;
+  color: #9da5b3;
   font-size: 13px;
   cursor: pointer;
 }
 
 .forgot-password {
-  color: #165DFF;
+  color: #3A84FF;
   text-decoration: none;
   font-size: 13px;
   transition: color 0.2s ease;
 }
 
 .forgot-password:hover {
-  color: #4080FF;
+  color: #699DF4;
   text-decoration: underline;
 }
 
@@ -743,7 +744,7 @@ const handleSubmit = async () => {
 .login-btn {
   height: 46px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #165DFF, #4080FF);
+  background: linear-gradient(135deg, #3A84FF, #699DF4);
   color: #fff;
   font-weight: 600;
   border: none;
@@ -764,7 +765,7 @@ const handleSubmit = async () => {
 }
 
 .login-btn:disabled {
-  background: #a3c0ff;
+  background: #4a6fa5;
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -772,9 +773,9 @@ const handleSubmit = async () => {
 .register-btn {
   height: 46px;
   border-radius: 8px;
-  background: #fff;
-  color: #4e5969;
-  border: 1px solid #dcdfe6;
+  background: #141b2d;
+  color: #9da5b3;
+  border: 1px solid rgba(255,255,255,0.1);
   cursor: pointer;
   transition: all 0.25s ease;
   font-size: 14px;
@@ -782,34 +783,34 @@ const handleSubmit = async () => {
 }
 
 .register-btn:hover:not(:disabled) {
-  color: #165DFF;
-  border-color: #165DFF;
+  color: #3A84FF;
+  border-color: #3A84FF;
   background: rgba(22, 93, 255, 0.04);
 }
 
 .register-btn:disabled {
-  color: #c0c4cc;
+  color: #5a6273;
   cursor: not-allowed;
 }
 
 .error-message {
-  background: #fef0f0;
-  color: #f56c6c;
+  background: rgba(245,108,108,0.12);
+  color: #f77b7b;
   padding: 11px 14px;
   border-radius: 8px;
   text-align: center;
   font-size: 13px;
-  border: 1px solid #fde2e2;
+  border: 1px solid rgba(245,108,108,0.2);
 }
 
 .success-message {
-  background: #f0f9eb;
-  color: #67c23a;
+  background: rgba(103,194,58,0.12);
+  color: #73d13d;
   padding: 11px 14px;
   border-radius: 8px;
   text-align: center;
   font-size: 13px;
-  border: 1px solid #e1f3d8;
+  border: 1px solid rgba(103,194,58,0.2);
 }
 
 /* LDAP 标识 */
@@ -822,7 +823,7 @@ const handleSubmit = async () => {
   background: rgba(103, 194, 58, 0.1);
   border: 1px solid rgba(103, 194, 58, 0.28);
   border-radius: 20px;
-  color: #529b2e;
+  color: #73d13d;
   font-size: 12px;
 }
 
@@ -834,7 +835,7 @@ const handleSubmit = async () => {
   background: rgba(22, 93, 255, 0.06);
   border: 1px solid rgba(22, 93, 255, 0.18);
   border-radius: 8px;
-  color: #165DFF;
+  color: #3A84FF;
   font-size: 13px;
 }
 
@@ -855,10 +856,10 @@ const handleSubmit = async () => {
   width: 100%;
   max-width: 420px;
   padding: 24px;
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: #141b2d;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
 }
 
 .modal-header {
@@ -869,7 +870,7 @@ const handleSubmit = async () => {
 }
 
 .modal-title {
-  color: #1d2129;
+  color: #e4e8ee;
   font-size: 18px;
   font-weight: 600;
 }
@@ -885,7 +886,7 @@ const handleSubmit = async () => {
 }
 
 .modal-close:hover {
-  color: #1d2129;
+  color: #e4e8ee;
 }
 
 .modal-form {
@@ -923,7 +924,7 @@ const handleSubmit = async () => {
   .form-wrapper {
     max-width: 400px;
     padding: 32px 24px;
-    background: #fff;
+    background: #141b2d;
     border-radius: 16px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
   }
