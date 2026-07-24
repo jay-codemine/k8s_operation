@@ -321,26 +321,39 @@ export const pipelineCallback = (data) => {
 // =======================
 
 /**
- * 获取 Git 仓库的远程分支列表
+ * 获取 Git 仓库的远程分支列表（支持公网与内网仓库）
+ * 私有仓库可传入 username/password(或访问令牌 Token)，或在 repoUrl 中内嵌凭证
  * @param {string} repoUrl - Git 仓库地址
- * @param {string} credentialId - 凭证ID（可选）
+ * @param {Object} [options] - 可选参数
+ * @param {string} [options.credentialId] - 凭证ID（预留）
+ * @param {string} [options.username] - 私有仓库用户名
+ * @param {string} [options.password] - 私有仓库密码或访问令牌(Token)
  */
-export const getGitBranches = (repoUrl, credentialId = '') => {
+export const getGitBranches = (repoUrl, options = {}) => {
+  const { credentialId = '', username = '', password = '' } = typeof options === 'string' ? { credentialId: options } : options
   return http.post(`${API_BASE}/k8s/cicd/git/branches`, {
     repo_url: repoUrl,
-    credential_id: credentialId
+    credential_id: credentialId,
+    username,
+    password
   })
 }
 
 /**
- * 验证 Git 仓库连接
+ * 验证 Git 仓库连接（支持公网与内网仓库）
  * @param {string} repoUrl - Git 仓库地址
- * @param {string} credentialId - 凭证ID（可选）
+ * @param {Object} [options] - 可选参数
+ * @param {string} [options.credentialId] - 凭证ID（预留）
+ * @param {string} [options.username] - 私有仓库用户名
+ * @param {string} [options.password] - 私有仓库密码或访问令牌(Token)
  */
-export const validateGitRepo = (repoUrl, credentialId = '') => {
+export const validateGitRepo = (repoUrl, options = {}) => {
+  const { credentialId = '', username = '', password = '' } = typeof options === 'string' ? { credentialId: options } : options
   return http.post(`${API_BASE}/k8s/cicd/git/validate`, {
     repo_url: repoUrl,
-    credential_id: credentialId
+    credential_id: credentialId,
+    username,
+    password
   })
 }
 

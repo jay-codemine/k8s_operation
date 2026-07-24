@@ -1,174 +1,219 @@
 <template>
   <div class="login-page">
-    <!-- 左侧品牌展示区 -->
-    <aside class="brand-panel">
-      <div class="brand-glow"></div>
-      <div class="brand-grid"></div>
+    <!-- 插画背景：浅蓝天空 + 港口云原生场景 -->
+    <div class="scene" aria-hidden="true">
+      <div class="cloud cloud-1"></div>
+      <div class="cloud cloud-2"></div>
+      <div class="cloud cloud-3"></div>
 
-      <div class="brand-content">
+      <!-- 港口插画剪影：城市天际线 + 龙门起重机 + 集装箱 + 货轮 + 海面 -->
+      <svg class="harbor" viewBox="0 0 1440 460" preserveAspectRatio="xMidYMax slice">
+        <!-- 远景城市天际线 -->
+        <g fill="#c3daf0">
+          <rect x="60" y="150" width="46" height="200" rx="3"/>
+          <rect x="118" y="110" width="34" height="240" rx="3"/>
+          <rect x="162" y="180" width="40" height="170" rx="3"/>
+          <rect x="212" y="90" width="30" height="260" rx="3"/>
+          <rect x="250" y="200" width="48" height="150" rx="3"/>
+          <rect x="1180" y="170" width="42" height="180" rx="3"/>
+          <rect x="1230" y="120" width="34" height="230" rx="3"/>
+          <rect x="1272" y="190" width="46" height="160" rx="3"/>
+          <rect x="1326" y="150" width="30" height="200" rx="3"/>
+        </g>
+        <!-- 中景高塔 -->
+        <g fill="#a7c8e8">
+          <rect x="196" y="60" width="14" height="290"/>
+          <polygon points="203,30 190,72 216,72"/>
+          <rect x="1256" y="70" width="12" height="280"/>
+          <polygon points="1262,44 1250,82 1274,82"/>
+        </g>
+
+        <!-- 左侧龙门起重机 -->
+        <g stroke="#6aa2da" stroke-width="6" fill="none" stroke-linecap="round">
+          <line x1="330" y1="120" x2="330" y2="360"/>
+          <line x1="400" y1="120" x2="400" y2="360"/>
+          <line x1="300" y1="122" x2="470" y2="122"/>
+          <line x1="330" y1="150" x2="365" y2="120"/>
+          <line x1="400" y1="150" x2="365" y2="120"/>
+        </g>
+        <line x1="455" y1="122" x2="455" y2="205" stroke="#6aa2da" stroke-width="4"/>
+        <rect x="444" y="205" width="22" height="18" rx="2" fill="#e89b5a"/>
+
+        <!-- 右侧龙门起重机 -->
+        <g stroke="#5a95d0" stroke-width="6" fill="none" stroke-linecap="round">
+          <line x1="1040" y1="90" x2="1040" y2="360"/>
+          <line x1="1120" y1="90" x2="1120" y2="360"/>
+          <line x1="1010" y1="92" x2="1180" y2="92"/>
+          <line x1="1040" y1="124" x2="1080" y2="92"/>
+          <line x1="1120" y1="124" x2="1080" y2="92"/>
+        </g>
+        <line x1="1160" y1="92" x2="1160" y2="180" stroke="#5a95d0" stroke-width="4"/>
+        <rect x="1149" y="180" width="22" height="18" rx="2" fill="#f0b36b"/>
+
+        <!-- 集装箱堆场 -->
+        <g>
+          <rect x="470" y="300" width="70" height="26" rx="2" fill="#4a86c9"/>
+          <rect x="470" y="272" width="70" height="26" rx="2" fill="#e89b5a"/>
+          <rect x="544" y="300" width="70" height="26" rx="2" fill="#6cc0b0"/>
+          <rect x="544" y="272" width="70" height="26" rx="2" fill="#4a86c9"/>
+          <rect x="618" y="300" width="70" height="26" rx="2" fill="#e89b5a"/>
+          <rect x="880" y="300" width="70" height="26" rx="2" fill="#6cc0b0"/>
+          <rect x="880" y="272" width="70" height="26" rx="2" fill="#4a86c9"/>
+          <rect x="954" y="300" width="70" height="26" rx="2" fill="#e89b5a"/>
+        </g>
+
+        <!-- 右侧货轮 -->
+        <g>
+          <path d="M1120 372 L1400 372 L1360 418 L1150 418 Z" fill="#3f6fa8"/>
+          <rect x="1150" y="336" width="150" height="38" fill="#5a8bc4"/>
+          <rect x="1156" y="308" width="40" height="28" rx="2" fill="#e89b5a"/>
+          <rect x="1200" y="308" width="40" height="28" rx="2" fill="#d8e6f2"/>
+          <rect x="1244" y="308" width="40" height="28" rx="2" fill="#6cc0b0"/>
+          <rect x="1306" y="320" width="26" height="54" fill="#2f5885"/>
+          <rect x="1312" y="326" width="14" height="12" fill="#cfe0f0"/>
+        </g>
+
+        <!-- 海面 -->
+        <path d="M0 372 Q360 356 720 372 T1440 372 L1440 460 L0 460 Z" fill="#7fb6e6"/>
+        <path d="M0 392 Q360 378 720 392 T1440 392 L1440 460 L0 460 Z" fill="#5f9fd8" opacity="0.85"/>
+        <g stroke="#a9d0f0" stroke-width="3" stroke-linecap="round" opacity="0.7">
+          <line x1="120" y1="410" x2="180" y2="410"/>
+          <line x1="300" y1="428" x2="360" y2="428"/>
+          <line x1="560" y1="414" x2="620" y2="414"/>
+          <line x1="820" y1="430" x2="880" y2="430"/>
+          <line x1="1000" y1="412" x2="1060" y2="412"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- 居中登录区 -->
+    <main class="login-main">
+      <!-- 品牌 -->
+      <div class="brand">
         <div class="brand-logo">
-          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 100 100">
-            <g fill="#ffffff">
-              <path
-                d="M39.971 5.05c-3.607-.418-7.152.532-9.957 2.694l-1.315 1.035 1.703 2.17 1.227-1.006c1.946-1.606 4.387-2.537 6.984-2.537 3.97 0 7.513 2.053 9.616 5.298l1.127 1.629 2.012-1.388-1.217-1.772c-2.563-3.722-6.534-6.13-10.984-6.23z"
-              />
-              <path
-                d="M42.026 94.796c3.608.418 7.153-.53 9.958-2.693l1.315-1.035-1.702-2.17-1.228 1.006c-1.947 1.606-4.388 2.537-6.985 2.537-3.969 0-7.512-2.053-9.615-5.298l-1.127-1.63-2.012 1.388 1.217 1.772c2.564 3.723 6.535 6.13 10.984 6.23z"
-              />
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <circle cx="32" cy="32" r="14" fill="none" stroke="#2f6fd0" stroke-width="4"/>
+            <circle cx="32" cy="32" r="5" fill="#2f6fd0"/>
+            <g stroke="#2f6fd0" stroke-width="3" stroke-linecap="round">
+              <line x1="38" y1="32" x2="54" y2="32"/>
+              <line x1="26" y1="32" x2="10" y2="32"/>
+              <line x1="32" y1="38" x2="32" y2="54"/>
+              <line x1="32" y1="26" x2="32" y2="10"/>
+              <line x1="36.2" y1="36.2" x2="47.5" y2="47.5"/>
+              <line x1="27.8" y1="36.2" x2="16.5" y2="47.5"/>
+              <line x1="27.8" y1="27.8" x2="16.5" y2="16.5"/>
+              <line x1="36.2" y1="27.8" x2="47.5" y2="16.5"/>
+            </g>
+            <g fill="#2f6fd0">
+              <circle cx="54" cy="32" r="3"/><circle cx="10" cy="32" r="3"/>
+              <circle cx="32" cy="54" r="3"/><circle cx="32" cy="10" r="3"/>
+              <circle cx="47.5" cy="47.5" r="3"/><circle cx="16.5" cy="47.5" r="3"/>
+              <circle cx="16.5" cy="16.5" r="3"/><circle cx="47.5" cy="16.5" r="3"/>
             </g>
           </svg>
-          <span>K8sOperation</span>
         </div>
-
-        <div class="brand-hero">
-          <h1>云原生运维<br />一体化管理平台</h1>
-          <p>多集群纳管 · CI/CD 流水线 · GitOps 发布 · 全链路可观测</p>
+        <h1 class="brand-title">K8S OPERATOR</h1>
+        <p class="brand-subtitle">云原生应用交付与运维平台</p>
+        <div v-if="ldapEnabled && mode === 'login'" class="ldap-badge">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>LDAP 认证已启用</span>
         </div>
-
-        <ul class="brand-features">
-          <li>
-            <span class="feat-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-            <span>多集群统一纳管，秒级切换工作负载</span>
-          </li>
-          <li>
-            <span class="feat-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-            <span>可视化流水线，一键构建与灰度发布</span>
-          </li>
-          <li>
-            <span class="feat-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-            <span>实时监控告警，故障自动回滚保障稳定</span>
-          </li>
-        </ul>
-
-        <div class="brand-footer">© 2026 K8sOperation · 云原生 DevOps 平台</div>
       </div>
-    </aside>
 
-    <!-- 右侧登录/注册表单区 -->
-    <main class="form-panel">
-      <div class="form-wrapper">
-        <!-- 移动端顶部 Logo（品牌区收起时展示） -->
-        <div class="mobile-brand">
-          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 100 100">
-            <g fill="#3A84FF">
-              <path
-                d="M39.971 5.05c-3.607-.418-7.152.532-9.957 2.694l-1.315 1.035 1.703 2.17 1.227-1.006c1.946-1.606 4.387-2.537 6.984-2.537 3.97 0 7.513 2.053 9.616 5.298l1.127 1.629 2.012-1.388-1.217-1.772c-2.563-3.722-6.534-6.13-10.984-6.23z"
-              />
-              <path
-                d="M42.026 94.796c3.608.418 7.153-.53 9.958-2.693l1.315-1.035-1.702-2.17-1.228 1.006c-1.947 1.606-4.388 2.537-6.985 2.537-3.969 0-7.512-2.053-9.615-5.298l-1.127-1.63-2.012 1.388 1.217 1.772c2.564 3.723 6.535 6.13 10.984 6.23z"
-              />
-            </g>
-          </svg>
-          <span>K8sOperation</span>
-        </div>
-
-        <div class="form-header">
-          <h2>{{ mode === 'login' ? '欢迎回来' : '创建新账号' }}</h2>
-          <p>{{ mode === 'login' ? '登录以进入管理控制台' : '注册一个新的平台账号' }}</p>
-          <div v-if="ldapEnabled && mode === 'login'" class="ldap-badge">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            <span>LDAP 认证已启用</span>
-          </div>
-        </div>
-
+      <!-- 白色登录卡片 -->
+      <div class="login-card">
         <form class="login-form" @submit.prevent="handleSubmit">
-          <div class="form-group">
-            <label for="username">用户名</label>
+          <div class="field">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+            </span>
             <input
-              id="username"
               v-model="form.username"
               type="text"
-              placeholder="请输入用户名"
+              placeholder="用户名"
               autocomplete="username"
               required
               aria-label="用户名"
             />
           </div>
 
-          <div class="form-group">
-            <label for="password">密码</label>
-            <div class="password-wrapper">
-              <input
-                id="password"
-                v-model="form.password"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="请输入密码"
-                :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
-                required
-                aria-label="密码"
-              />
-              <button type="button" class="toggle-password" @click="showPassword = !showPassword" tabindex="-1">
-                <svg v-if="!showPassword" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
-            </div>
+          <div class="field">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </span>
+            <input
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="密码"
+              :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+              required
+              aria-label="密码"
+            />
+            <button type="button" class="eye" @click="showPassword = !showPassword" tabindex="-1">
+              <svg v-if="!showPassword" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
           </div>
 
-          <div class="form-group" v-if="mode === 'register'">
-            <label for="password_confirm">确认密码</label>
+          <div class="field" v-if="mode === 'register'">
+            <span class="field-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </span>
             <input
-              id="password_confirm"
               v-model="form.password_confirm"
               type="password"
-              placeholder="请再次输入密码"
+              placeholder="确认密码"
               autocomplete="new-password"
               required
               aria-label="确认密码"
             />
           </div>
 
-          <div class="form-options" v-if="mode === 'login'">
-            <div class="remember-me">
-              <input type="checkbox" id="remember" v-model="form.remember" />
-              <label for="remember">记住我</label>
-            </div>
-
-            <!-- ✅ 修改点：弹出重置密码弹窗 -->
-            <a href="#" class="forgot-password" @click.prevent="openForgot">
-              忘记密码?
-            </a>
+          <div class="form-row" v-if="mode === 'login'">
+            <label class="remember">
+              <input type="checkbox" v-model="form.remember" />
+              <span>记住我</span>
+            </label>
+            <a href="#" class="forgot" @click.prevent="openForgot">忘记密码?</a>
           </div>
 
-          <div class="button-group">
-            <button type="submit" class="login-btn" :disabled="isLoading">
-              <span v-if="!isLoading">{{ mode === 'login' ? '登 录' : '注 册' }}</span>
-              <span v-else>{{ mode === 'login' ? '登录中...' : '注册中...' }}</span>
-            </button>
-
-            <button type="button" class="register-btn" :disabled="isLoading" @click="toggleMode">
-              {{ mode === 'login' ? '注册新账号' : '返回登录' }}
-            </button>
-          </div>
+          <button type="submit" class="submit-btn" :disabled="isLoading">
+            <span v-if="!isLoading">{{ mode === 'login' ? '登 录' : '注 册' }}</span>
+            <span v-else>{{ mode === 'login' ? '登录中...' : '注册中...' }}</span>
+          </button>
 
           <div class="error-message" v-if="error">{{ error }}</div>
           <div class="success-message" v-if="success">{{ success }}</div>
           <div class="ldap-info" v-if="authMethod === 'ldap' && success">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
             已通过 LDAP 认证
           </div>
+
+          <div class="switch-mode">
+            <span>{{ mode === 'login' ? '还没有账号？' : '已有账号？' }}</span>
+            <a href="#" @click.prevent="toggleMode">{{ mode === 'login' ? '注册新账号' : '返回登录' }}</a>
+          </div>
+
+          <div class="card-footer">© 2026 K8S Operator. All rights reserved.</div>
         </form>
       </div>
     </main>
 
-    <!-- =========================
-         ✅ 忘记密码弹窗（遮罩 + 表单）
-         ========================= -->
+    <!-- 忘记密码弹窗 -->
     <div v-if="forgot.visible" class="modal-mask" @click.self="closeForgot">
       <div class="modal">
         <div class="modal-header">
@@ -179,48 +224,23 @@
         <form class="modal-form" @submit.prevent="submitForgot">
           <div class="form-group">
             <label for="fp_username">用户名</label>
-            <input
-              id="fp_username"
-              v-model="forgot.username"
-              type="text"
-              placeholder="请输入用户名"
-              autocomplete="username"
-              required
-            />
+            <input id="fp_username" v-model="forgot.username" type="text" placeholder="请输入用户名" autocomplete="username" required />
           </div>
-
           <div class="form-group">
             <label for="fp_new_password">新密码</label>
-            <input
-              id="fp_new_password"
-              v-model="forgot.newPassword"
-              type="password"
-              placeholder="请输入新密码（至少 6 位）"
-              autocomplete="new-password"
-              required
-            />
+            <input id="fp_new_password" v-model="forgot.newPassword" type="password" placeholder="请输入新密码（至少 6 位）" autocomplete="new-password" required />
           </div>
-
           <div class="form-group">
             <label for="fp_confirm">确认密码</label>
-            <input
-              id="fp_confirm"
-              v-model="forgot.confirm"
-              type="password"
-              placeholder="请再次输入新密码"
-              autocomplete="new-password"
-              required
-            />
+            <input id="fp_confirm" v-model="forgot.confirm" type="password" placeholder="请再次输入新密码" autocomplete="new-password" required />
           </div>
 
           <div class="error-message" v-if="forgot.error">{{ forgot.error }}</div>
           <div class="success-message" v-if="forgot.success">{{ forgot.success }}</div>
 
           <div class="modal-actions">
-            <button type="button" class="register-btn" :disabled="forgot.loading" @click="closeForgot">
-              取消
-            </button>
-            <button type="submit" class="login-btn" :disabled="forgot.loading">
+            <button type="button" class="btn-cancel" :disabled="forgot.loading" @click="closeForgot">取消</button>
+            <button type="submit" class="btn-primary" :disabled="forgot.loading">
               <span v-if="!forgot.loading">重置密码</span>
               <span v-else>提交中...</span>
             </button>
@@ -461,389 +481,319 @@ const handleSubmit = async () => {
 
 <style scoped>
 /* ============================================================
-   大厂风格登录页：左侧品牌展示区 + 右侧浅色表单区
+   插画风格登录页：浅蓝天空 + 港口云原生插画 + 居中白卡片
    ============================================================ */
 .login-page {
-  display: flex;
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #0a1128;
-  color: #e4e8ee;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-
-/* ==================== 左侧品牌区 ==================== */
-.brand-panel {
-  position: relative;
-  flex: 1.15;
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding: 64px 72px;
-  background: linear-gradient(135deg, #0b122b 0%, #14224f 45%, #1d3faf 100%);
-  isolation: isolate;
+  justify-content: center;
+  padding: 32px 16px;
+  background: linear-gradient(180deg, #a9d1f0 0%, #cfe8fa 45%, #eef7fd 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
-/* 光晕装饰 */
-.brand-glow {
-  position: absolute;
-  top: -20%;
-  right: -10%;
-  width: 620px;
-  height: 620px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(64, 128, 255, 0.55) 0%, rgba(64, 128, 255, 0) 70%);
-  filter: blur(10px);
-  z-index: -1;
-}
-
-/* 网格纹理 */
-.brand-grid {
+/* ==================== 插画场景 ==================== */
+.scene {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse at 30% 40%, #000 0%, transparent 75%);
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
 }
 
-.brand-content {
+.harbor {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 46%;
+  min-height: 300px;
+}
+
+/* 云朵 */
+.cloud {
+  position: absolute;
+  background: #ffffff;
+  border-radius: 50%;
+  filter: blur(2px);
+  opacity: 0.9;
+  box-shadow: 40px 10px 0 -6px #ffffff, 82px 18px 0 -12px #ffffff, -38px 14px 0 -8px #ffffff;
+}
+.cloud-1 { top: 12%; left: 14%; width: 70px; height: 70px; animation: cloudDrift 26s ease-in-out infinite; }
+.cloud-2 { top: 22%; right: 18%; width: 54px; height: 54px; animation: cloudDrift 32s ease-in-out infinite reverse; }
+.cloud-3 { top: 8%; left: 52%; width: 46px; height: 46px; animation: cloudDrift 38s ease-in-out infinite; }
+
+@keyframes cloudDrift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(30px); }
+}
+
+/* ==================== 居中登录区 ==================== */
+.login-main {
   position: relative;
-  max-width: 460px;
+  z-index: 2;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 品牌 */
+.brand {
+  text-align: center;
+  margin-bottom: 22px;
 }
 
 .brand-logo {
+  width: 74px;
+  height: 74px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: #ffffff;
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.5px;
+  justify-content: center;
+  box-shadow: 0 10px 26px rgba(47, 111, 208, 0.22);
 }
 
-.brand-hero {
-  margin-top: 56px;
-}
-
-.brand-hero h1 {
-  font-size: 42px;
-  line-height: 1.25;
+.brand-title {
+  margin: 0;
+  font-size: 26px;
   font-weight: 800;
-  color: #fff;
-  margin: 0;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
+  color: #2b5c9e;
 }
 
-.brand-hero p {
-  margin-top: 20px;
-  font-size: 16px;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.brand-features {
-  list-style: none;
-  padding: 0;
-  margin: 48px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.brand-features li {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.feat-icon {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #7ea8ff;
-  background: rgba(126, 168, 255, 0.16);
-  border: 1px solid rgba(126, 168, 255, 0.28);
-}
-
-.brand-footer {
-  margin-top: 72px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-/* ==================== 右侧表单区 ==================== */
-.form-panel {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
-}
-
-.form-wrapper {
-  width: 100%;
-  max-width: 380px;
-}
-
-.mobile-brand {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 28px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #3A84FF;
-}
-
-.form-header {
-  margin-bottom: 32px;
-}
-
-.form-header h2 {
-  font-size: 28px;
-  font-weight: 700;
-  color: #e4e8ee;
-  margin: 0;
-}
-
-.form-header p {
-  margin-top: 8px;
+.brand-subtitle {
+  margin: 8px 0 0;
   font-size: 14px;
-  color: #7b8699;
+  color: #5a7fa8;
+}
+
+.ldap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 12px;
+  background: rgba(47, 111, 208, 0.1);
+  border: 1px solid rgba(47, 111, 208, 0.25);
+  border-radius: 20px;
+  color: #2f6fd0;
+  font-size: 12px;
+}
+
+/* ==================== 白色卡片 ==================== */
+.login-card {
+  width: 100%;
+  padding: 30px 28px 22px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(43, 92, 158, 0.18);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  color: #9da5b3;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.form-group input {
-  width: 100%;
-  height: 46px;
-  padding: 0 14px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #e4e8ee;
-  font-size: 14px;
-  box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-group input::placeholder {
-  color: #5a6273;
-}
-
-.form-group input:hover {
-  border-color: rgba(58,132,255,0.4);
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #3A84FF;
-  box-shadow: 0 0 0 3px rgba(58,132,255,0.15);
-  background: rgba(255,255,255,0.08);
-}
-
-.password-wrapper {
+/* 输入框 */
+.field {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.password-wrapper input {
-  padding-right: 44px;
+.field-icon {
+  position: absolute;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  color: #9bb0c9;
+  pointer-events: none;
 }
 
-.toggle-password {
+.field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 42px;
+  border-radius: 8px;
+  border: 1px solid #e3e9f0;
+  background: #f7f9fc;
+  color: #2b3648;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.field input::placeholder {
+  color: #a7b3c4;
+}
+
+.field input:hover {
+  border-color: #b9d0ea;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: #2f6fd0;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 111, 208, 0.14);
+}
+
+.eye {
   position: absolute;
-  right: 10px;
+  right: 12px;
   background: transparent;
   border: none;
-  color: #a8abb2;
+  color: #9bb0c9;
   cursor: pointer;
   padding: 4px;
   display: flex;
   align-items: center;
-  justify-content: center;
   transition: color 0.2s;
 }
 
-.toggle-password:hover {
-  color: #3A84FF;
+.eye:hover {
+  color: #2f6fd0;
 }
 
-.form-options {
+/* 记住我 / 忘记密码 */
+.form-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
-.remember-me {
+.remember {
   display: flex;
   align-items: center;
   gap: 6px;
+  color: #6b7a90;
+  font-size: 13px;
+  cursor: pointer;
 }
 
-.remember-me input {
+.remember input {
   width: 15px;
   height: 15px;
-  accent-color: #3A84FF;
+  accent-color: #2f6fd0;
   cursor: pointer;
 }
 
-.remember-me label {
-  color: #9da5b3;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.forgot-password {
-  color: #3A84FF;
+.forgot {
+  color: #2f6fd0;
   text-decoration: none;
   font-size: 13px;
-  transition: color 0.2s ease;
+  transition: color 0.2s;
 }
 
-.forgot-password:hover {
-  color: #699DF4;
+.forgot:hover {
+  color: #1e56ad;
   text-decoration: underline;
 }
 
-.button-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.login-btn {
+/* 登录按钮 */
+.submit-btn {
   height: 46px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #3A84FF, #699DF4);
-  color: #fff;
-  font-weight: 600;
   border: none;
+  background: linear-gradient(135deg, #3f83e0, #2f6fd0);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 4px;
   cursor: pointer;
   transition: all 0.25s ease;
-  font-size: 15px;
-  letter-spacing: 2px;
-  box-shadow: 0 6px 16px rgba(22, 93, 255, 0.28);
+  box-shadow: 0 8px 20px rgba(47, 111, 208, 0.3);
 }
 
-.login-btn:hover:not(:disabled) {
+.submit-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(22, 93, 255, 0.38);
+  box-shadow: 0 12px 26px rgba(47, 111, 208, 0.4);
 }
 
-.login-btn:active:not(:disabled) {
+.submit-btn:active:not(:disabled) {
   transform: translateY(0);
 }
 
-.login-btn:disabled {
-  background: #4a6fa5;
+.submit-btn:disabled {
+  background: #9db8dd;
   cursor: not-allowed;
   box-shadow: none;
 }
 
-.register-btn {
-  height: 46px;
-  border-radius: 8px;
-  background: #141b2d;
-  color: #9da5b3;
-  border: 1px solid rgba(255,255,255,0.1);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.register-btn:hover:not(:disabled) {
-  color: #3A84FF;
-  border-color: #3A84FF;
-  background: rgba(22, 93, 255, 0.04);
-}
-
-.register-btn:disabled {
-  color: #5a6273;
-  cursor: not-allowed;
-}
-
+/* 提示 */
 .error-message {
-  background: rgba(245,108,108,0.12);
-  color: #f77b7b;
-  padding: 11px 14px;
+  background: rgba(245, 108, 108, 0.1);
+  color: #e15b5b;
+  padding: 10px 14px;
   border-radius: 8px;
   text-align: center;
   font-size: 13px;
-  border: 1px solid rgba(245,108,108,0.2);
+  border: 1px solid rgba(245, 108, 108, 0.2);
 }
 
 .success-message {
-  background: rgba(103,194,58,0.12);
-  color: #73d13d;
-  padding: 11px 14px;
+  background: rgba(82, 196, 26, 0.1);
+  color: #52a41a;
+  padding: 10px 14px;
   border-radius: 8px;
   text-align: center;
   font-size: 13px;
-  border: 1px solid rgba(103,194,58,0.2);
-}
-
-/* LDAP 标识 */
-.ldap-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  padding: 5px 12px;
-  background: rgba(103, 194, 58, 0.1);
-  border: 1px solid rgba(103, 194, 58, 0.28);
-  border-radius: 20px;
-  color: #73d13d;
-  font-size: 12px;
+  border: 1px solid rgba(82, 196, 26, 0.2);
 }
 
 .ldap-info {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 10px 14px;
-  background: rgba(22, 93, 255, 0.06);
-  border: 1px solid rgba(22, 93, 255, 0.18);
+  padding: 9px 14px;
+  background: rgba(47, 111, 208, 0.06);
+  border: 1px solid rgba(47, 111, 208, 0.16);
   border-radius: 8px;
-  color: #3A84FF;
+  color: #2f6fd0;
   font-size: 13px;
+}
+
+/* 切换登录/注册 */
+.switch-mode {
+  text-align: center;
+  font-size: 13px;
+  color: #8a97a8;
+}
+
+.switch-mode a {
+  color: #2f6fd0;
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.switch-mode a:hover {
+  text-decoration: underline;
+}
+
+/* 版权 */
+.card-footer {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #a7b3c4;
 }
 
 /* ==================== 忘记密码 Modal ==================== */
 .modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(43, 92, 158, 0.28);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
@@ -856,10 +806,10 @@ const handleSubmit = async () => {
   width: 100%;
   max-width: 420px;
   padding: 24px;
-  background: #141b2d;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #ffffff;
+  border: 1px solid #eef2f7;
   border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  box-shadow: 0 20px 60px rgba(43, 92, 158, 0.25);
 }
 
 .modal-header {
@@ -870,7 +820,7 @@ const handleSubmit = async () => {
 }
 
 .modal-title {
-  color: #e4e8ee;
+  color: #2b3648;
   font-size: 18px;
   font-weight: 600;
 }
@@ -878,7 +828,7 @@ const handleSubmit = async () => {
 .modal-close {
   background: transparent;
   border: none;
-  color: #909399;
+  color: #909bab;
   font-size: 24px;
   cursor: pointer;
   line-height: 1;
@@ -886,7 +836,7 @@ const handleSubmit = async () => {
 }
 
 .modal-close:hover {
-  color: #e4e8ee;
+  color: #2b3648;
 }
 
 .modal-form {
@@ -895,52 +845,100 @@ const handleSubmit = async () => {
   gap: 16px;
 }
 
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  color: #6b7a90;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #e3e9f0;
+  background: #f7f9fc;
+  color: #2b3648;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #2f6fd0;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 111, 208, 0.14);
+}
+
 .modal-actions {
   display: flex;
   gap: 12px;
   margin-top: 6px;
 }
 
-.modal-actions .register-btn,
-.modal-actions .login-btn {
+.modal-actions button {
   flex: 1;
+  height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background: #f2f5f9;
+  border: 1px solid #e3e9f0;
+  color: #6b7a90;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #e9eef5;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3f83e0, #2f6fd0);
+  border: none;
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(47, 111, 208, 0.28);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.modal-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==================== 无障碍：尊重系统“减少动效”设置 ==================== */
+@media (prefers-reduced-motion: reduce) {
+  .cloud {
+    animation: none !important;
+  }
 }
 
 /* ==================== 响应式 ==================== */
-@media (max-width: 900px) {
-  .brand-panel {
-    display: none;
-  }
-
-  .form-panel {
-    flex: 1;
-    background: #f5f7fb;
-  }
-
-  .mobile-brand {
-    display: flex;
-  }
-
-  .form-wrapper {
-    max-width: 400px;
-    padding: 32px 24px;
-    background: #141b2d;
-    border-radius: 16px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
-  }
-}
-
 @media (max-width: 480px) {
-  .form-panel {
-    padding: 20px 16px;
+  .login-card {
+    padding: 24px 20px 18px;
   }
 
-  .form-header h2 {
-    font-size: 24px;
+  .brand-title {
+    font-size: 22px;
   }
 
-  .modal-actions {
-    flex-direction: column;
+  .harbor {
+    height: 34%;
+    min-height: 220px;
   }
 }
 </style>
