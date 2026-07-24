@@ -7,7 +7,7 @@ WORKDIR /app
 
 # 利用 Docker 层缓存：先只拷贝依赖描述文件
 COPY package*.json ./
-RUN npm ci --only=production=false
+RUN npm install
 
 # 拷贝源码并构建
 COPY . .
