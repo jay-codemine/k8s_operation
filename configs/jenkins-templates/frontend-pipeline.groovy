@@ -475,26 +475,12 @@ server {
 }
 """
 
-                            // 运行时后端地址注入脚本（通过 API_BACKEND_URL 环境变量动态配置）
-                            writeFile file: 'backend-url-entrypoint.sh', text: """\
-#!/bin/sh
-if [ -n "\$API_BACKEND_URL" ]; then
-    echo "Configuring backend URL: \$API_BACKEND_URL"
-    sed -i "s|server 127.0.0.1:8080;|server \${API_BACKEND_URL#http://};|g" /etc/nginx/conf.d/default.conf
-fi
-"""
-
                             writeFile file: dockerfile, text: """\
-FROM nginx:1.25-alpine
+FROM nginx:1.27-alpine
 RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.huaweicloud.com#g' /etc/apk/repositories && apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
 COPY nginx-app.conf /etc/nginx/conf.d/default.conf
-COPY backend-url-entrypoint.sh /docker-entrypoint.d/90-backend-url.sh
-RUN chmod +x /docker-entrypoint.d/90-backend-url.sh
-RUN chown -R nginx:nginx /usr/share/nginx/html && chown -R nginx:nginx /var/cache/nginx && touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
-USER nginx
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://localhost/health || exit 1
 CMD ["nginx", "-g", "daemon off;"]
 """
                             }
