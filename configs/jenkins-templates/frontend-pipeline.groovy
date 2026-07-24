@@ -523,25 +523,32 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --cache=true \
                                 --cache-repo=${registryHost}/kaniko-cache \
                         """
-                        // 推送后完整性校验：
-                        //   1. crane pull 下来验证所有层都存在
-                        //   2. registry 层缺失则重试一次（Kaniko cache 条件下偶发）
+                        // 推送后完整性校验：registry 同步有延迟，重试 3 次（5s/15s/30s）
                         sh """
-                            sleep 3
+                            echo '[Verify] 等待 registry 同步 (5s)...'
+                            sleep 5
+                            DOCKER_CONFIG=/kaniko/.docker
                             echo '[Verify] 校验镜像完整性: ${env.FULL_IMAGE}'
-                            for i in 1 2; do
-                                if REGISTRY_AUTH_FILE=/kaniko/.docker/config.json crane manifest ${env.FULL_IMAGE} >/dev/null 2>&1; then
+                            PASS=false
+                            for i in 1 2 3; do
+                                if crane manifest ${env.FULL_IMAGE} 2>/tmp/crane-err.log; then
                                     echo "[Verify] ✅ 镜像完整性校验通过 (attempt \$i)"
+                                    PASS=true
                                     break
                                 else
-                                    if [ \$i -eq 2 ]; then
-                                        echo '[Verify] ❌ 镜像层不完整（重试2次仍失败），构建失败'
-                                        exit 1
+                                    ERR=\$(cat /tmp/crane-err.log 2>/dev/null)
+                                    echo "[Verify] ⚠️ crane 返回错误: \$ERR"
+                                    if [ \$i -lt 3 ]; then
+                                        DELAY=\$(( 5 * 2**(\$i-1) ))
+                                        echo "[Verify] ⚠️ 重试 \$i/3，\${DELAY}s 后..."
+                                        sleep \$DELAY
                                     fi
-                                    echo "[Verify] ⚠️ 校验失败，等待后重试..."
-                                    sleep 10
                                 fi
                             done
+                            if [ "\$PASS" != "true" ]; then
+                                echo '[Verify] ❌ 镜像推送不完整（重试3次均失败），构建失败'
+                                exit 1
+                            fi
                         """
                         env.IMAGE_DIGEST = ''; env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
                         echo "[Build & Push] ✅ ${env.FULL_IMAGE}"
