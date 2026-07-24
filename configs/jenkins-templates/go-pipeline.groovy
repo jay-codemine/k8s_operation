@@ -725,6 +725,7 @@ ENTRYPOINT ["/app/${appName}"]
                                 --push-retry=5 \
                                 --use-new-run \
                                 --cache=true \
+                                --cache-repo=${registryHost}/k8s-gos/kaniko-cache \
                         """
 
                         // 验证：Kaniko 成功输出含 @sha256: 则表示镜像已完整推送
