@@ -1946,45 +1946,18 @@
     </div>
 
     <!-- 回滚弹窗 -->
-    <!-- 回滚弹窗 -->
-    <div v-if="showRollbackModal" class="modal-overlay" @click.self="showRollbackModal = false">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>⏪ 回滚 Deployment</h3>
-          <button class="close-btn" @click="showRollbackModal = false">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="info-box">
-            <div><strong>部署:</strong> {{ rollbackForm.name }}</div>
-            <div><strong>命名空间:</strong> {{ rollbackForm.namespace }}</div>
-          </div>
-          <div v-if="loadingHistory" class="loading-state">加载历史版本...</div>
-          <div v-else-if="historyList.length > 0">
-            <div class="form-group">
-              <label>选择 ReplicaSet（历史版本）</label>
-              <select v-model="rollbackForm.replica_set" class="form-select">
-                <option value="">请选择版本</option>
-                <option v-for="h in historyList" :key="h.name" :value="h.name">
-                  {{ h.name }} (版本 {{ h.revision }}, 副本数: {{ h.replicas }}, {{ h.createdAt }})
-                </option>
-              </select>
-            </div>
-            <div class="form-hint">
-              ℹ️ 提示：选择一个 ReplicaSet 回滚，Deployment 将恢复到该版本的配置
-            </div>
-          </div>
-          <div v-else class="empty-state-small">
-            <div class="empty-text">暂无历史版本</div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showRollbackModal = false">取消</button>
-          <button class="btn btn-warning" @click="submitRollback" :disabled="rollingBack || !rollbackForm.replica_set">
-            {{ rollingBack ? '回滚中...' : '确认回滚' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <RollbackDialog
+      :visible="showRollbackModal"
+      :loading="loadingHistory"
+      :confirming="rollingBack"
+      :resource-name="rollbackForm.name"
+      :current-info="rollbackCurrentInfo"
+      :revisions="historyList"
+      :selected-revision="historyList.find(h => h.name === rollbackForm.replica_set)"
+      @close="showRollbackModal = false"
+      @select="(rev) => rollbackForm.replica_set = rev.name"
+      @confirm="submitRollback"
+    />
 
     <!-- 滚动更新状态弹窗 -->
     <div v-if="showRolloutModal" class="modal-overlay" @click.self="showRolloutModal = false">
@@ -3323,6 +3296,7 @@ import { useClusterStore } from '@/stores/cluster'
 import { useResizableModal } from '@/composables/useResizableModal'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import RollbackDialog from '@/components/RollbackDialog.vue'
 import permissionStore from '@/stores/permission'
 
 // ===== 容器终端 =====
@@ -4145,6 +4119,11 @@ const scaleForm = ref({ namespace: '', name: '', replicas: 1 })
 const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
 const imagesList = ref([])
 const rollbackForm = ref({ namespace: '', name: '', revision: 0 })
+const rollbackCurrentInfo = computed(() => {
+  const d = deployments.value.find(d => d.name === rollbackForm.value.name && d.namespace === rollbackForm.value.namespace)
+  if (!d) return null
+  return { image: d.image || d.container_image || '—', replicas: d.replicas || '—', deployedAt: d.created_at || d.deployed_at || '—' }
+})
 const selectorInput = ref('')
 const editSelectorInput = ref('')
 const deploymentToDelete = ref('')
@@ -6053,8 +6032,9 @@ const viewHistory = async (deployment) => {
     const list = res.code === 0 ? (res.data?.list || res.data || []) : []
     historyList.value = list.map(rs => ({
       name: rs.metadata?.name || rs.name,
-      revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || '-',
+      revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || rs.metadata?.annotations?.['deprecated.deployment.rollback.to'] || '-',
       replicas: rs.spec?.replicas || 0,
+      image: rs.spec?.template?.spec?.containers?.[0]?.image || '—',
       createdAt: fmtTime(rs.metadata?.creationTimestamp),
       raw: rs
     })).sort((a, b) => {
@@ -6135,8 +6115,9 @@ const openRollback = async (deployment) => {
     const list = res.code === 0 ? (res.data?.list || res.data || []) : []
     historyList.value = list.map(rs => ({
       name: rs.metadata?.name || rs.name,
-      revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || '-',
+      revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || rs.metadata?.annotations?.['deprecated.deployment.rollback.to'] || '-',
       replicas: rs.spec?.replicas || 0,
+      image: rs.spec?.template?.spec?.containers?.[0]?.image || '—',
       createdAt: fmtTime(rs.metadata?.creationTimestamp),
       raw: rs
     }))

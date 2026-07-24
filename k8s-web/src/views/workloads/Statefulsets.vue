@@ -968,7 +968,7 @@
                   <td>{{ fmtTime(rev.creation_time) }}</td>
                   <td>
                     <span v-if="rev.revision === historyStatefulset?.revision" class="current-version-text">当前运行版本</span>
-                    <span v-else>-</span>
+                    <button v-else class="btn btn-sm btn-warning-outline" @click="openRollbackFromHistory(rev)">回滚到此版本</button>
                   </td>
                 </tr>
               </tbody>
@@ -981,6 +981,20 @@
         </div>
       </div>
     </div>
+
+    <!-- 回滚弹窗 -->
+    <RollbackDialog
+      :visible="showRollbackModal"
+      :loading="loadingHistory"
+      :confirming="rollingBack"
+      :resource-name="rollbackForm.name"
+      :current-info="rollbackCurrentInfo"
+      :revisions="historyList"
+      :selected-revision="historyList.find(h => h.name === rollbackForm.controllerRevision)"
+      @close="showRollbackModal = false"
+      @select="(rev) => rollbackForm.controllerRevision = rev.name"
+      @confirm="submitStsRollback"
+    />
 
     <!-- Pod 关联模态框 -->
     <div v-if="showPodsModal" class="modal-overlay" @click.self="showPodsModal = false">
@@ -1680,6 +1694,7 @@ import namespaceApi from '@/api/cluster/namespaces'
 import storageclassApi from '@/api/cluster/storage/storageclasses'
 import { useClusterStore } from '@/stores/cluster'
 import { useResizableModal } from '@/composables/useResizableModal'
+import RollbackDialog from '@/components/RollbackDialog.vue'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
@@ -1894,6 +1909,14 @@ const ddpShowAnno = ref(false)
 const eventsData = ref([])
 const historyList = ref([])
 const historyStatefulset = ref(null)
+const showRollbackModal = ref(false)
+const rollingBack = ref(false)
+const rollbackForm = ref({ namespace: '', name: '', controllerRevision: '' })
+const rollbackCurrentInfo = computed(() => {
+  if (!historyStatefulset.value) return null
+  const sts = statefulsets.value.find(s => s.name === historyStatefulset.value.name && s.namespace === historyStatefulset.value.namespace)
+  return { image: sts?.image || sts?.container_image || '—', replicas: sts?.replicas || '—', deployedAt: historyStatefulset.value.created_at || '—' }
+})
 const podsList = ref([])
 const containerList = ref([])
 const podsStatefulset = ref(null)
@@ -2503,6 +2526,32 @@ const viewHistory = async (sts) => {
     historyList.value = res.code === 0 ? (res.data || []) : []
   } catch (e) { console.error('获取历史版本失败:', e) }
   finally { loadingHistory.value = false }
+}
+
+const openRollbackFromHistory = async (rev) => {
+  if (!historyStatefulset.value || !rev.name) return
+  rollbackForm.value = { namespace: historyStatefulset.value.namespace, name: historyStatefulset.value.name, controllerRevision: rev.name }
+  showRollbackModal.value = true
+}
+
+const submitStsRollback = async () => {
+  if (!rollbackForm.value.controllerRevision) return
+  rollingBack.value = true
+  try {
+    const res = await statefulsetsApi.rollback(rollbackForm.value)
+    if (res.code === 0) {
+      Message.success({ content: '回滚成功，正在追踪状态...' })
+      showRollbackModal.value = false
+      showHistoryModal.value = false
+      fetchStatefulsets()
+    } else {
+      Message.error({ content: res.msg || '回滚失败' })
+    }
+  } catch (e) {
+    Message.error({ content: '回滚失败' })
+  } finally {
+    rollingBack.value = false
+  }
 }
 
 // Pods
