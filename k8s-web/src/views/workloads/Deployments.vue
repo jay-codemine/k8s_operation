@@ -10065,9 +10065,48 @@ const downloadYaml = () => {
   box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4);
 }
 
+/* YAML 弹窗布局 */
+.yaml-modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 95vw !important;
+  max-height: 90vh;
+  width: 1100px;
+}
+
+.yaml-modal .modal-header {
+  flex-shrink: 0;
+}
+
+.yaml-modal .modal-footer {
+  flex-shrink: 0;
+}
+
+.yaml-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.yaml-editor-wrapper {
+  height: 100%;
+}
+
+.yaml-content {
+  margin: 0;
+  padding: 20px;
+  background: #1e293b;
+  border-radius: 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: auto;
+  max-height: calc(90vh - 160px);
+}
+
 .yaml-editor {
   width: 100%;
-  min-height: 400px;
+  min-height: calc(90vh - 200px);
   padding: 20px;
   font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
@@ -10076,9 +10115,17 @@ const downloadYaml = () => {
   border-radius: 12px;
   background: #1e293b;
   color: #e2e8f0;
-  resize: vertical;
+  resize: none;
   tab-size: 2;
   transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.yaml-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .yaml-editor:focus {
