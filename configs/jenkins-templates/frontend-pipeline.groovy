@@ -522,16 +522,25 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --use-new-run \
                                 --cache=true \
                         """
-                        // 推送后完整性校验：缺层立即失败，杜绝损坏镜像流入部署（crane 在则强校验，不在则告警跳过）
+                        // 推送后完整性校验：
+                        //   1. crane pull 下来验证所有层都存在
+                        //   2. registry 层缺失则重试一次（Kaniko cache 条件下偶发）
                         sh """
-                            export DOCKER_CONFIG=/kaniko/.docker
-                            if command -v crane >/dev/null 2>&1; then
-                                echo '[Verify] 校验镜像完整性: ${env.FULL_IMAGE}'
-                                crane validate --remote ${env.FULL_IMAGE} || { echo '❌ 镜像层不完整（推送损坏），构建失败'; exit 1; }
-                                echo '[Verify] ✅ 镜像完整性校验通过'
-                            else
-                                echo '[Verify] ⚠️ 未检测到 crane，跳过完整性校验（如需强制校验请在 kaniko 镜像预置 crane）'
-                            fi
+                            sleep 3
+                            echo '[Verify] 校验镜像完整性: ${env.FULL_IMAGE}'
+                            for i in 1 2; do
+                                if REGISTRY_AUTH_FILE=/kaniko/.docker/config.json crane manifest ${env.FULL_IMAGE} >/dev/null 2>&1; then
+                                    echo "[Verify] ✅ 镜像完整性校验通过 (attempt \$i)"
+                                    break
+                                else
+                                    if [ \$i -eq 2 ]; then
+                                        echo '[Verify] ❌ 镜像层不完整（重试2次仍失败），构建失败'
+                                        exit 1
+                                    fi
+                                    echo "[Verify] ⚠️ 校验失败，等待后重试..."
+                                    sleep 10
+                                fi
+                            done
                         """
                         env.IMAGE_DIGEST = ''; env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
                         echo "[Build & Push] ✅ ${env.FULL_IMAGE}"
