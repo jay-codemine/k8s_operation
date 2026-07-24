@@ -57,7 +57,7 @@ FROM docker.m.daocloud.io/library/alpine:3.20
 RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
 
 # 安装运行时依赖（CA 证书 + 时区）
-RUN apk --no-cache add ca-certificates tzdata && \
+RUN apk --no-cache add ca-certificates tzdata git && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 
