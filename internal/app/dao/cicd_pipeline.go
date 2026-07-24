@@ -975,19 +975,24 @@ func (d *Dao) PipelineRunBuildStats(ctx context.Context) (*BuildStatsResult, err
 	if err != nil {
 		return nil, err
 	}
+	// terminalBuilds 只统计已完结（成功/失败）的构建，作为成功率分母；
+	// pending/running 未完结、aborted 为人工中止，均不应拉低成功率（口径与 CicdReleaseStatsEnhanced 一致）。
+	var terminalBuilds int64
 	for _, r := range rows {
 		stats.TotalBuilds += r.Cnt
 		switch r.Status {
 		case models.PipelineRunStatusSuccess:
 			stats.SuccessBuilds = r.Cnt
+			terminalBuilds += r.Cnt
 		case models.PipelineRunStatusFailed:
 			stats.FailedBuilds = r.Cnt
+			terminalBuilds += r.Cnt
 		case models.PipelineRunStatusRunning, models.PipelineRunStatusPending:
 			stats.RunningBuilds += r.Cnt
 		}
 	}
-	if stats.TotalBuilds > 0 {
-		stats.SuccessRate = float64(stats.SuccessBuilds) / float64(stats.TotalBuilds) * 100
+	if terminalBuilds > 0 {
+		stats.SuccessRate = float64(stats.SuccessBuilds) / float64(terminalBuilds) * 100
 	}
 
 	// 平均构建时长（仅计算已完成且 duration > 0 的记录）
