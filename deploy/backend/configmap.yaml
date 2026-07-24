@@ -107,6 +107,9 @@ data:
       GitCredentialID: "${GIT_CREDENTIAL_ID}"
       RegistryCredentialID: "${REGISTRY_CREDENTIAL_ID}"
       HMACCredentialID: "${HMAC_CREDENTIAL_ID}"
+      # Git 默认认证（供平台侧「检测仓库/获取分支」直接访问私有仓库；建议注入与 Jenkins gitee-id 同源的 Secret）
+      GitUsername: "${GIT_USERNAME}"
+      GitToken: "${GIT_TOKEN}"
       HMACSecret: "${HMAC_SECRET}"
       PollInterval: 15
       MaxBuildTime: 30

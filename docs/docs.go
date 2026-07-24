@@ -19663,7 +19663,15 @@ const docTemplate = `{
                     "description": "可选：Jenkins凭证ID",
                     "type": "string"
                 },
+                "password": {
+                    "description": "可选：私有仓库认证密码或访问令牌(Token)",
+                    "type": "string"
+                },
                 "repo_url": {
+                    "type": "string"
+                },
+                "username": {
+                    "description": "可选：私有仓库认证用户名",
                     "type": "string"
                 }
             }
@@ -19675,7 +19683,15 @@ const docTemplate = `{
                     "description": "可选：Jenkins凭证ID",
                     "type": "string"
                 },
+                "password": {
+                    "description": "可选：私有仓库认证密码或访问令牌(Token)",
+                    "type": "string"
+                },
                 "repo_url": {
+                    "type": "string"
+                },
+                "username": {
+                    "description": "可选：私有仓库认证用户名",
                     "type": "string"
                 }
             }

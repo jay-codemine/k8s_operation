@@ -387,6 +387,8 @@ func ValidPipelineCallbackRequest(data interface{}, ctx *gin.Context) map[string
 type GitBranchesRequest struct {
 	RepoURL      string `json:"repo_url" valid:"repo_url"`
 	CredentialID string `json:"credential_id"` // 可选：Jenkins凭证ID
+	Username     string `json:"username"`      // 可选：私有仓库认证用户名
+	Password     string `json:"password"`      // 可选：私有仓库认证密码或访问令牌(Token)
 }
 
 func ValidGitBranchesRequest(data interface{}, ctx *gin.Context) map[string][]string {
@@ -403,6 +405,8 @@ func ValidGitBranchesRequest(data interface{}, ctx *gin.Context) map[string][]st
 type GitValidateRequest struct {
 	RepoURL      string `json:"repo_url" valid:"repo_url"`
 	CredentialID string `json:"credential_id"` // 可选：Jenkins凭证ID
+	Username     string `json:"username"`      // 可选：私有仓库认证用户名
+	Password     string `json:"password"`      // 可选：私有仓库认证密码或访问令牌(Token)
 }
 
 func ValidGitValidateRequest(data interface{}, ctx *gin.Context) map[string][]string {

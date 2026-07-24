@@ -48,6 +48,7 @@ App:
   GlobalKubeConfigPath: configs/k8s.yaml
   DefaultClusterID: 2     # 可选，如走 DB 的默认集群
   AutoInitK8s: true          # 可选，是否开机自动初始化
+  SkipAutoMigrate: true      # 推荐：数据库已由完整 init.sql 初始化，跳过 GORM 自动建表（避免启动时多余迁移）
 
 PodLog:
   EnableStreaming: false   # true=实时跟随（流式）；false=一次性字符串
@@ -88,6 +89,9 @@ Jenkins:
   GitCredentialID: "gitee-id"           # Git 凭证 ID
   RegistryCredentialID: "harbor-registry" # 镜像仓库凭证 ID
   HMACCredentialID: "hmac-secret"        # HMAC 签名凭证 ID
+  # Git 默认认证（供平台侧「检测仓库/获取分支」直接访问私有仓库；配一次后自动复用，无需每次手输）
+  GitUsername: ""                        # Git 用户名（Gitee 可用 oauth2 或账号名；GitHub 可留空只填 Token）
+  GitToken: ""                          # Git 密码或 Personal Access Token（与 Jenkins gitee-id 同源）
   HMACSecret: "xxxxx3VbN6dHe1Zx4JuWq"
   PollInterval: 15
   MaxBuildTime: 30

@@ -40,7 +40,7 @@ func (c *GitController) GetBranches(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
-	branches, err := svc.GitGetBranches(ctx.Request.Context(), param.RepoURL, param.CredentialID)
+	branches, err := svc.GitGetBranches(ctx.Request.Context(), param.RepoURL, param.CredentialID, param.Username, param.Password)
 	if err != nil {
 		global.Logger.Error("GitGetBranches error", zap.Error(err), zap.String("repo", param.RepoURL))
 		rsp.ToErrorResponse(errorcode.ErrorGitBranchesFail.WithDetails(err.Error()))
@@ -70,7 +70,7 @@ func (c *GitController) ValidateRepo(ctx *gin.Context) {
 	}
 
 	svc := services.NewServices()
-	valid, message, err := svc.GitValidateRepo(ctx.Request.Context(), param.RepoURL, param.CredentialID)
+	valid, message, err := svc.GitValidateRepo(ctx.Request.Context(), param.RepoURL, param.CredentialID, param.Username, param.Password)
 	if err != nil {
 		global.Logger.Error("GitValidateRepo error", zap.Error(err), zap.String("repo", param.RepoURL))
 		rsp.ToErrorResponse(errorcode.ErrorGitValidateFail.WithDetails(err.Error()))

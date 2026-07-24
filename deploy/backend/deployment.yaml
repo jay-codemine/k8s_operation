@@ -257,6 +257,18 @@ spec:
                   name: k8soperation-secret
                   key: DEFAULT_IMAGE_REGISTRY
                   optional: true
+            - name: GIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: GIT_USERNAME
+                  optional: true
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: GIT_TOKEN
+                  optional: true
 
           # ==================== 健康检查探针 ====================
           # 存活探针：只要进程能响应即可（不检查外部依赖）

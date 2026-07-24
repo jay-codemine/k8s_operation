@@ -155,6 +155,10 @@ type JenkinsSettingS struct {
 	GitCredentialID      string `mapstructure:"GitCredentialID"`      // Git 凭证 ID（默认 gitee-id）
 	RegistryCredentialID string `mapstructure:"RegistryCredentialID"` // 镜像仓库凭证 ID（默认 harbor-registry）
 	HMACCredentialID     string `mapstructure:"HMACCredentialID"`     // HMAC 签名凭证 ID（默认 hmac-secret）
+	// Git 默认认证（供平台侧「检测仓库/获取分支」直接访问私有仓库使用；
+	// 与 Jenkins gitee-id 凭证同源，建议来自同一个 K8s Secret）
+	GitUsername string `mapstructure:"GitUsername"` // Git 用户名（Gitee 可用 oauth2 或账号名；GitHub 可留空只填 Token）
+	GitToken    string `mapstructure:"GitToken"`    // Git 密码或 Personal Access Token
 	// 回调机制配置
 	HMACSecret   string `mapstructure:"HMACSecret"`   // HMAC 签名密钥（用于验证回调请求）
 	PollInterval int    `mapstructure:"PollInterval"` // 轮询间隔(秒)，默认15
