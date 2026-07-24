@@ -523,18 +523,18 @@ watch(
 .app-layout {
   display: flex;
   height: 100vh;
-  background-color: #f2f3f5;
+  background-color: #eef4fb;
 }
 
-/* ===== 侧边栏 - 字节/Arco Pro 深色中性风格 ===== */
+/* ===== 侧边栏 - 品牌蓝风格（与登录页一致） ===== */
 .sidebar {
   width: 15rem;
-  background: #1d2129;
+  background: linear-gradient(180deg, #3f83d8 0%, #2f6fd0 50%, #2a62c4 100%);
   color: #ffffff;
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 2px 0 12px rgba(47, 111, 208, 0.18);
 }
 
 .sidebar.collapsed {
@@ -613,7 +613,7 @@ watch(
 
 .logo-version {
   font-size: 0.65rem;
-  color: #86909c;
+  color: rgba(255, 255, 255, 0.65);
   font-weight: 500;
   margin-top: 2px;
 }
@@ -643,8 +643,8 @@ watch(
 }
 
 .group-header:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  border-left-color: #4080FF;
+  background-color: rgba(255, 255, 255, 0.12);
+  border-left-color: rgba(255, 255, 255, 0.7);
   padding-left: 1.25rem;
 }
 
@@ -672,8 +672,8 @@ watch(
   position: absolute;
   width: 0.375rem;
   height: 0.375rem;
-  border-right: 2px solid #a0aec0;
-  border-bottom: 2px solid #a0aec0;
+  border-right: 2px solid rgba(255, 255, 255, 0.7);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.7);
   transform: rotate(-135deg);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -683,7 +683,7 @@ watch(
 }
 
 .arrow.expanded::before {
-  border-color: #4080FF;
+  border-color: #ffffff;
   transform: rotate(45deg);
 }
 
@@ -716,7 +716,7 @@ watch(
   content: '';
   width: 3px;
   height: 12px;
-  background: linear-gradient(135deg, #165DFF, #14C9C9);
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 2px;
   flex-shrink: 0;
 }
@@ -744,15 +744,15 @@ watch(
 }
 
 .nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   padding-left: 2.75rem;
 }
 
 .nav-item-active {
-  background: rgba(22, 93, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
-  border-left-color: #165DFF;
+  border-left-color: #ffffff;
   box-shadow: none;
 }
 
@@ -773,7 +773,7 @@ watch(
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 0.75rem;
-  color: #a0aec0;
+  color: rgba(255, 255, 255, 0.8);
   text-decoration: none;
   border-radius: 0.5rem;
   cursor: pointer;
@@ -782,13 +782,13 @@ watch(
 }
 
 .footer-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
 }
 
 .footer-item-active {
-  background: rgba(22, 93, 255, 0.12);
-  color: #4080FF;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
 .footer-icon {
@@ -865,7 +865,7 @@ watch(
 .user-role {
   display: block;
   font-size: 0.6875rem;
-  color: #a0aec0;
+  color: rgba(255, 255, 255, 0.7);
   margin-top: 1px;
 }
 
@@ -877,7 +877,7 @@ watch(
   border: none;
   border-radius: 0.375rem;
   cursor: pointer;
-  color: #a0aec0;
+  color: rgba(255, 255, 255, 0.8);
   transition: all 0.2s ease;
   flex-shrink: 0;
 }
@@ -980,7 +980,7 @@ watch(
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 16px 20px;
-  background: #f2f3f5;
+  background: #eef4fb;
 }
 
 /* ===== 响应式断点 ===== */

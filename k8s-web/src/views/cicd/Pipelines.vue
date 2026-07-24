@@ -328,7 +328,7 @@
             <th style="width: 130px;">运行时间</th>
             <th style="width: 180px;">Git 仓库</th>
             <th style="width: 90px;">分支</th>
-            <th style="width: 220px;">操作</th>
+            <th style="width: 180px;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -381,23 +381,32 @@
               <div class="table-actions">
                 <button 
                   v-if="canOperate && pipeline.status !== 'running'"
-                  class="action-btn-sm run"
+                  class="act-primary run"
                   @click="handleRunPipeline(pipeline)"
                   title="发布"
                 >
-                  ▶ 发布
+                  <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>发布</span>
                 </button>
                 <button 
                   v-if="canOperate && (pipeline.status === 'running' || pipeline.lastRunStatus === 'pending')"
-                  class="action-btn-sm stop"
+                  class="act-primary stop"
                   @click="handleStopPipeline(pipeline)"
                   title="停止"
                 >
-                  ■ 停止
+                  <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  <span>停止</span>
                 </button>
-                <button class="action-btn-sm" @click="viewPipeline(pipeline.id)" title="详情">查看</button>
-                <button v-if="canOperate" class="action-btn-sm" @click="editPipeline(pipeline.id)" title="编辑">编辑</button>
-                <button v-if="canOperate" class="action-btn-sm danger" @click="handleDeletePipeline(pipeline)" title="删除">删除</button>
+                <span class="act-divider"></span>
+                <button class="act-icon" @click="viewPipeline(pipeline.id)" title="查看详情">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button v-if="canOperate" class="act-icon" @click="editPipeline(pipeline.id)" title="编辑">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button v-if="canOperate" class="act-icon danger" @click="handleDeletePipeline(pipeline)" title="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
               </div>
             </td>
           </tr>
@@ -1961,53 +1970,87 @@ export default {
 
 .table-actions {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
-.action-btn-sm {
-  padding: 4px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: white;
+/* 主操作：发布 / 停止 */
+.act-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 7px;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.act-primary svg {
+  width: 13px;
+  height: 13px;
+}
+.act-primary.run {
+  color: #fff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.28);
+}
+.act-primary.run:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+.act-primary.stop {
+  color: #fff;
+  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.28);
+}
+.act-primary.stop:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+/* 分隔线 */
+.act-divider {
+  width: 1px;
+  height: 16px;
+  background: #e2e8f0;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* 次要操作：图标按钮 */
+.act-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
   color: #64748b;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
 }
-
-.action-btn-sm:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+.act-icon svg {
+  width: 15px;
+  height: 15px;
 }
-
-.action-btn-sm.run {
-  background: #d1fae5;
-  border-color: #a7f3d0;
-  color: #059669;
+.act-icon:hover {
+  background: #eff6ff;
+  border-color: #dbeafe;
+  color: #2563eb;
 }
-
-.action-btn-sm.run:hover {
-  background: #a7f3d0;
-}
-
-.action-btn-sm.stop {
-  background: #fee2e2;
-  border-color: #fecaca;
+.act-icon.danger:hover {
+  background: #fef2f2;
+  border-color: #fee2e2;
   color: #dc2626;
-}
-
-.action-btn-sm.stop:hover {
-  background: #fecaca;
-}
-
-.action-btn-sm.danger {
-  color: #dc2626;
-}
-
-.action-btn-sm.danger:hover {
-  background: #fee2e2;
-  border-color: #fecaca;
 }
 
 /* 流水线网格包装器 */

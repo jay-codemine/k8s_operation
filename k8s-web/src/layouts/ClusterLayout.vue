@@ -322,7 +322,7 @@ const backToClusters = () => router.push('/clusters')
   flex-direction: column;
   height: 100%;
   min-height: 100vh;
-  background: #f6f7fb;
+  background: transparent;
   padding: 0.75rem; /* 12px → 0.75rem */
   box-sizing: border-box;
 }
@@ -399,12 +399,12 @@ const backToClusters = () => router.push('/clusters')
 }
 
 .menu-item:hover {
-  background: #f1f5ff;
+  background: #eef4fb;
 }
 
 .menu-item.active {
-  background: #e8efff;
-  color: #326ce5;
+  background: #e6f0fb;
+  color: #2f6fd0;
   font-weight: 700;
 }
 
