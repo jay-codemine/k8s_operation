@@ -447,8 +447,6 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --push-retry=5 \
                                 --use-new-run \
                                 --cache=true \
-                                --compressed-caching=false \
-                                --cache-copy-layers \
                         """
                         // 推送后完整性校验：缺层立即失败，杜绝损坏镜像流入部署（crane 在则强校验，不在则告警跳过）
                         sh """
