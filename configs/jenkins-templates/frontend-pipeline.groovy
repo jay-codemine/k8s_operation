@@ -521,6 +521,7 @@ CMD ["nginx", "-g", "daemon off;"]
                                 --push-retry=5 \
                                 --use-new-run \
                                 --cache=true \
+                                --cache-repo=${registryHost}/kaniko-cache \
                         """
                         // 推送后完整性校验：
                         //   1. crane pull 下来验证所有层都存在

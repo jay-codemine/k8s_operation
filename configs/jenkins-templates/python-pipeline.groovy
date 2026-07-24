@@ -447,6 +447,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --push-retry=5 \
                                 --use-new-run \
                                 --cache=true \
+                                --cache-repo=${registryHost}/kaniko-cache \
                         """
                         // 推送后完整性校验：重试 2 次确认远端所有层都可达
                         sh """
