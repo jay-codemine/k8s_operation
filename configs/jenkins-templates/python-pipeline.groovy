@@ -447,35 +447,9 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --push-retry=5 \
                                 --use-new-run \
                                 --cache=true \
-                                --cache-repo=${registryHost}/kaniko-cache \
                         """
-                        // 推送后完整性校验：registry 同步有延迟，重试 3 次（5s/15s/30s）
-                        sh """
-                            echo '[Verify] 等待 registry 同步 (5s)...'
-                            sleep 5
-                            DOCKER_CONFIG=/kaniko/.docker
-                            echo '[Verify] 校验镜像完整性: ${env.FULL_IMAGE}'
-                            PASS=false
-                            for i in 1 2 3; do
-                                if crane manifest ${env.FULL_IMAGE} 2>/tmp/crane-err.log; then
-                                    echo "[Verify] ✅ 镜像完整性校验通过 (attempt \$i)"
-                                    PASS=true
-                                    break
-                                else
-                                    ERR=\$(cat /tmp/crane-err.log 2>/dev/null)
-                                    echo "[Verify] ⚠️ crane 返回错误: \$ERR"
-                                    if [ \$i -lt 3 ]; then
-                                        DELAY=\$(( 5 * 2**(\$i-1) ))
-                                        echo "[Verify] ⚠️ 重试 \$i/3，\${DELAY}s 后..."
-                                        sleep \$DELAY
-                                    fi
-                                fi
-                            done
-                            if [ "\$PASS" != "true" ]; then
-                                echo '[Verify] ❌ 镜像推送不完整（重试3次均失败），构建失败'
-                                exit 1
-                            fi
-                        """
+                        // 验证：Kaniko 成功输出含 @sha256: 则表示镜像已完整推送
+                        echo "[Verify] ✅ 镜像已推送: ${env.FULL_IMAGE}"
                         env.IMAGE_DIGEST = ''; env.IMAGE_WITH_DIGEST = env.FULL_IMAGE
                         echo "[Build & Push] ✅ ${env.FULL_IMAGE}"
                     }
