@@ -12,6 +12,9 @@ type ServerSettingS struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	// ReadinessTimeout 就绪探针 DB Ping 超时(秒)，需小于 K8s readinessProbe 的 timeoutSeconds
+	// 留空/<=0 时代码兜底为 2s
+	ReadinessTimeout time.Duration
 }
 
 // ReadSection 读取配置信息

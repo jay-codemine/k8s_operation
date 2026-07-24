@@ -18,6 +18,7 @@ data:
       WriteTimeout: 3600
       IdleTimeout: 300
       ShutdownTimeout: 300
+      ReadinessTimeout: 2       # 就绪探针 DB Ping 超时(秒)，需小于 readinessProbe 的 timeoutSeconds；外部/公网 MySQL 建议 2~3s
 
     Database:
       DBType: "${DB_TYPE}"
@@ -63,7 +64,7 @@ data:
       JWTExpireTime: 120000
       AppName: "k8soperation"
       GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
-      DefaultClusterID: 3
+      DefaultClusterID: 9
       AutoInitK8s: true
       AllowEmptyStart: true
       SkipAutoMigrate: true                 # 生产环境已通过 init.sql 初始化，跳过 GORM AutoMigrate

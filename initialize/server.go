@@ -88,7 +88,11 @@ func (s *Engine) injectRouters() {
 	r := s.Engine
 
 	// 先注册健康检查（不走 /api 前缀）
-	health.Register(r, health.Checks{DB: global.SQLDB})
+	// 就绪探针 DB Ping 超时从配置 Server.ReadinessTimeout(秒) 注入，<=0 时 health 内部兜底为 2s
+	health.Register(r, health.Checks{
+		DB:           global.SQLDB,
+		ReadyTimeout: global.ServerSetting.ReadinessTimeout * time.Second,
+	})
 
 	// 注册 Prometheus /metrics 端点（不走 JWT，公开暴露供 Prometheus 抓取）
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))

@@ -10,6 +10,7 @@ Server:
   WriteTimeout: 3600
   IdleTimeout: 300
   ShutdownTimeout: 300
+  ReadinessTimeout: 2       # 就绪探针 DB Ping 超时(秒)，需小于 K8s readinessProbe 的 timeoutSeconds
 
 Database:
   DBType: mysql
