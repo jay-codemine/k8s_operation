@@ -82,15 +82,4 @@ spec:
               cpu: 500m
               memory: 256Mi
 
-          # 挂载 Nginx 配置（可选，镜像内置了默认配置）
-          volumeMounts:
-            - name: nginx-config
-              mountPath: /etc/nginx/conf.d/default.conf
-              subPath: default.conf
-              readOnly: true
-
-      volumes:
-        - name: nginx-config
-          configMap:
-            name: k8soperation-web-nginx
-            optional: true           # 如果 ConfigMap 不存在则使用镜像内置配置
+          # nginx 配置已内置在 Docker 镜像中（nginx.conf），无需 ConfigMap 挂载
