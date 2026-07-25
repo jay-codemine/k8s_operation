@@ -1,6 +1,7 @@
 # 🚀 K8sOperation · 企业级 Kubernetes 多集群管理平台
 
-> 集成 **Jenkins + ArgoCD + Argo Workflows** 双模 CI/CD，支持传统 Push 发布与 GitOps Pull 发布
+> 集成 **Jenkins + ArgoCD + Argo Workflows** 双模 CI/CD，支持传统 Push 发布与 GitOps Pull 发布  
+> 当前版本：**v16.16** | 2026-07-25
 
 一个对标 **Rancher/KubeSphere** 的企业级 K8s 管理平台，基于 **Go + Gin + GORM + Vue3 + client-go + AI** 构建。
 
@@ -43,6 +44,9 @@
 - 📊 **多数据源监控** - Prometheus 指标视图 + Loki 日志探索，统一告警体系
 - 🚨 **告警多群路由** - 通知路由策略自动分发，按 severity/group/labels 智能匹配，多群不漏发
 - 🔍 **Loki 日志探索** - LogQL 专业查询、标签筛选、日志量趋势、健康状态实时检测
+- ⏪ **版本回滚管理** - 工作负载/CICD 批量回滚，版本对比（当前 vs 目标），ControllerRevision 历史追踪
+- 📈 **平台自监控** - 内置 Prometheus 指标 + Grafana 大盘 + 8 条告警规则，平台自身健康可视化
+- 🎨 **大厂风格 UI** - Arco Design 线性图标、蓝鲸深色登录主题、可拖拽 YAML 编辑器
 
 ------
 
@@ -1378,6 +1382,31 @@ k8soperation → 提供 HTTP API/Web 后台
 你的支持是我持续完善的最大动力！
 
 ------
+
+## 📝 更新日志
+
+### v16.16 (2026-07-25)
+
+**新功能**:
+- 版本回滚弹窗：当前版本 VS 目标版本对比卡片，Deployment/StatefulSet 均支持
+- CICD 批量回滚：带版本对比确认对话框
+- 平台监控大盘：Grafana Dashboard JSON + 8 条 Prometheus 告警规则
+- 平台健康中心新增 8 个性能指标卡片（API 请求量/CICD 成功率/错误率/DB 连接数等）
+- 蓝鲸风格深色登录主题
+
+**修复/优化**:
+- 前端 Dockerfile：`npm ci` → `npm install`，修复 lock 文件不同步
+- 添加 `gettext` 到 nginx 镜像，修复 `envsubst` 缺失
+- 后端 Dockerfile 运行时添加 `git`，修复仓库验证失败
+- Kaniko 构建简化：仅用 `--cache=true`，移除 `--cache-repo` 避免层引用丢失
+- 前端部署移除 nginx ConfigMap 只读挂载，修复 entrypoint `mv` 冲突
+- Makefile 支持任意目录执行
+
+**UI**:
+- Arco Design 线形图标全面替换 Emoji（80+ 页面）
+- YAML 编辑器弹窗布局修复（flex 自适应高度）
+
+---
 
 ## 📜 License
 
