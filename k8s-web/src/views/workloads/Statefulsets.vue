@@ -990,9 +990,9 @@
       :resource-name="rollbackForm.name"
       :current-info="rollbackCurrentInfo"
       :revisions="historyList"
-      :selected-revision="historyList.find(h => h.name === rollbackForm.controllerRevision)"
+      :selected-revision="historyList.find(h => h.name === rollbackForm.revision_name)"
       @close="showRollbackModal = false"
-      @select="(rev) => rollbackForm.controllerRevision = rev.name"
+      @select="(rev) => rollbackForm.revision_name = rev.name"
       @confirm="submitStsRollback"
     />
 
@@ -1911,7 +1911,7 @@ const historyList = ref([])
 const historyStatefulset = ref(null)
 const showRollbackModal = ref(false)
 const rollingBack = ref(false)
-const rollbackForm = ref({ namespace: '', name: '', controllerRevision: '' })
+const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
 const rollbackCurrentInfo = computed(() => {
   if (!historyStatefulset.value) return null
   const sts = statefulsets.value.find(s => s.name === historyStatefulset.value.name && s.namespace === historyStatefulset.value.namespace)
@@ -2530,12 +2530,12 @@ const viewHistory = async (sts) => {
 
 const openRollbackFromHistory = async (rev) => {
   if (!historyStatefulset.value || !rev.name) return
-  rollbackForm.value = { namespace: historyStatefulset.value.namespace, name: historyStatefulset.value.name, controllerRevision: rev.name }
+  rollbackForm.value = { namespace: historyStatefulset.value.namespace, name: historyStatefulset.value.name, revision_name: rev.name }
   showRollbackModal.value = true
 }
 
 const submitStsRollback = async () => {
-  if (!rollbackForm.value.controllerRevision) return
+  if (!rollbackForm.value.revision_name) return
   rollingBack.value = true
   try {
     const res = await statefulsetsApi.rollback(rollbackForm.value)
