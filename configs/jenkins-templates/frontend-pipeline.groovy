@@ -406,10 +406,10 @@ spec:
 
                         // Dockerfile 选择优先级：
                         // 1. DOCKERFILE_PATH 显式指定 → 直接使用
-                        // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带
-                        // 3. 平台自动生成生产级 Dockerfile（Gzip + 缓存 + 安全头 + API 代理 + WebSocket）
+                        // 2. 项目根有 Dockerfile → 优先使用项目自带（更可靠）
+                        // 3. 平台自动生成生产级 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            if (dockerfile != '__PLATFORM_GENERATE__' && params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
+                            if (fileExists('Dockerfile')) {
                                 dockerfile = 'Dockerfile'
                                 echo "[Build Image] 使用项目自带 Dockerfile"
                             } else {
