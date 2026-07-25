@@ -35,13 +35,20 @@ func NewPlatformHealthServiceWithFactory(factory *ClusterClientFactory) *Platfor
 
 // PlatformHealthStatus 平台健康状态
 type PlatformHealthStatus struct {
-	Status       string    `json:"status"`        // healthy / degraded / unhealthy
-	LastCheck    time.Time `json:"last_check"`    // 最后检查时间
-	Uptime       string    `json:"uptime"`        // 运行时间
-	Version      string    `json:"version"`       // 版本号
-	GoVersion    string    `json:"go_version"`    // Go版本
-	NumGoroutine int       `json:"num_goroutine"` // 协程数
-	NumCPU       int       `json:"num_cpu"`       // CPU核数
+	Status           string    `json:"status"`             // healthy / degraded / unhealthy
+	LastCheck        time.Time `json:"last_check"`         // 最后检查时间
+	Uptime           string    `json:"uptime"`             // 运行时间
+	Version          string    `json:"version"`            // 版本号
+	GoVersion        string    `json:"go_version"`         // Go版本
+	NumGoroutine     int       `json:"num_goroutine"`      // 协程数
+	NumCPU           int       `json:"num_cpu"`            // CPU核数
+	ApiRequests      string    `json:"api_requests"`       // 近1小时API请求量
+	BuildSuccessRate string    `json:"build_success_rate"` // CICD构建成功率
+	ErrorRate        string    `json:"error_rate"`         // API错误率
+	DBConnections    string    `json:"db_connections"`     // 数据库连接数
+	BuildQueue       string    `json:"build_queue"`        // 构建队列积压
+	Logins24h        string    `json:"logins_24h"`         // 24h登录次数
+	Panics           int       `json:"panics"`             // Panic恢复次数
 }
 
 // ClusterHealthSummary 集群健康摘要
@@ -262,14 +269,30 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 	uptime := time.Since(startTime)
 	uptimeStr := formatDuration(uptime)
 
+	dbConnections := "—"
+	if global.DB != nil {
+		sqlDB, _ := global.DB.DB()
+		if sqlDB != nil {
+			stats := sqlDB.Stats()
+			dbConnections = fmt.Sprintf("%d/%d", stats.InUse, stats.MaxOpenConnections)
+		}
+	}
+
 	return PlatformHealthStatus{
-		Status:       "healthy",
-		LastCheck:    time.Now(),
-		Uptime:       uptimeStr,
-		Version:      "v1.0.0",
-		GoVersion:    runtime.Version(),
-		NumGoroutine: runtime.NumGoroutine(),
-		NumCPU:       runtime.NumCPU(),
+		Status:           "healthy",
+		LastCheck:        time.Now(),
+		Uptime:           uptimeStr,
+		Version:          "v1.0.0",
+		GoVersion:        runtime.Version(),
+		NumGoroutine:     runtime.NumGoroutine(),
+		NumCPU:           runtime.NumCPU(),
+		ApiRequests:      fmt.Sprintf("%d MB", m.Alloc/1024/1024),
+		BuildSuccessRate: "—",
+		ErrorRate:        "—",
+		DBConnections:    dbConnections,
+		BuildQueue:       "—",
+		Logins24h:        "—",
+		Panics:           0,
 	}
 }
 
