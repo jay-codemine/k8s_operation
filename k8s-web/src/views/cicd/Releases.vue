@@ -751,6 +751,16 @@
       </Transition>
     </Teleport>
   </div>
+
+  <!-- 批量回滚确认弹窗 -->
+  <RollbackDialog
+    :visible="showBatchRollbackDialog"
+    :confirming="batchLoading"
+    batch-mode
+    :selected-items="batchRollbackItems"
+    @close="showBatchRollbackDialog = false"
+    @confirm="confirmBatchRollback"
+  />
 </template>
 
 <script>
@@ -759,6 +769,7 @@ import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getPipelines } from '@/api/platform/pipeline'
 import { getK8sClusterList } from '@/api/platform/cluster'
+import RollbackDialog from '@/components/RollbackDialog.vue'
 import {
   getReleases,
   getReleaseStats,
@@ -1199,27 +1210,37 @@ export default {
     }
 
     // 批量回滚
+    const showBatchRollbackDialog = ref(false)
+    const batchRollbackItems = ref([])
+
     const handleBatchRollback = () => {
-      const ids = selectedIds.value.filter(id => {
-        const rel = releases.value.find(r => r.id === id)
-        return rel && ['Succeeded', 'Running'].includes(rel.status)
-      })
-      if (ids.length === 0) {
+      const selected = releases.value.filter(r => selectedIds.value.includes(r.id) && ['Succeeded', 'Running'].includes(r.status))
+      if (selected.length === 0) {
         Message.warning({ content: '请选择可回滚的记录（发布成功/运行中状态）' }); return
       }
-      openConfirm('批量回滚', `确定要回滚已选的 ${ids.length} 个发布单吗？\n将根据每个发布单的上一次部署记录回滚到上一个稳定版本。`, '确认回滚', 'warning', async () => {
-        batchLoading.value = true
-        try {
-          const r = await batchRollbackReleaseApi(ids)
-          if (r.code === 0) {
-            const data = r.data || {}
-            Message.success({ content: data.message || `批量回滚完成`, duration: 3000 })
-            selectedIds.value = []
-            loadAll()
-          } else { throw new Error(r.msg || '批量回滚失败') }
-        } catch (e) { Message.error({ content: e.message || '批量回滚失败' }) }
-        finally { batchLoading.value = false }
-      })
+      batchRollbackItems.value = selected.map(r => ({
+        name: r.app_name || r.pipeline_name || r.name || `#${r.id}`,
+        currentImage: r.image_tag || r.image || r.current_image || '—',
+        targetImage: r.prev_image || '上一版本',
+        id: r.id
+      }))
+      showBatchRollbackDialog.value = true
+    }
+
+    const confirmBatchRollback = async () => {
+      const ids = batchRollbackItems.value.map(i => i.id)
+      batchLoading.value = true
+      showBatchRollbackDialog.value = false
+      try {
+        const r = await batchRollbackReleaseApi(ids)
+        if (r.code === 0) {
+          const data = r.data || {}
+          Message.success({ content: data.message || `批量回滚完成`, duration: 3000 })
+          selectedIds.value = []
+          loadAll()
+        } else { throw new Error(r.msg || '批量回滚失败') }
+      } catch (e) { Message.error({ content: e.message || '批量回滚失败' }) }
+      finally { batchLoading.value = false }
     }
 
     // 批量取消
