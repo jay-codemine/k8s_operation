@@ -1,0 +1,79 @@
+{
+  "dashboard": {
+    "title": "K8sOperation 平台监控",
+    "tags": ["platform", "k8soperation"],
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1, "title": "API QPS",
+        "type": "graph", "span": 6,
+        "targets": [{ "expr": "sum(rate(k8sop_http_request_duration_seconds_count[1m])) by (method, path)", "legendFormat": "{{method}} {{path}}" }],
+        "fieldConfig": { "defaults": { "unit": "reqps" } }
+      },
+      {
+        "id": 2, "title": "API P99 延迟",
+        "type": "graph", "span": 6,
+        "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(k8sop_http_request_duration_seconds_bucket[1m])) by (le, path))", "legendFormat": "{{path}}" }],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 3, "title": "API 错误率 (4xx/5xx)",
+        "type": "graph", "span": 6,
+        "targets": [
+          { "expr": "sum(rate(k8sop_http_request_duration_seconds_count{path=~\".*\"}[1m])) by (path, status)", "legendFormat": "{{path}} {{status}}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "reqps" } }
+      },
+      {
+        "id": 4, "title": "CICD 构建成功率",
+        "type": "stat", "span": 3,
+        "targets": [
+          { "expr": "sum(rate(k8sop_cicd_pipeline_runs_total{status=\"success\"}[24h])) / sum(rate(k8sop_cicd_pipeline_runs_total[24h])) * 100", "legendFormat": "成功率" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } }
+      },
+      {
+        "id": 5, "title": "CICD 构建耗时趋势",
+        "type": "graph", "span": 9,
+        "targets": [
+          { "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P50 {{language}}" },
+          { "expr": "histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P95 {{language}}" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 6, "title": "构建队列积压",
+        "type": "stat", "span": 3,
+        "targets": [{ "expr": "k8sop_cicd_build_queue_size" }]
+      },
+      {
+        "id": 7, "title": "DB 连接池使用率",
+        "type": "gauge", "span": 4,
+        "targets": [{ "expr": "k8sop_db_connection_pool_active / k8sop_db_connection_pool_max * 100" }],
+        "fieldConfig": { "defaults": { "unit": "percent", "max": 100 } }
+      },
+      {
+        "id": 8, "title": "登录统计 (24h)",
+        "type": "stat", "span": 4,
+        "targets": [{ "expr": "sum(increase(k8sop_auth_token_validation_total[24h]))", "legendFormat": "登录验证次数" }]
+      },
+      {
+        "id": 9, "title": "Panic 恢复次数 (24h)",
+        "type": "stat", "span": 4,
+        "targets": [{ "expr": "sum(increase(k8sop_panics_recovered_total[24h]))" }],
+        "fieldConfig": { "defaults": { "unit": "short" }, "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } }
+      },
+      {
+        "id": 10, "title": "服务运行时长",
+        "type": "stat", "span": 6,
+        "targets": [{ "expr": "time() - process_start_time_seconds{job=\"k8soperation\"}", "legendFormat": "uptime" }],
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      },
+      {
+        "id": 11, "title": "在线用户数 (估算)",
+        "type": "stat", "span": 6,
+        "targets": [{ "expr": "sum(k8sop_http_inflight_requests)" }]
+      }
+    ]
+  }
+}

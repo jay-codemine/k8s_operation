@@ -1,0 +1,79 @@
+# K8sOperation 平台告警规则
+# PrometheusRule / Prometheus alert rules
+groups:
+  - name: k8soperation-platform
+    rules:
+      # ===== 1. API 可用性 =====
+      - alert: PlatformAPIErrorRateHigh
+        expr: sum(rate(k8sop_http_request_duration_seconds_count{status=~"4..|5.."}[5m])) / sum(rate(k8sop_http_request_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels: { severity: warning, category: api }
+        annotations:
+          summary: "平台 API 错误率 > 5%"
+          description: "近 5 分钟错误率 {{ $value | humanizePercentage }}，请检查日志"
+
+      - alert: PlatformAPILatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(k8sop_http_request_duration_seconds_bucket[5m])) by (le)) > 3
+        for: 5m
+        labels: { severity: warning, category: api }
+        annotations:
+          summary: "平台 API P99 延迟 > 3s"
+          description: "P99 延迟 {{ $value }}s，可能 DB/Redis 慢查询或下游超时"
+
+      - alert: PlatformAPIDown
+        expr: up{job="k8soperation"} == 0
+        for: 1m
+        labels: { severity: critical, category: availability }
+        annotations:
+          summary: "平台服务不可达"
+          description: "Prometheus 无法 scrape /metrics，实例可能已崩溃"
+
+      # ===== 2. CICD 构建 =====
+      - alert: CICDBuildQueueBacklog
+        expr: k8sop_cicd_build_queue_size > 10
+        for: 10m
+        labels: { severity: warning, category: cicd }
+        annotations:
+          summary: "CICD 构建队列积压 > 10"
+          description: "当前积压 {{ $value }} 个构建，Jenkins Agent 可能不足"
+
+      - alert: CICDBuildSuccessRateLow
+        expr: sum(rate(k8sop_cicd_pipeline_runs_total{status="success"}[1h])) / sum(rate(k8sop_cicd_pipeline_runs_total[1h])) < 0.7
+        for: 15m
+        labels: { severity: warning, category: cicd }
+        annotations:
+          summary: "CICD 构建成功率 < 70%（1h）"
+          description: "近 1 小时成功率仅 {{ $value | humanizePercentage }}，需排查 Jenkins/镜像仓库"
+
+      - alert: CICDBuildDurationP95High
+        expr: histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le)) > 600
+        for: 10m
+        labels: { severity: info, category: cicd }
+        annotations:
+          summary: "CICD 构建 P95 耗时 > 10min"
+          description: "P95 构建耗时 {{ $value }}s，检查 PVC 缓存/Kaniko 层缓存"
+
+      # ===== 3. 数据库 =====
+      - alert: PlatformDBConnectionPoolHigh
+        expr: k8sop_db_connection_pool_active / k8sop_db_connection_pool_max > 0.8
+        for: 5m
+        labels: { severity: warning, category: database }
+        annotations:
+          summary: "DB 连接池使用率 > 80%"
+          description: "当前 {{ $value | humanizePercentage }}，可能即将耗尽"
+
+      # ===== 4. 稳定性 =====
+      - alert: PlatformPanicRecovered
+        expr: increase(k8sop_panics_recovered_total[5m]) > 0
+        labels: { severity: critical, category: stability }
+        annotations:
+          summary: "平台发生 Panic 恢复"
+          description: "近 5 分钟有 {{ $value }} 次 panic，立即查看日志"
+
+      - alert: PlatformInFlightRequestsHigh
+        expr: k8sop_http_inflight_requests > 50
+        for: 5m
+        labels: { severity: warning, category: api }
+        annotations:
+          summary: "并发请求 > 50"
+          description: "当前 {{ $value }} 个 inflight 请求，服务可能过载"
