@@ -125,8 +125,9 @@ type NodeConfig struct {
 }
 
 type ClusterClientConfig struct {
-	TTL       time.Duration `mapstructure:"TTL" yaml:"TTL"`
-	TTLJitter time.Duration `mapstructure:"TTLJitter" yaml:"TTLJitter"`
+	TTL               time.Duration `mapstructure:"TTL" yaml:"TTL"`
+	TTLJitter         time.Duration `mapstructure:"TTLJitter" yaml:"TTLJitter"`
+	ConnectionTimeout int           `mapstructure:"ConnectionTimeout" yaml:"ConnectionTimeout"` // K8s API 连接超时(秒)，默认30
 }
 
 // SecuritySettingS 安全配置结构体

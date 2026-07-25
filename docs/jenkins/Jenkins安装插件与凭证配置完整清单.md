@@ -332,7 +332,7 @@ kubectl -n devops exec jenkins-0 -- sh -c "ls /var/jenkins_home/plugins/ | grep 
 
 ---
 
-### 7.1 必装插件清单（13 个）
+### 7.1 必装插件清单（14个）
 
 以下插件通过 `initContainer` 中的 `jenkins-plugin-cli` 自动安装（**不指定版本号**，安装最新兼容版）：
 

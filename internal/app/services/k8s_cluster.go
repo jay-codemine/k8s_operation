@@ -152,7 +152,12 @@ func tuneRESTConfig(cfg *rest.Config) {
 	cfg.UserAgent = "k8soperation/1.0"
 	cfg.QPS = 50
 	cfg.Burst = 100
-	cfg.Timeout = 30 * time.Second
+	// 使用配置的超时时间，默认 30s
+	timeout := 30
+	if global.ClusterTTL != nil && global.ClusterTTL.ConnectionTimeout > 0 {
+		timeout = global.ClusterTTL.ConnectionTimeout
+	}
+	cfg.Timeout = time.Duration(timeout) * time.Second
 
 	// 强制跳过 TLS 验证，支持自签名证书集群
 	// 生产环境建议配置正确的 CA 证书

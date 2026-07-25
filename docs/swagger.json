@@ -22856,6 +22856,26 @@
         "services.PlatformHealthStatus": {
             "type": "object",
             "properties": {
+                "api_requests": {
+                    "description": "近1小时API请求量",
+                    "type": "string"
+                },
+                "build_queue": {
+                    "description": "构建队列积压",
+                    "type": "string"
+                },
+                "build_success_rate": {
+                    "description": "CICD构建成功率",
+                    "type": "string"
+                },
+                "db_connections": {
+                    "description": "数据库连接数",
+                    "type": "string"
+                },
+                "error_rate": {
+                    "description": "API错误率",
+                    "type": "string"
+                },
                 "go_version": {
                     "description": "Go版本",
                     "type": "string"
@@ -22864,12 +22884,20 @@
                     "description": "最后检查时间",
                     "type": "string"
                 },
+                "logins_24h": {
+                    "description": "24h登录次数",
+                    "type": "string"
+                },
                 "num_cpu": {
                     "description": "CPU核数",
                     "type": "integer"
                 },
                 "num_goroutine": {
                     "description": "协程数",
+                    "type": "integer"
+                },
+                "panics": {
+                    "description": "Panic恢复次数",
                     "type": "integer"
                 },
                 "status": {
