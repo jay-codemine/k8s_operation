@@ -68,6 +68,7 @@ ErrorCode:
 ClusterClient:
   TTL: 30m
   TTLJitter: 3m
+  ConnectionTimeout: 30         # K8s API 连接超时(秒)，公网集群建议 60
 
 Pod:
   eviction:
