@@ -2527,7 +2527,7 @@ const viewHistory = async (sts) => {
   showHistoryModal.value = true
   try {
     const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
-    historyList.value = res.code === 0 ? (res.data || []) : []
+    historyList.value = res.code === 0 ? (Array.isArray(res.data) ? res.data : res.data?.list || []) : []
   } catch (e) { console.error('获取历史版本失败:', e) }
   finally { loadingHistory.value = false }
 }
@@ -2541,7 +2541,7 @@ const openStsRollback = async (sts) => {
   showRollbackModal.value = true
   try {
     const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
-    historyList.value = res.code === 0 ? (res.data || []) : []
+    historyList.value = res.code === 0 ? (Array.isArray(res.data) ? res.data : res.data?.list || []) : []
   } catch (e) { console.error('获取历史失败:', e) }
   finally { loadingHistory.value = false }
 }
