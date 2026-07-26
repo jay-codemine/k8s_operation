@@ -1165,11 +1165,27 @@ export default {
     const rollbackRelease = (rel) => {
       const isFailed = rel.status === 'Failed'
       const msg = isFailed
-        ? `发布单 "${rel.app_name || rel.name}" 部署失败，确定回滚吗？将工作负载恢复到本次部署前的镜像。`
-        : `确定要回滚 "${rel.app_name || rel.name}" 吗？将恢复到上一个稳定版本。`
+        ? `发布单 "${rel.app_name || rel.workload_name || rel.name}" 部署失败，确定回滚吗？将工作负载恢复到本次部署前的镜像。`
+        : `确定要回滚 "${rel.app_name || rel.workload_name || rel.name}" 吗？将恢复到上一个稳定版本。`
       openConfirm('回滚发布', msg, '确认回滚', 'warning', async () => {
-        const r = await rollbackReleaseApi(rel.id)
-        if (r.code === 0) { Message.success({ content: '回滚已提交' }); loadAll() } else { throw new Error(r.msg || '回滚失败') }
+        try {
+          const r = await rollbackReleaseApi(rel.id)
+          if (r.code === 0) {
+            const results = r.data?.results
+            if (results && results.length > 0) {
+              const ok = results.filter(x => x.success).length
+              const fail = results.filter(x => !x.success).length
+              if (fail > 0) {
+                const errMsg = results.find(x => !x.success)?.message || '回滚失败'
+                Message.warning({ content: errMsg, duration: 5000 })
+              } else {
+                Message.success({ content: '回滚已提交' }); loadAll()
+              }
+            } else {
+              Message.success({ content: '回滚已提交' }); loadAll()
+            }
+          } else { Message.error({ content: r.msg || r.details || '回滚失败', duration: 5000 }) }
+        } catch (e) { Message.error({ content: e?.msg || e?.message || '回滚失败' }) }
       })
     }
     const retryRelease = (rel) => {
