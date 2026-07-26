@@ -27,6 +27,7 @@ var (
 	LDAPSetting       *setting.LDAPSettingS        // LDAP 认证配置
 	LogControlSetting *setting.LogControlS          // 日志控制配置
 	CanarySetting     *setting.CanarySettingS       // 金丝雀部署配置        // LDAP 认证配置
+	CicdSetting       *setting.CicdSettingS         // CICD Worker 配置
 )
 
 // DefaultBranch 返回配置的默认 Git 分支，未配置时返回 "master"

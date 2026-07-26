@@ -124,6 +124,11 @@ type NodeConfig struct {
 	Eviction NodeEvictionConfig `yaml:"eviction"`
 }
 
+// CicdSettingS CICD 配置
+type CicdSettingS struct {
+	WorkerEnabled bool `mapstructure:"WorkerEnabled" yaml:"WorkerEnabled"` // 是否启动 CICD Worker（本地开发可关闭）
+}
+
 type ClusterClientConfig struct {
 	TTL               time.Duration `mapstructure:"TTL" yaml:"TTL"`
 	TTLJitter         time.Duration `mapstructure:"TTLJitter" yaml:"TTLJitter"`
