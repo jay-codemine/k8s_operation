@@ -1953,7 +1953,7 @@
       :resource-name="rollbackForm.name"
       :current-info="rollbackCurrentInfo"
       :revisions="historyList"
-      :selected-revision="historyList.find(h => h.name === rollbackForm.replica_set)"
+      :selected-revision="(historyList || []).find(h => h.name === rollbackForm.replica_set)"
       @close="showRollbackModal = false"
       @select="(rev) => rollbackForm.replica_set = rev.name"
       @confirm="submitRollback"

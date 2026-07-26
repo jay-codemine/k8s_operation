@@ -990,7 +990,7 @@
       :resource-name="rollbackForm.name"
       :current-info="rollbackCurrentInfo"
       :revisions="historyList"
-      :selected-revision="historyList.find(h => h.name === rollbackForm.revision_name)"
+      :selected-revision="(historyList || []).find(h => h.name === rollbackForm.revision_name)"
       @close="showRollbackModal = false"
       @select="(rev) => rollbackForm.revision_name = rev.name"
       @confirm="submitStsRollback"

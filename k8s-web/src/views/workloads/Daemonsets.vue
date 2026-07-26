@@ -695,7 +695,7 @@
       :resource-name="rollbackForm.name"
       :current-info="dsRollbackCurrentInfo"
       :revisions="rollbackHistoryList"
-      :selected-revision="rollbackHistoryList.find(h => h.name === rollbackForm.revision_name)"
+      :selected-revision="(rollbackHistoryList || []).find(h => h.name === rollbackForm.revision_name)"
       @close="showRollbackModal = false"
       @select="(rev) => rollbackForm.revision_name = rev.name"
       @confirm="submitRollback"

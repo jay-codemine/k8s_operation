@@ -383,7 +383,7 @@ const menuGroupsConfig = reactive([
       { path: '/cicd/artifacts', label: '制品库', icon: 'apps' },
       // ── 发布中心 (CD) ──
       { section: '发布中心 · CD' },
-      { path: '/cicd/releases', label: '发布管理', icon: 'rocket' },
+      { path: '/cicd/releases', label: '发布管理', icon: 'send' },
       { path: '/cicd/promotion', label: '镜像晋级', icon: 'send' },
       { path: '/cicd/release-history', label: '发布历史', icon: 'calendar' },
       { path: '/cicd/approvals', label: '审批工单', icon: 'check-circle' },
