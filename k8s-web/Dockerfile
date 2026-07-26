@@ -7,8 +7,7 @@ WORKDIR /app
 
 # 利用 Docker 层缓存：先只拷贝依赖描述文件
 COPY package*.json ./
-ENV CYPRESS_INSTALL_BINARY=0
-RUN npm ci --ignore-scripts 2>/dev/null || npm install --legacy-peer-deps
+RUN CYPRESS_INSTALL_BINARY=0 npm ci 2>/dev/null || npm install --legacy-peer-deps
 
 # 拷贝源码并构建
 COPY . .

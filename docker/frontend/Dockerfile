@@ -30,8 +30,7 @@ RUN npm config set registry https://registry.npmmirror.com
 
 # 利用 Docker 缓存：先复制依赖声明
 COPY package.json ./
-ENV CYPRESS_INSTALL_BINARY=0
-RUN npm ci --ignore-scripts --prefer-offline --no-audit --no-fund 2>/dev/null || npm install --legacy-peer-deps
+RUN CYPRESS_INSTALL_BINARY=0 npm ci 2>/dev/null || npm install --legacy-peer-deps
 
 # 复制源码并构建
 COPY . .
