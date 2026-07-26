@@ -292,7 +292,14 @@ spec:
                         def extraArgs = params.NPM_INSTALL_ARGS?.trim() ?: ''
                         echo "[依赖安装] 额外参数: '${extraArgs ?: '(无)'}'"
                         // PVC 缓存 .npm 加速，--prefer-offline 优先走缓存
-                        sh "npm install --legacy-peer-deps --prefer-offline ${extraArgs}"
+                        sh """
+                            if npm ci --ignore-scripts --prefer-offline ${extraArgs}; then
+                                echo '[依赖安装] npm ci 成功'
+                            else
+                                echo '[依赖安装] npm ci 失败，回退 npm install'
+                                npm install --legacy-peer-deps --prefer-offline ${extraArgs}
+                            fi
+                        """
                     }
                 }
             }
