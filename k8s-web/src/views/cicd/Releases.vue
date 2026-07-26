@@ -744,6 +744,16 @@
     </Teleport>
   </div>
 
+  <!-- 批量发布确认弹窗 -->
+  <RollbackDialog
+    :visible="showBatchPublishDialog"
+    :confirming="batchLoading"
+    batch-mode
+    batch-action="发布"
+    :selected-items="batchPublishItems"
+    @close="showBatchPublishDialog = false"
+    @confirm="confirmBatchPublish"
+  />
   <!-- 批量回滚确认弹窗 -->
   <RollbackDialog
     :visible="showBatchRollbackDialog"
@@ -1178,27 +1188,37 @@ export default {
     const clearSearch = () => { searchKeyword.value = ''; currentPage.value = 1; loadReleases() }
 
     // 批量发布
+    const showBatchPublishDialog = ref(false)
+    const batchPublishItems = ref([])
+
     const handleBatchRetry = () => {
-      const ids = selectedIds.value.filter(id => {
-        const rel = releases.value.find(r => r.id === id)
-        return rel && ['Failed', 'Canceled', 'Succeeded'].includes(rel.status)
-      })
-      if (ids.length === 0) {
+      const selected = releases.value.filter(r => selectedIds.value.includes(r.id) && ['Failed', 'Canceled', 'Succeeded'].includes(r.status))
+      if (selected.length === 0) {
         Message.warning({ content: '请选择可发布的记录（失败/已取消/已成功状态）' }); return
       }
-      openConfirm('批量发布', `确定要重新发布已选的 ${ids.length} 个发布单吗？\n将根据每个发布单的最近配置重新执行发布。`, '确认发布', 'create', async () => {
-        batchLoading.value = true
-        try {
-          const r = await batchRetryReleaseApi(ids)
-          if (r.code === 0) {
-            const data = r.data || {}
-            Message.success({ content: data.message || `批量发布完成`, duration: 3000 })
-            selectedIds.value = []
-            loadAll()
-          } else { throw new Error(r.msg || '批量发布失败') }
-        } catch (e) { Message.error({ content: e.message || '批量发布失败' }) }
-        finally { batchLoading.value = false }
-      })
+      batchPublishItems.value = selected.map(r => ({
+        name: r.app_name || r.workload_name || `#${r.id}`,
+        currentImage: r.image_tag || r.image || '—',
+        targetImage: '重新构建',
+        id: r.id
+      }))
+      showBatchPublishDialog.value = true
+    }
+
+    const confirmBatchPublish = async () => {
+      const ids = batchPublishItems.value.map(i => i.id)
+      batchLoading.value = true
+      showBatchPublishDialog.value = false
+      try {
+        const r = await batchRetryReleaseApi(ids)
+        if (r.code === 0) {
+          const data = r.data || {}
+          Message.success({ content: data.message || `批量发布完成`, duration: 3000 })
+          selectedIds.value = []
+          loadAll()
+        } else { throw new Error(r.msg || '批量发布失败') }
+      } catch (e) { Message.error({ content: e.message || '批量发布失败' }) }
+      finally { batchLoading.value = false }
     }
 
     // 批量回滚

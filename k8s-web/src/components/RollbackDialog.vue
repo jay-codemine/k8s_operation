@@ -5,7 +5,7 @@
       <div class="rollback-header">
         <div class="rollback-header-left">
           <AppIcon name="sync" size="20"/>
-          <span>{{ batchMode ? '批量回滚' : '版本回滚' }}</span>
+          <span>{{ batchMode ? `批量${batchAction}` : '版本回滚' }}</span>
         </div>
         <button class="rollback-close" @click="$emit('close')">&times;</button>
       </div>
@@ -106,7 +106,7 @@
         <button class="btn-cancel" @click="$emit('close')">取消</button>
         <button class="btn-confirm" :disabled="!canConfirm || confirming" @click="onConfirm">
           <AppIcon name="sync" size="14" v-if="!confirming"/>
-          {{ confirming ? '回滚中...' : batchMode ? `回滚 ${selectedItems.length} 个资源` : '确认回滚' }}
+          {{ confirming ? `${batchAction}中...` : batchMode ? `${batchAction} ${selectedItems.length} 个资源` : `确认${batchAction}` }}
         </button>
       </div>
     </div>
@@ -125,6 +125,7 @@ const props = defineProps({
   revisions: { type: Array, default: () => [] },
   selectedRevision: Object,
   batchMode: Boolean,
+  batchAction: { type: String, default: '回滚' },
   selectedItems: { type: Array, default: () => [] }
 })
 
