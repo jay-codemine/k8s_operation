@@ -1567,15 +1567,16 @@
                     目标命名空间
                     <span class="required">*</span>
                   </label>
+                  <input v-model="nsSearch" class="form-input" style="margin-bottom:6px" placeholder="🔍 搜索命名空间..." :disabled="loadingNamespaces || !pipelineData.target_cluster_id" />
                   <div class="select-wrapper">
-                    <select 
-                      v-model="pipelineData.target_namespace" 
+                    <select
+                      v-model="pipelineData.target_namespace"
                       class="form-select"
                       @change="onNamespaceChange"
                       :disabled="loadingNamespaces || !pipelineData.target_cluster_id"
                     >
                       <option value="">请选择命名空间</option>
-                      <option v-for="ns in namespaces" :key="ns.name" :value="ns.name">
+                      <option v-for="ns in filteredNamespaces" :key="ns.name" :value="ns.name">
                         {{ ns.name }}
                       </option>
                     </select>
@@ -1621,14 +1622,15 @@
                     <span class="required">*</span>
                   </label>
                   <div class="select-wrapper">
-                    <select 
+                    <input v-if="workloads.length > 0" v-model="wlSearch" class="form-input" style="margin-bottom:6px" placeholder="🔍 搜索工作负载... (输入名称模糊过滤)" />
+                    <select
                       v-if="workloads.length > 0"
-                      v-model="pipelineData.target_workload_name" 
+                      v-model="pipelineData.target_workload_name"
                       class="form-select"
                       @change="onWorkloadChange"
                     >
                       <option value="">请选择工作负载</option>
-                      <option v-for="w in workloads" :key="w.name" :value="w.name">
+                      <option v-for="w in filteredWorkloads" :key="w.name" :value="w.name">
                         {{ w.name }}
                       </option>
                     </select>
@@ -2221,10 +2223,20 @@ export default {
     
     // 命名空间列表
     const namespaces = ref([])
+    const nsSearch = ref('')
     const loadingNamespaces = ref(false)
-    
+    const filteredNamespaces = computed(() => {
+      const q = nsSearch.value.toLowerCase().trim()
+      return q ? namespaces.value.filter(n => n.name.toLowerCase().includes(q)) : namespaces.value
+    })
+
     // 工作负载列表
     const workloads = ref([])
+    const wlSearch = ref('')
+    const filteredWorkloads = computed(() => {
+      const q = wlSearch.value.toLowerCase().trim()
+      return q ? workloads.value.filter(w => w.name.toLowerCase().includes(q)) : workloads.value
+    })
     const loadingWorkloads = ref(false)
     
     // 部署环境选项
