@@ -1242,17 +1242,23 @@ export default {
 
     const confirmBatchRollback = async () => {
       const ids = batchRollbackItems.value.map(i => i.id)
+      if (ids.length === 0) { Message.warning({ content: '没有可回滚的发布单' }); return }
       batchLoading.value = true
       showBatchRollbackDialog.value = false
       try {
         const r = await batchRollbackReleaseApi(ids)
         if (r.code === 0) {
-          const data = r.data || {}
-          Message.success({ content: data.message || `批量回滚完成`, duration: 3000 })
+          const results = r.data?.results || r.data || []
+          const ok = results.filter(x => x.success).length
+          const fail = results.filter(x => !x.success).length
+          const msg = fail > 0 ? `${ok} 成功, ${fail} 失败` : `全部 ${ok} 个回滚成功`
+          Message[ fail > 0 ? 'warning' : 'success' ]({ content: msg, duration: 4000 })
           selectedIds.value = []
           loadAll()
-        } else { throw new Error(r.msg || '批量回滚失败') }
-      } catch (e) { Message.error({ content: e.message || '批量回滚失败' }) }
+        } else {
+          Message.error({ content: r.msg || r.details || '批量回滚失败', duration: 5000 })
+        }
+      } catch (e) { Message.error({ content: e?.msg || e?.message || '批量回滚请求失败', duration: 5000 }) }
       finally { batchLoading.value = false }
     }
 
