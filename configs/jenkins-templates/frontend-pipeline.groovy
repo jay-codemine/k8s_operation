@@ -38,6 +38,8 @@ spec:
     env:
     - name: NPM_CONFIG_REGISTRY
       value: 'https://registry.npmmirror.com'
+    - name: CYPRESS_INSTALL_BINARY
+      value: '0'
     volumeMounts:
     - name: npm-cache
       mountPath: /root/.npm
