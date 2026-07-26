@@ -62,7 +62,8 @@
       <div class="batch-list" v-if="batchMode && selectedItems.length">
         <div v-for="item in selectedItems" :key="item.name" class="batch-item">
           <span class="batch-name">{{ item.name }}</span>
-          <span class="batch-to">{{ item.currentImage }} → {{ item.targetImage || '上一版本' }}</span>
+          <span class="batch-to" v-if="item.currentImage && item.targetImage">{{ item.currentImage }} → {{ item.targetImage }}</span>
+          <span class="batch-to" v-else>{{ item.currentImage || item.targetImage || '' }}</span>
         </div>
       </div>
 
