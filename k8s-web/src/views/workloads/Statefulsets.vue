@@ -161,6 +161,10 @@
                       <span class="menu-icon">📄</span>
                       <span>查看日志</span>
                     </button>
+                    <button v-if="canOperate" class="menu-item" @click="openStsRollback(sts)">
+                      <span class="menu-icon"><AppIcon name="sync" size="14"/></span>
+                      <span>回滚</span>
+                    </button>
                     <button class="menu-item" @click="viewHistory(sts)">
                       <span class="menu-icon">📜</span>
                       <span>版本记录</span>
@@ -2525,6 +2529,20 @@ const viewHistory = async (sts) => {
     const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
     historyList.value = res.code === 0 ? (res.data || []) : []
   } catch (e) { console.error('获取历史版本失败:', e) }
+  finally { loadingHistory.value = false }
+}
+
+const openStsRollback = async (sts) => {
+  showMoreOptions.value = false
+  historyStatefulset.value = sts
+  rollbackForm.value = { namespace: sts.namespace, name: sts.name, revision_name: '' }
+  loadingHistory.value = true
+  historyList.value = []
+  showRollbackModal.value = true
+  try {
+    const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
+    historyList.value = res.code === 0 ? (res.data || []) : []
+  } catch (e) { console.error('获取历史失败:', e) }
   finally { loadingHistory.value = false }
 }
 
