@@ -1198,6 +1198,7 @@ export default {
       }
       batchPublishItems.value = selected.map(r => ({
         name: r.app_name || r.workload_name || `#${r.id}`,
+        currentImage: r.image_tag || r.image || '—',
         targetImage: '重新构建',
         id: r.id
       }))
