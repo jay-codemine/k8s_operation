@@ -18,7 +18,7 @@
           <div class="rbd-col rbd-col-cur">
             <span class="rbd-badge rbd-badge-cur">当前运行</span>
             <div class="rbd-kv"><span>镜像</span><span class="rbd-kv-v">{{ currentInfo?.image || '—' }}</span></div>
-            <div class="rbd-kv"><span>副本</span><span class="rbd-kv-v">{{ currentInfo?.replicas || '—' }}</span></div>
+            <div class="rbd-kv"><span>副本</span><span class="rbd-kv-v">{{ currentInfo?.replicas && currentInfo.replicas !== '0' ? currentInfo.replicas : '—' }}</span></div>
             <div class="rbd-kv"><span>部署</span><span class="rbd-kv-v">{{ currentInfo?.deployedAt || '—' }}</span></div>
           </div>
           <div class="rbd-arr">
@@ -55,7 +55,7 @@
                   <td><span class="rbd-tag" :class="idx===0?'rbd-tag-l':''">{{idx===0?'Latest':'v'+(revisions.length-idx)}}</span></td>
                   <td class="mono">{{ rev.name?.length>30?'...'+rev.name.slice(-30):(rev.name||'—') }}</td>
                   <td class="img">{{ rev.image||'—' }}</td>
-                  <td>{{ rev.replicas||'—' }}</td>
+                  <td>{{ rev.replicas ? rev.replicas : '—' }}</td>
                   <td class="time">{{ rev.createdAt||'—' }}</td>
                 </tr>
               </tbody>
