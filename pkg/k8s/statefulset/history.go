@@ -74,7 +74,9 @@ func GetStatefulSetHistory(ctx context.Context, Kube kubernetes.Interface, names
 		image, replicas := "", int32(0)
 		var stsSpec appv1.StatefulSet
 		if err := json.Unmarshal(rev.Data.Raw, &stsSpec); err == nil {
-			replicas = *stsSpec.Spec.Replicas
+			if stsSpec.Spec.Replicas != nil {
+				replicas = *stsSpec.Spec.Replicas
+			}
 			if len(stsSpec.Spec.Template.Spec.Containers) > 0 {
 				image = stsSpec.Spec.Template.Spec.Containers[0].Image
 			}
