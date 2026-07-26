@@ -19,7 +19,7 @@
 # ==============================================================================
 
 # ======================== Stage 1: 编译阶段 ========================
-FROM docker.m.daocloud.io/library/golang:1.24-alpine AS builder
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/golang:1.24-alpine AS builder
 
 # 国内镜像加速
 RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
@@ -51,7 +51,7 @@ RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
 
 
 # ======================== Stage 2: 运行阶段 ========================
-FROM docker.m.daocloud.io/library/alpine:3.20
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/alpine:3.20
 
 # 国内镜像加速
 RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories

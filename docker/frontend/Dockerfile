@@ -21,7 +21,7 @@
 
 
 # ======================== Stage 1: 构建阶段 ========================
-FROM docker.m.daocloud.io/library/node:22-alpine AS builder
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/node:22-alpine3.22 AS builder
 
 WORKDIR /app
 
