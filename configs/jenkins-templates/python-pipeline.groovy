@@ -406,7 +406,7 @@ spec:
                             } else {
                                 dockerfile = '.Dockerfile.runtime'
                             writeFile file: dockerfile, text: """\
-FROM python:${pythonVersion}-slim
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/python:${pythonVersion}-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=Asia/Shanghai
 ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_NO_CACHE_DIR=1
 RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata && \\
