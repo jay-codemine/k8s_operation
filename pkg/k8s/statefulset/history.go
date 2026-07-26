@@ -2,6 +2,7 @@ package statefulset
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	appv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +16,8 @@ type ControllerRevisionItem struct {
 	Name            string            `json:"name"`
 	Namespace       string            `json:"namespace"`
 	Revision        int64             `json:"revision"`
+	Image           string            `json:"image,omitempty"`
+	Replicas        int32             `json:"replicas,omitempty"`
 	CreationTime    metav1.Time       `json:"creation_time"`
 	Labels          map[string]string `json:"labels,omitempty"`
 	OwnerReferences []string          `json:"owner_references,omitempty"`
@@ -67,10 +70,22 @@ func GetStatefulSetHistory(ctx context.Context, Kube kubernetes.Interface, names
 		for _, o := range rev.OwnerReferences {
 			ownerNames = append(ownerNames, fmt.Sprintf("%s/%s", o.Kind, o.Name))
 		}
+		// 从 ControllerRevision Data 中解析 image 和 replicas
+		image, replicas := "", int32(0)
+		var stsSpec appv1.StatefulSet
+		if err := json.Unmarshal(rev.Data.Raw, &stsSpec); err == nil {
+			replicas = *stsSpec.Spec.Replicas
+			if len(stsSpec.Spec.Template.Spec.Containers) > 0 {
+				image = stsSpec.Spec.Template.Spec.Containers[0].Image
+			}
+		}
+
 		result = append(result, ControllerRevisionItem{
 			Name:            rev.Name,
 			Namespace:       rev.Namespace,
 			Revision:        rev.Revision,
+			Image:           image,
+			Replicas:        replicas,
 			CreationTime:    rev.CreationTimestamp,
 			Labels:          rev.Labels,
 			OwnerReferences: ownerNames,
