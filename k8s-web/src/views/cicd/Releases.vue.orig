@@ -1208,8 +1208,7 @@ export default {
     const handleBatchRollback = () => {
       const selected = releases.value.filter(r => selectedIds.value.includes(r.id) && ['Succeeded', 'Running'].includes(r.status))
       if (selected.length === 0) {
-        const statuses = [...new Set(releases.value.filter(r => selectedIds.value.includes(r.id)).map(r => r.status))]
-        Message.warning({ content: `选中的发布单状态为 [${statuses.join(", ")}]，仅 Succeeded/Running 状态可回滚` }); return
+        Message.warning({ content: '请选择可回滚的记录（发布成功/运行中状态）' }); return
       }
       batchRollbackItems.value = selected.map(r => ({
         name: r.app_name || r.pipeline_name || r.name || `#${r.id}`,
