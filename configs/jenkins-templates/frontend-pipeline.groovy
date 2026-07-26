@@ -476,7 +476,7 @@ server {
 """
 
                             writeFile file: dockerfile, text: """\
-FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/nginx:alpine
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginxinc/nginx-unprivileged:1.27-alpine
 RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.huaweicloud.com#g' /etc/apk/repositories && apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
 COPY nginx-app.conf /etc/nginx/conf.d/default.conf
