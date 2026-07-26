@@ -446,7 +446,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --snapshot-mode=redo \
                                 --push-retry=5 \
                                 --use-new-run \
-                                --cache=true \
+                                --cache=false \
                         """
                         // 验证：Kaniko 成功输出含 @sha256: 则表示镜像已完整推送
                         echo "[Verify] ✅ 镜像已推送: ${env.FULL_IMAGE}"
