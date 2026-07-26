@@ -189,7 +189,7 @@
           </div>
           <div class="batch-chips">
             <span v-for="id in selectedIds" :key="id" class="batch-chip">
-              <span class="chip-name">{{ releases.find(r => r.id === id)?.app_name || releases.find(r => r.id === id)?.pipeline_name || '#' + id }}</span>
+              <span class="chip-name">{{ releases.find(r => r.id === id)?.app_name || releases.find(r => r.id === id)?.workload_name || '#' + id }}</span>
               <span class="chip-status" :class="releases.find(r => r.id === id)?.status?.toLowerCase()">{{ releases.find(r => r.id === id)?.status || '—' }}</span>
               <button class="chip-remove" @click="selectedIds = selectedIds.filter(sid => sid !== id)">&times;</button>
             </span>
@@ -1212,7 +1212,7 @@ export default {
         Message.warning({ content: `选中的发布单状态为 [${statuses.join(", ")}]，仅 Succeeded/Running 状态可回滚` }); return
       }
       batchRollbackItems.value = selected.map(r => ({
-        name: r.app_name || r.pipeline_name || r.name || `#${r.id}`,
+        name: r.app_name || r.workload_name || `#${r.id}`,
         currentImage: r.image_tag || r.image || r.current_image || '—',
         targetImage: r.prev_image || '上一版本',
         id: r.id
