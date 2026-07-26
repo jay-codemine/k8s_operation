@@ -680,7 +680,7 @@ spec:
                                 writeFile file: dockerfile, text: """\
 FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/alpine:3.20.2
 RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.huaweicloud.com#g' /etc/apk/repositories && \\
-    apk add --no-cache ca-certificates tzdata wget && \\
+    apk add --no-cache ca-certificates tzdata wget git && \\
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \\
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
