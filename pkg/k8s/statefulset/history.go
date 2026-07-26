@@ -16,8 +16,8 @@ type ControllerRevisionItem struct {
 	Name            string            `json:"name"`
 	Namespace       string            `json:"namespace"`
 	Revision        int64             `json:"revision"`
-	Image           string            `json:"image,omitempty"`
-	Replicas        int32             `json:"replicas,omitempty"`
+	Image           string            `json:"image"`
+	Replicas        int32             `json:"replicas"`
 	CreationTime    metav1.Time       `json:"creation_time"`
 	Labels          map[string]string `json:"labels,omitempty"`
 	OwnerReferences []string          `json:"owner_references,omitempty"`
