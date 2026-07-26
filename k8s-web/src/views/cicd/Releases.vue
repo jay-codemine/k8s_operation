@@ -1077,14 +1077,14 @@ export default {
         }
         const r = await createRelease(payload)
         if (r.code === 0) {
-          Message.success({ content: '发布单已创建，正在跳转构建界面...' }); showCreateDialog.value = false
+          showCreateDialog.value = false
           createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' }
           selectedPipelineInfo.value = null
-          // 创建发布后跳转到关联流水线的执行阶段页面，实时查看构建进度
-          if (payload.pipeline_id) {
+          // 手动发布：直接入队部署，显示成功提示并刷新列表
+          Message.success({ content: `发布单已创建，使用镜像标签: ${imageTag}`, duration: 4000 })
+          loadAll()
+          if (payload.pipeline_id && !imageTag) {
             router.push(`/cicd/pipelines/${payload.pipeline_id}?tab=stages`)
-          } else {
-            router.push('/cicd/approvals')
           }
         } else { throw new Error(r.msg || '创建失败') }
       } catch (e) { Message.error({ content: e.message || '创建发布单失败' }) }
