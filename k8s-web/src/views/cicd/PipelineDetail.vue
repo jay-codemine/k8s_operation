@@ -1954,6 +1954,7 @@ export default {
 
     // 加载流水线阶段数据
     const loadStages = async () => {
+      if (!pipelineId.value || isNaN(Number(pipelineId.value))) return
       stagesLoading.value = true
       try {
         let stages = null

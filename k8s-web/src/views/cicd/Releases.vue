@@ -1614,8 +1614,6 @@ export default {
   transition: all 0.15s;
 }
 .chip-remove:hover { background: #ef4444; color: #fff; }
-  border-color: rgba(255,255,255,0.5);
-}
 
 /* ---- Checkbox ---- */
 .row-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #4e7cf6; }
