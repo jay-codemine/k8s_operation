@@ -688,41 +688,18 @@
     </div>
 
     <!-- 回滚弹窗 -->
-    <div v-if="showRollbackModal" class="modal-overlay" @click.self="showRollbackModal = false">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>⏪ 回滚 DaemonSet</h3>
-          <button class="close-btn" @click="showRollbackModal = false">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="info-box">
-            <div><strong>DaemonSet:</strong> {{ rollbackForm.name }}</div>
-            <div><strong>命名空间:</strong> {{ rollbackForm.namespace }}</div>
-          </div>
-          <div v-if="loadingRollbackHistory" class="loading-state">加载历史版本...</div>
-          <div v-else-if="rollbackHistoryList.length > 0">
-            <div class="form-group">
-              <label>选择 ControllerRevision（历史版本）</label>
-              <select v-model="rollbackForm.revision_name" class="form-select">
-                <option value="">请选择版本</option>
-                <option v-for="h in rollbackHistoryList" :key="h.name" :value="h.name">
-                  {{ h.name }} (版本 {{ h.revision }}, {{ fmtTime(h.creation_time) }})
-                </option>
-              </select>
-            </div>
-          </div>
-          <div v-else class="empty-state-small">
-            <div class="empty-text">暂无历史版本</div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showRollbackModal = false">取消</button>
-          <button class="btn btn-warning" @click="submitRollback" :disabled="rollingBack || !rollbackForm.revision_name">
-            {{ rollingBack ? '回滚中...' : '确认回滚' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <RollbackDialog
+      :visible="showRollbackModal"
+      :loading="loadingRollbackHistory"
+      :confirming="rollingBack"
+      :resource-name="rollbackForm.name"
+      :current-info="dsRollbackCurrentInfo"
+      :revisions="rollbackHistoryList"
+      :selected-revision="rollbackHistoryList.find(h => h.name === rollbackForm.revision_name)"
+      @close="showRollbackModal = false"
+      @select="(rev) => rollbackForm.revision_name = rev.name"
+      @confirm="submitRollback"
+    />
 
     <!-- Pod 关联弹窗 -->
     <div v-if="showPodsModal" class="modal-overlay" @click.self="showPodsModal = false">
@@ -1053,6 +1030,7 @@ import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import Pagination from '@/components/Pagination.vue'
 import KubeTerminal from '@/components/KubeTerminal.vue'
+import RollbackDialog from '@/components/RollbackDialog.vue'
 import daemonsetsApi from '@/api/cluster/workloads/daemonsets'
 import podsApi from '@/api/cluster/workloads/pods'
 import namespaceApi from '@/api/cluster/namespaces'
@@ -1410,6 +1388,10 @@ let daemonsetLogAbortController = null
 const loadingRollbackHistory = ref(false)
 const rollbackHistoryList = ref([])
 const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
+const dsRollbackCurrentInfo = computed(() => {
+  const ds = daemonsets.value.find(d => d.name === rollbackForm.value.name && d.namespace === rollbackForm.value.namespace)
+  return ds ? { image: ds.image || '—', replicas: ds.replicas || '—', deployedAt: ds.created_at || '—' } : null
+})
 
 // 更新镜像表单
 const updateImageForm = ref({ namespace: '', name: '', container: '', image: '', currentImage: '' })
