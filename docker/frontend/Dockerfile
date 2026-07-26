@@ -40,7 +40,7 @@ RUN npm run build
 
 
 # ======================== Stage 2: 运行阶段 ========================
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/k8s-gos/nginx:alpine
 
 LABEL maintainer="K8sOperation Team"
 LABEL description="K8sOperation Web Frontend (Vue3 + Nginx)"
