@@ -139,11 +139,6 @@ func FlushLoggers() {
 
 // StartCicdWorker 启动 CICD Worker
 func StartCicdWorker() error {
-	// 本地开发环境可关闭 Worker（config.yaml 设 Cicd.WorkerEnabled: false）
-	if global.CicdSetting != nil && !global.CicdSetting.WorkerEnabled {
-		global.Logger.Info("[Cicd] Worker 已关闭（Cicd.WorkerEnabled=false），依赖 K8s 集群内 Pod 执行部署")
-		return nil
-	}
 	if global.RedisCli == nil {
 		global.Logger.Warn("redis client not initialized, cicd worker will not start")
 		return nil
