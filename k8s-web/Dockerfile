@@ -23,7 +23,7 @@ RUN sed -i 's|<head>|<head>\n    <script src="/config.js"><\/script>|' /app/dist
 # ============================================================
 # Stage 2: Runtime (Nginx)
 # ============================================================
-FROM nginx:1.27-alpine
+FROM docker.m.daocloud.io/library/nginx:1.27-alpine
 
 # 安装 gettext（提供 envsubst）用于启动时动态替换 nginx 配置变量
 RUN apk add --no-cache gettext
