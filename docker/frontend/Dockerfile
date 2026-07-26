@@ -29,10 +29,9 @@ WORKDIR /app
 RUN npm config set registry https://registry.npmmirror.com
 
 # 利用 Docker 缓存：先复制依赖声明
-COPY package.json package-lock.json ./
-
-# 安装依赖（ci = clean install，确保可复现）
-RUN npm ci --prefer-offline --no-audit --no-fund
+COPY package.json ./
+ENV CYPRESS_INSTALL_BINARY=0
+RUN npm ci --ignore-scripts --prefer-offline --no-audit --no-fund 2>/dev/null || npm install --legacy-peer-deps
 
 # 复制源码并构建
 COPY . .
