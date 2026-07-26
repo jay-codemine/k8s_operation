@@ -407,10 +407,12 @@
               {{ importLoading ? '扫描中...' : '扫描应用' }}
             </button>
           </div>
-          <div v-if="discoveredApps.length > 0" style="max-height:400px;overflow-y:auto;">
-            <div v-for="(app, ai) in discoveredApps" :key="ai" style="border:1px solid #e8eaf0;border-radius:10px;padding:14px;margin-bottom:10px;" :style="{background: importSelected.includes(ai)?'#f0f0ff':''}">
+          <div v-if="discoveredApps.length > 0">
+            <input v-model="importSearch" class="form-input" style="width:100%;margin-bottom:12px;" placeholder="🔍 搜索应用名 / 命名空间 / 工作负载名..." />
+            <div style="max-height:400px;overflow-y:auto;">
+            <div v-for="(app, ai) in filteredDiscoveredApps" :key="discoveredApps.indexOf(app)" style="border:1px solid #e8eaf0;border-radius:10px;padding:14px;margin-bottom:10px;" :style="{background: importSelected.includes(discoveredApps.indexOf(app))?'#f0f0ff':''}">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <input type="checkbox" :checked="importSelected.includes(ai)" @change="toggleSelect(ai)" />
+                <input type="checkbox" :checked="importSelected.includes(discoveredApps.indexOf(app))" @change="toggleSelect(discoveredApps.indexOf(app))" />
                 <strong style="font-size:14px;">{{ app.app_name }}</strong>
                 <span style="font-size:11px;color:#9ca3af;">{{ app.namespace }}</span>
                 <span style="flex:1;"></span>
@@ -429,6 +431,7 @@
                 <span v-if="app.services.length" class="res-badge res-svc" :title="app.services.map(s=>s.name+':'+s.type).join('\n')">🌐 Service ×{{ app.services.length }}</span>
                 <span v-if="app.pvcs.length" class="res-badge res-pvc" :title="app.pvcs.map(p=>p.name+' '+p.size).join('\n')">💾 PVC ×{{ app.pvcs.length }}</span>
               </div>
+            </div>
             </div>
           </div>
           <div v-if="discoveredApps.length === 0 && importSearched" style="text-align:center;padding:24px;color:#9ca3af;">
@@ -516,6 +519,7 @@ export default {
       importSearched: false,
       importSelected: [],
       batchLoading: false,
+      importSearch: '',
       discoveredApps: [],
       discoveredWorkloads: [],
       clusters: [],
@@ -563,6 +567,19 @@ export default {
         pvc_access_mode: '',
         pvc_mount_path: '',
       },
+    }
+  },
+
+  computed: {
+    filteredDiscoveredApps() {
+      const q = (this.importSearch || '').toLowerCase().trim()
+      if (!q) return this.discoveredApps
+      return this.discoveredApps.filter(app => {
+        const name = (app.app_name || '').toLowerCase()
+        const ns = (app.namespace || '').toLowerCase()
+        const wlNames = (app.workloads || []).map(w => (w.name || '').toLowerCase()).join(' ')
+        return name.includes(q) || ns.includes(q) || wlNames.includes(q)
+      })
     }
   },
 

@@ -175,32 +175,24 @@
         </div>
       </transition>
 
-      <!-- 批量操作工具栏（全宽醒目） -->
+      <!-- 批量操作工具栏 -->
       <transition name="batch-slide">
-        <div v-if="selectedIds.length > 0" class="batch-toolbar">
-          <div class="batch-left">
-            <div class="batch-indicator">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <div v-if="selectedIds.length > 0" class="batch-toolbar-v2">
+          <div class="batch-top-row">
+            <span class="batch-count">已选择 <strong>{{ selectedIds.length }}</strong> 个应用</span>
+            <div class="batch-actions">
+              <button class="batch-btn publish" @click="handleBatchRetry" :disabled="batchLoading">批量发布</button>
+              <button class="batch-btn rollback" @click="handleBatchRollback" :disabled="batchLoading">批量回滚</button>
+              <button class="batch-btn stop" @click="handleBatchCancel" :disabled="batchLoading">批量取消</button>
+              <button class="batch-btn clear" @click="selectedIds = []">清除全部</button>
             </div>
-            <span class="batch-label">已选择 <strong>{{ selectedIds.length }}</strong> 个发布单</span>
           </div>
-          <div class="batch-right">
-            <button class="batch-action-btn publish" @click="handleBatchRetry" :disabled="batchLoading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span>批量发布</span>
-            </button>
-            <button class="batch-action-btn rollback" @click="handleBatchRollback" :disabled="batchLoading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              <span>批量回滚</span>
-            </button>
-            <button class="batch-action-btn stop" @click="handleBatchCancel" :disabled="batchLoading">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-              <span>批量取消</span>
-            </button>
-            <button class="batch-action-btn cancel" @click="selectedIds = []">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              <span>取消选择</span>
-            </button>
+          <div class="batch-chips">
+            <span v-for="id in selectedIds" :key="id" class="batch-chip">
+              <span class="chip-name">{{ releases.find(r => r.id === id)?.app_name || releases.find(r => r.id === id)?.pipeline_name || '#' + id }}</span>
+              <span class="chip-status" :class="releases.find(r => r.id === id)?.status?.toLowerCase()">{{ releases.find(r => r.id === id)?.status || '—' }}</span>
+              <button class="chip-remove" @click="selectedIds = selectedIds.filter(sid => sid !== id)">&times;</button>
+            </span>
           </div>
         </div>
       </transition>
@@ -1568,86 +1560,59 @@ export default {
 .filter-slide-enter-to, .filter-slide-leave-from { max-height: 200px; }
 
 /* ---- Batch Toolbar (Full-width prominent) ---- */
-.batch-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 24px;
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
-  border-radius: 10px;
+/* === 新版批量操作工具栏 === */
+.batch-toolbar-v2 {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border: 1px solid #475569;
+  border-radius: 12px;
+  padding: 16px 20px;
   margin: 12px 0;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
-  animation: batchSlideIn 0.25s ease;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  animation: batchSlideIn 0.2s ease;
 }
-@keyframes batchSlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-.batch-slide-enter-active, .batch-slide-leave-active { transition: all 0.25s ease; }
-.batch-slide-enter-from, .batch-slide-leave-to { opacity: 0; transform: translateY(-8px); }
+@keyframes batchSlideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.batch-slide-enter-active, .batch-slide-leave-active { transition: all 0.2s ease; }
+.batch-slide-enter-from, .batch-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 
-.batch-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.batch-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.batch-count { font-size: 15px; color: #e2e8f0; font-weight: 500; }
+.batch-count strong { color: #60a5fa; font-size: 18px; }
+.batch-actions { display: flex; gap: 8px; }
+.batch-btn {
+  padding: 7px 16px; border: none; border-radius: 7px;
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
 }
-.batch-indicator {
-  width: 32px; height: 32px; border-radius: 8px;
-  background: rgba(255,255,255,0.2);
-  display: flex; align-items: center; justify-content: center;
-}
-.batch-indicator svg { width: 18px; height: 18px; color: #fff; }
-.batch-label { font-size: 14px; color: #fff; font-weight: 500; }
-.batch-label strong { color: #fbbf24; font-weight: 700; font-size: 16px; }
+.batch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.batch-btn.publish { background: #10b981; color: #fff; }
+.batch-btn.publish:hover:not(:disabled) { background: #059669; }
+.batch-btn.rollback { background: #f59e0b; color: #fff; }
+.batch-btn.rollback:hover:not(:disabled) { background: #d97706; }
+.batch-btn.stop { background: #ef4444; color: #fff; }
+.batch-btn.stop:hover:not(:disabled) { background: #dc2626; }
+.batch-btn.clear { background: rgba(255,255,255,0.08); color: #94a3b8; border: 1px solid rgba(255,255,255,0.12); }
+.batch-btn.clear:hover { background: rgba(255,255,255,0.14); color: #e2e8f0; }
 
-.batch-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.batch-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.batch-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px 4px 12px; border-radius: 18px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  font-size: 12px; transition: all 0.15s;
 }
-.batch-action-btn {
-  display: flex; align-items: center; gap: 7px;
-  padding: 10px 20px; border: none; border-radius: 8px;
-  font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: all 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+.batch-chip:hover { background: rgba(255,255,255,0.1); }
+.chip-name { color: #e2e8f0; font-weight: 500; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-status { padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600; }
+.chip-status.succeeded, .chip-status.success { background: rgba(16,185,129,0.2); color: #34d399; }
+.chip-status.running { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.chip-status.failed { background: rgba(239,68,68,0.2); color: #f87171; }
+.chip-status.awaiting_approval { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.chip-remove {
+  width: 16px; height: 16px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.1); color: #94a3b8;
+  cursor: pointer; font-size: 10px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
 }
-.batch-action-btn svg { width: 16px; height: 16px; }
-.batch-action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-
-.batch-action-btn.publish {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
-}
-.batch-action-btn.publish:hover:not(:disabled) {
-  background: linear-gradient(135deg, #059669, #047857);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.batch-action-btn.rollback {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #fff;
-}
-.batch-action-btn.rollback:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-}
-
-.batch-action-btn.stop {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: #fff;
-}
-.batch-action-btn.stop:hover:not(:disabled) {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-}
-
-.batch-action-btn.cancel {
-  background: rgba(255,255,255,0.15);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.3);
-}
-.batch-action-btn.cancel:hover {
-  background: rgba(255,255,255,0.25);
+.chip-remove:hover { background: #ef4444; color: #fff; }
   border-color: rgba(255,255,255,0.5);
 }
 
