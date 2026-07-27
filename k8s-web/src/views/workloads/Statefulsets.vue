@@ -1919,7 +1919,12 @@ const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
 const rollbackCurrentInfo = computed(() => {
   if (!historyStatefulset.value) return null
   const sts = statefulsets.value.find(s => s.name === historyStatefulset.value.name && s.namespace === historyStatefulset.value.namespace)
-  return { image: sts?.image || sts?.container_image || '—', replicas: sts?.replicas || '—', deployedAt: historyStatefulset.value.created_at || '—' }
+  // 本地列表对象字段为 desiredReplicas/readyReplicas/createdAt（见 fetchStatefulsets 映射）
+  return {
+    image: sts?.image || '—',
+    replicas: sts?.desiredReplicas != null ? `${sts.readyReplicas ?? 0}/${sts.desiredReplicas}` : '—',
+    deployedAt: sts?.createdAt ? fmtTime(sts.createdAt) : '—'
+  }
 })
 const podsList = ref([])
 const containerList = ref([])
@@ -2529,7 +2534,7 @@ const viewHistory = async (sts) => {
     const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
     historyList.value = (res.code === 0 ? (Array.isArray(res.data) ? res.data : res.data?.list || []) : []).map(r => ({
     ...r,
-    createdAt: r.creation_time || r.createdAt || '—'
+    createdAt: (r.creation_time || r.createdAt) ? fmtTime(r.creation_time || r.createdAt) : '—'
   }))
   } catch (e) { console.error('获取历史版本失败:', e) }
   finally { loadingHistory.value = false }
@@ -2546,7 +2551,7 @@ const openStsRollback = async (sts) => {
     const res = await statefulsetsApi.history({ namespace: sts.namespace, name: sts.name })
     historyList.value = (res.code === 0 ? (Array.isArray(res.data) ? res.data : res.data?.list || []) : []).map(r => ({
     ...r,
-    createdAt: r.creation_time || r.createdAt || '—'
+    createdAt: (r.creation_time || r.createdAt) ? fmtTime(r.creation_time || r.createdAt) : '—'
   }))
   } catch (e) { console.error('获取历史失败:', e) }
   finally { loadingHistory.value = false }

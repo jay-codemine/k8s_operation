@@ -17,18 +17,18 @@
         <div class="rbd-compare" v-if="!batchMode && selectedRevision">
           <div class="rbd-col rbd-col-cur">
             <span class="rbd-badge rbd-badge-cur">当前运行</span>
-            <div class="rbd-kv"><span>镜像</span><span class="rbd-kv-v">{{ currentInfo?.image || '—' }}</span></div>
+            <div class="rbd-kv"><span>镜像</span><span class="rbd-kv-v" :title="currentInfo?.image">{{ currentInfo?.image || '—' }}</span></div>
             <div class="rbd-kv"><span>副本</span><span class="rbd-kv-v">{{ currentInfo?.replicas && currentInfo.replicas !== '0' ? currentInfo.replicas : '—' }}</span></div>
-            <div class="rbd-kv"><span>部署</span><span class="rbd-kv-v">{{ currentInfo?.deployedAt || '—' }}</span></div>
+            <div class="rbd-kv"><span>部署</span><span class="rbd-kv-v" :title="currentInfo?.deployedAt">{{ currentInfo?.deployedAt || '—' }}</span></div>
           </div>
           <div class="rbd-arr">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#94a3b8" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </div>
           <div class="rbd-col rbd-col-old">
             <span class="rbd-badge rbd-badge-old">回滚目标</span>
-            <div class="rbd-kv"><span>版本</span><span class="rbd-kv-v">{{ selectedRevision?.name?.length > 28 ? '...' + selectedRevision?.name?.slice(-28) : (selectedRevision?.name || '—') }}</span></div>
-            <div class="rbd-kv"><span>镜像</span><span class="rbd-kv-v">{{ selectedRevision?.image || '—' }}</span></div>
-            <div class="rbd-kv"><span>创建</span><span class="rbd-kv-v">{{ selectedRevision?.createdAt || '—' }}</span></div>
+            <div class="rbd-kv"><span>版本</span><span class="rbd-kv-v" :title="selectedRevision?.name">{{ selectedRevision?.name?.length > 28 ? '...' + selectedRevision?.name?.slice(-28) : (selectedRevision?.name || '—') }}</span></div>
+            <div class="rbd-kv"><span>镜像</span><span class="rbd-kv-v" :title="selectedRevision?.image">{{ selectedRevision?.image || '—' }}</span></div>
+            <div class="rbd-kv"><span>创建</span><span class="rbd-kv-v" :title="selectedRevision?.createdAt">{{ selectedRevision?.createdAt || '—' }}</span></div>
           </div>
         </div>
 
@@ -53,10 +53,10 @@
                     @click="selectRevision(rev)">
                   <td><div class="rbd-dot" :class="{on:selectedRevision?.name===rev.name}"><span v-if="selectedRevision?.name===rev.name"></span></div></td>
                   <td><span class="rbd-tag" :class="idx===0?'rbd-tag-l':''">{{idx===0?'Latest':'v'+(revisions.length-idx)}}</span></td>
-                  <td class="mono">{{ rev.name?.length>30?'...'+rev.name.slice(-30):(rev.name||'—') }}</td>
-                  <td class="img">{{ rev.image||'—' }}</td>
+                  <td class="mono" :title="rev.name">{{ rev.name?.length>30?'...'+rev.name.slice(-30):(rev.name||'—') }}</td>
+                  <td class="img" :title="rev.image">{{ rev.image||'—' }}</td>
                   <td>{{ rev.replicas ? rev.replicas : '—' }}</td>
-                  <td class="time">{{ rev.createdAt||'—' }}</td>
+                  <td class="time" :title="rev.createdAt">{{ rev.createdAt||'—' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -123,7 +123,7 @@ function onConfirm(){emit('confirm')}
 .rbd-tbl-scroll{max-height:280px;overflow-y:auto}
 .rbd-tbl{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .rbd-tbl th{text-align:left;padding:9px 10px;color:#94a3b8;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff}
-.rbd-tbl th:nth-child(1){width:36px}.rbd-tbl th:nth-child(2){width:70px}.rbd-tbl th:nth-child(3){width:170px}.rbd-tbl th:nth-child(4){width:auto}.rbd-tbl th:nth-child(5){width:50px}.rbd-tbl th:nth-child(6){width:110px}
+.rbd-tbl th:nth-child(1){width:36px}.rbd-tbl th:nth-child(2){width:70px}.rbd-tbl th:nth-child(3){width:160px}.rbd-tbl th:nth-child(4){width:auto}.rbd-tbl th:nth-child(5){width:60px}.rbd-tbl th:nth-child(6){width:150px}
 .rbd-tbl td{padding:10px;border-bottom:1px solid #f1f5f9;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rbd-tbl td.mono{font-family:monospace;font-size:12px}.rbd-tbl td.img{max-width:0}.rbd-tbl td.time{color:#94a3b8;font-size:12px}
 .rbd-tbl tbody tr:hover td{background:#f8fafc}.rbd-tbl .sel td{background:#fffbeb!important}.rbd-tbl .cur td{font-weight:500}

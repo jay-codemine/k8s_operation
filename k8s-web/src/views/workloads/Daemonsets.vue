@@ -1390,7 +1390,13 @@ const rollbackHistoryList = ref([])
 const rollbackForm = ref({ namespace: '', name: '', revision_name: '' })
 const dsRollbackCurrentInfo = computed(() => {
   const ds = daemonsets.value.find(d => d.name === rollbackForm.value.name && d.namespace === rollbackForm.value.namespace)
-  return ds ? { image: ds.image || '—', replicas: ds.replicas || '—', deployedAt: ds.created_at || '—' } : null
+  if (!ds) return null
+  // DaemonSet 无副本数概念，展示 就绪/期望 调度数；本地对象字段为 numberReady/desiredNumberScheduled/createdAt
+  return {
+    image: ds.image || '—',
+    replicas: `${ds.numberReady ?? 0}/${ds.desiredNumberScheduled ?? 0}`,
+    deployedAt: ds.createdAt ? fmtTime(ds.createdAt) : '—'
+  }
 })
 
 // 更新镜像表单
@@ -2119,7 +2125,8 @@ const viewHistory = async (ds) => {
   showHistoryModal.value = true
   try {
     const res = await daemonsetsApi.history({ namespace: ds.namespace, name: ds.name })
-    historyList.value = res.code === 0 ? (res.data || []) : []
+    // 后端返回 snake_case（creation_time），映射为组件所需的 createdAt 并格式化
+    historyList.value = res.code === 0 ? (res.data || []).map(r => ({ ...r, createdAt: fmtTime(r.creation_time || r.createdAt) })) : []
   } catch (e) { console.error('获取历史失败:', e) }
   finally { loadingHistory.value = false }
 }
@@ -2169,7 +2176,8 @@ const openRollback = async (ds) => {
   showRollbackModal.value = true
   try {
     const res = await daemonsetsApi.history({ namespace: ds.namespace, name: ds.name })
-    rollbackHistoryList.value = res.code === 0 ? (res.data || []) : []
+    // 后端返回 snake_case（creation_time），映射为回滚弹窗所需的 createdAt 并格式化
+    rollbackHistoryList.value = res.code === 0 ? (res.data || []).map(r => ({ ...r, createdAt: fmtTime(r.creation_time || r.createdAt) })) : []
   } catch (e) { console.error('获取历史失败:', e) }
   finally { loadingRollbackHistory.value = false }
 }

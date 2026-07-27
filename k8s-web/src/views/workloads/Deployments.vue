@@ -4122,7 +4122,12 @@ const rollbackForm = ref({ namespace: '', name: '', revision: 0 })
 const rollbackCurrentInfo = computed(() => {
   const d = deployments.value.find(d => d.name === rollbackForm.value.name && d.namespace === rollbackForm.value.namespace)
   if (!d) return null
-  return { image: d.image || d.container_image || '—', replicas: d.replicas || '—', deployedAt: d.created_at || d.deployed_at || '—' }
+  // 本地列表对象字段为 desiredReplicas/readyReplicas/createdAt（见 fetchDeployments 映射）
+  return {
+    image: d.image || '—',
+    replicas: d.desiredReplicas != null ? `${d.readyReplicas ?? 0}/${d.desiredReplicas}` : '—',
+    deployedAt: d.createdAt ? fmtTime(d.createdAt) : '—'
+  }
 })
 const selectorInput = ref('')
 const editSelectorInput = ref('')
@@ -6033,7 +6038,8 @@ const viewHistory = async (deployment) => {
     historyList.value = list.map(rs => ({
       name: rs.metadata?.name || rs.name,
       revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || rs.metadata?.annotations?.['deprecated.deployment.rollback.to'] || '-',
-      replicas: rs.spec?.replicas || 0,
+      // 旧 ReplicaSet 的 spec.replicas 已缩容为 0，真实期望副本数在 desired-replicas 注解中
+      replicas: Number(rs.metadata?.annotations?.['deployment.kubernetes.io/desired-replicas']) || rs.spec?.replicas || 0,
       image: rs.spec?.template?.spec?.containers?.[0]?.image || '—',
       createdAt: fmtTime(rs.metadata?.creationTimestamp),
       raw: rs
@@ -6116,7 +6122,8 @@ const openRollback = async (deployment) => {
     historyList.value = list.map(rs => ({
       name: rs.metadata?.name || rs.name,
       revision: rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || rs.metadata?.annotations?.['deprecated.deployment.rollback.to'] || '-',
-      replicas: rs.spec?.replicas || 0,
+      // 旧 ReplicaSet 的 spec.replicas 已缩容为 0，真实期望副本数在 desired-replicas 注解中
+      replicas: Number(rs.metadata?.annotations?.['deployment.kubernetes.io/desired-replicas']) || rs.spec?.replicas || 0,
       image: rs.spec?.template?.spec?.containers?.[0]?.image || '—',
       createdAt: fmtTime(rs.metadata?.creationTimestamp),
       raw: rs
