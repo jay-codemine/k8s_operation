@@ -189,6 +189,8 @@ func SetupSetting() error {
 			// LDAP 可选
 			log.Println("[LDAP] 配置块未找到")
 			global.LDAPSetting = nil
+		}
+
 	// 读取 LogControl 配置
 	if err = s.ReadSection("LogControl", &global.LogControlSetting); err != nil || global.LogControlSetting == nil {
 		log.Println("[LogControl] 配置块未找到，使用默认值（全部抑制）")
@@ -213,6 +215,17 @@ func SetupSetting() error {
 			DefaultDurationSec: 300, HealthCheckInterval: 30, MaxTrafficRatio: 50,
 		}
 	}
+
+		// 读取 CicdWorker 配置（部署任务消费协程数）
+		// 对应 config.yaml 中的：
+		// CicdWorker:
+		if err = s.ReadSection("CicdWorker", &global.CicdWorkerSetting); err != nil || global.CicdWorkerSetting == nil {
+			log.Println("[CicdWorker] 配置块未找到，使用默认并发数 3")
+			global.CicdWorkerSetting = &setting.CicdWorkerSettingS{Concurrency: 3}
+		}
+		if global.CicdWorkerSetting.Concurrency <= 0 {
+			log.Println("[CicdWorker] Concurrency 非法，回退默认并发数 3")
+			global.CicdWorkerSetting.Concurrency = 3
 		}
 
 		// 注入错误码配置到 errorcode 包

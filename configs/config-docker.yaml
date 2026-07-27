@@ -99,6 +99,10 @@ Jenkins:
   FeishuWebhook: ""
   FeishuSecret: ""
 
+# CICD 部署 Worker 配置（可选，不配置时默认并发数 3）
+CicdWorker:
+  Concurrency: 3
+
 Monitoring:
   Enabled: false
   PrometheusURL: ""

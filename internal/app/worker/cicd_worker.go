@@ -38,6 +38,12 @@ func NewCicdWorker(rdb redis.Cmdable, factory *services.ClusterClientFactory) *C
 		hostname = "worker"
 	}
 
+	// 并发处理任务数：优先读 config.yaml 的 CicdWorker.Concurrency，未配置时默认 3
+	concurrency := 3
+	if global.CicdWorkerSetting != nil && global.CicdWorkerSetting.Concurrency > 0 {
+		concurrency = global.CicdWorkerSetting.Concurrency
+	}
+
 	return &CicdWorker{
 		stream:       infra.NewRedisStream(rdb),
 		dao:          dao.NewDao(global.DB),
@@ -45,7 +51,7 @@ func NewCicdWorker(rdb redis.Cmdable, factory *services.ClusterClientFactory) *C
 		svc:          services.NewServices(),
 		callback:     NewCicdCallback(),
 		consumerName: hostname + "-" + strconv.FormatInt(time.Now().Unix(), 10),
-		concurrency:  3, // 并发处理任务数
+		concurrency:  concurrency,
 		stopCh:       make(chan struct{}),
 	}
 }

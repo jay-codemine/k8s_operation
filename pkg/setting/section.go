@@ -325,6 +325,11 @@ type CanarySettingS struct {
 	MaxTrafficRatio     int32 `mapstructure:"MaxTrafficRatio"`
 }
 
+// CicdWorkerSettingS CICD 部署 Worker 配置
+type CicdWorkerSettingS struct {
+	Concurrency int `mapstructure:"Concurrency"` // 部署任务消费协程数（并发处理任务数），默认 3
+}
+
 // LogControlS 日志控制配置
 type LogControlS struct {
 	SuppressPrometheusQueryWarn bool `mapstructure:"SuppressPrometheusQueryWarn" yaml:"SuppressPrometheusQueryWarn"`

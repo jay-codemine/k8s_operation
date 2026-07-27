@@ -120,6 +120,10 @@ data:
       FeishuWebhook: "${FEISHU_WEBHOOK}"
       FeishuSecret: "${FEISHU_SECRET}"
 
+    # CICD 部署 Worker（可选，不配置时默认并发数 3）
+    CicdWorker:
+      Concurrency: 3                        # 部署任务消费协程数（单实例同时处理的部署任务上限）
+
     Security:
       KubeConfigEncryptKey: "${KUBECONFIG_ENCRYPT_KEY}"
       PasswordBcryptCost: 10
