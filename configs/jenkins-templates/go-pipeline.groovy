@@ -724,7 +724,7 @@ ENTRYPOINT ["/app/${appName}"]
                                 --snapshot-mode=redo \
                                 --push-retry=5 \
                                 --use-new-run \
-                                --cache=true \
+                                --cache=false \
                                 --cache-repo=${registryHost}/k8s-gos/kaniko-cache \
                         """
 
