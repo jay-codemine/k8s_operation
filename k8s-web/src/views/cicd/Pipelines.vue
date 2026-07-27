@@ -228,7 +228,7 @@
           </button>
         </div>
         <div class="view-switch">
-          <button 
+          <button
             :class="['view-btn', { active: viewMode === 'card' }]"
             @click="viewMode = 'card'"
             title="卡片视图"
@@ -237,7 +237,7 @@
               <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/>
             </svg>
           </button>
-          <button 
+          <button
             :class="['view-btn', { active: viewMode === 'table' }]"
             @click="viewMode = 'table'"
             title="列表视图"
@@ -266,7 +266,7 @@
       <div class="loading-spinner"></div>
       <p>正在加载流水线...</p>
     </div>
-    
+
     <!-- 空状态 -->
     <div v-else-if="filteredPipelines.length === 0" class="empty-state">
       <div class="empty-icon">
@@ -284,7 +284,7 @@
         创建流水线
       </button>
     </div>
-    
+
     <!-- 表格视图 -->
     <div v-else-if="viewMode === 'table'" class="table-container">
       <!-- 批量操作工具栏 -->
@@ -379,7 +379,7 @@
             </td>
             <td>
               <div class="table-actions">
-                <button 
+                <button
                   v-if="canOperate && pipeline.status !== 'running'"
                   class="act-primary run"
                   @click="handleRunPipeline(pipeline)"
@@ -388,7 +388,7 @@
                   <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   <span>发布</span>
                 </button>
-                <button 
+                <button
                   v-if="canOperate && (pipeline.status === 'running' || pipeline.lastRunStatus === 'pending')"
                   class="act-primary stop"
                   @click="handleStopPipeline(pipeline)"
@@ -413,7 +413,7 @@
         </tbody>
       </table>
     </div>
-    
+
     <!-- 卡片视图 -->
     <div v-else class="pipeline-grid-wrapper">
       <!-- 批量操作工具栏 -->
@@ -440,8 +440,8 @@
         </div>
       </transition>
       <div class="pipeline-grid">
-        <div 
-          v-for="pipeline in paginatedPipelines" 
+        <div
+          v-for="pipeline in paginatedPipelines"
           :key="pipeline.id"
           :class="['pipeline-card', { 'is-running': pipeline.status === 'running', 'is-selected': selectedIds.includes(pipeline.id) }]"
         >
@@ -465,9 +465,9 @@
             <p class="pipeline-desc">{{ pipeline.description || '暂无描述' }}</p>
           </div>
           <div class="pipeline-actions">
-            <button 
+            <button
               v-if="canOperate"
-              class="action-btn run" 
+              class="action-btn run"
               @click="handleRunPipeline(pipeline)"
               :disabled="pipeline.status === 'running'"
               title="发布"
@@ -837,24 +837,24 @@ export default {
     const canEditPipeline = computed(() => permissionStore.hasCICDPermission('cicd:pipeline:edit'))
 
     // 统计数据
-    const runningCount = computed(() => 
+    const runningCount = computed(() =>
       pipelines.value.filter(p => p.status === 'running').length
     )
-    const successCount = computed(() => 
+    const successCount = computed(() =>
       pipelines.value.filter(p => p.lastRunStatus === 'success').length
     )
-    const failedCount = computed(() => 
+    const failedCount = computed(() =>
       pipelines.value.filter(p => p.lastRunStatus === 'failed').length
     )
     const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
     const localTotalPages = computed(() => Math.ceil(filteredPipelines.value.length / pageSize.value))
-    
+
     // 生成分页按钮
     const displayPages = computed(() => {
       const pages = []
       const total = localTotalPages.value
       const current = currentPage.value
-      
+
       if (total <= 7) {
         for (let i = 1; i <= total; i++) pages.push(i)
       } else {
@@ -898,7 +898,7 @@ export default {
           keyword: searchQuery.value || undefined,
           status: statusFilter.value || undefined
         })
-        
+
         if (response.code === 0) {
           pipelines.value = (response.data?.list || []).map(item => ({
             id: item.id,
@@ -1050,21 +1050,21 @@ export default {
       })
       if (!ok1) return
       Message.info({ content: `正在启动 ${toRun.length} 条流水线...` })
-      
+
       try {
         const response = await batchRunPipelinesApi(toRun.map(p => p.id))
-        if (response?.code === 0) {
+        if (response.code === 0) {
           const successCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
           Message.success({ content: `成功发布 ${successCount} 条，失败 ${failCount} 条` })
         } else {
-          throw new Error(response?.msg || '批量发布失败')
+          throw new Error(response.msg || '批量发布失败')
         }
       } catch (error) {
         console.error('批量发布失败:', error)
         Message.error({ content: error.message || '批量发布失败' })
       }
-      
+
       selectedIds.value = []
       loadPipelines()
     }
@@ -1089,7 +1089,7 @@ export default {
       })
       if (!ok2) return
       Message.info({ content: `正在停止 ${toStop.length} 条流水线...` })
-      
+
       try {
         const response = await batchStopPipelinesApi(toStop.map(p => p.id))
         if (response.code === 0) {
@@ -1103,7 +1103,7 @@ export default {
         console.error('批量停止失败:', error)
         Message.error({ content: error.message || '批量停止失败' })
       }
-      
+
       selectedIds.value = []
       loadPipelines()
     }
@@ -1173,12 +1173,12 @@ export default {
       const date = new Date(dateString)
       const now = new Date()
       const diff = now - date
-      
+
       if (diff < 60000) return '刚刚'
       if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
       if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
       if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`
-      
+
       return date.toLocaleDateString('zh-CN')
     }
 
@@ -2174,8 +2174,8 @@ export default {
 }
 
 .status-indicator.status-idle { background: #3182ce; }
-.status-indicator.status-running { 
-  background: #d97706; 
+.status-indicator.status-running {
+  background: #d97706;
   animation: pulse 1.5s infinite;
 }
 .status-indicator.status-disabled { background: #a0aec0; }
@@ -2792,32 +2792,32 @@ export default {
     flex-direction: column;
     gap: 16px;
   }
-  
+
   .header-right {
     width: 100%;
   }
-  
+
   .header-right .btn {
     flex: 1;
   }
-  
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .config-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .filter-bar {
     flex-direction: column;
   }
-  
+
   .search-wrapper {
     max-width: none;
     width: 100%;
   }
-  
+
   .pipeline-grid {
     grid-template-columns: 1fr;
   }
