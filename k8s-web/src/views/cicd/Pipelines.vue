@@ -1053,12 +1053,12 @@ export default {
       
       try {
         const response = await batchRunPipelinesApi(toRun.map(p => p.id))
-        if (response.code === 0) {
+        if (response?.code === 0) {
           const successCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
           Message.success({ content: `成功发布 ${successCount} 条，失败 ${failCount} 条` })
         } else {
-          throw new Error(response.msg || '批量发布失败')
+          throw new Error(response?.msg || '批量发布失败')
         }
       } catch (error) {
         console.error('批量发布失败:', error)
