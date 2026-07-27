@@ -449,8 +449,8 @@ spec:
                             set -e
                             mkdir -p bin
                             # 尝试编译 cmd/ 目录，失败则编译根目录
-                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... 2>/dev/null || \
-                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
+                            go build -v -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... 2>&1 || \
+                            { echo '[Build] cmd/... 失败，尝试根目录...'; go build -v -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .; }
                         """
                         def binarySize = sh(script: "stat -c%s ${env.BINARY_PATH} 2>/dev/null || stat -f%z ${env.BINARY_PATH}", returnStdout: true).trim()
                         echo "[编译] ✅ 二进制产物: ${env.BINARY_PATH} (${binarySize} bytes)"
