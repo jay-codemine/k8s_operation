@@ -377,11 +377,21 @@ spec:
                                     }
                                     if (bootPom) {
                                         buildDir = bootPom.replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
-                                        echo "[Build] ✅ 自动检测到 Spring Boot 模块: ${buildDir}"
+                                        echo "[Build] ✅ Spring Boot 插件检测 → 模块: ${buildDir}"
                                     } else {
-                                        // 取最浅层级的 pom.xml
-                                        buildDir = pomList[0].replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
-                                        echo "[Build] 使用最浅层级 pom.xml 所在目录: ${buildDir}"
+                                        // 兜底：搜 @SpringBootApplication 注解
+                                        for (pom in pomList) {
+                                            def modDir = pom.replace('/pom.xml', '')
+                                            def hasApp = sh(script: "grep -rl '@SpringBootApplication' '${modDir}/src' 2>/dev/null || true", returnStdout: true).trim()
+                                            if (hasApp) { bootPom = pom; break }
+                                        }
+                                        if (bootPom) {
+                                            buildDir = bootPom.replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
+                                            echo "[Build] ✅ @SpringBootApplication 检测 → 模块: ${buildDir}"
+                                        } else {
+                                            buildDir = pomList[0].replace('/pom.xml', '').replaceAll('^\\./','') ?: '.'
+                                            echo "[Build] ⚠️ 无法自动检测启动模块，使用: ${buildDir}（建议设置 BUILD_DIR）"
+                                        }
                                     }
                                 }
                             }
