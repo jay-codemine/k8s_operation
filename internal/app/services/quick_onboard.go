@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -72,16 +73,22 @@ func (s *Services) QuickOnboard(ctx context.Context, req *requests.QuickOnboardR
 	// 先创建 ConfigMap / Secret / PVC，收集 volumes/volumeMounts
 	volumes, volumeMounts := s.createExtraResources(ctx, cli, req)
 
-	// 创建工作负载
+	// 创建工作负载（已存在时视为接入成功，支持从 K8s 导入已有应用）
+	workloadExisted := false
 	if err := s.createWorkloadByKind(ctx, cli, req, labels, annotations, volumes, volumeMounts); err != nil {
-		result.Message = fmt.Sprintf("创建 %s 失败: %v", req.WorkloadKind, err)
-		return result, err
+		if !k8serrors.IsAlreadyExists(err) {
+			result.Message = fmt.Sprintf("创建 %s 失败: %v", req.WorkloadKind, err)
+			return result, err
+		}
+		workloadExisted = true
+		global.Logger.Info("[快速接入] 工作负载已存在，跳过创建直接接入",
+			zap.String("kind", req.WorkloadKind), zap.String("name", req.WorkloadName))
 	}
 
-	// 按需创建 Service
+	// 按需创建 Service（已存在时跳过）
 	if req.ServiceType != "" {
 		svcName, svcErr := s.createServiceForOnboard(ctx, cli, req, labels, annotations)
-		if svcErr != nil {
+		if svcErr != nil && !k8serrors.IsAlreadyExists(svcErr) {
 			global.Logger.Warn("[快速接入] 创建Service失败", zap.Error(svcErr))
 		} else {
 			result.ServiceName = svcName
@@ -108,6 +115,8 @@ func (s *Services) QuickOnboard(ctx context.Context, req *requests.QuickOnboardR
 			result.ReleaseID = releaseID
 			result.Message = fmt.Sprintf("%s 创建成功并已触发部署", req.WorkloadKind)
 		}
+	} else if workloadExisted {
+		result.Message = fmt.Sprintf("%s 已存在，接入成功", req.WorkloadKind)
 	} else {
 		result.Message = fmt.Sprintf("%s 创建成功", req.WorkloadKind)
 	}
@@ -133,7 +142,7 @@ func (s *Services) createExtraResources(ctx context.Context, cli *K8sClients, re
 			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: req.Namespace},
 			Data:       cmData,
 		}
-		if _, err := cli.Kube.CoreV1().ConfigMaps(req.Namespace).Create(ctx, cm, metav1.CreateOptions{}); err == nil {
+		if _, err := cli.Kube.CoreV1().ConfigMaps(req.Namespace).Create(ctx, cm, metav1.CreateOptions{}); err == nil || k8serrors.IsAlreadyExists(err) {
 			mountPath := req.ConfigMapMountPath
 			if mountPath == "" {
 				mountPath = "/etc/config"
@@ -161,7 +170,7 @@ func (s *Services) createExtraResources(ctx context.Context, cli *K8sClients, re
 			ObjectMeta: metav1.ObjectMeta{Name: secName, Namespace: req.Namespace},
 			Data:       secData,
 		}
-		if _, err := cli.Kube.CoreV1().Secrets(req.Namespace).Create(ctx, sec, metav1.CreateOptions{}); err == nil {
+		if _, err := cli.Kube.CoreV1().Secrets(req.Namespace).Create(ctx, sec, metav1.CreateOptions{}); err == nil || k8serrors.IsAlreadyExists(err) {
 			mountPath := req.SecretMountPath
 			if mountPath == "" {
 				mountPath = "/etc/secrets"
@@ -208,7 +217,7 @@ func (s *Services) createExtraResources(ctx context.Context, cli *K8sClients, re
 				StorageClassName: scName,
 			},
 		}
-		if _, err := cli.Kube.CoreV1().PersistentVolumeClaims(req.Namespace).Create(ctx, pvc, metav1.CreateOptions{}); err == nil {
+		if _, err := cli.Kube.CoreV1().PersistentVolumeClaims(req.Namespace).Create(ctx, pvc, metav1.CreateOptions{}); err == nil || k8serrors.IsAlreadyExists(err) {
 			mountPath := req.PVCMountPath
 			if mountPath == "" {
 				mountPath = "/data"
@@ -396,7 +405,11 @@ func (s *Services) buildServicePorts(req *requests.QuickOnboardRequest) []corev1
 	for _, p := range sourcePorts {
 		proto := corev1.ProtocolTCP
 		if strings.EqualFold(p.Protocol, "UDP") { proto = corev1.ProtocolUDP }
-		ports = append(ports, corev1.ServicePort{Name: p.Name, Port: p.Port, TargetPort: intstr.FromString(p.Name), Protocol: proto})
+		// 多端口 Service 要求每个端口有名字，缺失时按端口号生成
+		name := p.Name
+		if name == "" { name = fmt.Sprintf("port-%d", p.Port) }
+		// TargetPort 按端口号匹配，避免容器端口未命名导致转发失败
+		ports = append(ports, corev1.ServicePort{Name: name, Port: p.Port, TargetPort: intstr.FromInt(int(p.Port)), Protocol: proto})
 	}
 	return ports
 }

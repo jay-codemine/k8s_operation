@@ -365,7 +365,7 @@
           <div class="toggle-row" style="margin-top:16px;">
             <div class="toggle-info">
               <label class="form-label" style="margin:0;">创建后立即部署</label>
-              <p class="toggle-desc">K8s 资源创建完成后自动触发一次测试发布</p>
+              <p class="toggle-desc">K8s 资源创建完成后自动触发一次测试发布（若目标环境配置了审批，将进入待审批状态）</p>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="form.auto_deploy" />
@@ -630,6 +630,10 @@ export default {
       try {
         const payload = this.buildPayload()
         const res = await quickOnboard(payload)
+        // 兼容后端业务错误码（HTTP 200 但 code 非 0）
+        if (res?.code !== undefined && res.code !== 0) {
+          throw new Error(res?.msg || '接入失败')
+        }
         this.result = {
           success: true,
           ...(res?.data || res),
@@ -685,8 +689,8 @@ export default {
         delete p.job_ttl
       }
 
-      // 清理空端口
-      p.ports = (p.ports || []).filter(po => po.name && po.port)
+      // 清理空端口（只要求端口号，名字缺失时后端自动生成）
+      p.ports = (p.ports || []).filter(po => po.port)
       // 清理空环境变量
       p.env_vars = (p.env_vars || []).filter(ev => ev.name)
 
@@ -800,12 +804,11 @@ export default {
             service_type: app.services.length > 0 ? (app.services[0].type || 'ClusterIP') : '',
             auto_deploy: false,
           }
-          // 带入关联的 ConfigMap 数据
-          if (app.configmaps.length) {
-            payload.configmap_mount_path = '/etc/config'
-            payload.configmap_data = []
+          // 已有 ConfigMap/Secret/PVC 保留在集群中，无需重复创建（后端对已存在资源自动跳过）
+          const res = await quickOnboard(payload)
+          if (res?.code !== undefined && res.code !== 0) {
+            throw new Error(res?.msg || '接入失败')
           }
-          await quickOnboard(payload)
           success++
         } catch (e) {
           fail++
