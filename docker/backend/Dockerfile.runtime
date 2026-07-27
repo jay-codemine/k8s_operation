@@ -19,6 +19,12 @@
 
 FROM docker.m.daocloud.io/library/alpine:3.20
 
+# git 为必需依赖：后端 CICD 模块通过 git ls-remote 获取分支列表/验证仓库连通性（internal/app/services/cicd_git.go）
+# 缺失时报错: exec: "git": executable file not found in $PATH
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories && \
+    apk --no-cache add ca-certificates tzdata git wget && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
 # 创建非 root 用户（UID=1000 与 Deployment securityContext 一致）
 RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
 

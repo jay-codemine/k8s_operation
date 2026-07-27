@@ -312,8 +312,9 @@ spec:
                 }
             }
             post {
-                success { script { stageCallback('clone_deps', 'success') } }
-                failure { script { stageCallback('clone_deps', 'failed') } }
+                // 注意: 平台后端 stage_type 白名单无 clone_deps，统一归入 dependencies 阶段上报
+                success { script { stageCallback('dependencies', 'success') } }
+                failure { script { stageCallback('dependencies', 'failed') } }
             }
         }
 
@@ -420,47 +421,325 @@ spec:
         }
 
         stage('Compile Check') {
-            steps {
-                echo "=== 编译检查（直接产出最终二进制，Build Image 复用，避免重复编译） ==="
-                container('golang') {
-                    script {
-                        if (!fileExists('go.mod')) { echo "跳过编译检查"; return }
 
-                        // === 推断二进制名称优先级：BINARY_NAME 参数 > go.mod module 名 > 仓库名 ===
-                        def appName = ''
-                        if (params.BINARY_NAME?.trim()) {
-                            appName = params.BINARY_NAME.trim()
-                            echo "[编译] 使用自定义二进制名: ${appName}"
-                        } else {
-                            // 从 go.mod 的 module 行推断（如 module foxess.hub → foxess.hub）
-                            def moduleName = sh(script: "head -1 go.mod | awk '{print \$2}' | awk -F/ '{print \$NF}'", returnStdout: true).trim()
-                            if (moduleName) {
-                                appName = moduleName
-                                echo "[编译] 从 go.mod module 推断二进制名: ${appName}"
-                            } else {
-                                appName = params.GIT_REPO?.tokenize('/')?.last()?.replace('.git', '') ?: 'server'
-                                echo "[编译] 从仓库名推断二进制名: ${appName}"
-                            }
+            steps {
+
+                echo "=== 编译检查（自动识别 Go 项目结构） ==="
+
+                container('golang') {
+
+                    script {
+
+
+                        if (!fileExists('go.mod')) {
+
+                            echo "未检测到 go.mod，跳过编译"
+
+                            return
                         }
+
+
+                        // ==================================================
+                        // 二进制名称推断
+                        // 优先级:
+                        // 1. BINARY_NAME 参数
+                        // 2. go.mod module
+                        // 3. 仓库名称
+                        // ==================================================
+
+                        def appName = ""
+
+                        if (params.BINARY_NAME?.trim()) {
+
+
+                            appName = params.BINARY_NAME.trim()
+
+                            echo "[编译] 使用自定义名称: ${appName}"
+
+
+                        } else {
+
+
+                            // 用 grep 精确匹配 module 行（首行可能是注释/空行）
+                            // 并处理 /v2 之类的 major 版本后缀
+                            def moduleName = sh(
+                                    script: """
+                            grep -E '^module[[:space:]]' go.mod \
+                            | head -1 \
+                            | awk '{print \$2}' \
+                            | awk -F/ '{ if (NF > 1 && \$NF ~ /^v[0-9]+\$/) print \$(NF-1); else print \$NF }'
+                        """,
+                                    returnStdout: true
+                            ).trim()
+
+
+                            if (moduleName) {
+
+
+                                appName = moduleName
+
+                                echo "[编译] module 推断名称: ${appName}"
+
+
+                            } else {
+
+
+                                appName =
+                                        params.GIT_REPO
+                                                ?.tokenize('/')
+                                                ?.last()
+                                                ?.replace('.git','')
+                                                ?: "server"
+
+
+                                echo "[编译] 仓库名称: ${appName}"
+
+                            }
+
+                        }
+
+
                         env.APP_NAME = appName
+
                         env.BINARY_PATH = "bin/${appName}"
 
+
+
+                        // ==================================================
+                        // Go 项目结构检测
+                        //
+                        // 支持:
+                        //
+                        // 1.
+                        // cmd/api/main.go
+                        //
+                        // 2.
+                        // main.go
+                        //
+                        // ==================================================
+
+
+                        def hasCmdMain = sh(
+                                script: """
+                        find ./cmd \
+                        -name main.go \
+                        2>/dev/null \
+                        | grep -q .
+                    """,
+                                returnStatus: true
+                        ) == 0
+
+
+
+                        def hasRootMain = sh(
+                                script: """
+                        ls main.go >/dev/null 2>&1
+                    """,
+                                returnStatus: true
+                        ) == 0
+
+
+
                         sh """
-                            set -e
-                            mkdir -p bin
-                            # 尝试编译 cmd/ 目录，失败则编译根目录
-                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} ./cmd/... 2>/dev/null || \
-                            go build -buildvcs=false -ldflags="-s -w -X main.Version=${env.FINAL_TAG} -X main.GitCommit=${env.GIT_COMMIT_FULL}" -o ${env.BINARY_PATH} .
-                        """
-                        def binarySize = sh(script: "stat -c%s ${env.BINARY_PATH} 2>/dev/null || stat -f%z ${env.BINARY_PATH}", returnStdout: true).trim()
-                        echo "[编译] ✅ 二进制产物: ${env.BINARY_PATH} (${binarySize} bytes)"
+                    set -e
+
+                    mkdir -p bin
+
+
+                    echo "=============================="
+
+                    echo "Go Version:"
+                    go version
+
+                    echo "=============================="
+
+
+                """
+
+
+
+                        if (hasCmdMain) {
+
+
+                            // 定位 cmd/ 下的 main 包目录
+                            // 避免 ./cmd/... 匹配多个包时 go build -o 报错:
+                            // cannot write multiple packages to non-directory
+                            def mainPkgDirs = sh(
+                                    script: """
+                        go list -find -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./cmd/... 2>/dev/null \
+                        | grep -v '^\$' \
+                        || true
+                    """,
+                                    returnStdout: true
+                            ).trim()
+
+                            def mainDirList = mainPkgDirs
+                                    ? mainPkgDirs.split('\n').collect { it.trim() }.findAll { it }
+                                    : []
+
+                            if (mainDirList.isEmpty()) {
+
+                                // fallback: 取第一个 main.go 所在目录
+                                def firstMainDir = sh(
+                                        script: "dirname \$(find ./cmd -name main.go 2>/dev/null | sort | head -1)",
+                                        returnStdout: true
+                                ).trim()
+
+                                mainDirList = [firstMainDir]
+
+                            }
+
+                            if (mainDirList.size() > 1) {
+                                echo "[编译] ⚠️ 检测到 ${mainDirList.size()} 个 main 包: ${mainDirList.join(', ')}，默认编译第一个"
+                            }
+
+                            def buildTarget = mainDirList[0]
+
+                            echo "[编译] 检测到 cmd 入口: ${buildTarget}"
+
+                            sh """
+
+                        set -e
+
+
+                        go build \
+                        -buildvcs=false \
+                        -ldflags="-s -w \
+                        -X main.Version=${env.FINAL_TAG} \
+                        -X main.GitCommit=${env.GIT_COMMIT_FULL}" \
+                        -o ${env.BINARY_PATH} \
+                        '${buildTarget}'
+
+
+                    """
+
+
+                        } else if (hasRootMain) {
+
+
+                            echo "[编译] 检测到根目录 main.go"
+
+
+                            sh """
+
+                        set -e
+
+
+                        go build \
+                        -buildvcs=false \
+                        -ldflags="-s -w \
+                        -X main.Version=${env.FINAL_TAG} \
+                        -X main.GitCommit=${env.GIT_COMMIT_FULL}" \
+                        -o ${env.BINARY_PATH} \
+                        .
+
+
+                    """
+
+
+                        } else {
+
+
+                            error("""
+                    ====================================
+                    未找到 Go main 入口
+
+                    支持结构:
+
+                    1.
+                    cmd/app/main.go
+
+
+                    2.
+                    main.go
+
+
+                    当前目录:
+                    ${pwd()}
+
+                    ====================================
+                    """)
+
+
+                        }
+
+
+
+                        def binarySize = sh(
+                                script: """
+                        stat -c%s ${env.BINARY_PATH} \
+                        2>/dev/null \
+                        || stat -f%z ${env.BINARY_PATH}
+                    """,
+                                returnStdout:true
+                        ).trim()
+
+
+
+                        echo """
+                ====================================
+                编译成功
+
+                Binary:
+                ${env.BINARY_PATH}
+
+                Size:
+                ${binarySize} bytes
+
+                ====================================
+                """
+
+
                     }
+
                 }
+
             }
+
+
             post {
-                success { script { stageCallback('compile', 'success'); stageCallback('build_binary', 'success') } }
-                failure { script { stageCallback('compile', 'failed'); stageCallback('build_binary', 'failed') } }
+
+
+                success {
+
+                    script {
+
+                        stageCallback(
+                                'compile',
+                                'success'
+                        )
+
+                        stageCallback(
+                                'build_binary',
+                                'success'
+                        )
+
+                    }
+
+                }
+
+
+                failure {
+
+                    script {
+
+                        stageCallback(
+                                'compile',
+                                'failed'
+                        )
+
+                        stageCallback(
+                                'build_binary',
+                                'failed'
+                        )
+
+                    }
+
+                }
+
+
             }
+
         }
 
         stage('Test') {

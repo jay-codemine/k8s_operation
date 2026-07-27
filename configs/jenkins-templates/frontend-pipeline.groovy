@@ -415,10 +415,10 @@ spec:
 
                         // Dockerfile 选择优先级：
                         // 1. DOCKERFILE_PATH 显式指定 → 直接使用
-                        // 2. 项目根有 Dockerfile → 优先使用项目自带（更可靠）
+                        // 2. USE_PROJECT_DOCKERFILE=true 且项目根有 Dockerfile → 使用项目自带（与其他模板对齐）
                         // 3. 平台自动生成生产级 Dockerfile
                         if (!dockerfile || dockerfile == '__PLATFORM_GENERATE__') {
-                            if (fileExists('Dockerfile')) {
+                            if (dockerfile != '__PLATFORM_GENERATE__' && params.USE_PROJECT_DOCKERFILE && fileExists('Dockerfile')) {
                                 dockerfile = 'Dockerfile'
                                 echo "[Build Image] 使用项目自带 Dockerfile"
                             } else {
@@ -492,8 +492,8 @@ COPY nginx-app.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 """
+                                echo "[Build Image] 平台统一生成 Dockerfile（Nginx + Gzip + 缓存 + 安全头）"
                             }
-                            echo "[Build Image] 平台统一生成 Dockerfile（Nginx + Gzip + 缓存 + 安全头）"
                         }
 
                         def registryHost = params.IMAGE_REPO.split('/')[0]

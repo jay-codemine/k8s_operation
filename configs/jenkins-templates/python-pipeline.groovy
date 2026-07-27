@@ -457,7 +457,8 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                 }
             }
             post {
-                success { script { stageCallback('build', 'success'); stageCallback('push', 'success') } }
+                // SKIP_TESTS=true 时 Test 阶段被跳过，build_binary 改由此处补报，避免平台阶段状态永远 pending
+                success { script { if (params.SKIP_TESTS) { stageCallback('build_binary', 'success') }; stageCallback('build', 'success'); stageCallback('push', 'success') } }
                 failure { script { stageCallback('build', 'failed'); stageCallback('push', 'failed') } }
             }
         }
