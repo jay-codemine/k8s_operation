@@ -19,7 +19,7 @@ Database:
   Host: mysql          # docker-compose 服务名
   Port: 3306
   DBName: k8s-platform
-  Charset: utf8
+  Charset: utf8mb4
   ParseTime: true
   MaxIdleConns: 5
   MaxOpenConns: 100
