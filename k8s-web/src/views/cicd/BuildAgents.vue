@@ -395,10 +395,10 @@ const deleteTarget = ref(null)
 // 统计
 const categoryStats = computed(() => {
   const map = {
-    observability: { key: 'observability', label: '可观测性', icon: 'wifi', color: 'obs', count: 0 },
+    observability: { key: 'observability', label: '可观测性', icon: '📡', color: 'obs', count: 0 },
     diagnostics: { key: 'diagnostics', label: '诊断工具', icon: '🔬', color: 'diag', count: 0 },
     security: { key: 'security', label: '安全扫描', icon: '🛡️', color: 'sec', count: 0 },
-    custom: { key: 'custom', label: '自定义', icon: 'tool', color: 'cust', count: 0 }
+    custom: { key: 'custom', label: '自定义', icon: '🔧', color: 'cust', count: 0 }
   }
   agents.value.forEach(a => { if (map[a.category]) map[a.category].count++ })
   return Object.values(map).filter(s => s.count > 0)
@@ -407,7 +407,7 @@ const activeCount = computed(() => agents.value.filter(a => a.status === 'active
 
 // 标签辅助
 const getCategoryLabel = (c) => ({ observability: '可观测性', diagnostics: '诊断工具', security: '安全扫描', custom: '自定义' }[c] || c)
-const getCategoryEmoji = (c) => ({ observability: 'wifi', diagnostics: '🔬', security: '🛡️', custom: 'tool' }[c] || 'apps')
+const getCategoryEmoji = (c) => ({ observability: '📡', diagnostics: '🔬', security: '🛡️', custom: '🔧' }[c] || '📦')
 const getScopeLabel = (s) => ({ java: 'Java', go: 'Go', python: 'Python', all: '通用' }[s] || s)
 
 const formatSize = (bytes) => {

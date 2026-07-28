@@ -72,11 +72,11 @@ import AuditLog from '@/views/security/audit/AuditLog.vue'
 const activeTab = ref('all')
 
 const tabs = [
-  { key: 'all', label: '全部日志', icon: 'file' },
+  { key: 'all', label: '全部日志', icon: '📄' },
   { key: 'login', label: '登录审计', icon: '🔐' },
   { key: 'permission', label: '权限变更', icon: '🛡️' },
   { key: 'cluster', label: '集群操作', icon: '☸️' },
-  { key: 'release', label: '发布记录', icon: 'send' },
+  { key: 'release', label: '发布记录', icon: '🚀' },
 ]
 </script>
 

@@ -927,9 +927,9 @@ const templates = [
   { name: 'CPU > 80%', icon: '💻', expr: '100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80', severity: 'warning', duration: '5m', summary: '集群CPU使用率超过80%' },
   { name: '内存 > 85%', icon: '🧠', expr: 'avg(100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)) > 85', severity: 'warning', duration: '5m', summary: '集群内存使用率超过85%' },
   { name: '磁盘 > 90%', icon: '💾', expr: 'avg(100 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100)) > 90', severity: 'critical', duration: '10m', summary: '磁盘使用率超过90%' },
-  { name: 'Pod 重启', icon: 'sync', expr: 'increase(kube_pod_container_status_restarts_total[1h]) > 3', severity: 'warning', duration: '1m', summary: 'Pod 1小时内重启超过3次' },
-  { name: '节点宕机', icon: 'desktop', expr: 'up{job="node-exporter"} == 0', severity: 'critical', duration: '2m', summary: '节点 {{ $labels.instance }} 不可达' },
-  { name: 'API 5xx', icon: 'language', expr: 'sum(rate(http_requests_total{status=~"5.."}[5m])) > 1', severity: 'critical', duration: '3m', summary: 'HTTP 5xx 错误率升高' },
+  { name: 'Pod 重启', icon: '🔄', expr: 'increase(kube_pod_container_status_restarts_total[1h]) > 3', severity: 'warning', duration: '1m', summary: 'Pod 1小时内重启超过3次' },
+  { name: '节点宕机', icon: '🖥️', expr: 'up{job="node-exporter"} == 0', severity: 'critical', duration: '2m', summary: '节点 {{ $labels.instance }} 不可达' },
+  { name: 'API 5xx', icon: '🌐', expr: 'sum(rate(http_requests_total{status=~"5.."}[5m])) > 1', severity: 'critical', duration: '3m', summary: 'HTTP 5xx 错误率升高' },
 ]
 
 const defaultForm = () => ({
@@ -1058,7 +1058,7 @@ function getRuleChannelIcons(rule) {
     const pureId = idStr.includes(':') ? idStr.split(':')[1] : idStr
     const ch = notifyChannelList.value.find(c => String(c.id) === pureId)
     if (ch) return { id: ch.id, name: ch.name, icon: getChannelIcon(ch.type) }
-    return { id: pureId, name: `#${pureId}`, icon: 'wifi' }
+    return { id: pureId, name: `#${pureId}`, icon: '📡' }
   })
 }
 
@@ -1350,7 +1350,7 @@ function parseNotifyChannels(value = '') {
 }
 
 function getChannelIcon(type) {
-  return channelTypes.find(t => t.value === type)?.icon || 'wifi'
+  return channelTypes.find(t => t.value === type)?.icon || '📡'
 }
 
 function getChannelLabel(type) {

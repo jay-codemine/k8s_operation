@@ -431,7 +431,7 @@ const permissionModules = reactive([
   {
     key: 'cicd',
     name: '🚀 发布域',
-    icon: 'send',
+    icon: '🚀',
     description: '流水线管理/构建与部署/制品与镜像/审批与管理',
     collapsed: false,
     permissions: [],

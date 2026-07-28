@@ -349,10 +349,10 @@ const typePresets = [
   { type: 'prometheus', label: 'Prometheus', icon: '🔥', desc: '时序指标监控', gradient: 'linear-gradient(135deg, #e25e3e, #ff8f6b)', defaultUrl: 'http://prometheus:9090' },
   { type: 'loki', label: 'Loki', icon: '📜', desc: '日志聚合引擎', gradient: 'linear-gradient(135deg, #2563eb, #60a5fa)', defaultUrl: 'http://loki:3100' },
   { type: 'alertmanager', label: 'Alertmanager', icon: '🚨', desc: '告警路由分发', gradient: 'linear-gradient(135deg, #dc2626, #f87171)', defaultUrl: 'http://alertmanager:9093' },
-  { type: 'victoriametrics', label: 'VictoriaMetrics', icon: 'dashboard', desc: '高性能时序存储', gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)', defaultUrl: 'http://victoria-metrics:8428' },
+  { type: 'victoriametrics', label: 'VictoriaMetrics', icon: '📊', desc: '高性能时序存储', gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)', defaultUrl: 'http://victoria-metrics:8428' },
   { type: 'thanos', label: 'Thanos', icon: '♾️', desc: '多集群指标聚合', gradient: 'linear-gradient(135deg, #0891b2, #67e8f9)', defaultUrl: 'http://thanos-query:9090' },
   { type: 'n9e', label: '夜莺 Nightingale', icon: '🦉', desc: '开源统一告警平台', gradient: 'linear-gradient(135deg, #d97706, #fbbf24)', defaultUrl: 'http://n9e:17000' },
-  { type: 'grafana', label: 'Grafana', icon: 'dashboard', desc: '可视化看板', gradient: 'linear-gradient(135deg, #ea580c, #fb923c)', defaultUrl: 'http://grafana:3000' },
+  { type: 'grafana', label: 'Grafana', icon: '📈', desc: '可视化看板', gradient: 'linear-gradient(135deg, #ea580c, #fb923c)', defaultUrl: 'http://grafana:3000' },
 ]
 
 // ===== 状态 =====
@@ -408,7 +408,7 @@ function getTypeCount(type) {
   return list.value.filter(d => d.type === type).length
 }
 function getTypeIcon(type) {
-  return typePresets.find(t => t.type === type)?.icon || 'wifi'
+  return typePresets.find(t => t.type === type)?.icon || '🔌'
 }
 function getTypeLabel(type) {
   return typePresets.find(t => t.type === type)?.label || type

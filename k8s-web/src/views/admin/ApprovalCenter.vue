@@ -55,9 +55,9 @@ const pendingCount = ref(0)
 const todayCount = ref(0)
 
 const tabs = [
-  { key: 'release', label: '发布审批', icon: 'send', badge: null },
-  { key: 'ai-risk', label: 'AI 风险审核', icon: 'robot', badge: null },
-  { key: 'policy', label: '审批策略', icon: 'file', badge: null },
+  { key: 'release', label: '发布审批', icon: '🚀', badge: null },
+  { key: 'ai-risk', label: 'AI 风险审核', icon: '🤖', badge: null },
+  { key: 'policy', label: '审批策略', icon: '📄', badge: null },
 ]
 </script>
 

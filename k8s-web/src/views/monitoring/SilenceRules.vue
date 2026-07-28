@@ -486,7 +486,7 @@ async function handleBatchDelete() {
 const ruleTabs = [
   { value: 'silence', icon: '🔇', label: '静默规则', desc: '按时间窗口和标签匹配静默告警' },
   { value: 'inhibit', icon: '🛡️', label: '抑制规则', desc: '高优告警触发时自动抑制低优同类' },
-  { value: 'aggregate', icon: 'apps', label: '聚合规则', desc: '合并同类告警减少通知频率' },
+  { value: 'aggregate', icon: '📦', label: '聚合规则', desc: '合并同类告警减少通知频率' },
 ]
 const repeatTypeMap = { once: '仅一次', daily: '每天', weekly: '每周', cron: 'Cron' }
 

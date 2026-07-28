@@ -458,7 +458,7 @@ const roleTemplates = ref([
   {
     id: 'edit',
     name: '编辑权限',
-    icon: 'edit',
+    icon: '✏️',
     description: '允许查看和编辑大部分资源',
     rules: [{ apiGroups: ['', 'apps'], resources: ['pods', 'deployments', 'services', 'configmaps'], verbs: ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete'] }]
   },
@@ -472,7 +472,7 @@ const roleTemplates = ref([
   {
     id: 'pod-reader',
     name: 'Pod 只读',
-    icon: 'apps',
+    icon: '📦',
     description: '只能查看 Pod',
     rules: [{ apiGroups: [''], resources: ['pods', 'pods/log', 'pods/status'], verbs: ['get', 'list', 'watch'] }]
   }
