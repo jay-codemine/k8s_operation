@@ -1,0 +1,22 @@
+# ============================================================
+# docker-compose 环境专用 Prometheus 抓取配置
+# 由 docker-compose.yaml 挂载到 prometheus 容器 /etc/prometheus/prometheus.yml
+# ============================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 自身指标
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # K8sOperation 后端指标（/metrics 公开端点，无需 JWT）
+  - job_name: k8soperation-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          service: k8soperation
+          env: compose

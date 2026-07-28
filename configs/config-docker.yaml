@@ -111,8 +111,8 @@ CicdWorker:
   Concurrency: 3
 
 Monitoring:
-  Enabled: false
-  PrometheusURL: ""
+  Enabled: true
+  PrometheusURL: "http://prometheus:9090"  # compose 内置 prometheus 服务；首次启动引导值，DB 有数据源后以 DB 为准
   QueryTimeout: 30
 
 AIAssistant:

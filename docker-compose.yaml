@@ -1,6 +1,6 @@
 # ============================================================
 # K8sOperation 全栈本地开发/测试环境
-# 包含: MySQL 8.0 + Redis 7 + 后端 API + 前端 Web
+# 包含: MySQL 8.0 + Redis 7 + 后端 API + 前端 Web + Prometheus
 # 使用: docker-compose up -d
 # ============================================================
 
@@ -53,6 +53,30 @@ services:
     networks:
       - k8sop-net
 
+  # ==================== Prometheus 监控 ====================
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: k8sop-prometheus
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - k8sop-net
+
   # ==================== 后端 API (Go) ====================
   backend:
     image: devops-be:latest
@@ -65,6 +89,8 @@ services:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      prometheus:
         condition: service_healthy
     environment:
       GIN_MODE: release
@@ -117,6 +143,8 @@ volumes:
   backend_logs:
     driver: local
   backend_artifacts:
+    driver: local
+  prometheus_data:
     driver: local
 
 networks:

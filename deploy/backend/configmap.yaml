@@ -130,8 +130,8 @@ data:
       AutoEncryptLegacyData: true
 
     Monitoring:
-      Enabled: false                        # 按需开启监控集成
-      PrometheusURL: ""                     # Prometheus 地址（为空时从数据源表读取）
+      Enabled: true                         # 监控集成（需集群内已部署 Prometheus）
+      PrometheusURL: "http://prometheus.monitoring.svc:9090"  # 首次启动引导值，DB 有数据源后以 DB 为准
       QueryTimeout: 30
 
     LDAP:
