@@ -23,13 +23,20 @@ SetupDB 函数用于初始化和配置数据库连接
 */
 func SetupDB() error {
 	// 拼接 DSN，加上超时参数（防止连不通时卡很久）
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&collation=utf8mb4_general_ci&parseTime=%t&loc=Local&timeout=1s&readTimeout=2s&writeTimeout=2s",
+	// collation 需与 charset 匹配：仅 utf8mb4 时显式指定，其余字符集交给服务端默认，
+	// 避免 Error 1253（如 charset=utf8/utf8mb3 配 utf8mb4_general_ci 会握手失败）
+	collationParam := ""
+	if global.DatabaseSetting.Charset == "utf8mb4" {
+		collationParam = "&collation=utf8mb4_general_ci"
+	}
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s%s&parseTime=%t&loc=Local&timeout=1s&readTimeout=2s&writeTimeout=2s",
 		global.DatabaseSetting.Username,
 		global.DatabaseSetting.Password,
 		global.DatabaseSetting.Host,
 		global.DatabaseSetting.Port,
 		global.DatabaseSetting.DBName,
 		global.DatabaseSetting.Charset,
+		collationParam,
 		global.DatabaseSetting.ParseTime,
 	)
 
