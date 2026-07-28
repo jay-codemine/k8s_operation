@@ -1,79 +1,133 @@
 {
-  "dashboard": {
-    "title": "K8sOperation 平台监控",
-    "tags": ["platform", "k8soperation"],
-    "refresh": "30s",
-    "panels": [
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "gauge", "name": "Gauge", "version": "" }
+  ],
+  "annotations": { "list": [{ "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" }, "type": "dashboard" }] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1, "panels": [], "title": "API 性能", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "id": 2, "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(rate(k8sop_http_request_duration_seconds_count[1m])) by (path)", "legendFormat": "{{path}}", "range": true, "refId": "A" }],
+      "title": "API QPS", "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "id": 3, "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.99, sum(rate(k8sop_http_request_duration_seconds_bucket[5m])) by (le, path))", "legendFormat": "{{path}}", "range": true, "refId": "A" }],
+      "title": "API P99 延迟", "type": "timeseries"
+    },
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 4, "panels": [], "title": "CICD 构建", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 70 }, { "color": "green", "value": 90 }] }, "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 10 },
+      "id": 5, "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(rate(k8sop_cicd_pipeline_runs_total{status=\"success\"}[24h])) / sum(rate(k8sop_cicd_pipeline_runs_total[24h])) * 100", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "CICD 成功率 (24h)", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 300 }, { "color": "red", "value": 600 }] }, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 10 },
+      "id": 6, "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le))", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "P50 构建耗时", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 10 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 10 },
+      "id": 7, "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "k8sop_cicd_build_queue_size", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "构建队列积压", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "id": 8, "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P50 {{language}}", "range": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P95 {{language}}", "range": true, "refId": "B" }
+      ],
+      "title": "构建耗时趋势 (P50/P95)", "type": "timeseries"
+    },
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 9, "panels": [], "title": "平台稳定性", "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 80 }] }, "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 19 },
+      "id": 10, "options": { "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "k8sop_db_connection_pool_active / k8sop_db_connection_pool_max * 100", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "DB 连接池使用率", "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 19 },
+      "id": 11, "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(increase(k8sop_auth_token_validation_total[24h]))", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "24h 登录验证次数", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 19 },
+      "id": 12, "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(increase(k8sop_panics_recovered_total[24h]))", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "24h Panic 恢复次数", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 19 },
+      "id": 13, "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "time() - process_start_time_seconds{job=\"k8soperation\"}", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "title": "服务运行时长", "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["platform", "k8soperation", "self-monitoring"],
+  "templating": {
+    "list": [
       {
-        "id": 1, "title": "API QPS",
-        "type": "graph", "span": 6,
-        "targets": [{ "expr": "sum(rate(k8sop_http_request_duration_seconds_count[1m])) by (method, path)", "legendFormat": "{{method}} {{path}}" }],
-        "fieldConfig": { "defaults": { "unit": "reqps" } }
-      },
-      {
-        "id": 2, "title": "API P99 延迟",
-        "type": "graph", "span": 6,
-        "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(k8sop_http_request_duration_seconds_bucket[1m])) by (le, path))", "legendFormat": "{{path}}" }],
-        "fieldConfig": { "defaults": { "unit": "s" } }
-      },
-      {
-        "id": 3, "title": "API 错误率 (4xx/5xx)",
-        "type": "graph", "span": 6,
-        "targets": [
-          { "expr": "sum(rate(k8sop_http_request_duration_seconds_count{path=~\".*\"}[1m])) by (path, status)", "legendFormat": "{{path}} {{status}}" }
-        ],
-        "fieldConfig": { "defaults": { "unit": "reqps" } }
-      },
-      {
-        "id": 4, "title": "CICD 构建成功率",
-        "type": "stat", "span": 3,
-        "targets": [
-          { "expr": "sum(rate(k8sop_cicd_pipeline_runs_total{status=\"success\"}[24h])) / sum(rate(k8sop_cicd_pipeline_runs_total[24h])) * 100", "legendFormat": "成功率" }
-        ],
-        "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } }
-      },
-      {
-        "id": 5, "title": "CICD 构建耗时趋势",
-        "type": "graph", "span": 9,
-        "targets": [
-          { "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P50 {{language}}" },
-          { "expr": "histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P95 {{language}}" }
-        ],
-        "fieldConfig": { "defaults": { "unit": "s" } }
-      },
-      {
-        "id": 6, "title": "构建队列积压",
-        "type": "stat", "span": 3,
-        "targets": [{ "expr": "k8sop_cicd_build_queue_size" }]
-      },
-      {
-        "id": 7, "title": "DB 连接池使用率",
-        "type": "gauge", "span": 4,
-        "targets": [{ "expr": "k8sop_db_connection_pool_active / k8sop_db_connection_pool_max * 100" }],
-        "fieldConfig": { "defaults": { "unit": "percent", "max": 100 } }
-      },
-      {
-        "id": 8, "title": "登录统计 (24h)",
-        "type": "stat", "span": 4,
-        "targets": [{ "expr": "sum(increase(k8sop_auth_token_validation_total[24h]))", "legendFormat": "登录验证次数" }]
-      },
-      {
-        "id": 9, "title": "Panic 恢复次数 (24h)",
-        "type": "stat", "span": 4,
-        "targets": [{ "expr": "sum(increase(k8sop_panics_recovered_total[24h]))" }],
-        "fieldConfig": { "defaults": { "unit": "short" }, "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } }
-      },
-      {
-        "id": 10, "title": "服务运行时长",
-        "type": "stat", "span": 6,
-        "targets": [{ "expr": "time() - process_start_time_seconds{job=\"k8soperation\"}", "legendFormat": "uptime" }],
-        "fieldConfig": { "defaults": { "unit": "s" } }
-      },
-      {
-        "id": 11, "title": "在线用户数 (估算)",
-        "type": "stat", "span": 6,
-        "targets": [{ "expr": "sum(k8sop_http_inflight_requests)" }]
+        "current": { "selected": false, "text": "Prometheus", "value": "prometheus" },
+        "hide": 0, "includeAll": false, "multi": false, "name": "DS_PROMETHEUS",
+        "options": [], "query": "prometheus", "queryValue": "", "refresh": 1,
+        "regex": "", "skipUrlSync": false, "type": "datasource"
       }
     ]
-  }
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "K8sOperation 平台监控",
+  "uid": "k8soperation-self-monitoring",
+  "version": 1
 }
