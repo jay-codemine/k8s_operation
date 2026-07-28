@@ -5,7 +5,7 @@ groups:
     rules:
       # ===== 1. API 可用性 =====
       - alert: PlatformAPIErrorRateHigh
-        expr: sum(rate(k8sop_http_request_duration_seconds_count{status=~"4..|5.."}[5m])) / sum(rate(k8sop_http_request_duration_seconds_count[5m])) > 0.05
+        expr: sum(rate(k8sop_http_requests_total{status=~"4..|5.."}[5m])) / sum(rate(k8sop_http_requests_total[5m])) > 0.05
         for: 5m
         labels: { severity: warning, category: api }
         annotations:
@@ -55,7 +55,7 @@ groups:
 
       # ===== 3. 数据库 =====
       - alert: PlatformDBConnectionPoolHigh
-        expr: k8sop_db_connection_pool_active / k8sop_db_connection_pool_max > 0.8
+        expr: k8sop_db_connection_pool_active > 50
         for: 5m
         labels: { severity: warning, category: database }
         annotations:
@@ -64,7 +64,7 @@ groups:
 
       # ===== 4. 稳定性 =====
       - alert: PlatformPanicRecovered
-        expr: increase(k8sop_panics_recovered_total[5m]) > 0
+        expr: increase(k8sop_runtime_panics_total[5m]) > 0
         labels: { severity: critical, category: stability }
         annotations:
           summary: "平台发生 Panic 恢复"
