@@ -147,11 +147,17 @@ func SetupSetting() error {
 		}
 
 		// 初始化全局加密服务
-		if global.SecuritySetting != nil && global.SecuritySetting.KubeConfigEncryptKey != "" {
-			utils.InitGlobalCrypto(global.SecuritySetting.KubeConfigEncryptKey)
-		} else {
-			log.Println("[Security] 警告: 加密密钥未配置，数据将不加密存储")
+		// 注意：viper 对“配置段不存在”不报错，上面的默认值兑底可能不触发，
+		// 若密钥为空则回退默认密钥，确保加密服务一定初始化，
+		// 避免创建集群时报 "global crypto service not initialized"
+		if global.SecuritySetting == nil {
+			global.SecuritySetting = &setting.SecuritySettingS{}
 		}
+		if global.SecuritySetting.KubeConfigEncryptKey == "" {
+			log.Println("[Security] 警告: 加密密钥未配置，使用内置默认密钥（生产环境请在 Security.KubeConfigEncryptKey 配置自定义密钥）")
+			global.SecuritySetting.KubeConfigEncryptKey = "k8s-operation-default-secret-key"
+		}
+		utils.InitGlobalCrypto(global.SecuritySetting.KubeConfigEncryptKey)
 
 		// 读取 PlatformSettings 配置（平台系统设置默认值）
 		// 对应 config.yaml 中的：

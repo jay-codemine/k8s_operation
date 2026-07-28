@@ -1,5 +1,3 @@
-version: "3.8"
-
 # ============================================================
 # K8sOperation 全栈本地开发/测试环境
 # 包含: MySQL 8.0 + Redis 7 + 后端 API + 前端 Web
@@ -40,6 +38,8 @@ services:
     image: redis:7-alpine
     container_name: k8sop-redis
     restart: always
+    environment:
+      TZ: Asia/Shanghai
     command: redis-server --requirepass admin123 --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
@@ -69,6 +69,7 @@ services:
     environment:
       GIN_MODE: release
       APP_CONFIG: /app/configs/config.yaml
+      TZ: Asia/Shanghai
     ports:
       - "8080:8080"
     volumes:
@@ -97,6 +98,7 @@ services:
         condition: service_healthy
     environment:
       API_BACKEND_URL: "http://backend:8080"
+      TZ: Asia/Shanghai
     ports:
       - "80:80"
     healthcheck:

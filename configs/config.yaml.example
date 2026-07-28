@@ -62,6 +62,13 @@ PodLog:
 ErrorCode:
   AllowOverride: true   # 是否允许错误码覆盖（true: 开发模式；false: 生产模式）
 
+# 安全配置：KubeConfigEncryptKey 用于加密存储集群 kubeconfig，缺失会导致创建集群报
+# "global crypto service not initialized"，生产环境请替换为自定义强密钥
+Security:
+  KubeConfigEncryptKey: "k8s-operation-default-secret-key"
+  PasswordBcryptCost: 10
+  AutoEncryptLegacyData: false
+
 ClusterClient:
   TTL: 30m
   TTLJitter: 3m
