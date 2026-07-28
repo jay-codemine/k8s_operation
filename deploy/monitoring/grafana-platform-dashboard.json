@@ -24,7 +24,7 @@
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "reqps" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
       "id": 2, "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
-      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(rate(k8sop_http_request_duration_seconds_count[1m])) by (path)", "legendFormat": "{{path}}", "range": true, "refId": "A" }],
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(rate(k8sop_http_requests_total[1m])) by (path)", "legendFormat": "{{path}}", "range": true, "refId": "A" }],
       "title": "API QPS", "type": "timeseries"
     },
     {
@@ -69,8 +69,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
       "id": 8, "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P50 {{language}}", "range": true, "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, language))", "legendFormat": "P95 {{language}}", "range": true, "refId": "B" }
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, pipelinename))", "legendFormat": "P50 {{pipelinename}}", "range": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "histogram_quantile(0.95, sum(rate(k8sop_cicd_pipeline_duration_seconds_bucket[1h])) by (le, pipelinename))", "legendFormat": "P95 {{pipelinename}}", "range": true, "refId": "B" }
       ],
       "title": "构建耗时趋势 (P50/P95)", "type": "timeseries"
     },
@@ -83,7 +83,7 @@
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 80 }] }, "unit": "percent" }, "overrides": [] },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 19 },
       "id": 10, "options": { "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true },
-      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "k8sop_db_connection_pool_active / k8sop_db_connection_pool_max * 100", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "k8sop_db_connection_pool_active", "legendFormat": "__auto", "range": true, "refId": "A" }],
       "title": "DB 连接池使用率", "type": "gauge"
     },
     {
@@ -99,7 +99,7 @@
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 19 },
       "id": 12, "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
-      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(increase(k8sop_panics_recovered_total[24h]))", "legendFormat": "__auto", "range": true, "refId": "A" }],
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "editorMode": "code", "expr": "sum(increase(k8sop_runtime_panics_total[24h]))", "legendFormat": "__auto", "range": true, "refId": "A" }],
       "title": "24h Panic 恢复次数", "type": "stat"
     },
     {
