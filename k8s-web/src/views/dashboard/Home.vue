@@ -1,385 +1,347 @@
 <template>
-  <div class="dashboard-container">
-    <!-- 顶部欢迎区域 -->
-    <div class="dashboard-header">
-      <div class="header-content">
-        <h1>👋 欢迎回来，{{ username }}</h1>
-        <p>当前时间：{{ currentTime }}</p>
+  <div class="home-page">
+    <!-- 顶部工具条 -->
+    <div class="page-toolbar">
+      <div class="toolbar-title">
+        <h1>平台总览</h1>
+        <span class="conn-badge" :class="clusterConnectionStatus">
+          <span v-if="clusterConnectionStatus === 'checking'"><span class="spinner"></span> 连接中</span>
+          <span v-else-if="clusterConnectionStatus === 'connected'">● 已连接</span>
+          <span v-else-if="clusterConnectionStatus === 'timeout'">● 部分超时</span>
+          <span v-else>● 连接失败</span>
+        </span>
       </div>
-      <div class="header-actions">
-        <!-- 集群连接状态指示器 -->
-        <div class="connection-status" :class="clusterConnectionStatus">
-          <span v-if="clusterConnectionStatus === 'checking'" class="status-indicator">
-            <span class="spinner"></span> 连接中...
-          </span>
-          <span v-else-if="clusterConnectionStatus === 'connected'" class="status-indicator connected">
-            ✅ 已连接
-          </span>
-          <span v-else-if="clusterConnectionStatus === 'timeout'" class="status-indicator timeout">
-            ⚠️ 部分集群超时
-          </span>
-          <span v-else class="status-indicator error">
-            ❌ 连接失败
-          </span>
-        </div>
-        <button class="btn btn-primary" @click="refreshData">
-          <span v-if="!loading">🔄 刷新数据</span>
-          <span v-else>加载中...</span>
+      <div class="toolbar-actions">
+        <select v-model.number="autoRefresh" class="auto-refresh-select" @change="setupAutoRefresh">
+          <option :value="0">自动刷新：关闭</option>
+          <option :value="30">自动刷新 30s</option>
+          <option :value="60">自动刷新 60s</option>
+        </select>
+        <button class="btn-refresh" :disabled="loading" @click="refreshData">
+          {{ loading ? '刷新中...' : '🔄 刷新' }}
         </button>
       </div>
     </div>
 
-    <!-- 集群概览卡片 - 仅有集群权限时显示 -->
-    <div v-if="hasClusterAccess" class="cluster-overview">
-      <div class="section-title">
-        <h2>🖥️ 集群概览</h2>
-      </div>
-      <div class="stats-grid">
-        <div v-if="canView('clusters')" class="stat-card cluster-card">
-          <div class="stat-icon">🏛️</div>
-          <div class="stat-content">
-            <div class="stat-label">集群数量</div>
-            <div class="stat-value">{{ clusterStats.total }}</div>
-            <div class="stat-detail">
-              <span class="status-active">活跃: {{ clusterStats.active }}</span>
-              <span class="status-inactive">离线: {{ clusterStats.inactive }}</span>
-            </div>
-          </div>
+    <!-- 顶部统计卡片 -->
+    <div v-if="hasClusterAccess" class="stats-row">
+      <div v-if="canView('clusters')" class="stat-card clickable" @click="handleNavigate('/clusters')">
+        <div class="stat-top">
+          <span class="stat-label">集群总数</span>
+          <span class="stat-emoji bg-indigo">🏛️</span>
         </div>
-
-        <div v-if="canView('nodes')" class="stat-card node-card">
-          <div class="stat-icon">💻</div>
-          <div class="stat-content">
-            <div class="stat-label">节点总数</div>
-            <div class="stat-value">{{ nodeStats.total }}</div>
-            <div class="stat-detail">
-              <span class="status-ready">就绪: {{ nodeStats.ready }}</span>
-              <span class="status-notready">异常: {{ nodeStats.notReady }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="canView('pods')" class="stat-card pod-card">
-          <div class="stat-icon">📦</div>
-          <div class="stat-content">
-            <div class="stat-label">Pod 总数</div>
-            <div class="stat-value">{{ podStats.total }}</div>
-            <div class="stat-detail">
-              <span class="status-running">运行: {{ podStats.running }}</span>
-              <span class="status-pending">等待: {{ podStats.pending }}</span>
-              <span class="status-failed">失败: {{ podStats.failed }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="canView('namespaces')" class="stat-card namespace-card">
-          <div class="stat-icon">📁</div>
-          <div class="stat-content">
-            <div class="stat-label">命名空间</div>
-            <div class="stat-value">{{ namespaceStats.total }}</div>
-            <div class="stat-detail">
-              <span class="status-system">系统: {{ namespaceStats.system }}</span>
-              <span class="status-user">用户: {{ namespaceStats.user }}</span>
-            </div>
-          </div>
+        <div class="stat-value">{{ clusterStats.total }}</div>
+        <div class="stat-badges">
+          <span class="badge badge-green">运行中 {{ clusterStats.active }}</span>
+          <span class="badge badge-red">异常 {{ clusterStats.inactive }}</span>
         </div>
       </div>
-    </div>
 
-    <!-- 工作负载统计 - 仅有集群权限时显示 -->
-    <div v-if="hasClusterAccess && hasAnyWorkloadPermission" class="workload-section">
-      <div class="section-title">
-        <h2>🚀 工作负载统计</h2>
+      <div v-if="canView('nodes')" class="stat-card clickable" @click="handleClusterNavigate('nodes')">
+        <div class="stat-top">
+          <span class="stat-label">节点总数</span>
+          <span class="stat-emoji bg-blue">🖥️</span>
+        </div>
+        <div class="stat-value">{{ nodeStats.total }}</div>
+        <div class="stat-badges">
+          <span class="badge badge-green">正常 {{ nodeStats.ready }}</span>
+          <span class="badge badge-red">异常 {{ nodeStats.notReady }}</span>
+        </div>
       </div>
-      <div class="workload-grid">
-        <div 
-          v-if="canView('deployments')"
-          class="workload-card" 
-          @click="handleClusterNavigate('workloads/deployments')"
-        >
-          <div class="workload-icon deployment">🚀</div>
-          <div class="workload-info">
-            <div class="workload-name">Deployments</div>
-            <div class="workload-count">{{ workloadStats.deployments }}</div>
-          </div>
-        </div>
 
-        <div 
-          v-if="canView('statefulsets')"
-          class="workload-card" 
-          @click="handleClusterNavigate('workloads/statefulsets')"
-        >
-          <div class="workload-icon statefulset">📊</div>
-          <div class="workload-info">
-            <div class="workload-name">StatefulSets</div>
-            <div class="workload-count">{{ workloadStats.statefulsets }}</div>
-          </div>
+      <div v-if="canView('pods')" class="stat-card clickable" @click="handleClusterNavigate('workloads/pods')">
+        <div class="stat-top">
+          <span class="stat-label">Pod 总数</span>
+          <span class="stat-emoji bg-green">📦</span>
         </div>
-
-        <div 
-          v-if="canView('daemonsets')"
-          class="workload-card" 
-          @click="handleClusterNavigate('workloads/daemonsets')"
-        >
-          <div class="workload-icon daemonset">🔄</div>
-          <div class="workload-info">
-            <div class="workload-name">DaemonSets</div>
-            <div class="workload-count">{{ workloadStats.daemonsets }}</div>
-          </div>
+        <div class="stat-value">{{ podStats.total }}</div>
+        <div class="stat-badges">
+          <span class="badge badge-green">运行中 {{ podStats.running }}</span>
+          <span class="badge badge-amber">待调度 {{ podStats.pending }}</span>
         </div>
+      </div>
 
-        <div 
-          v-if="canView('jobs')"
-          class="workload-card" 
-          @click="handleClusterNavigate('workloads/jobs')"
-        >
-          <div class="workload-icon job">⚙️</div>
-          <div class="workload-info">
-            <div class="workload-name">Jobs</div>
-            <div class="workload-count">{{ workloadStats.jobs }}</div>
-          </div>
+      <div class="stat-card ring-card">
+        <div class="stat-top">
+          <span class="stat-label">CPU 使用率</span>
         </div>
+        <div class="ring-body">
+          <svg viewBox="0 0 72 72" class="ring">
+            <circle cx="36" cy="36" r="30" class="ring-bg" />
+            <circle cx="36" cy="36" r="30" class="ring-val" stroke="#3b82f6"
+              :stroke-dasharray="ringDash(overview.cpu_usage)" transform="rotate(-90 36 36)" />
+            <text x="36" y="41" text-anchor="middle" class="ring-text">{{ overview.cpu_usage.toFixed(0) }}%</text>
+          </svg>
+          <div class="ring-sub">所有节点平均<br />告警阈值 80%</div>
+        </div>
+      </div>
 
-        <div 
-          v-if="canView('cronjobs')"
-          class="workload-card" 
-          @click="handleClusterNavigate('workloads/cronjobs')"
-        >
-          <div class="workload-icon cronjob">⏰</div>
-          <div class="workload-info">
-            <div class="workload-name">CronJobs</div>
-            <div class="workload-count">{{ workloadStats.cronjobs }}</div>
-          </div>
+      <div class="stat-card ring-card">
+        <div class="stat-top">
+          <span class="stat-label">内存使用率</span>
+        </div>
+        <div class="ring-body">
+          <svg viewBox="0 0 72 72" class="ring">
+            <circle cx="36" cy="36" r="30" class="ring-bg" />
+            <circle cx="36" cy="36" r="30" class="ring-val" stroke="#10b981"
+              :stroke-dasharray="ringDash(overview.memory_usage)" transform="rotate(-90 36 36)" />
+            <text x="36" y="41" text-anchor="middle" class="ring-text">{{ overview.memory_usage.toFixed(0) }}%</text>
+          </svg>
+          <div class="ring-sub">所有节点平均<br />告警阈值 85%</div>
+        </div>
+      </div>
+
+      <div class="stat-card clickable" @click="handleNavigate('/monitoring/alert-events')">
+        <div class="stat-top">
+          <span class="stat-label">告警数量</span>
+          <span class="stat-emoji bg-red">🔔</span>
+        </div>
+        <div class="stat-value">{{ alertTotal }}</div>
+        <div class="stat-badges">
+          <span class="badge badge-red">严重 {{ alertStats.critical }}</span>
+          <span class="badge badge-amber">警告 {{ alertStats.warning }}</span>
         </div>
       </div>
     </div>
 
-    <!-- 网络与存储 - 仅有集群权限时显示 -->
-    <div v-if="hasClusterAccess && hasAnyNetworkOrStoragePermission" class="resource-section">
-      <div class="section-row">
-        <div class="resource-group">
-          <div class="section-title">
-            <h2>🌐 网络资源</h2>
-          </div>
-          <div class="resource-list">
-            <div 
-              v-if="canView('services')"
-              class="resource-item" 
-              @click="handleClusterNavigate('networking/services')"
-            >
-              <div class="resource-icon">🔌</div>
-              <div class="resource-info">
-                <div class="resource-name">Services</div>
-                <div class="resource-count">{{ networkStats.services }}</div>
-              </div>
-              <div class="resource-arrow">›</div>
-            </div>
+    <!-- 集群健康状态 + 资源使用趋势 -->
+    <div v-if="hasClusterAccess" class="grid-row row-2">
+      <div class="panel">
+        <div class="panel-header">
+          <h3>集群健康状态</h3>
+        </div>
+        <table class="mini-table">
+          <thead>
+            <tr><th>集群名称</th><th>状态</th><th>版本</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in clustersList" :key="c.id" class="clickable" @click="handleNavigate('/clusters')">
+              <td class="td-name">{{ c.cluster_name }}</td>
+              <td><span class="badge" :class="clusterStatusClass(c.status)">{{ clusterStatusText(c.status) }}</span></td>
+              <td class="td-muted">{{ c.cluster_version || '—' }}</td>
+              <td class="td-muted td-ellipsis">{{ c.last_error || '—' }}</td>
+            </tr>
+            <tr v-if="!clustersList.length && !loading"><td colspan="4" class="td-empty">暂无集群数据</td></tr>
+          </tbody>
+        </table>
+        <div class="panel-footer">
+          <a class="footer-link" @click="handleNavigate('/clusters')">查看全部集群 →</a>
+        </div>
+      </div>
 
-            <div 
-              v-if="canView('ingress')"
-              class="resource-item" 
-              @click="handleClusterNavigate('networking/ingresses')"
-            >
-              <div class="resource-icon">🌍</div>
-              <div class="resource-info">
-                <div class="resource-name">Ingresses</div>
-                <div class="resource-count">{{ networkStats.ingresses }}</div>
-              </div>
-              <div class="resource-arrow">›</div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>资源使用趋势</h3>
+          <div class="panel-tools">
+            <div class="tab-group">
+              <button v-for="t in trendTabs" :key="t.key" class="tab-btn"
+                :class="{ active: trendTab === t.key }" @click="switchTrendTab(t.key)">{{ t.label }}</button>
             </div>
+            <select v-model="trendDuration" class="duration-select" @change="loadTrend">
+              <option value="1h">最近 1 小时</option>
+              <option value="6h">最近 6 小时</option>
+              <option value="24h">最近 24 小时</option>
+            </select>
           </div>
         </div>
+        <div ref="trendChartRef" class="trend-chart"></div>
+      </div>
+    </div>
 
-        <div class="resource-group">
-          <div class="section-title">
-            <h2>💾 存储资源</h2>
+    <!-- CI/CD 流水线状态 + 最近发布记录 -->
+    <div v-if="canView('pipelines')" class="grid-row row-3">
+      <div class="panel">
+        <div class="panel-header">
+          <h3>CI/CD 流水线状态</h3>
+        </div>
+        <div class="cicd-chips">
+          <div class="chip">
+            <span class="chip-icon chip-blue">▶</span>
+            <div class="chip-info"><span class="chip-label">运行中</span><span class="chip-value">{{ cicdRunning }}</span></div>
           </div>
-          <div class="resource-list">
-            <div 
-              v-if="canView('pv')"
-              class="resource-item" 
-              @click="handleClusterNavigate('storage/persistentvolumes')"
-            >
-              <div class="resource-icon">💿</div>
-              <div class="resource-info">
-                <div class="resource-name">PersistentVolumes</div>
-                <div class="resource-count">{{ storageStats.pvs }}</div>
-              </div>
-              <div class="resource-arrow">›</div>
-            </div>
+          <div class="chip">
+            <span class="chip-icon chip-green">✔</span>
+            <div class="chip-info"><span class="chip-label">今日构建</span><span class="chip-value">{{ buildStats.today_builds ?? '—' }}</span></div>
+          </div>
+          <div class="chip">
+            <span class="chip-icon chip-amber">％</span>
+            <div class="chip-info"><span class="chip-label">成功率 7d</span><span class="chip-value">{{ cicdSuccessRate }}</span></div>
+          </div>
+          <div class="chip">
+            <span class="chip-icon chip-gray">Σ</span>
+            <div class="chip-info"><span class="chip-label">流水线总数</span><span class="chip-value">{{ pipelineTotal }}</span></div>
+          </div>
+        </div>
+        <table class="mini-table">
+          <thead>
+            <tr><th>流水线名称</th><th>状态</th><th>分支</th><th>更新时间</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in pipelines" :key="p.id" class="clickable" @click="handleNavigate(`/cicd/pipelines/${p.id}`)">
+              <td class="td-name">{{ p.name }}</td>
+              <td><span class="badge" :class="pipeStatusClass(p)">{{ pipeStatusText(p) }}</span></td>
+              <td class="td-muted">{{ p.git_branch || p.branch || 'main' }}</td>
+              <td class="td-muted">{{ formatTime(p.last_run_time || p.created_at) }}</td>
+            </tr>
+            <tr v-if="!pipelines.length && !loading"><td colspan="4" class="td-empty">暂无流水线</td></tr>
+          </tbody>
+        </table>
+        <div class="panel-footer">
+          <a class="footer-link" @click="handleNavigate('/cicd/pipelines')">查看全部流水线 →</a>
+        </div>
+      </div>
 
-            <div 
-              v-if="canView('pvc')"
-              class="resource-item" 
-              @click="handleClusterNavigate('storage/persistentvolumeclaims')"
-            >
-              <div class="resource-icon">📝</div>
-              <div class="resource-info">
-                <div class="resource-name">PVCs</div>
-                <div class="resource-count">{{ storageStats.pvcs }}</div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>最近发布记录</h3>
+        </div>
+        <div class="release-list">
+          <div v-for="rel in releases" :key="rel.id" class="release-item clickable"
+            @click="handleNavigate('/cicd/releases')">
+            <span class="rel-avatar" :class="'rel-' + releaseStatusKey(rel.status)">
+              {{ (rel.app_name || rel.name || '?').charAt(0).toUpperCase() }}
+            </span>
+            <div class="rel-info">
+              <div class="rel-line1">
+                <span class="rel-name">{{ rel.app_name || rel.name || '—' }}</span>
+                <code v-if="rel.image_tag" class="rel-tag">{{ rel.image_tag }}</code>
               </div>
-              <div class="resource-arrow">›</div>
+              <div class="rel-line2">
+                <span>{{ rel.creator || rel.created_by || '—' }}</span>
+                <span v-if="rel.env || rel.namespace" class="rel-env">{{ rel.env || rel.namespace }}</span>
+              </div>
             </div>
-
-            <div 
-              v-if="canView('storageclasses')"
-              class="resource-item" 
-              @click="handleClusterNavigate('storage/storageclasses')"
-            >
-              <div class="resource-icon">📦</div>
-              <div class="resource-info">
-                <div class="resource-name">StorageClasses</div>
-                <div class="resource-count">{{ storageStats.storageClasses }}</div>
-              </div>
-              <div class="resource-arrow">›</div>
+            <div class="rel-right">
+              <span class="badge" :class="'badge-' + releaseStatusKey(rel.status)">{{ releaseStatusText(rel.status) }}</span>
+              <span class="rel-time">{{ formatTime(rel.created_at) }}</span>
             </div>
           </div>
+          <div v-if="!releases.length && !loading" class="td-empty">暂无发布记录</div>
+        </div>
+        <div class="panel-footer">
+          <a class="footer-link" @click="handleNavigate('/cicd/releases')">查看全部发布记录 →</a>
         </div>
       </div>
     </div>
 
-    <!-- 配置资源 - 仅有集群权限时显示 -->
-    <div v-if="hasClusterAccess && hasAnyConfigPermission" class="config-section">
-      <div class="section-title">
-        <h2>⚙️ 配置资源</h2>
-      </div>
-      <div class="config-grid">
-        <div 
-          v-if="canView('configmaps')"
-          class="config-card" 
-          @click="handleClusterNavigate('config/configmaps')"
-        >
-          <div class="config-icon">🗂️</div>
-          <div class="config-info">
-            <div class="config-name">ConfigMaps</div>
-            <div class="config-count">{{ configStats.configmaps }}</div>
+    <!-- 关键指标监控 + Pod 状态分布 + 集群事件 -->
+    <div v-if="hasClusterAccess" class="grid-row row-4">
+      <div class="panel">
+        <div class="panel-header">
+          <h3>关键指标监控</h3>
+          <a class="footer-link" @click="handleNavigate('/monitoring')">查看大盘</a>
+        </div>
+        <div class="kpi-grid">
+          <div v-for="k in kpiCards" :key="k.label" class="kpi-card">
+            <div class="kpi-label">{{ k.label }}</div>
+            <div class="kpi-value" :style="{ color: k.color }">{{ k.value }}</div>
+            <svg class="kpi-spark" viewBox="0 0 120 36" preserveAspectRatio="none">
+              <path :d="k.spark" fill="none" :stroke="k.color" stroke-width="1.5" />
+            </svg>
           </div>
         </div>
+      </div>
 
-        <div 
-          v-if="canView('secrets')"
-          class="config-card" 
-          @click="handleClusterNavigate('config/secrets')"
-        >
-          <div class="config-icon">🔐</div>
-          <div class="config-info">
-            <div class="config-name">Secrets</div>
-            <div class="config-count">{{ configStats.secrets }}</div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Pod 状态分布</h3>
+          <a class="footer-link" @click="handleNavigate('/monitoring')">更多</a>
+        </div>
+        <div class="donut-body">
+          <svg viewBox="0 0 140 140" class="donut">
+            <circle cx="70" cy="70" r="52" class="donut-bg" />
+            <circle v-for="(seg, i) in donutSegments" :key="i" cx="70" cy="70" r="52"
+              fill="none" :stroke="seg.color" stroke-width="18"
+              :stroke-dasharray="seg.dash" :stroke-dashoffset="seg.offset"
+              transform="rotate(-90 70 70)" />
+            <text x="70" y="66" text-anchor="middle" class="donut-num">{{ podDistTotal }}</text>
+            <text x="70" y="84" text-anchor="middle" class="donut-label">总数</text>
+          </svg>
+          <div class="donut-legend">
+            <div v-for="it in podDistItems" :key="it.name" class="legend-item">
+              <span class="legend-dot" :style="{ background: it.color }"></span>
+              <span class="legend-name">{{ it.label }}</span>
+              <span class="legend-count">{{ it.value }} ({{ podDistTotal ? ((it.value / podDistTotal) * 100).toFixed(1) : 0 }}%)</span>
+            </div>
+            <div v-if="!podDistItems.length && !loading" class="td-empty">暂无数据</div>
           </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>集群事件</h3>
+          <a class="footer-link" @click="handleNavigate('/monitoring/alert-events')">查看全部</a>
+        </div>
+        <div class="event-list">
+          <div v-for="ev in events" :key="ev.id" class="event-item">
+            <span class="event-dot" :class="'sev-' + (ev.severity || 'info')"></span>
+            <div class="event-info">
+              <div class="event-summary">{{ ev.summary || ev.rule_name || '—' }}</div>
+              <div class="event-meta">{{ ev.rule_name }}</div>
+            </div>
+            <span class="event-time">{{ formatTime(ev.fired_at) }}</span>
+          </div>
+          <div v-if="!events.length && !loading" class="td-empty">暂无告警事件</div>
         </div>
       </div>
     </div>
 
-    <!-- 快速链接 -->
-    <div class="quick-links-section">
-      <div class="section-title">
-        <h2>🔗 快速链接</h2>
+    <!-- 系统状态栏 -->
+    <div class="system-bar">
+      <span class="sys-title">系统状态</span>
+      <div class="sys-items">
+        <div v-for="comp in healthComponents" :key="comp.name" class="sys-item">
+          <span class="sys-name">{{ comp.name }}</span>
+          <span class="badge" :class="comp.status === 'ok' ? 'badge-green' : 'badge-red'">
+            {{ comp.status === 'ok' ? '正常' : '异常' }}
+          </span>
+        </div>
+        <div v-if="!healthComponents.length" class="td-empty">健康数据加载中...</div>
       </div>
-      <div class="quick-links-grid">
-        <a 
-          v-if="canView('clusters')"
-          class="quick-link" 
-          @click="handleNavigate('/clusters')"
-        >
-          <div class="link-icon">🏛️</div>
-          <div class="link-text">集群管理</div>
-        </a>
-        <a 
-          v-if="canView('nodes')"
-          class="quick-link" 
-          @click="handleClusterNavigate('nodes')"
-        >
-          <div class="link-icon">💻</div>
-          <div class="link-text">节点管理</div>
-        </a>
-        <a 
-          v-if="canView('namespaces')"
-          class="quick-link" 
-          @click="handleClusterNavigate('namespaces')"
-        >
-          <div class="link-icon">📁</div>
-          <div class="link-text">命名空间</div>
-        </a>
-        <a 
-          v-if="canView('pipelines')"
-          class="quick-link" 
-          @click="handleNavigate('/cicd/pipelines')"
-        >
-          <div class="link-icon">🚀</div>
-          <div class="link-text">CI/CD 流水线</div>
-        </a>
-        <a 
-          v-if="canView('repositories')"
-          class="quick-link" 
-          @click="handleNavigate('/images/repositories')"
-        >
-          <div class="link-icon">📷</div>
-          <div class="link-text">镜像仓库</div>
-        </a>
-        <a 
-          v-if="canView('users')"
-          class="quick-link" 
-          @click="handleNavigate('/users')"
-        >
-          <div class="link-icon">👥</div>
-          <div class="link-text">用户管理</div>
-        </a>
-      </div>
+      <div v-if="platformUptime" class="sys-uptime">系统运行时间 <b>{{ platformUptime }}</b></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import * as echarts from 'echarts'
 import { useClusterStore } from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
 
-// 导入 API
+import http from '@/api/http'
 import { getClusterList } from '@/api/cluster'
 import nodesApi from '@/api/cluster/nodes'
 import podsApi from '@/api/cluster/workloads/pods'
-import deploymentsApi from '@/api/cluster/workloads/deployments'
-import statefulsetsApi from '@/api/cluster/workloads/statefulsets'
-import daemonsetsApi from '@/api/cluster/workloads/daemonsets'
-import jobsApi from '@/api/cluster/workloads/jobs'
-import cronjobsApi from '@/api/cluster/workloads/cronjobs'
-import serviceApi from '@/api/cluster/networking/service'
-import ingressApi from '@/api/cluster/networking/ingress'
-import pvApi from '@/api/cluster/storage/pv'
-import pvcApi from '@/api/cluster/storage/pvc'
-import storageclassApi from '@/api/cluster/storage/storageclasses'
-import configmapApi from '@/api/cluster/config/configmap'
-import secretApi from '@/api/cluster/config/secret'
-import namespaceApi from '@/api/cluster/namespaces'
+import {
+  getClusterOverview,
+  getResourceTrend,
+  getPodStatusDistribution,
+  listAlertEvents,
+  getAlertStats,
+} from '@/api/monitoring'
+import { getPipelines, getBuildStats } from '@/api/platform/pipeline'
+import { getReleases } from '@/api/cicd'
 
 const router = useRouter()
 const clusterStore = useClusterStore()
 
 // =============================================================================
-// 超时控制工具（大厂设计模式）
-// 
-// 设计原则：
-// 1. 快速失败：单个 API 超时不阻塞其他请求
-// 2. 优雅降级：超时后显示默认数据，不影响用户体验
-// 3. 可观测性：记录超时日志，便于问题定位
+// 超时控制工具
+// 设计原则：快速失败、优雅降级、可观测（超时不阻塞其他面板）
 // =============================================================================
+const API_TIMEOUT = 8000
+// 平台健康是聚合接口：需逐个集群做连通性探测，存在离线集群时后端约需 15s 才降级返回，
+// 因此单独放宽超时，避免健康面板长期空白（该请求与其他面板并发，不阻塞首屏）
+const HEALTH_TIMEOUT = 20000
 
-// API 超时配置（单位：毫秒）
-const API_TIMEOUT = 8000 // 8 秒，给后端 5 秒超时 + 网络延迟
-
-/**
- * 包装 Promise，添加超时控制
- * @param {Promise} promise 原始 Promise
- * @param {number} timeoutMs 超时时间（毫秒）
- * @param {string} name 请求名称（用于日志）
- * @returns {Promise} 带超时控制的 Promise
- */
 const withTimeout = (promise, timeoutMs = API_TIMEOUT, name = 'API') => {
   return Promise.race([
     promise,
-    new Promise((_, reject) => 
+    new Promise((_, reject) =>
       setTimeout(() => reject(new Error(`${name} 请求超时(${timeoutMs}ms)`)), timeoutMs)
     )
   ])
@@ -388,36 +350,25 @@ const withTimeout = (promise, timeoutMs = API_TIMEOUT, name = 'API') => {
 // 集群连接状态
 const clusterConnectionStatus = ref('checking') // checking | connected | timeout | error
 
-/**
- * 基于实际授权的资源权限配置
- * 参考 Rancher/Kuboard/KubeSphere 权限模型
- * 
- * 角色权限层级：
- * - cluster_admin: 集群完整权限，可查看所有资源
- * - developer: 开发者权限，可查看常用工作负载、服务、配置
- * - viewer: 只读权限，仅查看基础资源
- * - cicd_admin: CI/CD管理员，可查看部署相关资源
- */
+// =============================================================================
+// 权限模型（与原版保持一致）
+// =============================================================================
 const ROLE_RESOURCE_MAP = {
-  // 集群管理员 - 所有资源
   cluster_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
     'configmaps', 'secrets', 'namespaces', 'nodes', 'clusters'
   ],
-  // 开发者 - 常用资源（劅除节点、存储类等集群级资源）
   developer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pvc', 'configmaps', 'secrets',
     'namespaces', 'clusters', 'pipelines'
   ],
-  // 只读 - 可查看所有资源（与 cluster_admin 相同，但无操作权限）
   viewer: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
     'configmaps', 'secrets', 'namespaces', 'nodes', 'clusters'
   ],
-  // CI/CD管理员 - 部署相关
   cicd_admin: [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pvc', 'configmaps', 'secrets',
@@ -425,226 +376,417 @@ const ROLE_RESOURCE_MAP = {
   ]
 }
 
-// 平台级管理员可查看的额外资源
 const PLATFORM_ADMIN_RESOURCES = ['repositories', 'users']
 
-/**
- * 判断是否有任何集群访问权限
- */
 const hasClusterAccess = computed(() => {
   if (permissionStore.state.isSuperAdmin) return true
-  // 检查是否有任何集群权限
   const clusterPerms = permissionStore.state.clusterPermissions
   return Object.keys(clusterPerms).length > 0
 })
 
-/**
- * 获取用户的最高角色类型
- */
 const userHighestRole = computed(() => {
   if (permissionStore.state.isSuperAdmin) return 'super_admin'
-  
   const roleTypes = permissionStore.roleTypes.value
-  
-  // 角色优先级：super_admin > platform_admin > cluster_admin > cicd_admin > developer > viewer
   if (roleTypes.includes('super_admin')) return 'super_admin'
   if (roleTypes.includes('platform_admin')) return 'platform_admin'
   if (roleTypes.includes('cluster_admin')) return 'cluster_admin'
   if (roleTypes.includes('cicd_admin')) return 'cicd_admin'
   if (roleTypes.includes('developer')) return 'developer'
   if (roleTypes.includes('viewer')) return 'viewer'
-  
   return null
 })
 
-/**
- * 获取用户可查看的资源列表
- */
 const userAccessibleResources = computed(() => {
   if (permissionStore.state.isSuperAdmin) {
-    // 超级管理员可查看所有资源
-    return [
-      ...ROLE_RESOURCE_MAP.cluster_admin,
-      ...PLATFORM_ADMIN_RESOURCES,
-      'pipelines'
-    ]
+    return [...ROLE_RESOURCE_MAP.cluster_admin, ...PLATFORM_ADMIN_RESOURCES, 'pipelines']
   }
-  
   const role = userHighestRole.value
   if (!role) return []
-  
-  // platform_admin 等同于 cluster_admin + 平台资源
   if (role === 'platform_admin') {
-    return [
-      ...ROLE_RESOURCE_MAP.cluster_admin,
-      ...PLATFORM_ADMIN_RESOURCES,
-      'pipelines'
-    ]
+    return [...ROLE_RESOURCE_MAP.cluster_admin, ...PLATFORM_ADMIN_RESOURCES, 'pipelines']
   }
-  
   return ROLE_RESOURCE_MAP[role] || []
 })
 
-/**
- * 检查是否有权限查看资源（基于实际授权）
- */
 const canView = (resource) => {
-  // 超级管理员全部可见
   if (permissionStore.state.isSuperAdmin) return true
-  
-  // 集群相关资源需要检查是否有集群权限
   const clusterResources = [
     'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs',
     'services', 'ingress', 'pv', 'pvc', 'storageclasses',
     'configmaps', 'secrets', 'namespaces', 'nodes', 'clusters'
   ]
-  
   if (clusterResources.includes(resource)) {
-    // 没有任何集群权限则不显示
     if (!hasClusterAccess.value) return false
   }
-  
-  // 检查资源是否在用户可访问列表中
   return userAccessibleResources.value.includes(resource)
 }
 
-/**
- * 检查是否有任何工作负载权限
- */
-const hasAnyWorkloadPermission = computed(() => {
-  const workloads = ['deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs']
-  return workloads.some(r => canView(r))
-})
-
-/**
- * 检查是否有任何网络或存储权限
- */
-const hasAnyNetworkOrStoragePermission = computed(() => {
-  const resources = ['services', 'ingress', 'pv', 'pvc', 'storageclasses']
-  return resources.some(r => canView(r))
-})
-
-/**
- * 检查是否有任何配置资源权限
- */
-const hasAnyConfigPermission = computed(() => {
-  const configs = ['configmaps', 'secrets']
-  return configs.some(r => canView(r))
-})
-
-/**
- * 导航处理
- */
+// =============================================================================
+// 导航
+// =============================================================================
 const handleNavigate = (path) => {
   router.push(path)
 }
 
-// 用户名
-const username = computed(() => {
-  const userStr = localStorage.getItem('user') || sessionStorage.getItem('user')
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr)
-      return user.username || 'Admin'
-    } catch (e) {
-      return 'Admin'
-    }
+const handleClusterNavigate = (subPath) => {
+  const cid = clusterStore.current?.id
+  if (!cid) {
+    router.push('/clusters')
+    return
   }
-  return 'Admin'
-})
-
-// 当前时间
-const currentTime = ref('')
-const updateTime = () => {
-  const now = new Date()
-  currentTime.value = now.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
+  router.push(`/c/${cid}/${subPath}`)
 }
 
-// 加载状态
+// =============================================================================
+// 状态数据
+// =============================================================================
 const loading = ref(true)
 
-// 统计数据
-const clusterStats = ref({
-  total: 0,
-  active: 0,
-  inactive: 0
+const clusterStats = ref({ total: 0, active: 0, inactive: 0 })
+const clustersList = ref([])
+const nodeStats = ref({ total: 0, ready: 0, notReady: 0 })
+const podStats = ref({ total: 0, running: 0, pending: 0, failed: 0 })
+
+// 监控总览（Prometheus 数据源）
+const overview = reactive({
+  cpu_usage: 0,
+  memory_usage: 0,
+  node_count: 0,
+  pod_count: 0,
+  alert_count: 0,
+  network_in: 0,
+  network_out: 0,
 })
 
-const nodeStats = ref({
-  total: 0,
-  ready: 0,
-  notReady: 0
+const alertStats = ref({ critical: 0, warning: 0, info: 0, total_firing: 0 })
+// 告警总数优先取后端 total_firing，降级为各级别求和
+const alertTotal = computed(() =>
+  alertStats.value.total_firing ||
+  (alertStats.value.critical || 0) + (alertStats.value.warning || 0) + (alertStats.value.info || 0)
+)
+
+// CI/CD
+const pipelines = ref([])
+const pipelineTotal = ref(0)
+const buildStats = ref({})
+const releases = ref([])
+
+// 告警事件（集群事件面板）
+const events = ref([])
+
+// 平台健康
+const health = ref({})
+const healthComponents = computed(() => health.value?.components || [])
+const platformUptime = computed(() => health.value?.platform?.uptime || '')
+
+// =============================================================================
+// 顶部环形卡片
+// =============================================================================
+const RING_C = 188.5 // 2 * PI * 30
+const ringDash = (pct) => {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0))
+  return `${(p / 100) * RING_C} ${RING_C}`
+}
+
+// =============================================================================
+// 集群健康状态表
+// =============================================================================
+const clusterStatusText = (status) => {
+  const map = { 0: '健康', 1: '异常', 2: '待检测' }
+  return map[Number(status)] || '未知'
+}
+const clusterStatusClass = (status) => {
+  const map = { 0: 'badge-green', 1: 'badge-red', 2: 'badge-amber' }
+  return map[Number(status)] || 'badge-gray'
+}
+
+// =============================================================================
+// 资源使用趋势（ECharts）
+// =============================================================================
+const trendTabs = [
+  { key: 'cpu', label: 'CPU 使用率' },
+  { key: 'memory', label: '内存使用率' },
+  { key: 'network', label: '网络流量' },
+]
+const trendTab = ref('cpu')
+const trendDuration = ref('6h')
+const trendChartRef = ref(null)
+let trendChart = null
+
+const formatBytes = (v) => {
+  const n = Number(v) || 0
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB'
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB'
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB'
+  return n.toFixed(0) + ' B'
+}
+
+const TREND_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444']
+
+const buildTrendOption = (seriesList, isPercent) => ({
+  color: TREND_COLORS,
+  tooltip: {
+    trigger: 'axis',
+    valueFormatter: (v) => isPercent ? Number(v).toFixed(1) + '%' : formatBytes(v) + '/s'
+  },
+  grid: { left: 48, right: 16, top: 16, bottom: 44 },
+  legend: { bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8, textStyle: { fontSize: 11, color: '#64748b' } },
+  xAxis: {
+    type: 'time',
+    axisLabel: { fontSize: 11, color: '#94a3b8' },
+    axisLine: { lineStyle: { color: '#e2e8f0' } }
+  },
+  yAxis: {
+    type: 'value',
+    max: isPercent ? 100 : null,
+    axisLabel: {
+      fontSize: 11, color: '#94a3b8',
+      formatter: isPercent ? '{value}%' : (v) => formatBytes(v)
+    },
+    splitLine: { lineStyle: { color: '#f1f5f9' } }
+  },
+  series: seriesList.map((s, i) => ({
+    name: s.label,
+    type: 'line',
+    smooth: true,
+    showSymbol: false,
+    data: s.data,
+    lineStyle: { width: 2 },
+    areaStyle: i === 0 ? { opacity: 0.1 } : undefined
+  }))
 })
 
-const podStats = ref({
-  total: 0,
-  running: 0,
-  pending: 0,
-  failed: 0
+const switchTrendTab = (key) => {
+  if (trendTab.value === key) return
+  trendTab.value = key
+  loadTrend()
+}
+
+const loadTrend = async () => {
+  try {
+    const res = await withTimeout(
+      getResourceTrend(trendTab.value, trendDuration.value),
+      API_TIMEOUT, '资源趋势'
+    )
+    if (res.code === 0 && res.data) {
+      const seriesList = res.data.map(td => ({
+        label: td.label,
+        // 后端 timestamp 为秒级 Unix 时间戳，ECharts time 轴需毫秒
+        data: (td.points || []).map(p => [p.timestamp * 1000, p.value])
+      }))
+      await nextTick()
+      if (!trendChart && trendChartRef.value) {
+        trendChart = echarts.init(trendChartRef.value)
+      }
+      if (trendChart) {
+        trendChart.setOption(buildTrendOption(seriesList, trendTab.value !== 'network'), true)
+      }
+    }
+  } catch (e) {
+    console.warn('加载资源趋势失败:', e.message)
+  }
+}
+
+const onResize = () => {
+  trendChart?.resize()
+}
+
+// =============================================================================
+// 关键指标监控（sparkline 迷你图）
+// =============================================================================
+const sparkData = ref({ cpu: [], memory: [], netIn: [], netOut: [] })
+
+const sparkPath = (points, w = 120, h = 36) => {
+  if (!points || points.length < 2) return ''
+  const vals = points.map(p => Number(p.value) || 0)
+  const min = Math.min(...vals)
+  const max = Math.max(...vals)
+  const span = max - min || 1
+  return points.map((p, i) => {
+    const x = (i / (points.length - 1)) * w
+    const y = h - 4 - (((Number(p.value) || 0) - min) / span) * (h - 8)
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+const kpiCards = computed(() => [
+  {
+    label: 'CPU 使用率',
+    value: overview.cpu_usage.toFixed(1) + '%',
+    color: '#3b82f6',
+    spark: sparkPath(sparkData.value.cpu)
+  },
+  {
+    label: '内存使用率',
+    value: overview.memory_usage.toFixed(1) + '%',
+    color: '#10b981',
+    spark: sparkPath(sparkData.value.memory)
+  },
+  {
+    label: '入站流量',
+    value: formatBytes(overview.network_in) + '/s',
+    color: '#8b5cf6',
+    spark: sparkPath(sparkData.value.netIn)
+  },
+  {
+    label: '出站流量',
+    value: formatBytes(overview.network_out) + '/s',
+    color: '#f59e0b',
+    spark: sparkPath(sparkData.value.netOut)
+  },
+])
+
+const loadSparklines = async () => {
+  try {
+    const [cpuRes, memRes, netRes] = await Promise.allSettled([
+      withTimeout(getResourceTrend('cpu', '1h'), API_TIMEOUT, 'CPU迷你图'),
+      withTimeout(getResourceTrend('memory', '1h'), API_TIMEOUT, '内存迷你图'),
+      withTimeout(getResourceTrend('network', '1h'), API_TIMEOUT, '网络迷你图'),
+    ])
+    if (cpuRes.status === 'fulfilled' && cpuRes.value.code === 0) {
+      sparkData.value.cpu = cpuRes.value.data?.[0]?.points || []
+    }
+    if (memRes.status === 'fulfilled' && memRes.value.code === 0) {
+      sparkData.value.memory = memRes.value.data?.[0]?.points || []
+    }
+    if (netRes.status === 'fulfilled' && netRes.value.code === 0) {
+      const netSeries = netRes.value.data || []
+      // 后端 network 系列由 Go map 生成，顺序不固定，按 label 匹配入/出站
+      const inSeries = netSeries.find(s => (s.label || '').includes('入'))
+      const outSeries = netSeries.find(s => (s.label || '').includes('出'))
+      sparkData.value.netIn = inSeries?.points || netSeries[0]?.points || []
+      sparkData.value.netOut = outSeries?.points || netSeries[1]?.points || []
+    }
+  } catch (e) {
+    console.warn('加载迷你图数据失败:', e.message)
+  }
+}
+
+// =============================================================================
+// Pod 状态分布（SVG 环形图）
+// =============================================================================
+const POD_STATUS_META = {
+  Running: { label: '运行中', color: '#22c55e' },
+  Succeeded: { label: '已完成', color: '#3b82f6' },
+  Pending: { label: '待调度', color: '#f59e0b' },
+  Failed: { label: '异常', color: '#ef4444' },
+  Unknown: { label: '未知', color: '#94a3b8' },
+}
+
+const podDistRaw = ref([])
+
+const podDistItems = computed(() => {
+  return podDistRaw.value
+    .map(it => {
+      // 后端 PodStatusCount 字段为 { phase, count }
+      const name = it.phase || it.status || it.name || 'Unknown'
+      const meta = POD_STATUS_META[name] || { label: name, color: '#a78bfa' }
+      return { name, label: meta.label, color: meta.color, value: Number(it.count ?? it.value ?? 0) }
+    })
+    .filter(it => it.value > 0)
+    .sort((a, b) => b.value - a.value)
 })
 
-const namespaceStats = ref({
-  total: 0,
-  system: 0,
-  user: 0
+const podDistTotal = computed(() => podDistItems.value.reduce((s, it) => s + it.value, 0))
+
+const DONUT_C = 326.73 // 2 * PI * 52
+const donutSegments = computed(() => {
+  const total = podDistTotal.value
+  if (!total) return []
+  let acc = 0
+  return podDistItems.value.map(it => {
+    const frac = it.value / total
+    const seg = {
+      color: it.color,
+      dash: `${frac * DONUT_C} ${DONUT_C}`,
+      offset: -acc * DONUT_C
+    }
+    acc += frac
+    return seg
+  })
 })
 
-const workloadStats = ref({
-  deployments: 0,
-  statefulsets: 0,
-  daemonsets: 0,
-  jobs: 0,
-  cronjobs: 0
+// =============================================================================
+// CI/CD 面板
+// =============================================================================
+const cicdRunning = computed(() => {
+  if (buildStats.value.running_builds != null) return buildStats.value.running_builds
+  return pipelines.value.filter(p => p.status === 'running').length
 })
 
-const networkStats = ref({
-  services: 0,
-  ingresses: 0
+const cicdSuccessRate = computed(() => {
+  const r = buildStats.value.success_rate
+  if (r == null || r === '') return '—'
+  return typeof r === 'number' ? r.toFixed(1) + '%' : String(r)
 })
 
-const storageStats = ref({
-  pvs: 0,
-  pvcs: 0,
-  storageClasses: 0
-})
+// 流水线状态（后端 status: idle/running/disabled；last_run_status: pending/running/success/failed/aborted）
+const pipeStatusText = (p) => {
+  if (p.status === 'running') return '运行中'
+  if (p.status === 'disabled') return '已禁用'
+  const last = p.last_run_status || p.lastRunStatus || p.last_status
+  const map = { success: '成功', failed: '失败', pending: '等待', running: '运行中', aborted: '已中止' }
+  return map[last] || '空闲'
+}
 
-const configStats = ref({
-  configmaps: 0,
-  secrets: 0
-})
+const pipeStatusClass = (p) => {
+  if (p.status === 'running') return 'badge-blue'
+  if (p.status === 'disabled') return 'badge-gray'
+  const last = p.last_run_status || p.lastRunStatus || p.last_status
+  const map = { success: 'badge-green', failed: 'badge-red', pending: 'badge-amber', running: 'badge-blue', aborted: 'badge-gray' }
+  return map[last] || 'badge-gray'
+}
 
-// 确保有默认集群
+// 发布状态归一化（后端枚举：Pending/AwaitingApproval/Queued/Running/Succeeded/Failed/Canceled/Rollback）
+const releaseStatusKey = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'success' || s === 'succeeded') return 'green'
+  if (s === 'failed' || s === 'error') return 'red'
+  if (s === 'deploying' || s === 'running' || s === 'pending' || s === 'queued' || s === 'awaitingapproval') return 'blue'
+  if (s === 'canceled' || s === 'cancelled' || s === 'rollback') return 'gray'
+  return 'gray'
+}
+
+const releaseStatusText = (status) => {
+  const s = String(status || '').toLowerCase()
+  const map = {
+    success: '成功', succeeded: '成功', failed: '失败', error: '失败',
+    deploying: '发布中', running: '发布中', pending: '等待中', queued: '排队中',
+    awaitingapproval: '待审批', rollback: '已回滚',
+    canceled: '已取消', cancelled: '已取消'
+  }
+  return map[s] || (status || '—')
+}
+
+// =============================================================================
+// 时间格式化
+// =============================================================================
+// 兼容后端秒级 Unix 时间戳（pipeline/release/alert 均为秒级）与 ISO 字符串
+const formatTime = (t) => {
+  if (!t) return '—'
+  let v = t
+  const n = Number(t)
+  if (!isNaN(n) && n > 0 && n < 1e12) v = n * 1000 // 秒级数字 → 毫秒
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return '—'
+  const pad = (n2) => String(n2).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// =============================================================================
+// 数据加载
+// =============================================================================
 const ensureDefaultCluster = async () => {
   try {
-    // 如果 store 中已有当前集群，直接使用
-    if (clusterStore.current?.id) {
-      return true
-    }
-    
-    // 获取集群列表
+    if (clusterStore.current?.id) return true
     const res = await getClusterList({ page: 1, limit: 100 })
     if (res.code === 0 && res.data) {
       const allClusters = res.data.list || []
-      
-      // 权限过滤：只显示用户有权限访问的集群
-      const clusters = allClusters.filter(c => 
+      const clusters = allClusters.filter(c =>
         permissionStore.state.isSuperAdmin ||
         permissionStore.state.accessibleClusterIds.includes(c.id)
       )
-      
-      if (clusters.length === 0) {
-        return false
-      }
-      
-      // 优先使用默认集群，否则使用第一个
+      if (clusters.length === 0) return false
       const defaultCluster = clusters.find(c => c.is_default) || clusters[0]
       clusterStore.setCurrent(defaultCluster)
       return true
@@ -656,102 +798,34 @@ const ensureDefaultCluster = async () => {
   }
 }
 
-// 加载数据（带超时控制）
-const loadData = async () => {
-  loading.value = true
-  clusterConnectionStatus.value = 'checking'
-  
-  try {
-    // 先确保有默认集群（快速超时）
-    const hasCluster = await withTimeout(
-      ensureDefaultCluster(), 
-      5000, 
-      '获取集群列表'
-    ).catch(() => false)
-    
-    if (!hasCluster) {
-      clusterConnectionStatus.value = 'timeout'
-      useMockData()
-      Message.warning({ content: '无可用集群或连接超时，暂无数据', duration: 3000 })
-      return
-    }
-    
-    clusterConnectionStatus.value = 'connected'
-    
-    // 并发请求所有数据（每个请求独立超时，互不影响）
-    const results = await Promise.allSettled([
-      withTimeout(loadClusterStats(), API_TIMEOUT, '集群统计'),
-      withTimeout(loadNodeStats(), API_TIMEOUT, '节点统计'),
-      withTimeout(loadPodStats(), API_TIMEOUT, 'Pod统计'),
-      withTimeout(loadNamespaceStats(), API_TIMEOUT, '命名空间统计'),
-      withTimeout(loadWorkloadStats(), API_TIMEOUT, '工作负载统计'),
-      withTimeout(loadNetworkStats(), API_TIMEOUT, '网络统计'),
-      withTimeout(loadStorageStats(), API_TIMEOUT, '存储统计'),
-      withTimeout(loadConfigStats(), API_TIMEOUT, '配置统计')
-    ])
-    
-    // 统计成功/失败数量
-    const failed = results.filter(r => r.status === 'rejected')
-    if (failed.length > 0) {
-      console.warn(`Dashboard: ${failed.length}/${results.length} 个请求超时或失败`)
-      // 部分超时时只显示警告，不影响已成功的数据
-      if (failed.length >= results.length / 2) {
-        clusterConnectionStatus.value = 'timeout'
-      }
-    }
-  } catch (error) {
-    console.error('加载数据失败:', error)
-    clusterConnectionStatus.value = 'error'
-    useMockData()
-  } finally {
-    loading.value = false
-  }
-}
-
-// 无数据时显示真实零值（不使用虚假mock数据）
-const useMockData = () => {
-  clusterStats.value = { total: 0, active: 0, inactive: 0 }
-  nodeStats.value = { total: 0, ready: 0, notReady: 0 }
-  podStats.value = { total: 0, running: 0, pending: 0, failed: 0 }
-  namespaceStats.value = { total: 0, system: 0, user: 0 }
-  workloadStats.value = { deployments: 0, statefulsets: 0, daemonsets: 0, jobs: 0, cronjobs: 0 }
-  networkStats.value = { services: 0, ingresses: 0 }
-  storageStats.value = { pvs: 0, pvcs: 0, storageClasses: 0 }
-  configStats.value = { configmaps: 0, secrets: 0 }
-}
-
-// 加载集群统计
 const loadClusterStats = async () => {
   try {
     const res = await getClusterList({ page: 1, limit: 1000 })
     if (res.code === 0 && res.data) {
       const allClusters = res.data.list || []
-      // 权限过滤：只统计用户有权限访问的集群
-      const clusters = allClusters.filter(c => 
+      const clusters = allClusters.filter(c =>
         permissionStore.state.isSuperAdmin ||
         permissionStore.state.accessibleClusterIds.includes(c.id)
       )
       clusterStats.value.total = clusters.length
-      // status: 0=正常, 1=异常, 2=待检测
       clusterStats.value.active = clusters.filter(c => Number(c.status) === 0).length
       clusterStats.value.inactive = clusters.filter(c => Number(c.status) === 1 || Number(c.status) === 2).length
+      clustersList.value = clusters.slice(0, 5)
     }
   } catch (error) {
     console.error('加载集群数据失败:', error)
     clusterStats.value = { total: 0, active: 0, inactive: 0 }
+    clustersList.value = []
   }
 }
 
-// 加载节点统计
 const loadNodeStats = async () => {
   try {
     const res = await nodesApi.list({ page: 1, limit: 1000 })
     if (res.code === 0 && res.data) {
       const nodes = res.data.list || res.data || []
       nodeStats.value.total = nodes.length
-      nodeStats.value.ready = nodes.filter(n => 
-        n.status === 'Ready' || n.status === 'ready'
-      ).length
+      nodeStats.value.ready = nodes.filter(n => n.status === 'Ready' || n.status === 'ready').length
       nodeStats.value.notReady = nodeStats.value.total - nodeStats.value.ready
     }
   } catch (error) {
@@ -760,7 +834,6 @@ const loadNodeStats = async () => {
   }
 }
 
-// 加载 Pod 统计
 const loadPodStats = async () => {
   try {
     const res = await podsApi.list({ page: 1, limit: 1000 })
@@ -769,7 +842,7 @@ const loadPodStats = async () => {
       podStats.value.total = pods.length
       podStats.value.running = pods.filter(p => p.status === 'Running').length
       podStats.value.pending = pods.filter(p => p.status === 'Pending').length
-      podStats.value.failed = pods.filter(p => 
+      podStats.value.failed = pods.filter(p =>
         p.status === 'Failed' || p.status === 'Error' || p.status === 'CrashLoopBackOff'
       ).length
     }
@@ -779,643 +852,850 @@ const loadPodStats = async () => {
   }
 }
 
-// 加载命名空间统计
-const loadNamespaceStats = async () => {
+const loadOverview = async () => {
   try {
-    const res = await namespaceApi.list({ page: 1, limit: 1000 })
+    const res = await getClusterOverview()
     if (res.code === 0 && res.data) {
-      let namespaces = res.data.list || res.data || []
-      
-      // 权限过滤：只统计用户有权限访问的命名空间
-      if (!permissionStore.state.isSuperAdmin) {
-        const clusterId = clusterStore.current?.id
-        if (clusterId) {
-          const accessibleNs = permissionStore.getAccessibleNamespaces(clusterId)
-          if (accessibleNs.length > 0 && !accessibleNs.includes('*') && !accessibleNs.includes('__none__')) {
-            namespaces = namespaces.filter(ns => accessibleNs.includes(ns.name || ns.metadata?.name))
-          } else if (accessibleNs.includes('__none__')) {
-            namespaces = []
-          }
-        }
+      Object.assign(overview, res.data)
+    }
+  } catch (e) {
+    console.warn('加载监控总览失败:', e.message)
+  }
+}
+
+const loadAlertStats = async () => {
+  try {
+    const res = await getAlertStats()
+    if (res.code === 0 && res.data) {
+      alertStats.value = {
+        critical: res.data.critical || 0,
+        warning: res.data.warning || 0,
+        info: res.data.info || 0,
+        total_firing: res.data.total_firing || 0,
       }
-      
-      namespaceStats.value.total = namespaces.length
-      const systemNs = ['kube-system', 'kube-public', 'kube-node-lease', 'default']
-      namespaceStats.value.system = namespaces.filter(ns => 
-        systemNs.includes(ns.name)
-      ).length
-      namespaceStats.value.user = namespaceStats.value.total - namespaceStats.value.system
     }
-  } catch (error) {
-    console.error('加载命名空间数据失败:', error)
-    namespaceStats.value = { total: 0, system: 0, user: 0 }
+  } catch (e) {
+    console.warn('加载告警统计失败:', e.message)
   }
 }
 
-// 加载工作负载统计
-const loadWorkloadStats = async () => {
+const loadPodDistribution = async () => {
   try {
-    const [deployRes, stsRes, dsRes, jobRes, cronRes] = await Promise.allSettled([
-      deploymentsApi.list({ page: 1, limit: 1000 }),
-      statefulsetsApi.list({ page: 1, limit: 1000 }),
-      daemonsetsApi.list({ page: 1, limit: 1000 }),
-      jobsApi.list({ page: 1, limit: 1000 }),
-      cronjobsApi.list({ page: 1, limit: 1000 })
-    ])
-    
-    if (deployRes.status === 'fulfilled' && deployRes.value.code === 0) {
-      workloadStats.value.deployments = (deployRes.value.data?.list || deployRes.value.data || []).length
-    } else {
-      workloadStats.value.deployments = 0
+    const res = await getPodStatusDistribution()
+    if (res.code === 0) {
+      podDistRaw.value = res.data || []
     }
-    
-    if (stsRes.status === 'fulfilled' && stsRes.value.code === 0) {
-      workloadStats.value.statefulsets = (stsRes.value.data?.list || stsRes.value.data || []).length
-    } else {
-      workloadStats.value.statefulsets = 0
-    }
-    
-    if (dsRes.status === 'fulfilled' && dsRes.value.code === 0) {
-      workloadStats.value.daemonsets = (dsRes.value.data?.list || dsRes.value.data || []).length
-    } else {
-      workloadStats.value.daemonsets = 0
-    }
-    
-    if (jobRes.status === 'fulfilled' && jobRes.value.code === 0) {
-      workloadStats.value.jobs = (jobRes.value.data?.list || jobRes.value.data || []).length
-    } else {
-      workloadStats.value.jobs = 0
-    }
-    
-    if (cronRes.status === 'fulfilled' && cronRes.value.code === 0) {
-      workloadStats.value.cronjobs = (cronRes.value.data?.list || cronRes.value.data || []).length
-    } else {
-      workloadStats.value.cronjobs = 0
-    }
-  } catch (error) {
-    console.error('加载工作负载数据失败:', error)
-    workloadStats.value = { deployments: 0, statefulsets: 0, daemonsets: 0, jobs: 0, cronjobs: 0 }
+  } catch (e) {
+    console.warn('加载 Pod 状态分布失败:', e.message)
   }
 }
 
-// 加载网络统计
-const loadNetworkStats = async () => {
+const loadPipelines = async () => {
   try {
-    const [svcRes, ingRes] = await Promise.allSettled([
-      serviceApi.list({ page: 1, limit: 1000 }),
-      ingressApi.list({ page: 1, limit: 1000 })
+    const [listRes, statsRes] = await Promise.allSettled([
+      getPipelines({ page: 1, page_size: 5 }),
+      getBuildStats(7),
     ])
-    
-    if (svcRes.status === 'fulfilled' && svcRes.value.code === 0) {
-      networkStats.value.services = (svcRes.value.data?.list || svcRes.value.data || []).length
-    } else {
-      networkStats.value.services = 0
+    if (listRes.status === 'fulfilled' && listRes.value.code === 0 && listRes.value.data) {
+      pipelines.value = listRes.value.data.list || []
+      pipelineTotal.value = listRes.value.data.total ?? pipelines.value.length
     }
-    
-    if (ingRes.status === 'fulfilled' && ingRes.value.code === 0) {
-      networkStats.value.ingresses = (ingRes.value.data?.list || ingRes.value.data || []).length
-    } else {
-      networkStats.value.ingresses = 0
+    if (statsRes.status === 'fulfilled' && statsRes.value.code === 0) {
+      buildStats.value = statsRes.value.data?.stats || statsRes.value.data || {}
     }
-  } catch (error) {
-    console.error('加载网络数据失败:', error)
-    networkStats.value = { services: 0, ingresses: 0 }
+  } catch (e) {
+    console.warn('加载流水线数据失败:', e.message)
   }
 }
 
-// 加载存储统计
-const loadStorageStats = async () => {
+const loadReleases = async () => {
   try {
-    const [pvRes, pvcRes, scRes] = await Promise.allSettled([
-      pvApi.list({ page: 1, limit: 1000 }),
-      pvcApi.list({ page: 1, limit: 1000 }),
-      storageclassApi.list({ page: 1, limit: 1000 })
-    ])
-    
-    if (pvRes.status === 'fulfilled' && pvRes.value.code === 0) {
-      storageStats.value.pvs = (pvRes.value.data?.list || pvRes.value.data || []).length
-    } else {
-      storageStats.value.pvs = 0
+    const res = await getReleases({ page: 1, page_size: 5 })
+    if (res.code === 0 && res.data) {
+      releases.value = res.data.list || []
     }
-    
-    if (pvcRes.status === 'fulfilled' && pvcRes.value.code === 0) {
-      storageStats.value.pvcs = (pvcRes.value.data?.list || pvcRes.value.data || []).length
-    } else {
-      storageStats.value.pvcs = 0
-    }
-    
-    if (scRes.status === 'fulfilled' && scRes.value.code === 0) {
-      storageStats.value.storageClasses = (scRes.value.data?.list || scRes.value.data || []).length
-    } else {
-      storageStats.value.storageClasses = 0
-    }
-  } catch (error) {
-    console.error('加载存储数据失败:', error)
-    storageStats.value = { pvs: 0, pvcs: 0, storageClasses: 0 }
+  } catch (e) {
+    console.warn('加载发布记录失败:', e.message)
   }
 }
 
-// 加载配置统计
-const loadConfigStats = async () => {
+const loadEvents = async () => {
   try {
-    const [cmRes, secretRes] = await Promise.allSettled([
-      configmapApi.list({ page: 1, limit: 1000 }),
-      secretApi.list({ page: 1, limit: 1000 })
-    ])
-    
-    if (cmRes.status === 'fulfilled' && cmRes.value.code === 0) {
-      configStats.value.configmaps = (cmRes.value.data?.list || cmRes.value.data || []).length
-    } else {
-      configStats.value.configmaps = 0
+    const res = await listAlertEvents({ page: 1, size: 5 })
+    if (res.code === 0 && res.data) {
+      events.value = res.data.items || res.data.list || []
     }
-    
-    if (secretRes.status === 'fulfilled' && secretRes.value.code === 0) {
-      configStats.value.secrets = (secretRes.value.data?.list || secretRes.value.data || []).length
-    } else {
-      configStats.value.secrets = 0
-    }
-  } catch (error) {
-    console.error('加载配置数据失败:', error)
-    configStats.value = { configmaps: 0, secrets: 0 }
+  } catch (e) {
+    console.warn('加载告警事件失败:', e.message)
   }
 }
 
-// 刷新数据
+const loadHealth = async () => {
+  try {
+    const res = await http.get('/api/v1/platform/health')
+    if (res.code === 0 && res.data) {
+      health.value = res.data
+    }
+  } catch (e) {
+    console.warn('加载平台健康状态失败:', e.message)
+  }
+}
+
+const loadData = async (silent = false) => {
+  loading.value = true
+  if (!silent) clusterConnectionStatus.value = 'checking'
+
+  try {
+    const hasCluster = await withTimeout(ensureDefaultCluster(), 5000, '获取集群列表').catch(() => false)
+
+    if (!hasCluster) {
+      clusterConnectionStatus.value = 'timeout'
+      if (!silent) Message.warning({ content: '无可用集群或连接超时，暂无数据', duration: 3000 })
+      // 平台级数据不依赖集群，仍然加载
+      await Promise.allSettled([
+        canView('pipelines') ? withTimeout(loadPipelines(), API_TIMEOUT, '流水线') : Promise.resolve(),
+        canView('pipelines') ? withTimeout(loadReleases(), API_TIMEOUT, '发布记录') : Promise.resolve(),
+        withTimeout(loadHealth(), HEALTH_TIMEOUT, '平台健康'),
+      ])
+      return
+    }
+
+    clusterConnectionStatus.value = 'connected'
+
+    // 并发请求所有面板数据（每个请求独立超时，互不影响）
+    const results = await Promise.allSettled([
+      withTimeout(loadClusterStats(), API_TIMEOUT, '集群统计'),
+      withTimeout(loadNodeStats(), API_TIMEOUT, '节点统计'),
+      withTimeout(loadPodStats(), API_TIMEOUT, 'Pod统计'),
+      withTimeout(loadOverview(), API_TIMEOUT, '监控总览'),
+      withTimeout(loadAlertStats(), API_TIMEOUT, '告警统计'),
+      withTimeout(loadPodDistribution(), API_TIMEOUT, 'Pod分布'),
+      withTimeout(loadEvents(), API_TIMEOUT, '告警事件'),
+      withTimeout(loadHealth(), HEALTH_TIMEOUT, '平台健康'),
+      withTimeout(loadSparklines(), API_TIMEOUT * 2, '迷你图'),
+      loadTrend(),
+      canView('pipelines') ? withTimeout(loadPipelines(), API_TIMEOUT, '流水线') : Promise.resolve(),
+      canView('pipelines') ? withTimeout(loadReleases(), API_TIMEOUT, '发布记录') : Promise.resolve(),
+    ])
+
+    const failed = results.filter(r => r.status === 'rejected')
+    if (failed.length > 0) {
+      console.warn(`Dashboard: ${failed.length}/${results.length} 个请求超时或失败`)
+      if (failed.length >= results.length / 2) {
+        clusterConnectionStatus.value = 'timeout'
+      }
+    }
+  } catch (error) {
+    console.error('加载数据失败:', error)
+    clusterConnectionStatus.value = 'error'
+  } finally {
+    loading.value = false
+  }
+}
+
 const refreshData = async () => {
-  Message.info({ content: '正在刷新数据...' })
   await loadData()
   Message.success({ content: '数据刷新成功' })
 }
 
-// 导航
-const navigateTo = (path) => {
-  router.push(path)
+// =============================================================================
+// 自动刷新
+// =============================================================================
+const autoRefresh = ref(30)
+let refreshTimer = null
+
+const setupAutoRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+  if (autoRefresh.value > 0) {
+    refreshTimer = setInterval(() => loadData(true), autoRefresh.value * 1000)
+  }
 }
 
-// 时间定时器
-let timeInterval = null
-
 onMounted(() => {
-  updateTime()
-  timeInterval = setInterval(updateTime, 1000)
   loadData()
+  setupAutoRefresh()
+  window.addEventListener('resize', onResize)
 })
 
 onUnmounted(() => {
-  if (timeInterval) {
-    clearInterval(timeInterval)
+  if (refreshTimer) clearInterval(refreshTimer)
+  window.removeEventListener('resize', onResize)
+  if (trendChart) {
+    trendChart.dispose()
+    trendChart = null
   }
 })
 </script>
 
 <style scoped>
-.dashboard-container {
-  padding: 24px;
+.home-page {
+  padding: 20px 24px;
   max-width: 1600px;
   margin: 0 auto;
   background: #f8fafc;
   min-height: calc(100vh - 60px);
 }
 
-/* 顶部欢迎区域 */
-.dashboard-header {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  border-radius: 12px;
-  padding: 32px;
-  margin-bottom: 24px;
-  color: white;
+/* ===== 顶部工具条 ===== */
+.page-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
-}
-
-.header-content h1 {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-}
-
-.header-content p {
-  font-size: 14px;
-  margin: 0;
-  opacity: 0.9;
-}
-
-.header-actions .btn {
-  padding: 10px 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  backdrop-filter: blur(10px);
-}
-
-.header-actions .btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
-}
-
-.header-actions .btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* 连接状态指示器（大厂设计风格） */
-.connection-status {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-right: 12px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
-}
-
-.connection-status .status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.connection-status .status-indicator.connected {
-  color: #86efac;
-}
-
-.connection-status .status-indicator.timeout {
-  color: #fcd34d;
-}
-
-.connection-status .status-indicator.error {
-  color: #fca5a5;
-}
-
-/* 加载动画 */
-.connection-status .spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 区域标题 */
-.section-title {
   margin-bottom: 16px;
 }
 
-.section-title h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a202c;
+.toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-title h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
   margin: 0;
 }
 
-/* 集群概览 */
-.cluster-overview {
-  margin-bottom: 32px;
+.conn-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
 }
 
-.stats-grid {
+.conn-badge.connected { background: #dcfce7; color: #16a34a; }
+.conn-badge.checking { background: #e0e7ff; color: #4f46e5; }
+.conn-badge.timeout { background: #fef3c7; color: #d97706; }
+.conn-badge.error { background: #fee2e2; color: #dc2626; }
+
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: -1px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auto-refresh-select,
+.duration-select {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.btn-refresh {
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-refresh:hover { background: #4338ca; }
+.btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ===== 顶部统计卡片 ===== */
+.stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
 .stat-card {
-  background: white;
+  background: #fff;
+  border: 1px solid #eef2f7;
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  transition: all 0.3s ease;
-  border-left: 4px solid;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
-.stat-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+.stat-card.clickable { cursor: pointer; }
+.stat-card.clickable:hover {
   transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
-.stat-card.cluster-card { border-left-color: #6366f1; }
-.stat-card.node-card { border-left-color: #10b981; }
-.stat-card.pod-card { border-left-color: #f59e0b; }
-.stat-card.namespace-card { border-left-color: #3b82f6; }
-
-.stat-icon {
-  font-size: 40px;
-  line-height: 1;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #718096;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1a202c;
+.stat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 8px;
 }
 
-.stat-detail {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.stat-label {
   font-size: 12px;
-}
-
-.stat-detail span {
-  padding: 2px 8px;
-  border-radius: 4px;
+  color: #64748b;
   font-weight: 500;
 }
 
-.status-active { background: #c6f6d5; color: #22543d; }
-.status-inactive { background: #fed7d7; color: #742a2a; }
-.status-ready { background: #c6f6d5; color: #22543d; }
-.status-notready { background: #fed7d7; color: #742a2a; }
-.status-running { background: #bee3f8; color: #2c5282; }
-.status-pending { background: #feebc8; color: #7c2d12; }
-.status-failed { background: #fed7d7; color: #742a2a; }
-.status-system { background: #e9d8fd; color: #44337a; }
-.status-user { background: #bee3f8; color: #2c5282; }
-
-/* 工作负载统计 */
-.workload-section {
-  margin-bottom: 32px;
-}
-
-.workload-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.workload-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.workload-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
-}
-
-.workload-icon {
-  width: 48px;
-  height: 48px;
+.stat-emoji {
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 17px;
 }
 
-.workload-icon.deployment { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
-.workload-icon.statefulset { background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); }
-.workload-icon.daemonset { background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); }
-.workload-icon.job { background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%); }
-.workload-icon.cronjob { background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%); }
+.bg-indigo { background: #eef2ff; }
+.bg-blue { background: #eff6ff; }
+.bg-green { background: #ecfdf5; }
+.bg-red { background: #fef2f2; }
 
-.workload-info {
-  flex: 1;
-}
-
-.workload-name {
-  font-size: 14px;
-  color: #718096;
-  margin-bottom: 4px;
-}
-
-.workload-count {
-  font-size: 24px;
+.stat-value {
+  font-size: 28px;
   font-weight: 700;
-  color: #1a202c;
+  color: #0f172a;
+  line-height: 1.2;
+  margin-bottom: 8px;
 }
 
-/* 资源区域 */
-.resource-section {
-  margin-bottom: 32px;
-}
-
-.section-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 24px;
-}
-
-.resource-group {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.resource-list {
+.stat-badges {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-.resource-item {
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-green { background: #dcfce7; color: #16a34a; }
+.badge-red { background: #fee2e2; color: #dc2626; }
+.badge-amber { background: #fef3c7; color: #d97706; }
+.badge-blue { background: #dbeafe; color: #2563eb; }
+.badge-gray { background: #f1f5f9; color: #64748b; }
+
+/* 环形卡片 */
+.ring-body {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.ring {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.ring-bg {
+  fill: none;
+  stroke: #f1f5f9;
+  stroke-width: 7;
+}
+
+.ring-val {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.ring-text {
+  font-size: 15px;
+  font-weight: 700;
+  fill: #0f172a;
+}
+
+.ring-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+/* ===== 面板通用 ===== */
+.grid-row {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.row-2 { grid-template-columns: 5fr 7fr; }
+.row-3 { grid-template-columns: 7fr 5fr; }
+.row-4 { grid-template-columns: 1fr 1fr 1fr; }
+
+.panel {
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
   gap: 12px;
-  padding: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tab-group {
+  display: flex;
+  background: #f1f5f9;
   border-radius: 8px;
+  padding: 2px;
+}
+
+.tab-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #64748b;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s;
 }
 
-.resource-item:hover {
-  background: #f7fafc;
+.tab-btn.active {
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 500;
 }
 
-.resource-icon {
-  width: 40px;
-  height: 40px;
+.panel-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  text-align: center;
+}
+
+.footer-link {
+  font-size: 12px;
+  color: #4f46e5;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.footer-link:hover { text-decoration: underline; }
+
+/* ===== 迷你表格 ===== */
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mini-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mini-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f8fafc;
+  color: #334155;
+}
+
+.mini-table tr.clickable { cursor: pointer; }
+.mini-table tr.clickable:hover td { background: #f8fafc; }
+
+.td-name { font-weight: 600; color: #0f172a; }
+.td-muted { color: #64748b; font-size: 12px; }
+.td-ellipsis {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.td-empty {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 20px 0;
+}
+
+/* ===== 趋势图 ===== */
+.trend-chart {
+  width: 100%;
+  height: 280px;
+  min-height: 280px;
+}
+
+/* ===== CI/CD 面板 ===== */
+.cicd-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fafbfc;
+}
+
+.chip-icon {
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 13px;
+  color: #fff;
+  flex-shrink: 0;
 }
 
-.resource-info {
-  flex: 1;
+.chip-blue { background: #3b82f6; }
+.chip-green { background: #22c55e; }
+.chip-amber { background: #f59e0b; }
+.chip-gray { background: #94a3b8; }
+
+.chip-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.resource-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #2d3748;
+.chip-label { font-size: 11px; color: #94a3b8; }
+.chip-value { font-size: 17px; font-weight: 700; color: #0f172a; }
+
+/* ===== 发布记录 ===== */
+.release-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.release-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  border-bottom: 1px solid #f8fafc;
+  border-radius: 8px;
+}
+
+.release-item.clickable { cursor: pointer; }
+.release-item.clickable:hover { background: #f8fafc; }
+
+.rel-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.rel-green { background: #22c55e; }
+.rel-red { background: #ef4444; }
+.rel-blue { background: #3b82f6; }
+.rel-gray { background: #94a3b8; }
+
+.rel-info { flex: 1; min-width: 0; }
+
+.rel-line1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 2px;
 }
 
-.resource-count {
-  font-size: 18px;
-  font-weight: 700;
-  color: #6366f1;
+.rel-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.resource-arrow {
-  font-size: 20px;
-  color: #cbd5e0;
+.rel-tag {
+  font-size: 11px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 5px;
+  flex-shrink: 0;
 }
 
-/* 配置资源 */
-.config-section {
-  margin-bottom: 32px;
+.rel-line2 {
+  font-size: 11px;
+  color: #94a3b8;
+  display: flex;
+  gap: 8px;
 }
 
-.config-grid {
+.rel-env {
+  background: #eef2ff;
+  color: #4f46e5;
+  padding: 0 6px;
+  border-radius: 5px;
+}
+
+.rel-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rel-time { font-size: 11px; color: #94a3b8; }
+
+/* ===== 关键指标监控 ===== */
+.kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.config-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.config-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
-}
-
-.config-icon {
-  width: 48px;
-  height: 48px;
+.kpi-card {
+  border: 1px solid #eef2f7;
   border-radius: 10px;
-  background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
+  padding: 12px;
+  background: #fafbfc;
 }
 
-.config-info {
+.kpi-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.kpi-spark {
+  width: 100%;
+  height: 36px;
+  display: block;
+}
+
+/* ===== Pod 状态分布 ===== */
+.donut-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   flex: 1;
 }
 
-.config-name {
-  font-size: 14px;
-  color: #718096;
-  margin-bottom: 4px;
+.donut {
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
 }
 
-.config-count {
+.donut-bg {
+  fill: none;
+  stroke: #f1f5f9;
+  stroke-width: 18;
+}
+
+.donut-num {
   font-size: 24px;
   font-weight: 700;
-  color: #1a202c;
+  fill: #0f172a;
 }
 
-/* 快速链接 */
-.quick-links-section {
-  margin-bottom: 32px;
+.donut-label {
+  font-size: 11px;
+  fill: #94a3b8;
 }
 
-.quick-links-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-}
-
-.quick-link {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: center;
-  text-decoration: none;
+.donut-legend {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
-.quick-link:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
-}
-
-.link-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+.legend-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 28px;
+  gap: 8px;
+  font-size: 12px;
 }
 
-.link-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: #2d3748;
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-/* 响应式设计 */
+.legend-name { color: #475569; }
+.legend-count { margin-left: auto; color: #94a3b8; }
+
+/* ===== 集群事件 ===== */
+.event-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.event-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.event-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.sev-critical { background: #ef4444; }
+.sev-warning { background: #f59e0b; }
+.sev-info { background: #3b82f6; }
+
+.event-info { flex: 1; min-width: 0; }
+
+.event-summary {
+  font-size: 12px;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.event-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-time {
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* ===== 系统状态栏 ===== */
+.system-bar {
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  padding: 14px 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.sys-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  flex-shrink: 0;
+}
+
+.sys-items {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.sys-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sys-name { font-size: 12px; color: #64748b; }
+
+.sys-uptime {
+  font-size: 12px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.sys-uptime b { color: #0f172a; }
+
+/* ===== 响应式 ===== */
+@media (max-width: 1400px) {
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 1100px) {
+  .row-2, .row-3, .row-4 { grid-template-columns: 1fr; }
+  .cicd-chips { grid-template-columns: repeat(2, 1fr); }
+}
+
 @media (max-width: 768px) {
-  .dashboard-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .section-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .workload-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  }
+  .home-page { padding: 12px; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .stats-row, .grid-row { gap: 10px; }
+  .donut-body { flex-direction: column; }
 }
 </style>

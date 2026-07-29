@@ -283,12 +283,22 @@ func (s *Services) CicdReleaseList(ctx context.Context, req *requests.CicdReleas
 		return nil, 0, err
 	}
 
-	// 为每条发布记录补充 deploy_mode
+	// 为每条发布记录补充 deploy_mode 与发布人用户名
 	result := make([]*models.CicdReleaseWithDeployMode, 0, len(releases))
+	userNameCache := make(map[int64]string) // 局部缓存，避免同一发布人重复查库
 	for _, rel := range releases {
 		enriched := &models.CicdReleaseWithDeployMode{
 			CicdRelease: *rel,
 			DeployMode:  "jenkins", // 默认值
+		}
+		// 通过 created_user_id 填充发布人用户名（首页/列表展示用）
+		if rel.CreatedUserID > 0 {
+			name, ok := userNameCache[rel.CreatedUserID]
+			if !ok {
+				name = s.getUsernameByID(rel.CreatedUserID)
+				userNameCache[rel.CreatedUserID] = name
+			}
+			enriched.Creator = name
 		}
 		// 通过 build_id → pipeline_run → pipeline 获取 deploy_mode
 		if rel.BuildID > 0 {

@@ -1517,6 +1517,9 @@ func (s *PlatformHealthService) CheckClusterConnectivity(ctx context.Context, cl
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	// 主动探测：清除失败负缓存，确保本次拿到集群的真实连通状态
+	s.factory.ResetFailure(uint32(clusterID))
+
 	start := time.Now()
 	clients, err := s.factory.GetClient(checkCtx, clusterID)
 	if err != nil {

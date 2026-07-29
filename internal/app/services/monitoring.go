@@ -691,17 +691,19 @@ func (s *MonitoringService) GetNodeHeatmap(ctx context.Context, metric string, d
 }
 
 // GetPodStatusDistribution Pod 状态分布
+// 说明：与 GetClusterOverview 保持一致的容错策略——Prometheus 未配置或查询失败时
+// 返回空列表而非错误，避免首页因监控数据源暂不可用而整体报错。
 func (s *MonitoringService) GetPodStatusDistribution(ctx context.Context) ([]PodStatusItem, error) {
+	items := make([]PodStatusItem, 0)
 	client, _, ok := s.resolveClient(ctx)
 	if !ok {
-		return nil, fmt.Errorf("Prometheus 未配置")
+		return items, nil
 	}
 	result, err := client.QueryInstant(ctx, `sum by(phase)(kube_pod_status_phase == 1)`)
-	if err != nil {
-		return nil, err
+	if err != nil || result == nil {
+		return items, nil
 	}
 	vectors, _ := prom.ParseVectorResult(result.Data.Result)
-	var items []PodStatusItem
 	for _, v := range vectors {
 		items = append(items, PodStatusItem{
 			Phase: v.Metric["phase"],

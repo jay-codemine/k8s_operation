@@ -33,6 +33,8 @@ func (s *Services) K8sClusterUpdate(ctx context.Context, param *requests.K8sClus
 	// kubeconfig 非空时：覆盖 kube_config，并把 status 置 Pending(2)，清空 last_error/last_check_at
 	kubeConfigPlain := strings.TrimSpace(param.KubeConfig)
 	hasKC := kubeConfigPlain != ""
+	// 注：更新会刷新 modified_at，而客户端缓存与连接失败负缓存均以 modified_at 作为版本，
+	// 因此配置变更后两者自然失效，下次访问将按新配置重连。
 	return s.dao.KubeClusterUpdate(ctx,
 		param.ID,
 		param.ClusterName,

@@ -1,7 +1,10 @@
 -- ============================================================
 -- K8sOperation 平台全量初始化 SQL
--- 用法: mysql -u root -p < docs/sql/k8s_platform_full_init.sql
+-- 用法: mysql -u root -p --default-character-set=utf8mb4 < docs/sql/k8s_platform_full_init.sql
+-- 注意: 必须以 utf8mb4 连接字符集导入（Windows 控制台默认 GBK，
+--       漏加 --default-character-set 会导致中文种子数据乱码入库）
 -- ============================================================
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS `k8s-platform` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `k8s-platform`;
 
@@ -1876,6 +1879,9 @@ SET character_set_client = @saved_cs_client;
 -- ============================================================
 -- 默认种子数据（首次启动必需）
 -- ============================================================
+
+-- 强制种子数据按 utf8mb4 写入（防止客户端字符集错误导致中文乱码入库）
+SET NAMES utf8mb4;
 
 -- 默认角色
 INSERT IGNORE INTO `sys_role` (`name`, `role_type`, `description`, `created_at`, `modified_at`, `is_del`) VALUES

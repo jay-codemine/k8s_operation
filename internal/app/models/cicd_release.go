@@ -53,4 +53,5 @@ func (CicdRelease) TableName() string { return "cicd_release" }
 type CicdReleaseWithDeployMode struct {
 	CicdRelease
 	DeployMode string `json:"deploy_mode"`
+	Creator    string `json:"creator"` // 发布人用户名（由 created_user_id 查询填充）
 }
