@@ -48,6 +48,7 @@ type PlatformHealthStatus struct {
 	DBConnections    string    `json:"db_connections"`     // 数据库连接数
 	BuildQueue       string    `json:"build_queue"`        // 构建队列积压
 	Logins24h        string    `json:"logins_24h"`         // 24h登录次数
+	OnlineUsers      string    `json:"online_users"`       // 当前在线用户数（15分钟内活跃）
 	Panics           int       `json:"panics"`             // Panic恢复次数
 }
 
@@ -292,6 +293,10 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 		}
 	}
 
+	// 当前在线用户数：优先用 Redis ZSET（auth 中间件记录的活跃时间，15 分钟内视为在线），
+	// Redis 不可用时降级为审计日志近 15 分钟登录成功的去重用户数
+	onlineUsers := s.getOnlineUsers()
+
 	return PlatformHealthStatus{
 		Status:           "healthy",
 		LastCheck:        time.Now(),
@@ -306,8 +311,43 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 		DBConnections:    dbConnections,
 		BuildQueue:       "—",
 		Logins24h:        logins24h,
+		OnlineUsers:      onlineUsers,
 		Panics:           0,
 	}
+}
+
+// getOnlineUsers 统计当前在线用户数（15 分钟内有请求视为在线）
+func (s *PlatformHealthService) getOnlineUsers() string {
+	const onlineWindow = 15 * time.Minute
+	since := time.Now().Add(-onlineWindow).Unix()
+
+	// 优先：Redis ZSET（auth 中间件每次认证成功后写入活跃时间）
+	if global.RedisCli != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		// 顺手清理过期成员，避免 ZSET 无限增长
+		global.RedisCli.ZRemRangeByScore(ctx, global.OnlineUsersKey, "-inf", fmt.Sprintf("%d", since-1))
+		count, err := global.RedisCli.ZCount(ctx, global.OnlineUsersKey,
+			fmt.Sprintf("%d", since), "+inf").Result()
+		if err == nil {
+			return fmt.Sprintf("%d", count)
+		}
+	}
+
+	// 降级：审计日志近 15 分钟登录成功的去重用户数
+	if global.DB != nil {
+		var userCount int64
+		err := global.DB.Table("audit_log").
+			Where("module = ? AND action = ? AND status = ? AND created_at >= ?",
+				"auth", "login", "success", since).
+			Distinct("user_id").
+			Count(&userCount).Error
+		if err == nil {
+			return fmt.Sprintf("%d", userCount)
+		}
+	}
+
+	return "—"
 }
 
 // getClusterSummary 获取集群摘要

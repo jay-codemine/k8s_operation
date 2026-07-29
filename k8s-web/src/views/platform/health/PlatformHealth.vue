@@ -152,6 +152,13 @@
           </div>
         </div>
         <div class="metric-card">
+          <div class="metric-card-icon online">●</div>
+          <div class="metric-card-body">
+            <span class="metric-card-value">{{ platformStats.onlineUsers || '—' }}</span>
+            <span class="metric-card-label">在线用户 (15min)</span>
+          </div>
+        </div>
+        <div class="metric-card">
           <div class="metric-card-icon panic">P</div>
           <div class="metric-card-body">
             <span class="metric-card-value" :class="{ 'text-danger': (platformStats.panics || 0) > 0 }">{{ platformStats.panics || 0 }}</span>
@@ -506,6 +513,7 @@ const updatePlatformStats = (healthData) => {
     dbConnections: p.db_connections || '—',
     buildQueue: p.build_queue || '0',
     logins24h: p.logins_24h || '—',
+    onlineUsers: p.online_users || '—',
     panics: p.panics || 0,
     goroutines: p.num_goroutine || '—'
   }
@@ -812,6 +820,7 @@ onUnmounted(() => stopAutoRefresh())
 .metric-card-icon.db { background: #10b981; }
 .metric-card-icon.queue { background: #f59e0b; }
 .metric-card-icon.login { background: #06b6d4; }
+.metric-card-icon.online { background: #22c55e; }
 .metric-card-icon.panic { background: #dc2626; }
 .metric-card-icon.uptime { background: #6366f1; }
 .metric-card-body { display: flex; flex-direction: column; }

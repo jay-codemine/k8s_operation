@@ -1,7 +1,12 @@
 package middlewares
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/errorcode"
@@ -9,6 +14,20 @@ import (
 	"k8soperation/pkg/metrics"
 	jwt2 "k8soperation/pkg/jwt"
 )
+
+// recordUserOnline 将用户最近活跃时间写入 Redis ZSET（best-effort，失败静默）
+func recordUserOnline(userID int64) {
+	if global.RedisCli == nil || userID <= 0 {
+		return
+	}
+	defer func() { _ = recover() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	global.RedisCli.ZAdd(ctx, global.OnlineUsersKey, redis.Z{
+		Score:  float64(time.Now().Unix()),
+		Member: fmt.Sprintf("%d", userID),
+	})
+}
 
 // Auth认证中间件
 // 建议放到 internal/app/routers 或 middlewares 里
@@ -76,6 +95,9 @@ func AuthJWT() gin.HandlerFunc {
 		ctx.Set("current_user_name", u.Username)
 		// 设置当前用户对象到上下文中
 		ctx.Set("current_user", u)
+
+		// 5) 记录用户活跃时间（异步，用于"在线用户"统计，不阻塞请求）
+		go recordUserOnline(int64(u.ID))
 
 		ctx.Next()
 

@@ -719,6 +719,77 @@
         </div>
       </div>
     </transition>
+
+    <!-- 批量发布确认弹窗（可自由增删应用） -->
+    <transition name="modal-fade">
+      <div v-if="batchReleaseVisible" class="br-mask" @click.self="closeBatchRelease">
+        <div class="br-dialog">
+          <div class="br-glow"></div>
+          <div class="br-head">
+            <div class="br-head-left">
+              <div class="br-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+              </div>
+              <div class="br-head-text">
+                <h3 class="br-title">确认批量发布</h3>
+                <p class="br-subtitle">以下应用将启动流水线构建，可移除或添加</p>
+              </div>
+            </div>
+            <button class="br-close" @click="closeBatchRelease">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="br-body">
+            <div class="br-section-label">
+              <span>发布应用</span>
+              <span class="br-count-pill">{{ batchReleaseApps.length }} 个</span>
+            </div>
+            <transition-group v-if="batchReleaseApps.length > 0" name="br-list" tag="div" class="br-app-list">
+              <div v-for="(app, i) in batchReleaseApps" :key="app.id" class="br-app-row">
+                <span class="br-app-index">{{ i + 1 }}</span>
+                <div class="br-app-info">
+                  <span class="br-app-name" :title="app.name">{{ app.name }}</span>
+                  <span class="br-app-meta">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                    {{ app.branch || 'main' }}
+                  </span>
+                </div>
+                <span v-if="app.deployEnv" class="br-app-env" :style="{ color: getEnvColor(app.deployEnv), background: getEnvColor(app.deployEnv) + '1a', borderColor: getEnvColor(app.deployEnv) + '40' }">{{ getEnvLabel(app.deployEnv) }}</span>
+                <button class="br-app-remove" title="移除该应用" @click="removeBatchApp(app.id)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            </transition-group>
+            <div v-else class="br-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+              <span>已移除全部应用，请从下方添加或取消</span>
+            </div>
+
+            <div v-if="batchReleaseCandidates.length > 0" class="br-add-section">
+              <div class="br-section-label muted">还可添加</div>
+              <div class="br-add-chips">
+                <button v-for="p in batchReleaseCandidates" :key="p.id" class="br-add-chip" @click="addBatchApp(p)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {{ p.name }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="br-foot">
+            <div class="br-foot-summary">共 <strong>{{ batchReleaseApps.length }}</strong> 个应用</div>
+            <div class="br-foot-actions">
+              <button class="br-btn cancel" @click="closeBatchRelease">取消</button>
+              <button class="br-btn confirm" :disabled="batchReleaseApps.length === 0 || batchReleaseSubmitting" @click="confirmBatchRelease">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                {{ batchReleaseSubmitting ? '发布中...' : `确认发布 (${batchReleaseApps.length})` }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -1030,41 +1101,66 @@ export default {
       activeMenu.value = null
     }
 
-    // 批量运行流水线
-    const batchRunPipelines = async () => {
+    // ===== 批量发布确认弹窗（可自由增删应用） =====
+    const batchReleaseVisible = ref(false)
+    const batchReleaseApps = ref([])
+    const batchReleaseSubmitting = ref(false)
+    // 还可添加的候选：当前列表中未在运行且未入选的流水线
+    const batchReleaseCandidates = computed(() =>
+      pipelines.value.filter(p => p.status !== 'running' && !batchReleaseApps.value.some(a => a.id === p.id))
+    )
+
+    // 批量运行流水线：打开确认弹窗
+    const batchRunPipelines = () => {
       if (selectedIds.value.length === 0) return
       const toRun = pipelines.value.filter(p => selectedIds.value.includes(p.id) && p.status !== 'running')
       if (toRun.length === 0) {
         Message.warning({ content: '所选流水线均在运行中' })
         return
       }
-      const ok1 = await showConfirm({
-        title: '确认批量发布',
-        content: `即将启动 ${toRun.length} 条流水线构建。`,
-        type: 'info',
-        details: [
-          { label: '发布数量', value: `${toRun.length} 条`, highlight: true },
-        ],
-        confirmText: '确认发布',
-        cancelText: '取消',
-      })
-      if (!ok1) return
+      batchReleaseApps.value = [...toRun]
+      batchReleaseVisible.value = true
+    }
+
+    const removeBatchApp = (id) => {
+      batchReleaseApps.value = batchReleaseApps.value.filter(a => a.id !== id)
+    }
+
+    const addBatchApp = (pipeline) => {
+      if (!batchReleaseApps.value.some(a => a.id === pipeline.id)) {
+        batchReleaseApps.value.push(pipeline)
+      }
+    }
+
+    const closeBatchRelease = () => {
+      if (batchReleaseSubmitting.value) return
+      batchReleaseVisible.value = false
+    }
+
+    // 确认发布：启动弹窗内当前保留的应用
+    const confirmBatchRelease = async () => {
+      const toRun = batchReleaseApps.value
+      if (toRun.length === 0) return
+      batchReleaseSubmitting.value = true
       Message.info({ content: `正在启动 ${toRun.length} 条流水线...` })
 
       try {
         const response = await batchRunPipelinesApi(toRun.map(p => p.id))
         if (response.code === 0) {
-          const successCount = response.data?.success_count || 0
+          const okCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
-          Message.success({ content: `成功发布 ${successCount} 条，失败 ${failCount} 条` })
+          Message.success({ content: `成功发布 ${okCount} 条，失败 ${failCount} 条` })
         } else {
           throw new Error(response.msg || '批量发布失败')
         }
       } catch (error) {
         console.error('批量发布失败:', error)
         Message.error({ content: error.message || '批量发布失败' })
+      } finally {
+        batchReleaseSubmitting.value = false
       }
 
+      batchReleaseVisible.value = false
       selectedIds.value = []
       loadPipelines()
     }
@@ -1273,6 +1369,14 @@ export default {
       batchRunPipelines,
       batchStopPipelines,
       batchDeletePipelines,
+      batchReleaseVisible,
+      batchReleaseApps,
+      batchReleaseSubmitting,
+      batchReleaseCandidates,
+      removeBatchApp,
+      addBatchApp,
+      closeBatchRelease,
+      confirmBatchRelease,
       toggleSelect,
       toggleSelectAll,
       clearSelection,
@@ -3034,4 +3138,269 @@ export default {
 
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+
+/* ========== 批量发布确认弹窗 ========== */
+.br-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 28, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.br-dialog {
+  width: 520px;
+  max-width: 92vw;
+  max-height: 84vh;
+  background: #1e2030;
+  border-radius: 20px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 顶部装饰光效 */
+.br-glow {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #4e8ff7, transparent);
+}
+
+.br-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+}
+.br-head-left { display: flex; align-items: center; gap: 14px; }
+.br-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(78, 143, 247, 0.25), rgba(59, 125, 232, 0.12));
+  border: 1px solid rgba(78, 143, 247, 0.3);
+  color: #6ba3f9;
+  box-shadow: 0 0 24px rgba(78, 143, 247, 0.18);
+}
+.br-icon svg { width: 22px; height: 22px; }
+.br-title { margin: 0; font-size: 16px; font-weight: 700; color: #e8ecf8; letter-spacing: 0.3px; }
+.br-subtitle { margin: 4px 0 0; font-size: 12px; color: #8b95b0; }
+.br-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  color: #8b95b0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.br-close:hover { background: rgba(255, 255, 255, 0.12); color: #e8ecf8; }
+.br-close svg { width: 15px; height: 15px; }
+
+.br-body { padding: 0 24px; overflow-y: auto; flex: 1; }
+.br-body::-webkit-scrollbar { width: 6px; }
+.br-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+.br-body::-webkit-scrollbar-track { background: transparent; }
+
+.br-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7394;
+  letter-spacing: 0.5px;
+  margin: 4px 0 10px;
+}
+.br-section-label.muted { margin-top: 16px; }
+.br-count-pill {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(78, 143, 247, 0.15);
+  color: #6ba3f9;
+  border: 1px solid rgba(78, 143, 247, 0.25);
+}
+
+.br-app-list { display: flex; flex-direction: column; gap: 8px; }
+.br-app-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.br-app-row:hover { background: rgba(78, 143, 247, 0.07); border-color: rgba(78, 143, 247, 0.3); }
+.br-app-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6ba3f9;
+  background: rgba(78, 143, 247, 0.12);
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+.br-app-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.br-app-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8ecf8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.br-app-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8b95b0;
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+.br-app-meta svg { width: 11px; height: 11px; flex-shrink: 0; }
+.br-app-env {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.br-app-remove {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #6b7394;
+  transition: all 0.2s;
+}
+.br-app-remove:hover { background: rgba(255, 77, 79, 0.15); color: #ff6b6d; }
+.br-app-remove svg { width: 13px; height: 13px; }
+
+.br-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 0;
+  color: #6b7394;
+  font-size: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+.br-empty svg { width: 28px; height: 28px; opacity: 0.6; }
+
+.br-add-section { margin-top: 4px; padding-bottom: 4px; }
+.br-add-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.br-add-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b95b0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  transition: all 0.2s;
+}
+.br-add-chip:hover {
+  color: #6ba3f9;
+  border-color: rgba(78, 143, 247, 0.5);
+  border-style: solid;
+  background: rgba(78, 143, 247, 0.1);
+}
+.br-add-chip svg { width: 12px; height: 12px; }
+
+.br-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px 20px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.br-foot-summary { font-size: 12px; color: #8b95b0; }
+.br-foot-summary strong { color: #6ba3f9; font-size: 14px; margin: 0 2px; }
+.br-foot-actions { display: flex; gap: 10px; }
+.br-btn {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.3px;
+}
+.br-btn svg { width: 13px; height: 13px; }
+.br-btn.cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: #8b95b0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.br-btn.cancel:hover { background: rgba(255, 255, 255, 0.1); color: #c0caf5; }
+.br-btn.confirm {
+  color: #fff;
+  background: linear-gradient(135deg, #4e8ff7, #3b7de8);
+  box-shadow: 0 4px 14px rgba(78, 143, 247, 0.25);
+}
+.br-btn.confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6ba3f9, #4e8ff7);
+  box-shadow: 0 6px 20px rgba(78, 143, 247, 0.35);
+  transform: translateY(-1px);
+}
+.br-btn.confirm:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.br-btn.confirm:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+/* 列表增删动画 */
+.br-list-enter-active,
+.br-list-leave-active { transition: all 0.25s ease; }
+.br-list-enter-from { opacity: 0; transform: translateX(-8px); }
+.br-list-leave-to { opacity: 0; transform: translateX(12px); }
+.br-list-move { transition: transform 0.25s ease; }
 </style>
