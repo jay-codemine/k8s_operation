@@ -4,72 +4,84 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Checks: 依赖注入（需要检查哪些下游就加到这里）
+// Checks 依赖注入（需要检查哪些下游就加到这里）
 type Checks struct {
 	DB *sql.DB
 	// ReadyTimeout 就绪探针 DB Ping 的超时（<=0 时用默认 2s），从配置 Server.ReadinessTimeout 注入
 	ReadyTimeout time.Duration
-	// Redis *redis.Client
-	// MQ    *amqp.Connection
-	// 需要再加的依赖按需扩展
 }
 
 // defaultReadyTimeout 就绪探针默认超时（未配置时的兜底值）
 const defaultReadyTimeout = 2 * time.Second
 
-// Register: 注册健康检查路由
+// dbProbeCache 缓存 DB ping 结果，避免每次探针请求都真实 ping 远程数据库
+// K8s readinessProbe 默认每 10s 一次，远程 MySQL 网络波动频繁 → 间歇性 503
+type dbProbeCache struct {
+	mu        sync.RWMutex
+	lastOk    bool
+	lastCheck time.Time
+	ttl       time.Duration // 缓存有效期，默认与 ping 超时一致或略长
+}
+
+var probeCache = &dbProbeCache{ttl: 10 * time.Second}
+
+// Register 注册健康检查路由
 func Register(r *gin.Engine, c Checks) {
-	// 使用路由组功能，创建一个以 "/healthz" 为前缀的路由组
 	api := r.Group("/healthz")
 
-	// 存活探针：只要进程活着能响应即可（不要检查DB等外部依赖）
+	// 存活探针：只要进程活着能响应即可（不检查外部依赖）
 	api.GET("/live", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "ok")
 	})
 
-	// 就绪探针：只有核心依赖就绪才返回200
+	// 就绪探针：检查核心依赖，带缓存避免网络抖动误判
 	api.GET("/ready", func(ctx *gin.Context) {
-		// 兜底：如果上游没带超时，这里统一加个超时，避免探针阻塞。
-		// 超时时长从配置 Server.ReadinessTimeout 注入（未配置则用默认 2s）。
-		// 注意：不能太激进——外部/公网 MySQL 单次 Ping 的 RTT（尤其需要新建连接时）
-		// 很容易超过几百毫秒，超时太短会导致就绪探针间歇性误报 503。
 		timeout := c.ReadyTimeout
 		if timeout <= 0 {
 			timeout = defaultReadyTimeout
 		}
-		// 从请求上下文中获取上下文信息
-		reqCtx := ctx.Request.Context()
-		// 检查上下文是否设置了截止时间
-		if _, has := reqCtx.Deadline(); !has {
-			// 如果没有设置截止时间，则创建一个带有配置超时的上下文
-			var cancel context.CancelFunc
-			reqCtx, cancel = context.WithTimeout(reqCtx, timeout)
-			// 确保在函数返回时取消上下文，避免资源泄漏
-			defer cancel()
-		}
 
-		// 1) DB（按需增加更多依赖检查）
-		// 检查数据库连接是否初始化
 		if c.DB == nil {
-			// 如果数据库未初始化，返回服务不可用状态码和错误信息
 			ctx.String(http.StatusServiceUnavailable, "db not initialized")
 			return
 		}
-		// 尝试ping数据库以检查连接是否可用
-		if err := c.DB.PingContext(reqCtx); err != nil {
-			// 如果数据库连接不可用，返回服务不可用状态码和详细的错误信息
-			ctx.String(http.StatusServiceUnavailable, "db not ready: %v", err)
+
+		// 检查缓存：如果在 TTL 内且上次 OK，直接返回 200，跳过真实 ping
+		probeCache.mu.RLock()
+		cached := probeCache.lastOk && time.Since(probeCache.lastCheck) < probeCache.ttl
+		probeCache.mu.RUnlock()
+		if cached {
+			ctx.String(http.StatusOK, "ok")
 			return
 		}
 
-		// 2) 其他依赖（示例）
-		// if c.Redis == nil || c.Redis.Ping(reqCtx).Err() != nil { ... }
-		// if c.MQ == nil || c.MQ.IsClosed() { ... }
+		// 真实 ping（带超时）
+		reqCtx := ctx.Request.Context()
+		if _, has := reqCtx.Deadline(); !has {
+			var cancel context.CancelFunc
+			reqCtx, cancel = context.WithTimeout(reqCtx, timeout)
+			defer cancel()
+		}
+
+		err := c.DB.PingContext(reqCtx)
+		ok := err == nil
+
+		// 更新缓存
+		probeCache.mu.Lock()
+		probeCache.lastOk = ok
+		probeCache.lastCheck = time.Now()
+		probeCache.mu.Unlock()
+
+		if !ok {
+			ctx.String(http.StatusServiceUnavailable, "db not ready: %v", err)
+			return
+		}
 
 		ctx.String(http.StatusOK, "ok")
 	})
