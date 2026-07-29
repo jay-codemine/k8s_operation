@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -1279,16 +1280,16 @@ func (s *PlatformHealthService) checkK8sCoreComponents(ctx context.Context) []Co
 
 	client := global.ManagementKubeClient
 
-	// 定义核心组件及其 Pod 标签选择器
+	// 定义核心组件及其 Pod 标签选择器 + 名称前缀兜底
 	coreComponents := []struct {
-		Name     string
-		Selector string
-		Icon     string
+		Name       string
+		Selector   string
+		NamePrefix string // 兜底：按 Pod 名称前缀匹配（部分集群标签不一致）
 	}{
-		{"ETCD", "component=etcd", "💾"},
-		{"Controller Manager", "component=kube-controller-manager", "🎛️"},
-		{"Scheduler", "component=kube-scheduler", "📅"},
-		{"CoreDNS", "k8s-app=kube-dns", "🌐"},
+		{"ETCD", "component=etcd", "etcd-"},
+		{"Controller Manager", "component=kube-controller-manager", "kube-controller-manager-"},
+		{"Scheduler", "component=kube-scheduler", "kube-scheduler-"},
+		{"CoreDNS", "k8s-app=kube-dns", "coredns-"},
 	}
 
 	for _, comp := range coreComponents {
@@ -1301,6 +1302,22 @@ func (s *PlatformHealthService) checkK8sCoreComponents(ctx context.Context) []Co
 		pods, err := client.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
 			LabelSelector: comp.Selector,
 		})
+
+		// 标签选择器未找到 Pod，尝试按名称前缀匹配（兜底）
+		if err == nil && len(pods.Items) == 0 && comp.NamePrefix != "" {
+			allPods, listErr := client.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{})
+			if listErr == nil {
+				var matched []corev1.Pod
+				for _, pod := range allPods.Items {
+					if strings.HasPrefix(pod.Name, comp.NamePrefix) {
+						matched = append(matched, pod)
+					}
+				}
+				if len(matched) > 0 {
+					pods = &corev1.PodList{Items: matched}
+				}
+			}
+		}
 
 		latency := time.Since(start)
 		status.Latency = latency.String()
