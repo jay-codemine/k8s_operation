@@ -68,8 +68,6 @@ spec:
 
           # ==================== 环境变量（从 Secret 注入敏感配置） ====================
           env:
-            - name: K8SOP_MACHINE_ID
-              value: "A670-1E2E-BCC8-C7BF"   # License 机器码绑定：从宿主机 /etc/machine-id 生成，Pod 重启不变
             - name: GIN_MODE
               value: "release"
             - name: APP_CONFIG

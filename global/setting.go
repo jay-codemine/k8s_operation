@@ -26,6 +26,7 @@ var (
 	AIRegistry        *openai.Registry             // AI 多模型注册中心
 	LDAPSetting       *setting.LDAPSettingS        // LDAP 认证配置
 	LogControlSetting *setting.LogControlS          // 日志控制配置
+	LicenseSetting    *setting.LicenseSettingS      // License 授权配置
 	CanarySetting     *setting.CanarySettingS       // 金丝雀部署配置        // LDAP 认证配置
 	CicdWorkerSetting *setting.CicdWorkerSettingS   // CICD 部署 Worker 配置（消费协程数等）
 )

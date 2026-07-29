@@ -91,9 +91,12 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// ======================================================
 	// License 授权闸门（挂在 /api/v1 最外层，先于所有业务中间件）
 	// 未激活/过期时除登录、License 激活、健康检查外全部拒绝
+	// 通过 config.yaml License.Enabled 控制开关
 	// ======================================================
-	// license.Init() // 计算机器码并加载本地 License 文件
-	// v1.Use(middlewares.LicenseGate())
+	if global.LicenseSetting != nil && global.LicenseSetting.Enabled {
+		license.Init() // 计算机器码并加载本地 License 文件
+		v1.Use(middlewares.LicenseGate())
+	}
 
 	// ======================================================
 	// License 状态/激活接口（公开，不受登录限流影响）

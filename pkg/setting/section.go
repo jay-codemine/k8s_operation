@@ -314,6 +314,11 @@ type LDAPSettingS struct {
 	GroupRoleMapping []LDAPGroupRoleMapping `mapstructure:"GroupRoleMapping"`
 }
 
+// LicenseSettingS License 授权配置
+type LicenseSettingS struct {
+	Enabled bool `mapstructure:"Enabled"` // 是否启用 License 校验，false 关闭授权
+}
+
 // CanarySettingS 金丝雀部署配置
 type CanarySettingS struct {
 	Enabled             bool  `mapstructure:"Enabled"`

@@ -213,6 +213,13 @@ func SetupSetting() error {
 			global.LogControlSetting.SuppressK8sClusterInitError)
 	}
 
+	// 读取 License 配置
+	if err = s.ReadSection("License", &global.LicenseSetting); err != nil || global.LicenseSetting == nil {
+		log.Println("[License] 配置块未找到，默认关闭 License 校验")
+		global.LicenseSetting = &setting.LicenseSettingS{Enabled: false}
+	}
+	log.Printf("[License] Enabled=%v\n", global.LicenseSetting.Enabled)
+
 	// 读取 Canary 配置
 	if err = s.ReadSection("Canary", &global.CanarySetting); err != nil || global.CanarySetting == nil {
 		log.Println("[Canary] 配置块未找到，使用默认值")
