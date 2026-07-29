@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/component: frontend
     spec:
       imagePullSecrets:
-        - name: aliyun-registry
+        - name: aliyun-acr-secret
       containers:
         - name: devops-fe
           image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v16.14

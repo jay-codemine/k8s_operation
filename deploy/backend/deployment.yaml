@@ -28,7 +28,7 @@ spec:
     spec:
       serviceAccountName: k8soperation    # 需要操作 K8s API 的 ServiceAccount
       imagePullSecrets:
-        - name: aliyun-registry
+        - name: aliyun-acr-secret
       terminationGracePeriodSeconds: 60   # 优雅退出等待时间（匹配代码中 30s shutdown + 5s cleanup）
       securityContext:
         runAsUser: 1000             # 明确指定以 app 用户（UID=1000）运行，与 Dockerfile USER app 一致
