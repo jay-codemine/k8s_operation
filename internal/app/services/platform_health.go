@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"k8soperation/global"
+	"k8soperation/internal/app/models"
+	prom "k8soperation/pkg/prometheus"
 
 	"go.uber.org/zap"
 	appv1 "k8s.io/api/apps/v1"
@@ -263,7 +266,7 @@ func (s *PlatformHealthService) calculateClusterSummaryFromDetails(details []Clu
 	return summary
 }
 
-// getPlatformStatus 获取平台状态
+// getPlatformStatus 获取平台状态（真实数据来源：Prometheus + DB）
 func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -271,32 +274,79 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 	uptime := time.Since(startTime)
 	uptimeStr := formatDuration(uptime)
 
+	// 数据库连接（真实）
 	dbConnections := "—"
 	if global.DB != nil {
-		sqlDB, _ := global.DB.DB()
-		if sqlDB != nil {
+		if sqlDB, _ := global.DB.DB(); sqlDB != nil {
 			stats := sqlDB.Stats()
 			dbConnections = fmt.Sprintf("%d/%d", stats.InUse, stats.MaxOpenConnections)
 		}
 	}
 
-	// 24h 登录次数：基于审计日志统计近 24 小时内登录成功的次数
+	// 24h 登录次数（真实：audit_log 统计）
 	logins24h := "—"
 	if global.DB != nil {
 		var loginCount int64
 		since := time.Now().Add(-24 * time.Hour).Unix()
-		err := global.DB.Table("audit_log").
+		if err := global.DB.Table("audit_log").
 			Where("module = ? AND action = ? AND status = ? AND created_at >= ?",
 				"auth", "login", "success", since).
-			Count(&loginCount).Error
-		if err == nil {
+			Count(&loginCount).Error; err == nil {
 			logins24h = fmt.Sprintf("%d", loginCount)
 		}
 	}
 
-	// 当前在线用户数：优先用 Redis ZSET（auth 中间件记录的活跃时间，15 分钟内视为在线），
-	// Redis 不可用时降级为审计日志近 15 分钟登录成功的去重用户数
+	// 在线用户数（真实：Redis ZSET / audit_log 降级）
 	onlineUsers := s.getOnlineUsers()
+
+	// ===== 以下从 Prometheus / DB 获取真实指标 =====
+
+	// API 请求量：近 1 小时总请求数
+	apiRequests := s.queryPromScalar("sum(increase(k8sop_http_requests_total[1h]))")
+	if apiRequests == "—" {
+		apiRequests = "—"
+	} else if n, err := strconv.ParseFloat(apiRequests, 64); err == nil {
+		apiRequests = formatCount(int64(n))
+	}
+
+	// API 错误率：5xx+4xx / 总量
+	errorRate := "—"
+	if r := s.queryPromScalar("sum(rate(k8sop_http_requests_total{status=~\"4..|5..\"}[1h])) / sum(rate(k8sop_http_requests_total[1h])) * 100"); r != "—" {
+		if n, err := strconv.ParseFloat(r, 64); err == nil {
+			errorRate = fmt.Sprintf("%.1f", n)
+		}
+	}
+
+	// CICD 构建成功率（24h）：DB 统计 cicd_pipeline_run
+	buildSuccessRate := "—"
+	buildQueue := "—"
+	if global.DB != nil {
+		since := time.Now().Add(-24 * time.Hour)
+		var totalRuns, successRuns int64
+		if err := global.DB.Table("cicd_pipeline_run").
+			Where("created_at >= ? AND status != ?", since, models.PipelineRunStatusPending).
+			Count(&totalRuns).Error; err == nil && totalRuns > 0 {
+			global.DB.Table("cicd_pipeline_run").
+				Where("created_at >= ? AND status = ?", since, models.PipelineRunStatusSuccess).
+				Count(&successRuns)
+			buildSuccessRate = fmt.Sprintf("%.1f", float64(successRuns)/float64(totalRuns)*100)
+		}
+		// 构建队列积压：pending + running 状态的 run 数
+		var queueCount int64
+		if err := global.DB.Table("cicd_pipeline_run").
+			Where("status IN (?,?)", models.PipelineRunStatusPending, models.PipelineRunStatusRunning).
+			Count(&queueCount).Error; err == nil {
+			buildQueue = fmt.Sprintf("%d", queueCount)
+		}
+	}
+
+	// Panic 恢复次数：近 1 小时
+	panics := 0
+	if r := s.queryPromScalar("increase(k8sop_runtime_panics_total[1h])"); r != "—" {
+		if n, err := strconv.ParseFloat(r, 64); err == nil {
+			panics = int(n)
+		}
+	}
 
 	return PlatformHealthStatus{
 		Status:           "healthy",
@@ -306,15 +356,78 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 		GoVersion:        runtime.Version(),
 		NumGoroutine:     runtime.NumGoroutine(),
 		NumCPU:           runtime.NumCPU(),
-		ApiRequests:      fmt.Sprintf("%d MB", m.Alloc/1024/1024),
-		BuildSuccessRate: "—",
-		ErrorRate:        "—",
+		ApiRequests:      apiRequests,
+		BuildSuccessRate: buildSuccessRate,
+		ErrorRate:        errorRate,
 		DBConnections:    dbConnections,
-		BuildQueue:       "—",
+		BuildQueue:       buildQueue,
 		Logins24h:        logins24h,
 		OnlineUsers:      onlineUsers,
-		Panics:           0,
+		Panics:           panics,
 	}
+}
+
+// resolvePromURL 解析 Prometheus 地址（DB 数据源优先，config.yaml 兜底）
+func (s *PlatformHealthService) resolvePromURL() string {
+	if global.DB != nil {
+		var ds models.MonitorDatasource
+		if err := global.DB.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
+			"prometheus", "victoriametrics", "thanos").First(&ds).Error; err == nil && ds.URL != "" {
+			return ds.URL
+		}
+		if err := global.DB.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
+			"prometheus", "victoriametrics", "thanos").Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
+			return ds.URL
+		}
+	}
+	if global.MonitoringSetting != nil && global.MonitoringSetting.Enabled {
+		return global.MonitoringSetting.PrometheusURL
+	}
+	return ""
+}
+
+// queryPromScalar 查询 Prometheus 即时查询，返回单值字符串（失败返回 "—"）
+func (s *PlatformHealthService) queryPromScalar(query string) string {
+	url := s.resolvePromURL()
+	if url == "" {
+		return "—"
+	}
+	client := prom.NewClient(url, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	result, err := client.QueryInstant(ctx, query)
+	if err != nil {
+		return "—"
+	}
+	vec, err := prom.ParseVectorResult(result.Data.Result)
+	if err != nil || len(vec) == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%v", vec[0].Value[1])
+}
+
+// formatCount 格式化大数字（1000 → "1,000"）
+func formatCount(n int64) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	s := fmt.Sprintf("%d", n)
+	var b strings.Builder
+	rem := len(s) % 3
+	if rem > 0 {
+		b.WriteString(s[:rem])
+		if len(s) > 3 {
+			b.WriteByte(',')
+		}
+	}
+	for i := rem; i < len(s); i += 3 {
+		b.WriteString(s[i : i+3])
+		if i+3 < len(s) {
+			b.WriteByte(',')
+		}
+	}
+	return b.String()
 }
 
 // getOnlineUsers 统计当前在线用户数（15 分钟内有请求视为在线）

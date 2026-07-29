@@ -104,6 +104,77 @@
       </div>
     </div>
 
+    <!-- 平台性能指标 -->
+    <div class="section-header">
+      <h3>平台性能指标</h3>
+      <span class="section-sub">核心运行数据 / 实时刷新</span>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-icon api">API</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.apiRequests || '—' }}</span>
+          <span class="metric-lbl">近1小时请求量</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon cicd">CICD</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.buildSuccessRate !== undefined && platformStats.buildSuccessRate !== '—' ? platformStats.buildSuccessRate + '%' : '—' }}</span>
+          <span class="metric-lbl">构建成功率 (24h)</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon err">ERR</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.errorRate !== undefined && platformStats.errorRate !== '—' ? platformStats.errorRate + '%' : '—' }}</span>
+          <span class="metric-lbl">API 错误率</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon db">DB</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.dbConnections || '—' }}</span>
+          <span class="metric-lbl">数据库连接数</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon queue">Q</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.buildQueue !== undefined ? platformStats.buildQueue : '—' }}</span>
+          <span class="metric-lbl">构建队列积压</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon login">L</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.logins24h || '—' }}</span>
+          <span class="metric-lbl">24h 登录次数</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon online">●</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.onlineUsers || '—' }}</span>
+          <span class="metric-lbl">在线用户 (15min)</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon panic">P</div>
+        <div class="metric-body">
+          <span class="metric-val" :class="{ 'text-danger': platformStats.panics > 0 }">{{ platformStats.panics ?? '—' }}</span>
+          <span class="metric-lbl">Panic 恢复次数</span>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon go">↑</div>
+        <div class="metric-body">
+          <span class="metric-val">{{ platformStats.goroutines || '—' }}</span>
+          <span class="metric-lbl">协程数</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 集群健康状态 + 资源使用趋势 -->
     <div v-if="hasClusterAccess" class="grid-row row-2">
       <div class="panel">
@@ -478,6 +549,23 @@ const events = ref([])
 const health = ref({})
 const healthComponents = computed(() => health.value?.components || [])
 const platformUptime = computed(() => health.value?.platform?.uptime || '')
+
+// 平台性能指标
+const platformStats = ref({})
+const updatePlatformStats = (healthData) => {
+  const p = healthData?.platform || {}
+  platformStats.value = {
+    apiRequests: p.api_requests || '—',
+    buildSuccessRate: p.build_success_rate || '—',
+    errorRate: p.error_rate || '—',
+    dbConnections: p.db_connections || '—',
+    buildQueue: p.build_queue ?? '—',
+    logins24h: p.logins_24h || '—',
+    onlineUsers: p.online_users || '—',
+    panics: p.panics ?? 0,
+    goroutines: p.num_goroutine || '—',
+  }
+}
 
 // =============================================================================
 // 顶部环形卡片
@@ -935,6 +1023,7 @@ const loadHealth = async () => {
     const res = await http.get('/api/v1/platform/health')
     if (res.code === 0 && res.data) {
       health.value = res.data
+      updatePlatformStats(res.data)
     }
   } catch (e) {
     console.warn('加载平台健康状态失败:', e.message)
@@ -1682,9 +1771,82 @@ onUnmounted(() => {
 
 .sys-uptime b { color: #0f172a; }
 
+/* ===== 平台性能指标卡片 ===== */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  margin-top: 4px;
+}
+.section-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+.section-sub {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.metric-card {
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+.metric-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: #fff;
+}
+.metric-icon.api  { background: #6366f1; }
+.metric-icon.cicd { background: #3b82f6; }
+.metric-icon.err  { background: #ef4444; }
+.metric-icon.db   { background: #10b981; }
+.metric-icon.queue { background: #f59e0b; }
+.metric-icon.login { background: #8b5cf6; }
+.metric-icon.online { background: #06b6d4; }
+.metric-icon.panic { background: #f43f5e; }
+.metric-icon.go   { background: #64748b; }
+
+.metric-body { flex: 1; min-width: 0; }
+.metric-val {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+.metric-val.text-danger { color: #ef4444; }
+.metric-lbl {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 1400px) {
   .stats-row { grid-template-columns: repeat(3, 1fr); }
+  .metrics-row { grid-template-columns: repeat(5, 1fr); }
 }
 
 @media (max-width: 1100px) {
