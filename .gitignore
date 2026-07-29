@@ -21,8 +21,7 @@ configs/config.yaml
 configs/k8s.yaml
 storage/logs/*
 storage/artifacts/*
-!storage/artifacts/.gitkeep*.exe~
-*.exe
+!storage/artifacts/.gitkeep
 deploy/registry-secret.yaml
 
 # K8s Secrets（含敏感信息，禁止提交）
