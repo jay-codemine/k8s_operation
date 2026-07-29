@@ -134,6 +134,10 @@ data:
       PrometheusURL: "http://prometheus.monitoring.svc:9090"  # 首次启动引导值，DB 有数据源后以 DB 为准
       QueryTimeout: 30
 
+    # License 授权校验开关：false 关闭授权，开发/测试环境可用
+    License:
+      Enabled: false
+
     LDAP:
       Enabled: false                        # 按需开启 LDAP 身份源
       Host: "${LDAP_HOST}"
