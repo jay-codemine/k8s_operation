@@ -278,6 +278,20 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 		}
 	}
 
+	// 24h 登录次数：基于审计日志统计近 24 小时内登录成功的次数
+	logins24h := "—"
+	if global.DB != nil {
+		var loginCount int64
+		since := time.Now().Add(-24 * time.Hour).Unix()
+		err := global.DB.Table("audit_log").
+			Where("module = ? AND action = ? AND status = ? AND created_at >= ?",
+				"auth", "login", "success", since).
+			Count(&loginCount).Error
+		if err == nil {
+			logins24h = fmt.Sprintf("%d", loginCount)
+		}
+	}
+
 	return PlatformHealthStatus{
 		Status:           "healthy",
 		LastCheck:        time.Now(),
@@ -291,7 +305,7 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 		ErrorRate:        "—",
 		DBConnections:    dbConnections,
 		BuildQueue:       "—",
-		Logins24h:        "—",
+		Logins24h:        logins24h,
 		Panics:           0,
 	}
 }
