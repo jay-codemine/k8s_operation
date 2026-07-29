@@ -6,6 +6,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/middlewares"
+	"k8soperation/pkg/license"
 
 	_ "k8soperation/docs"
 
@@ -86,6 +87,21 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// ======================================================
 	api := root.Group("/api")
 	v1 := api.Group("/v1")
+
+	// ======================================================
+	// License 授权闸门（挂在 /api/v1 最外层，先于所有业务中间件）
+	// 未激活/过期时除登录、License 激活、健康检查外全部拒绝
+	// ======================================================
+	license.Init() // 计算机器码并加载本地 License 文件
+	v1.Use(middlewares.LicenseGate())
+
+	// ======================================================
+	// License 状态/激活接口（公开，不受登录限流影响）
+	// /api/v1/platform/license/...
+	// ======================================================
+	licensePublic := v1.Group("")
+	licensePublic.Use(middlewares.AuthJWTSkip())
+	platform.NewLicenseRouter().Inject(licensePublic)
 
 	// ======================================================
 	// Public 分组（跳过 JWT）

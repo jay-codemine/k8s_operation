@@ -110,6 +110,8 @@ func (e *Error) StatusCode() int {
 		return http.StatusUnauthorized // 401 鉴权失败/未认证/未登录
 	case 309001, 800010:
 		return http.StatusForbidden // RBAC/AI 审批权限不足
+	case 110001, 110002:
+		return http.StatusForbidden // License 未授权/已过期（前端拦截跳转激活页）
 	case TooManyRequests.Code():
 		return http.StatusTooManyRequests // 429 请求过多
 	default:

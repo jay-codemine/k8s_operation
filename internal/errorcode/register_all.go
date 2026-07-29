@@ -36,5 +36,7 @@ func Register() {
 	registerCRD()
 	// HPA/VPA 弹性扩缩容
 	register_k8s_Autoscaler()
+	// License 授权
+	registerLicense()
 	// 后续可以继续扩展
 }

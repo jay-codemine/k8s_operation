@@ -29,3 +29,8 @@ deploy/registry-secret.yaml
 deploy/backend/secret.yaml
 deploy/jenkins/secret.yaml
 .DS_Store
+
+# License signing keys (private key MUST NOT be committed)
+configs/license-keys/
+storage/license.lic
+*.lic

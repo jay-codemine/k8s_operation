@@ -137,6 +137,11 @@ http.interceptors.response.use(
 
     // 非 401：按你原逻辑弹错（支持 _silent 静默模式）
     if (status !== 401 && data?.code !== 401) {
+      // License 未授权(110001)/已过期(110002)：强制跳转激活页（避免激活页自身死循环）
+      if ((data?.code === 110001 || data?.code === 110002) && window.location.pathname !== '/license') {
+        window.location.assign('/license')
+        return Promise.reject(data || error)
+      }
       if (!original._silent) {
         const msg =
           (Array.isArray(data?.details) && data.details[0]) ||

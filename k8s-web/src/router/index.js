@@ -24,6 +24,8 @@ const router = createRouter({
   routes: [
     {path: '/', redirect: '/login'},
     {path: '/login', component: Login},
+    // License 激活页（公开：平台未授权时由 http 拦截器强制跳转至此）
+    {path: '/license', component: () => import('@/views/platform/license/LicenseActivate.vue')},
 
     {
       path: '/',
@@ -232,8 +234,8 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // 登录页直接放行
-  if (to.path === '/login') {
+  // 登录页/License 激活页直接放行
+  if (to.path === '/login' || to.path === '/license') {
     next()
     return
   }
