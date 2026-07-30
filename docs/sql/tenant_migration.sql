@@ -93,6 +93,11 @@ ALTER TABLE `aiops_analysis_record`   ADD COLUMN IF NOT EXISTS `tenant_id` INT U
 ALTER TABLE `aiops_inspection_report` ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
 
 -- 应用商城
-ALTER TABLE `app_store_app`           ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `app_store_component`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `app_store_install`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_apps`          ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_components`    ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_installs`      ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+
+-- IAM 环境管理
+ALTER TABLE `iam_env_audit_log`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_env_binding`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_grant`               ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
