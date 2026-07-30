@@ -32,6 +32,9 @@ VALUES (1, '默认租户', 'default', 1, 1, UNIX_TIMESTAMP());
 ALTER TABLE `user`                    ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
 ALTER TABLE `sys_user_role`           ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
 ALTER TABLE `sys_user_cluster`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_role`                ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_permission`          ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_role_permission`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
 
 -- K8s 集群
 ALTER TABLE `kube_cluster`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
