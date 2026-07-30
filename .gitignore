@@ -33,3 +33,4 @@ deploy/jenkins/secret.yaml
 configs/license-keys/
 storage/license.lic
 *.lic
+k8soperation.exe~
