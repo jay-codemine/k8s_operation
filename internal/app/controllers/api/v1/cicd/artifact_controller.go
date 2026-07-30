@@ -9,7 +9,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -42,7 +42,7 @@ func (c *ArtifactController) List(ctx *gin.Context) {
 	languageType := ctx.Query("language_type")
 	status := ctx.Query("status")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.ArtifactList(ctx.Request.Context(), pipelineID, artifactType, languageType, status, page, pageSize)
 	if err != nil {
 		global.Logger.Error("ArtifactList error", zap.Error(err))
@@ -68,7 +68,7 @@ func (c *ArtifactController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	artifact, err := svc.ArtifactDetail(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -118,7 +118,7 @@ func (c *ArtifactController) Upload(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.ArtifactUpload(ctx.Request.Context(), file, header, artifact, userID)
 	if err != nil {
 		global.Logger.Error("ArtifactUpload error", zap.Error(err))
@@ -148,7 +148,7 @@ func (c *ArtifactController) Download(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	artifact, err := svc.ArtifactDownload(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -185,7 +185,7 @@ func (c *ArtifactController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.ArtifactDelete(ctx.Request.Context(), req.ID); err != nil {
 		global.Logger.Error("ArtifactDelete error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -206,7 +206,7 @@ func (c *ArtifactController) Stats(ctx *gin.Context) {
 
 	pipelineID, _ := strconv.ParseInt(ctx.Query("pipeline_id"), 10, 64)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stats, err := svc.ArtifactStats(ctx.Request.Context(), pipelineID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -268,7 +268,7 @@ func (c *ArtifactController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.ArtifactUpdate(ctx.Request.Context(), req.ID, updates); err != nil {
 		global.Logger.Error("ArtifactUpdate error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -324,7 +324,7 @@ func (c *ArtifactController) CreateRecord(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.ArtifactCreateRecord(ctx.Request.Context(), artifact, userID)
 	if err != nil {
 		global.Logger.Error("ArtifactCreateRecord error", zap.Error(err))
@@ -364,7 +364,7 @@ func (c *ArtifactController) BatchDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	affected, err := svc.ArtifactBatchDelete(ctx.Request.Context(), req.IDs)
 	if err != nil {
 		global.Logger.Error("ArtifactBatchDelete error", zap.Error(err))
@@ -402,7 +402,7 @@ func (c *ArtifactController) AttachFile(ctx *gin.Context) {
 	}
 	defer file.Close()
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.ArtifactAttachFile(ctx.Request.Context(), id, file, header)
 	if err != nil {
 		global.Logger.Error("ArtifactAttachFile error", zap.Error(err))
@@ -431,7 +431,7 @@ func (c *ArtifactController) ListByRunID(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.ArtifactListByRunID(ctx.Request.Context(), runID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

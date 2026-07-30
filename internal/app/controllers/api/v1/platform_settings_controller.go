@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -28,7 +28,7 @@ func NewPlatformSettingsController() *PlatformSettingsController {
 // @Router /api/v1/platform/settings [get]
 func (c *PlatformSettingsController) Get(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	settings, err := svc.PlatformSettingsGet(ctx.Request.Context())
 	if err != nil {
@@ -53,7 +53,7 @@ func (c *PlatformSettingsController) Get(ctx *gin.Context) {
 // @Router /api/v1/platform/settings [put]
 func (c *PlatformSettingsController) Update(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var req models.PlatformSettingsResponse
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -81,7 +81,7 @@ func (c *PlatformSettingsController) Update(ctx *gin.Context) {
 // @Router /api/v1/platform/settings/reset [post]
 func (c *PlatformSettingsController) Reset(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	settings, err := svc.PlatformSettingsReset(ctx.Request.Context())
 	if err != nil {

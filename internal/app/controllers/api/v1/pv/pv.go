@@ -7,7 +7,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -39,7 +38,7 @@ func (ctl *KubePVController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pv, err := svc.KubeCreatePV(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -80,7 +79,7 @@ func (ctl *KubePVController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubePVList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -119,7 +118,7 @@ func (c *KubePVController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pvDetail, err := svc.KubePVDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -161,7 +160,7 @@ func (c *KubePVController) DetailEnhanced(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	detail, err := svc.KubePVDetailEnhanced(ctx.Request.Context(), cli, param)
 	if err != nil {
@@ -191,7 +190,7 @@ func (ctl *KubePVController) Delete(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePVDelete(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubePVDelete error", zap.Error(err))
@@ -211,7 +210,7 @@ func (ctl *KubePVController) GraceDelete(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePVGraceDelete(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubePVGraceDelete error", zap.Error(err))
@@ -242,7 +241,7 @@ func (c *KubePVController) Reclaim(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	updated, err := svc.KubePVReclaim(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -277,7 +276,7 @@ func (c *KubePVController) Expand(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	updated, err := svc.KubePVExpand(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -311,7 +310,7 @@ func (c *KubePVController) GetYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	yamlStr, err := svc.KubePVGetYaml(ctx.Request.Context(), cli, param.Name)
 	if err != nil {
 		ctx.Error(err)
@@ -346,7 +345,7 @@ func (c *KubePVController) ApplyYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	updated, err := svc.KubePVApplyYaml(ctx.Request.Context(), cli, param.Name, param.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -380,7 +379,7 @@ func (c *KubePVController) CreateFromYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	created, err := svc.KubePVCreateFromYaml(ctx.Request.Context(), cli, param.Yaml)
 	if err != nil {
 		ctx.Error(err)

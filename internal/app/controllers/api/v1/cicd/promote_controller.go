@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -41,7 +41,7 @@ func (c *PromoteController) Targets(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.PipelineTargetList(ctx.Request.Context(), pipelineID)
 	if err != nil {
 		global.Logger.Error("PipelineTargetList error", zap.Error(err))
@@ -68,7 +68,7 @@ func (c *PromoteController) SaveTargets(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.PipelineTargetSave(ctx.Request.Context(), param, userID); err != nil {
 		global.Logger.Error("PipelineTargetSave error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorCicdPipelineTargetFail.WithDetails(err.Error()))
@@ -93,7 +93,7 @@ func (c *PromoteController) DeleteTarget(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.PipelineTargetDelete(ctx.Request.Context(), param.ID); err != nil {
 		global.Logger.Error("PipelineTargetDelete error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorCicdPipelineTargetFail.WithDetails(err.Error()))
@@ -119,7 +119,7 @@ func (c *PromoteController) Promote(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	releaseID, err := svc.PipelinePromote(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("PipelinePromote error", zap.Error(err))
@@ -148,7 +148,7 @@ func (c *PromoteController) Chain(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	nodes, err := svc.PipelinePromotionChain(ctx.Request.Context(), pipelineID)
 	if err != nil {
 		global.Logger.Error("PipelinePromotionChain error", zap.Error(err))

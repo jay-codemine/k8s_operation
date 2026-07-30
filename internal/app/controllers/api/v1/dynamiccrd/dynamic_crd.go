@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -27,7 +26,7 @@ func (c *DynamicCRDController) ListCRDs(ctx *gin.Context) {
 	keyword := ctx.Query("keyword")
 	group := ctx.Query("group")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubeCRDList(ctx.Request.Context(), cli, keyword, group)
 	if err != nil {
 		r.ToErrorResponse(errorcode.ErrorCRDListFail.WithDetails(err.Error()))
@@ -47,7 +46,7 @@ func (c *DynamicCRDController) GetCRD(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeCRDGet(ctx.Request.Context(), cli, name)
 	if err != nil {
 		r.ToErrorResponse(errorcode.ErrorCRDGetFail.WithDetails(err.Error()))
@@ -67,7 +66,7 @@ func (c *DynamicCRDController) DeleteCRD(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeCRDDelete(ctx.Request.Context(), cli, name); err != nil {
 		if strings.Contains(err.Error(), "删除保护") {
 			r.ToErrorResponse(errorcode.ErrorCRDDeleteProtected.WithDetails(err.Error()))
@@ -97,7 +96,7 @@ func (c *DynamicCRDController) ListCRs(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.KubeCRList(ctx.Request.Context(), cli, group, version, resource, namespace, labelSelector)
 	if err != nil {
 		r.ToErrorResponse(errorcode.ErrorCRListFail.WithDetails(err.Error()))
@@ -154,7 +153,7 @@ func (c *DynamicCRDController) GetCR(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeCRGet(ctx.Request.Context(), cli, group, version, resource, namespace, name)
 	if err != nil {
 		r.ToErrorResponse(errorcode.ErrorCRGetFail.WithDetails(err.Error()))
@@ -185,7 +184,7 @@ func (c *DynamicCRDController) CreateCR(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	created, dryRunResult, err := svc.KubeCRCreate(ctx.Request.Context(), cli, req.Group, req.Version, req.Resource, req.Namespace, req.Yaml, req.DryRun)
 	if err != nil {
 		if strings.Contains(err.Error(), "YAML") {
@@ -229,7 +228,7 @@ func (c *DynamicCRDController) UpdateCR(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	updated, dryRunResult, err := svc.KubeCRUpdate(ctx.Request.Context(), cli, req.Group, req.Version, req.Resource, req.Namespace, req.Name, req.Yaml, req.DryRun)
 	if err != nil {
 		if strings.Contains(err.Error(), "YAML") {
@@ -266,7 +265,7 @@ func (c *DynamicCRDController) DeleteCR(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeCRDelete(ctx.Request.Context(), cli, group, version, resource, namespace, name); err != nil {
 		if strings.Contains(err.Error(), "删除保护") {
 			r.ToErrorResponse(errorcode.ErrorCRDeleteProtected.WithDetails(err.Error()))
@@ -294,7 +293,7 @@ func (c *DynamicCRDController) GetCRYaml(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	yamlStr, err := svc.KubeCRGetYaml(ctx.Request.Context(), cli, group, version, resource, namespace, name)
 	if err != nil {
 		r.ToErrorResponse(errorcode.ErrorCRGetFail.WithDetails(err.Error()))
@@ -322,7 +321,7 @@ func (c *DynamicCRDController) DryRunCR(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if req.IsUpdate {
 		_, dryRunResult, err := svc.KubeCRUpdate(ctx.Request.Context(), cli, req.Group, req.Version, req.Resource, req.Namespace, req.Name, req.Yaml, true)
 		if err != nil {

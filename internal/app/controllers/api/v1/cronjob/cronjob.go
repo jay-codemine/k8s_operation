@@ -6,7 +6,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -43,7 +42,7 @@ func (c *KubeCronJobController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 CronJob 创建逻辑
 	cronJobObj, err := svc.KubeCronJobCreate(ctx.Request.Context(), cli, req)
@@ -80,7 +79,7 @@ func (c *KubeCronJobController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeCronJobList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取CronJob列表失败", zap.String("error", err.Error()))
@@ -113,7 +112,7 @@ func (c *KubeCronJobController) Detail(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cj, jobs, err := svc.KubeCronJobDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -184,7 +183,7 @@ func (c *KubeCronJobController) Delete(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeCronJobDelete(ctx.Request.Context(), cli, req); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeCronJobDelete error", zap.Error(err))
@@ -218,7 +217,7 @@ func (c *KubeCronJobController) Suspend(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层逻辑
 	if err := svc.KubeCronJobSuspend(ctx.Request.Context(), cli, req); err != nil {
@@ -261,7 +260,7 @@ func (c *KubeCronJobController) CreateFromYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层创建逻辑
 	cronJobObj, err := svc.KubeCronJobCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
@@ -299,7 +298,7 @@ func (c *KubeCronJobController) UpdateFromYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层更新逻辑
 	cronJobObj, err := svc.KubeCronJobUpdateFromYaml(ctx.Request.Context(), cli, req.Yaml)
@@ -338,7 +337,7 @@ func (c *KubeCronJobController) Trigger(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层触发逻辑
 	job, err := svc.KubeCronJobTrigger(ctx.Request.Context(), cli, req)
@@ -386,7 +385,7 @@ func (c *KubeCronJobController) Events(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	events, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -466,7 +465,7 @@ func (c *KubeCronJobController) ApplyYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cronJobObj, err := svc.KubeCronJobUpdateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)

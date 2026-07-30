@@ -7,7 +7,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -47,7 +46,7 @@ func (ctl *KubeNamespaceController) Create(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 创建 Namespace
 	ns, err := svc.KubeCreateNamespace(ctx.Request.Context(), cli, req)
@@ -88,7 +87,7 @@ func (ctl *KubeNamespaceController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubeNamespaceList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -166,7 +165,7 @@ func (c *KubeNamespaceController) Detail(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	nsDetail, err := svc.KubeNamespaceDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -229,7 +228,7 @@ func (ctl *KubeNamespaceController) Delete(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeNamespaceDelete(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeNamespaceDelete error", zap.Error(err))
@@ -263,7 +262,7 @@ func (c *KubeNamespaceController) Patch(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	updated, err := svc.KubeNamespaceUpdate(ctx, cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -296,7 +295,7 @@ func (c *KubeNamespaceController) PatchLabels(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	if err := svc.KubeNamespacePatchLabels(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)

@@ -5,6 +5,7 @@ import (
 	"gorm.io/gorm"
 
 	"k8soperation/global"
+	"k8soperation/internal/app/services"
 	"k8soperation/pkg/tenant"
 )
 
@@ -44,4 +45,10 @@ func GetTenantDB(c *gin.Context) *gorm.DB {
 		}
 	}
 	return global.DB
+}
+
+// NewServicesFromContext 从 gin context 获取租户隔离 DB 并创建 Services
+// Controller 层替换 services.NewServices() → middlewares.NewServicesFromContext(c)
+func NewServicesFromContext(c *gin.Context) *services.Services {
+	return services.NewServicesWithDB(GetTenantDB(c))
 }

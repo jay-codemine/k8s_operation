@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -39,7 +39,7 @@ func (c *StageController) GetStages(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stages, err := svc.GetRunStages(ctx.Request.Context(), runID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
@@ -69,7 +69,7 @@ func (c *StageController) GetStageLogs(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	logs, err := svc.GetStageLogs(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
@@ -99,7 +99,7 @@ func (c *StageController) ApproveStage(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	var err error
 	if param.Action == "approve" {
 		err = svc.ApproveStage(ctx.Request.Context(), param.StageID, userID, param.Comment)
@@ -139,7 +139,7 @@ func (c *StageController) DeployStage(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.ExecuteDeployStage(ctx.Request.Context(), param, userID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineRunFail.WithDetails(err.Error()))
@@ -169,7 +169,7 @@ func (c *StageController) StageCallback(ctx *gin.Context) {
 	}
 
 	// HMAC 签名验证（可选，与最终回调保持一致）
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	signature := ctx.GetHeader("X-Signature")
 	if signature != "" {
 		// 如果提供了签名，则验证
@@ -210,7 +210,7 @@ func (c *StageController) CancelDeploy(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.CancelDeployStage(ctx.Request.Context(), id, userID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineRunFail.WithDetails(err.Error()))
@@ -255,7 +255,7 @@ func (c *StageController) RollbackDeploy(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.RollbackDeployStage(ctx.Request.Context(), id, targetRS, userID)
 
 	// 统一返回 result，包含成功/失败的详细日志
@@ -291,7 +291,7 @@ func (c *StageController) DeployStatus(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.GetDeployStatus(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))
@@ -319,7 +319,7 @@ func (c *StageController) GetDeployHistory(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	revisions, err := svc.GetDeploymentHistory(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ErrorPipelineQueryFail.WithDetails(err.Error()))

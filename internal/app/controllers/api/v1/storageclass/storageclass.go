@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/k8s/storageclass"
@@ -40,7 +39,7 @@ func (ctl *KubeStorageClassController) Create(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sc, err := svc.KubeCreateStorageClass(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -89,7 +88,7 @@ func (c *KubeStorageClassController) List(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4. 调用 Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	storageClasses, total, err := svc.KubeStorageClassList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -126,7 +125,7 @@ func (c *KubeStorageClassController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sc, err := svc.KubeStorageClassDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -160,7 +159,7 @@ func (c *KubeStorageClassController) Delete(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeStorageClassDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeStorageClassDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -191,7 +190,7 @@ func (c *KubeStorageClassController) GetYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	yamlContent, err := svc.KubeStorageClassGetYaml(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("service.KubeStorageClassGetYaml error", zap.Error(err))
@@ -224,7 +223,7 @@ func (c *KubeStorageClassController) CreateFromYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sc, err := svc.KubeStorageClassCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		global.Logger.Error("service.KubeStorageClassCreateFromYaml error", zap.Error(err))
@@ -254,7 +253,7 @@ func (c *KubeStorageClassController) ApplyYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sc, err := svc.KubeStorageClassApplyYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		global.Logger.Error("service.KubeStorageClassApplyYaml error", zap.Error(err))

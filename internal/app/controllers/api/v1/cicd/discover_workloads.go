@@ -10,6 +10,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -74,7 +75,7 @@ func (c *PipelineController) DiscoverApplications(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	factory := services.NewClusterClientFactory(svc)
 	cli, err := factory.GetClient(ctx.Request.Context(), clusterID)
 	if err != nil {
@@ -284,7 +285,7 @@ func (c *PipelineController) DiscoverWorkloads(ctx *gin.Context) {
 		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("命名空间不能为空"))
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	factory := services.NewClusterClientFactory(svc)
 	cli, err := factory.GetClient(ctx.Request.Context(), clusterID)
 	if err != nil {

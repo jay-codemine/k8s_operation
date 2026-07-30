@@ -8,6 +8,7 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -48,7 +49,7 @@ func (c *AppStoreController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.AppStoreList(ctx.Request.Context(), &req)
 	if err != nil {
 		global.Logger.Error("获取应用列表失败", zap.Error(err))
@@ -77,7 +78,7 @@ func (c *AppStoreController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	app, err := svc.AppStoreDetail(ctx.Request.Context(), uint32(id))
 	if err != nil {
 		global.Logger.Error("获取应用详情失败", zap.Error(err))
@@ -107,7 +108,7 @@ func (c *AppStoreController) Create(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	app, err := svc.AppStoreCreate(ctx.Request.Context(), &req)
 	if err != nil {
 		global.Logger.Error("创建应用失败", zap.Error(err))
@@ -137,7 +138,7 @@ func (c *AppStoreController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreUpdate(ctx.Request.Context(), &req); err != nil {
 		global.Logger.Error("更新应用失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AppStoreUpdateFailed.WithDetails(err.Error()))
@@ -165,7 +166,7 @@ func (c *AppStoreController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreDelete(ctx.Request.Context(), uint32(id)); err != nil {
 		global.Logger.Error("删除应用失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AppStoreDeleteFailed.WithDetails(err.Error()))
@@ -185,7 +186,7 @@ func (c *AppStoreController) Delete(ctx *gin.Context) {
 func (c *AppStoreController) Categories(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	categories, err := svc.AppStoreCategories(ctx.Request.Context())
 	if err != nil {
 		global.Logger.Error("获取分类列表失败", zap.Error(err))
@@ -227,7 +228,7 @@ func (c *AppStoreController) Install(ctx *gin.Context) {
 		operatorStr = "admin"
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	install, err := svc.AppStoreInstall(ctx.Request.Context(), c.factory, &req, operatorStr)
 	if err != nil {
 		global.Logger.Error("安装应用失败", zap.Error(err))
@@ -261,7 +262,7 @@ func (c *AppStoreController) Uninstall(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreUninstall(ctx.Request.Context(), c.factory, uint32(id)); err != nil {
 		global.Logger.Error("卸载应用失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AppStoreUninstallFailed.WithDetails(err.Error()))
@@ -292,7 +293,7 @@ func (c *AppStoreController) InstallList(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.AppStoreInstallList(ctx.Request.Context(), &req)
 	if err != nil {
 		global.Logger.Error("获取安装记录失败", zap.Error(err))
@@ -320,7 +321,7 @@ func (c *AppStoreController) InstallDetail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	install, err := svc.AppStoreInstallDetail(ctx.Request.Context(), uint32(id))
 	if err != nil {
 		resp.ToErrorResponse(errorcode.AppStoreInstallNotFound)
@@ -353,7 +354,7 @@ func (c *AppStoreController) InstallStatus(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	status, err := svc.AppStoreInstallStatus(ctx.Request.Context(), c.factory, uint32(id))
 	if err != nil {
 		global.Logger.Error("查询安装状态失败", zap.Error(err))
@@ -386,7 +387,7 @@ func (c *AppStoreController) InstallUpdate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreInstallUpdate(ctx.Request.Context(), c.factory, uint32(id), &req); err != nil {
 		global.Logger.Error("更新安装失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -411,7 +412,7 @@ func (c *AppStoreController) ComponentList(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.AppStoreComponentList(ctx.Request.Context(), uint32(id))
 	if err != nil {
 		global.Logger.Error("获取组件列表失败", zap.Error(err))
@@ -432,7 +433,7 @@ func (c *AppStoreController) ComponentCreate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	comp, err := svc.AppStoreComponentCreate(ctx.Request.Context(), &req)
 	if err != nil {
 		global.Logger.Error("创建组件失败", zap.Error(err))
@@ -453,7 +454,7 @@ func (c *AppStoreController) ComponentUpdate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreComponentUpdate(ctx.Request.Context(), &req); err != nil {
 		global.Logger.Error("更新组件失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -474,7 +475,7 @@ func (c *AppStoreController) ComponentDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreComponentDelete(ctx.Request.Context(), uint32(id)); err != nil {
 		global.Logger.Error("删除组件失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -494,7 +495,7 @@ func (c *AppStoreController) ComponentBatchDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreComponentBatchDelete(ctx.Request.Context(), req.IDs); err != nil {
 		global.Logger.Error("批量删除组件失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -514,7 +515,7 @@ func (c *AppStoreController) ComponentSort(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AppStoreComponentSort(ctx.Request.Context(), &req); err != nil {
 		global.Logger.Error("更新组件排序失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

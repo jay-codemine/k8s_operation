@@ -7,7 +7,7 @@ import (
 
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -37,7 +37,7 @@ func (c *ResourceController) TemplateList(ctx *gin.Context) {
 	env := ctx.Query("env")
 	serviceType := ctx.Query("service_type")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.ResourceTemplateList(ctx.Request.Context(), env, serviceType)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -64,7 +64,7 @@ func (c *ResourceController) TemplateDetail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	tpl, err := svc.ResourceTemplateGetByID(ctx.Request.Context(), id)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -91,7 +91,7 @@ func (c *ResourceController) TemplateDefault(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	tpl, err := svc.ResourceTemplateGetDefault(ctx.Request.Context(), env, serviceType)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -117,7 +117,7 @@ func (c *ResourceController) TemplateCreate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.ResourceTemplateCreate(ctx.Request.Context(), &tpl); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -149,7 +149,7 @@ func (c *ResourceController) TemplateUpdate(ctx *gin.Context) {
 	}
 	tpl.ID = id
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.ResourceTemplateUpdate(ctx.Request.Context(), &tpl); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -172,7 +172,7 @@ func (c *ResourceController) TemplateDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.ResourceTemplateDelete(ctx.Request.Context(), id); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -193,7 +193,7 @@ func (c *ResourceController) RuleList(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 	env := ctx.Query("env")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.EnvResourceRuleList(ctx.Request.Context(), env)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -229,7 +229,7 @@ func (c *ResourceController) RuleUpdate(ctx *gin.Context) {
 	}
 	rule.ID = id
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.EnvResourceRuleUpdate(ctx.Request.Context(), &rule); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -257,7 +257,7 @@ func (c *ResourceController) Validate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result := svc.ValidateResourceConfig(ctx.Request.Context(), req.Env, req.ServiceType, req.Config)
 
 	resp.Success(result)
@@ -279,7 +279,7 @@ func (c *ResourceController) ApprovalList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.DeployApprovalList(ctx.Request.Context(), status, page, pageSize)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -307,7 +307,7 @@ func (c *ResourceController) ApprovalDetail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	approval, err := svc.DeployApprovalGetByID(ctx.Request.Context(), id)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -341,7 +341,7 @@ func (c *ResourceController) ApprovalApprove(ctx *gin.Context) {
 	userID := ctx.GetInt64("user_id")
 	userName := ctx.GetString("user_name")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.DeployApprovalApprove(ctx.Request.Context(), id, uint64(userID), userName, req.Comment); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -374,7 +374,7 @@ func (c *ResourceController) ApprovalReject(ctx *gin.Context) {
 	userID := ctx.GetInt64("user_id")
 	userName := ctx.GetString("user_name")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.DeployApprovalReject(ctx.Request.Context(), id, uint64(userID), userName, req.Comment); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return

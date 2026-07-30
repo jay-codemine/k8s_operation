@@ -6,7 +6,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -39,7 +39,7 @@ func (c *GitController) GetBranches(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	branches, err := svc.GitGetBranches(ctx.Request.Context(), param.RepoURL, param.CredentialID, param.Username, param.Password)
 	if err != nil {
 		global.Logger.Error("GitGetBranches error", zap.Error(err), zap.String("repo", param.RepoURL))
@@ -69,7 +69,7 @@ func (c *GitController) ValidateRepo(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	valid, message, err := svc.GitValidateRepo(ctx.Request.Context(), param.RepoURL, param.CredentialID, param.Username, param.Password)
 	if err != nil {
 		global.Logger.Error("GitValidateRepo error", zap.Error(err), zap.String("repo", param.RepoURL))

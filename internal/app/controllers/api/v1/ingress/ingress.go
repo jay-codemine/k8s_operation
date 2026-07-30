@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -42,7 +41,7 @@ func (c *KubeIngressController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Ingress 创建逻辑
 	ing, err := svc.KubeIngressCreate(ctx.Request.Context(), cli, req)
@@ -83,7 +82,7 @@ func (c *KubeIngressController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ingresses, total, err := svc.KubeIngressList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取Ingress列表失败", zap.String("error", err.Error()))
@@ -208,7 +207,7 @@ func (c *KubeIngressController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 3. 调用 Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ing, err := svc.KubeIngressDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -243,7 +242,7 @@ func (c *KubeIngressController) Patch(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	out, err := svc.KubeIngressPatch(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -274,7 +273,7 @@ func (c *KubeIngressController) PatchJSON(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	out, err := svc.KubeIngressPatchJSON(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -306,7 +305,7 @@ func (c *KubeIngressController) Delete(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用服务层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeIngressDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeIngressDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -340,7 +339,7 @@ func (c *KubeIngressController) Yaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	yamlContent, err := svc.KubeIngressYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
@@ -375,7 +374,7 @@ func (c *KubeIngressController) ApplyYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	ing, err := svc.KubeIngressApplyYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
@@ -412,7 +411,7 @@ func (c *KubeIngressController) CreateFromYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	ing, err := svc.KubeIngressCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {

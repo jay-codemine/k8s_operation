@@ -9,7 +9,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -43,7 +42,7 @@ func (ctl *KubePVCController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pvc, err := svc.KubeCreatePVC(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -86,7 +85,7 @@ func (ctl *KubePVCController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubePVCList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取PVC列表失败", zap.String("error", err.Error()))
@@ -146,7 +145,7 @@ func (c *KubePVCController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4) 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pvcDetail, err := svc.KubePVCDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -196,7 +195,7 @@ func (ctl *KubePVCController) Delete(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePVCDelete(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubePVCDelete error", zap.Error(err))
@@ -216,7 +215,7 @@ func (ctl *KubePVCController) GraceDelete(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePVCGraceDelete(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubePVCGraceDelete error", zap.Error(err))
@@ -251,7 +250,7 @@ func (ctl *KubePVCController) Resize(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pvcObj, err := svc.KubePVCResize(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -289,7 +288,7 @@ func (ctl *KubePVCController) CreateFromYaml(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pvc, err := svc.KubePVCCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -321,7 +320,7 @@ func (ctl *KubePVCController) ApplyYaml(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	
 	pvc, err := svc.KubePVCApplyYaml(ctx.Request.Context(), cli, param.Namespace, param.Name, param.Yaml)
 	if err != nil {
@@ -358,7 +357,7 @@ func (c *KubePVCController) DetailEnhanced(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	detail, err := svc.KubePVCDetailEnhanced(ctx.Request.Context(), cli, param)
 	if err != nil {

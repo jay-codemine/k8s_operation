@@ -8,7 +8,7 @@ import (
 	"io"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -36,7 +36,7 @@ func (c *K8sClusterController) Create(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.K8sClusterCreate(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("创建K8s集群失败", zap.Error(err))
 		// 如果项目里没有 ErrorClusterCreateFail，可替换为 ServerError 或自定义
@@ -66,7 +66,7 @@ func (c *K8sClusterController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.K8sClusterList(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("获取K8s集群列表失败", zap.Error(err))
@@ -94,7 +94,7 @@ func (c *K8sClusterController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.K8sClusterUpdate(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("修改K8s集群失败", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorClusterUpdateFail.WithDetails(err.Error()))
@@ -131,7 +131,7 @@ func (c *K8sClusterController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.K8sClusterDelete(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("删除K8s集群失败", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorClusterDeleteFail)
@@ -158,7 +158,7 @@ func (c *K8sClusterController) Init(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 现在的返回值是 *services.K8sClients（里面封装了 RestConfig/Clientset/MetricsClient）
 	cli, err := svc.K8sClusterInit(ctx.Request.Context(), param)
@@ -206,7 +206,7 @@ func (c *K8sClusterController) BatchDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	affected, err := svc.K8sClusterBatchDelete(ctx.Request.Context(), param.IDs)
 	if err != nil {
 		global.Logger.Error("批量删除K8s集群失败", zap.Error(err))

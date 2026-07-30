@@ -6,7 +6,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -42,7 +41,7 @@ func (c *KubeJobController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Job 创建逻辑（只有 Job，没有 Service）
 	jobObj, err := svc.KubeJobCreate(ctx.Request.Context(), cli, req)
@@ -76,7 +75,7 @@ func (c *KubeJobController) CreateFromYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层创建逻辑
 	jobObj, err := svc.KubeJobCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
@@ -116,7 +115,7 @@ func (c *KubeJobController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	jobs, total, err := svc.KubeJobList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取Job列表失败", zap.String("error", err.Error()))
@@ -152,7 +151,7 @@ func (c *KubeJobController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service 层逻辑
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	jobObj, err := svc.KubeJobDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -215,7 +214,7 @@ func (c *KubeJobController) Delete(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service 层删除逻辑
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeJobDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeJobDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -252,7 +251,7 @@ func (c *KubeJobController) Suspend(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层逻辑
 	if err := svc.KubeJobSuspend(ctx.Request.Context(), cli, req); err != nil {
@@ -296,7 +295,7 @@ func (c *KubeJobController) Restart(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层逻辑
 	jobObj, err := svc.KubeJobRestart(ctx.Request.Context(), cli, req)
@@ -337,7 +336,7 @@ func (c *KubeJobController) UpdateImage(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层逻辑
 	jobObj, err := svc.KubeJobUpdateImage(ctx.Request.Context(), cli, req)
@@ -386,7 +385,7 @@ func (c *KubeJobController) Events(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	events, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -420,7 +419,7 @@ func (c *KubeJobController) GetYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	yamlStr, err := svc.KubeJobGetYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		ctx.Error(err)
@@ -453,7 +452,7 @@ func (c *KubeJobController) ApplyYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	jobObj, err := svc.KubeJobApplyYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)

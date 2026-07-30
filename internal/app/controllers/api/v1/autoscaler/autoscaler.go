@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -41,7 +40,7 @@ func (c *KubeHPAController) List(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.KubeHPAList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("KubeHPAList error", zap.Error(err))
@@ -65,7 +64,7 @@ func (c *KubeHPAController) Detail(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeHPADetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("KubeHPADetail error", zap.Error(err))
@@ -94,7 +93,7 @@ func (c *KubeHPAController) Create(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeHPACreate(ctx.Request.Context(), cli, req)
 	if err != nil {
 		global.Logger.Error("KubeHPACreate error", zap.Error(err))
@@ -121,7 +120,7 @@ func (c *KubeHPAController) Update(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeHPAUpdate(ctx.Request.Context(), cli, req)
 	if err != nil {
 		global.Logger.Error("KubeHPAUpdate error", zap.Error(err))
@@ -148,7 +147,7 @@ func (c *KubeHPAController) Delete(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeHPADelete(ctx.Request.Context(), cli, param.Namespace, param.Name); err != nil {
 		global.Logger.Error("KubeHPADelete error", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorK8sHPADeleteFail.WithDetails(err.Error()))
@@ -171,7 +170,7 @@ func (c *KubeHPAController) Scale(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeHPAScale(ctx.Request.Context(), cli, req)
 	if err != nil {
 		global.Logger.Error("KubeHPAScale error", zap.Error(err))
@@ -200,7 +199,7 @@ func (c *KubeHPAController) CreateFromYaml(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeHPACreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		global.Logger.Error("KubeHPACreateFromYaml error", zap.Error(err))
@@ -235,7 +234,7 @@ func (c *KubeHPAController) BatchScale(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	results, successCnt, failCnt := svc.KubeHPABatchScale(ctx.Request.Context(), cli, req)
 	r.Success(gin.H{
 		"message":      "批量扩缩容完成",
@@ -264,7 +263,7 @@ func (c *KubeHPAController) BatchStatus(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	results := svc.KubeHPABatchStatus(ctx.Request.Context(), cli, req.Items)
 
 	successCnt, failCnt := 0, 0
@@ -301,7 +300,7 @@ func (c *KubeVPAController) Available(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	available := svc.KubeVPAAvailable(ctx.Request.Context(), cli)
 	r.Success(gin.H{"available": available})
 }
@@ -320,7 +319,7 @@ func (c *KubeVPAController) List(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if !svc.KubeVPAAvailable(ctx.Request.Context(), cli) {
 		r.ToErrorResponse(errorcode.ErrorK8sVPANotInstalled)
 		return
@@ -348,7 +347,7 @@ func (c *KubeVPAController) Detail(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeVPADetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("KubeVPADetail error", zap.Error(err))
@@ -375,7 +374,7 @@ func (c *KubeVPAController) Create(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if !svc.KubeVPAAvailable(ctx.Request.Context(), cli) {
 		r.ToErrorResponse(errorcode.ErrorK8sVPANotInstalled)
 		return
@@ -406,7 +405,7 @@ func (c *KubeVPAController) Update(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	obj, err := svc.KubeVPAUpdate(ctx.Request.Context(), cli, req)
 	if err != nil {
 		global.Logger.Error("KubeVPAUpdate error", zap.Error(err))
@@ -433,7 +432,7 @@ func (c *KubeVPAController) Delete(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeVPADelete(ctx.Request.Context(), cli, param.Namespace, param.Name); err != nil {
 		global.Logger.Error("KubeVPADelete error", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorK8sVPADeleteFail.WithDetails(err.Error()))
@@ -458,7 +457,7 @@ func (c *KubeVPAController) CreateFromYaml(ctx *gin.Context) {
 	if cli == nil {
 		return
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if !svc.KubeVPAAvailable(ctx.Request.Context(), cli) {
 		r.ToErrorResponse(errorcode.ErrorK8sVPANotInstalled)
 		return

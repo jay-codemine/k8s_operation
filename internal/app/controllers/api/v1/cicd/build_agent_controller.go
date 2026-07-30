@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -38,7 +38,7 @@ func (c *BuildAgentController) List(ctx *gin.Context) {
 	status := ctx.Query("status")
 	keyword := ctx.Query("keyword")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.BuildAgentList(ctx.Request.Context(), category, scope, status, keyword, page, pageSize)
 	if err != nil {
 		global.Logger.Error("BuildAgentList error", zap.Error(err))
@@ -64,7 +64,7 @@ func (c *BuildAgentController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	agent, err := svc.BuildAgentDetail(ctx.Request.Context(), id)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -126,7 +126,7 @@ func (c *BuildAgentController) Upload(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.BuildAgentUpload(ctx.Request.Context(), file, header, agent, userID)
 	if err != nil {
 		global.Logger.Error("BuildAgentUpload error", zap.Error(err))
@@ -208,7 +208,7 @@ func (c *BuildAgentController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.BuildAgentUpdate(ctx.Request.Context(), req.ID, updates); err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -234,7 +234,7 @@ func (c *BuildAgentController) ToggleStatus(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	agent, err := svc.BuildAgentToggleStatus(ctx.Request.Context(), req.ID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -261,7 +261,7 @@ func (c *BuildAgentController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.BuildAgentDelete(ctx.Request.Context(), req.ID); err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -280,7 +280,7 @@ func (c *BuildAgentController) Delete(ctx *gin.Context) {
 func (c *BuildAgentController) Download(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	var agent *models.CicdBuildAgent
 	var err error
 
@@ -332,7 +332,7 @@ func (c *BuildAgentController) ListByScope(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, err := svc.BuildAgentListByScope(ctx.Request.Context(), scope)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

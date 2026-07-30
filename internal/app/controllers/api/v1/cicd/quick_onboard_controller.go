@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -37,7 +37,7 @@ func (c *QuickOnboardController) Onboard(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.QuickOnboard(ctx.Request.Context(), param, userID)
 	if err != nil {
 		ctx.Error(err)

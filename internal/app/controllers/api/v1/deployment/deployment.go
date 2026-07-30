@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -47,7 +46,7 @@ func (c *KubeDeploymentController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	deployments, total, err := svc.KubeDeploymentList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取Deployment列表失败", zap.String("error", err.Error()))
@@ -77,7 +76,7 @@ func (c *KubeDeploymentController) Detail(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	dp, err := svc.KubeDeploymentDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -110,7 +109,7 @@ func (c *KubeDeploymentController) Create(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	dp, svcObj, err := svc.KubeDeploymentCreate(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -137,7 +136,7 @@ func (c *KubeDeploymentController) CreateFromYaml(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	dp, createdResources, err := svc.KubeDeploymentCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -180,7 +179,7 @@ func (c *KubeDeploymentController) Delete(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeDeploymentDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeDeploymentDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -211,7 +210,7 @@ func (c *KubeDeploymentController) Scale(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	// 注意：传入的是 context.Context
 	dep, err := svc.KubeUpdateDeploymentReplicas(ctx.Request.Context(), cli, param)
 	if err != nil {
@@ -247,7 +246,7 @@ func (c *KubeDeploymentController) UpdateImage(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	dp, err := svc.KubeUpdateDeploymentImage(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -278,7 +277,7 @@ func (c *KubeDeploymentController) PatchTemplate(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	dp, err := svc.KubeUpdateDeploymentTemplate(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -309,7 +308,7 @@ func (c *KubeDeploymentController) Rollback(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	_, err := svc.KubeDeploymentRollback(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -339,7 +338,7 @@ func (c *KubeDeploymentController) Restart(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeDeploymentRestart(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeDeploymentRestart error", zap.Error(err))
@@ -367,7 +366,7 @@ func (c *KubeDeploymentController) DeploymentPodList(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pods, err := svc.KubeDeploymentGetPod(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -398,7 +397,7 @@ func (c *KubeDeploymentController) DeleteService(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeDeploymentDeleteService(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeDeploymentDeleteService error", zap.Error(err))
@@ -436,7 +435,7 @@ func (c *KubeDeploymentController) EventList(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -466,7 +465,7 @@ func (c *KubeDeploymentController) History(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	rsList, err := svc.KubeDeploymentHistory(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -565,7 +564,7 @@ func (c *KubeDeploymentController) UpdateStrategy(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	config, err := svc.KubeUpdateDeploymentStrategy(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -596,7 +595,7 @@ func (c *KubeDeploymentController) PauseRollout(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePauseDeployment(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("暂停 Rollout 失败", zap.Error(err))
@@ -625,7 +624,7 @@ func (c *KubeDeploymentController) ResumeRollout(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeResumeDeployment(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("恢复 Rollout 失败", zap.Error(err))
@@ -654,7 +653,7 @@ func (c *KubeDeploymentController) RolloutStatus(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	status, err := svc.KubeGetRolloutStatus(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -685,7 +684,7 @@ func (c *KubeDeploymentController) UpdateResources(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeUpdateDeploymentResources(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)

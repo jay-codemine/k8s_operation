@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
@@ -38,7 +38,7 @@ func NewAuditLogController() *AuditLogController {
 // @Router /api/v1/platform/audit/logs [get]
 func (ctrl *AuditLogController) List(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var query models.AuditLogQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {
@@ -67,7 +67,7 @@ func (ctrl *AuditLogController) List(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/logs/{id} [get]
 func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -95,7 +95,7 @@ func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/statistics [get]
 func (ctrl *AuditLogController) Statistics(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	stats, err := svc.AuditLogGetStatistics(ctx.Request.Context())
 	if err != nil {
@@ -116,7 +116,7 @@ func (ctrl *AuditLogController) Statistics(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/retention [get]
 func (ctrl *AuditLogController) GetRetention(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	policy, err := svc.AuditLogGetRetention(ctx.Request.Context())
 	if err != nil {
@@ -139,7 +139,7 @@ func (ctrl *AuditLogController) GetRetention(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/retention [put]
 func (ctrl *AuditLogController) UpdateRetention(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var req models.AuditRetentionUpdateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -166,7 +166,7 @@ func (ctrl *AuditLogController) UpdateRetention(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/cleanup [post]
 func (ctrl *AuditLogController) Cleanup(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	affected, err := svc.AuditLogCleanup(ctx.Request.Context())
 	if err != nil {
@@ -196,7 +196,7 @@ func (ctrl *AuditLogController) Cleanup(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/export [get]
 func (ctrl *AuditLogController) Export(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var query models.AuditLogQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {

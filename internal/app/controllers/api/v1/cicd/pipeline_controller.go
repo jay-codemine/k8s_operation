@@ -13,6 +13,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -46,7 +47,7 @@ func (c *PipelineController) Create(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	id, warnings, err := svc.PipelineCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("PipelineCreate error", zap.Error(err))
@@ -93,7 +94,7 @@ func (c *PipelineController) CheckName(ctx *gin.Context) {
 
 	excludeID, _ := strconv.ParseInt(ctx.Query("exclude_id"), 10, 64)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	available, _, err := svc.PipelineCheckName(ctx.Request.Context(), name, excludeID)
 	if err != nil {
 		global.Logger.Error("PipelineCheckName error", zap.Error(err))
@@ -129,7 +130,7 @@ func (c *PipelineController) BatchCreate(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	result, err := svc.PipelineBatchCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
@@ -167,7 +168,7 @@ func (c *PipelineController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pipeline, err := svc.PipelineDetail(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("PipelineDetail error", zap.Error(err))
@@ -197,7 +198,7 @@ func (c *PipelineController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.PipelineList(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("PipelineList error", zap.Error(err))
@@ -227,7 +228,7 @@ func (c *PipelineController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.PipelineUpdate(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("PipelineUpdate error", zap.Error(err))
@@ -257,7 +258,7 @@ func (c *PipelineController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.PipelineDelete(ctx.Request.Context(), param.ID)
 	if err != nil {
 		global.Logger.Error("PipelineDelete error", zap.Error(err))
@@ -289,7 +290,7 @@ func (c *PipelineController) Run(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	run, err := svc.PipelineRun(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("PipelineRun error", zap.Error(err))
@@ -328,7 +329,7 @@ func (c *PipelineController) BatchRun(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var successCount, failCount int
 	var results []map[string]any
@@ -385,7 +386,7 @@ func (c *PipelineController) BatchStop(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var successCount, failCount int
 	var results []map[string]any
@@ -436,7 +437,7 @@ func (c *PipelineController) Stop(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.PipelineStop(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("PipelineStop error", zap.Error(err))
@@ -467,7 +468,7 @@ func (c *PipelineController) Logs(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	log, err := svc.PipelineLogs(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("PipelineLogs error", zap.Error(err))
@@ -498,7 +499,7 @@ func (c *PipelineController) Status(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pipeline, buildInfo, latestRun, err := svc.PipelineStatusWithRun(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("PipelineStatus error", zap.Error(err))
@@ -540,7 +541,7 @@ func (c *PipelineController) History(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.PipelineHistory(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("PipelineHistory error", zap.Error(err))
@@ -574,7 +575,7 @@ func (c *PipelineController) Callback(ctx *gin.Context) {
 
 	// HMAC 签名验证
 	// 签名格式: HMAC-SHA256(secret, "job_name:build_number:status")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	signature := ctx.GetHeader("X-Signature")
 	if !svc.VerifyHMACSignature(signature, param.JobName, param.BuildNumber, param.Status) {
 		global.Logger.Warn("[回调] HMAC 签名验证失败",
@@ -632,7 +633,7 @@ func (c *PipelineController) Stages(ctx *gin.Context) {
 		buildNumber, _ = strconv.Atoi(bn)
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stages, err := svc.PipelineStages(ctx.Request.Context(), id, buildNumber)
 	if err != nil {
 		global.Logger.Error("PipelineStages error", zap.Error(err))
@@ -652,7 +653,7 @@ func (c *PipelineController) Stages(ctx *gin.Context) {
 // @Router /api/v1/k8s/cicd/pipeline/template-verify [get]
 func (c *PipelineController) TemplateVerify(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	templates, err := svc.TemplateVerifyAll(ctx.Request.Context())
 	if err != nil {
@@ -695,7 +696,7 @@ func (c *PipelineController) TemplateSimulate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.TemplateSimulateRun(ctx.Request.Context(), languageType, gitRepo, gitBranch, imageRepo)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -728,7 +729,7 @@ func (c *PipelineController) SonarReport(ctx *gin.Context) {
 		runID, _ = strconv.ParseInt(rid, 10, 64)
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	report, err := svc.GetSonarReport(ctx.Request.Context(), pipelineID, runID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -773,7 +774,7 @@ func (c *PipelineController) SonarCallback(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.SaveSonarReport(ctx.Request.Context(), req.PipelineID, req.RunID, &models.StageSonarInfo{
 		ProjectKey:        req.ProjectKey,
 		ProjectName:       req.ProjectName,
@@ -816,7 +817,7 @@ func (c *PipelineController) DeploySilenceStatus(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	rules, err := svc.GetActiveDeploySilences(ctx.Request.Context(), pipelineID)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -866,7 +867,7 @@ func (c *PipelineController) Discover(ctx *gin.Context) {
 	}
 
 	// 通过集群工厂获取客户端
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	factory := services.NewClusterClientFactory(svc)
 
 	cli, err := factory.GetClient(ctx.Request.Context(), clusterID)
@@ -1009,7 +1010,7 @@ func (c *PipelineController) BuildRecords(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.BuildRecordList(ctx.Request.Context(), page, pageSize, status, keyword, pipelineID)
 	if err != nil {
 		global.Logger.Error("BuildRecords error", zap.Error(err))
@@ -1037,7 +1038,7 @@ func (c *PipelineController) ExportBuildRecords(ctx *gin.Context) {
 	keyword := ctx.Query("keyword")
 	pipelineID, _ := strconv.ParseInt(ctx.Query("pipeline_id"), 10, 64)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, _, err := svc.BuildRecordList(ctx.Request.Context(), 1, 10000, status, keyword, pipelineID)
 	if err != nil {
 		global.Logger.Error("ExportBuildRecords error", zap.Error(err))
@@ -1077,7 +1078,7 @@ func (c *PipelineController) BuildStats(ctx *gin.Context) {
 
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.BuildStats(ctx.Request.Context(), days)
 	if err != nil {
 		global.Logger.Error("BuildStats error", zap.Error(err))

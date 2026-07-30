@@ -8,7 +8,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -42,7 +42,7 @@ func (c *TemplateController) Create(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	id, err := svc.TemplateCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("TemplateCreate error", zap.Error(err))
@@ -73,7 +73,7 @@ func (c *TemplateController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	template, err := svc.TemplateDetail(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("TemplateDetail error", zap.Error(err))
@@ -103,7 +103,7 @@ func (c *TemplateController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.TemplateList(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("TemplateList error", zap.Error(err))
@@ -133,7 +133,7 @@ func (c *TemplateController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.TemplateUpdate(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("TemplateUpdate error", zap.Error(err))
@@ -163,7 +163,7 @@ func (c *TemplateController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.TemplateDelete(ctx.Request.Context(), param.ID)
 	if err != nil {
 		global.Logger.Error("TemplateDelete error", zap.Error(err))

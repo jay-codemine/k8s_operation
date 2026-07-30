@@ -3,7 +3,7 @@ package appconfig
 import (
 	"github.com/gin-gonic/gin"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
 )
@@ -35,7 +35,7 @@ func (c *KubeAppConfigController) Create(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	data, err := svc.KubeAppConfigCreate(ctx, param)
 	if err != nil {
 		ctx.Error(err)
@@ -65,7 +65,7 @@ func (c *KubeAppConfigController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	data, err := svc.KubeAppConfigUpdate(ctx, param)
 	if err != nil {
 		ctx.Error(err)
@@ -97,7 +97,7 @@ func (c *KubeAppConfigController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	data, err := svc.KubeAppConfigGet(ctx, param)
 	if err != nil {
 		ctx.Error(err)
@@ -128,7 +128,7 @@ func (c *KubeAppConfigController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	data, err := svc.KubeAppConfigList(ctx, param)
 	if err != nil {
 		ctx.Error(err)
@@ -160,7 +160,7 @@ func (c *KubeAppConfigController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeAppConfigDelete(ctx, param); err != nil {
 		ctx.Error(err)
 		return

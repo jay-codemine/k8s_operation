@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -41,7 +40,7 @@ func (c *KubeStatefulSetController) Create(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	sts, svc, err := service.KubeStatefulSetCreateService(ctx.Request.Context(), cli, req)
 	// fulSetCreateService(ctx.Request.Context(), cli, req)
 	if err != nil {
@@ -74,7 +73,7 @@ func (c *KubeStatefulSetController) CreateFromYaml(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	sts, createdResources, err := service.KubeStatefulSetCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -122,7 +121,7 @@ func (c *KubeStatefulSetController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sts, total, err := svc.KubeStatefulSetList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取StatefulSet列表失败", zap.String("error", err.Error()))
@@ -154,7 +153,7 @@ func (c *KubeStatefulSetController) Detail(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	sts, err := service.KubeStatefulSetDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -190,7 +189,7 @@ func (c *KubeStatefulSetController) Scale(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	sts, err := service.KubeStatefulSetPatchReplicas(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err) // 交给中间件
@@ -241,7 +240,7 @@ func (c *KubeStatefulSetController) UpdateImage(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 3) 调用服务
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	sts, err := svc.KubeStatefulSetPatchImage(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err) // 交给中间件统一处理
@@ -283,7 +282,7 @@ func (c *KubeStatefulSetController) Restart(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	sts, err := service.KubeStatefulSetRestart(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -319,7 +318,7 @@ func (c *KubeStatefulSetController) Delete(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	err := service.KubeStatefulSetDelete(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -352,7 +351,7 @@ func (c *KubeStatefulSetController) DeleteService(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	service := services.NewServices()
+	service := middlewares.NewServicesFromContext(ctx)
 	err := service.KubeStatefulSetDeleteService(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -383,7 +382,7 @@ func (c *KubeStatefulSetController) PodList(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pods, err := svc.KubeStatefulSetGetPod(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -415,7 +414,7 @@ func (c *KubeStatefulSetController) EventList(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -446,7 +445,7 @@ func (c *KubeStatefulSetController) History(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	revList, err := svc.KubeStatefulSetHistory(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -477,7 +476,7 @@ func (c *KubeStatefulSetController) Rollback(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	_, err := svc.KubeStatefulSetRollback(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -575,7 +574,7 @@ func (c *KubeStatefulSetController) UpdateResources(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeUpdateStatefulSetResources(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)

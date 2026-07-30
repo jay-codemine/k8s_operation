@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -39,7 +39,7 @@ func (c *CicdReleaseController) Create(ctx *gin.Context) {
 	// 获取当前用户 ID
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	id, err := svc.CicdReleaseCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		ctx.Error(err)
@@ -92,7 +92,7 @@ func (c *CicdReleaseController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	rel, tasks, err := svc.CicdReleaseDetail(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("CicdReleaseDetail error", zap.Error(err))
@@ -124,7 +124,7 @@ func (c *CicdReleaseController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.CicdReleaseList(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("CicdReleaseList error", zap.Error(err))
@@ -143,7 +143,7 @@ func (c *CicdReleaseController) List(ctx *gin.Context) {
 // @Router /api/v1/k8s/cicd/release/stats [get]
 func (c *CicdReleaseController) Stats(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stats, err := svc.CicdReleaseStats(ctx.Request.Context())
 	if err != nil {
 		global.Logger.Error("CicdReleaseStats error", zap.Error(err))
@@ -169,7 +169,7 @@ func (c *CicdReleaseController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.CicdReleaseUpdate(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("CicdReleaseUpdate error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorCicdReleaseUpdateFail.WithDetails(err.Error()))
@@ -194,7 +194,7 @@ func (c *CicdReleaseController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.CicdReleaseDelete(ctx.Request.Context(), param.ID); err != nil {
 		global.Logger.Error("CicdReleaseDelete error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorCicdReleaseDeleteFail.WithDetails(err.Error()))
@@ -221,7 +221,7 @@ func (c *CicdReleaseController) Cancel(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.CicdReleaseCancel(ctx.Request.Context(), param.ID, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseCancel error", zap.Error(err))
@@ -262,7 +262,7 @@ func (c *CicdReleaseController) Rollback(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	newID, err := svc.CicdReleaseRollback(ctx.Request.Context(), param.ID, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseRollback error", zap.Error(err))
@@ -293,7 +293,7 @@ func (c *CicdReleaseController) Retry(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	newID, err := svc.CicdReleaseRetry(ctx.Request.Context(), param.ID, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseRetry error", zap.Error(err))
@@ -321,7 +321,7 @@ func (c *CicdReleaseController) Tasks(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	tasks, err := svc.CicdTasksByRelease(ctx.Request.Context(), releaseID)
 	if err != nil {
 		global.Logger.Error("CicdTasksByRelease error", zap.Error(err))
@@ -349,7 +349,7 @@ func (c *CicdReleaseController) BuildCallback(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.CicdBuildCallback(ctx.Request.Context(), param); err != nil {
 		global.Logger.Error("CicdBuildCallback error", zap.Error(err))
 		rsp.ToErrorResponse(errorcode.ErrorCicdBuildCallbackFail.WithDetails(err.Error()))
@@ -382,7 +382,7 @@ func (c *CicdReleaseController) BatchRetry(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	results, err := svc.CicdReleaseBatchRetry(ctx.Request.Context(), param.IDs, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseBatchRetry error", zap.Error(err))
@@ -429,7 +429,7 @@ func (c *CicdReleaseController) BatchRollback(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	results, err := svc.CicdReleaseBatchRollback(ctx.Request.Context(), param.IDs, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseBatchRollback error", zap.Error(err))
@@ -476,7 +476,7 @@ func (c *CicdReleaseController) BatchCancel(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	results, err := svc.CicdReleaseBatchCancel(ctx.Request.Context(), param.IDs, userID)
 	if err != nil {
 		global.Logger.Error("CicdReleaseBatchCancel error", zap.Error(err))
@@ -510,7 +510,7 @@ func (c *CicdReleaseController) BatchCancel(ctx *gin.Context) {
 func (c *CicdReleaseController) SyncFromPipeline(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	synced, err := svc.CicdReleaseSyncFromPipeline(ctx.Request.Context())
 	if err != nil {
 		global.Logger.Error("CicdReleaseSyncFromPipeline error", zap.Error(err))
@@ -549,7 +549,7 @@ func (c *CicdReleaseController) History(ctx *gin.Context) {
 	startTime, _ := strconv.ParseInt(ctx.Query("start_time"), 10, 64)
 	endTime, _ := strconv.ParseInt(ctx.Query("end_time"), 10, 64)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.CicdReleaseHistory(ctx.Request.Context(), appName, namespace, status, startTime, endTime, page, pageSize)
 	if err != nil {
 		global.Logger.Error("CicdReleaseHistory error", zap.Error(err))
@@ -570,7 +570,7 @@ func (c *CicdReleaseController) History(ctx *gin.Context) {
 func (c *CicdReleaseController) StatsEnhanced(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stats, err := svc.CicdReleaseStatsEnhanced(ctx.Request.Context())
 	if err != nil {
 		global.Logger.Error("CicdReleaseStatsEnhanced error", zap.Error(err))

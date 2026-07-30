@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -42,7 +41,7 @@ func (ctl *KubeConfigMapController) Create(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cm, err := svc.KubeCreateConfigMap(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -88,7 +87,7 @@ func (c *KubeConfigMapController) List(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	configMaps, total, err := svc.KubeConfigMapList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -128,7 +127,7 @@ func (c *KubeConfigMapController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用业务逻辑层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cm, err := svc.KubeConfigMapDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -165,7 +164,7 @@ func (c *KubeConfigMapController) Delete(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用服务层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeConfigMapDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeConfigMapDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -201,7 +200,7 @@ func (c *KubeConfigMapController) Patch(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	out, err := svc.KubeConfigMapPatch(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -237,7 +236,7 @@ func (c *KubeConfigMapController) PatchJSON(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	out, err := svc.KubeConfigMapUpdate(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -271,7 +270,7 @@ func (c *KubeConfigMapController) Yaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	yamlStr, err := svc.KubeConfigMapYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		ctx.Error(err)
@@ -304,7 +303,7 @@ func (c *KubeConfigMapController) UpdateData(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cm, err := svc.KubeConfigMapUpdateData(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -344,7 +343,7 @@ func (c *KubeConfigMapController) ApplyYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	cm, err := svc.KubeConfigMapApplyYaml(ctx.Request.Context(), cli, param.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -382,7 +381,7 @@ func (c *KubeConfigMapController) ParseMultiYaml(ctx *gin.Context) {
 		zap.String("yaml_preview", param.Yaml[:min(100, len(param.Yaml))]),
 	)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeMultiResourceParseYaml(ctx.Request.Context(), param.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -418,7 +417,7 @@ func (c *KubeConfigMapController) ApplyMultiYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeMultiResourceApplyYaml(ctx.Request.Context(), cli, param.Yaml)
 	if err != nil {
 		ctx.Error(err)

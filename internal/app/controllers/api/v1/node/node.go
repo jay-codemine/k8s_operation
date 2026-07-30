@@ -11,7 +11,6 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -49,7 +48,7 @@ func (ctl *KubeNodeController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubeNodeList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -161,7 +160,7 @@ func (c *KubeNodeController) Detail(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4) 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	nodeObj, err := svc.KubeNodeDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -224,7 +223,7 @@ func (ctl *KubeNodeController) ListPods(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, err := svc.KubeNodePods(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -260,7 +259,7 @@ func (ctl *KubeNodeController) Metrics(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, total, err := svc.KubeNodeMetricsList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Warn("获取 Node 指标失败", zap.Error(err))
@@ -317,7 +316,7 @@ func (c *KubeNodeController) Cordon(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4) 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeNodeCordon(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeNodeCordon error", zap.Error(err))
@@ -360,7 +359,7 @@ func (c *KubeNodeController) Drain(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 4) 调用 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeNodeDrain(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeNodeDrain error", zap.Error(err))
@@ -395,7 +394,7 @@ func (c *KubeNodeController) PatchLabels(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	if err := svc.KubeNodePatchLabels(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
@@ -430,7 +429,7 @@ func (c *KubeNodeController) PatchTaints(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	if err := svc.KubeNodePatchTaints(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
@@ -464,7 +463,7 @@ func (c *KubeNodeController) Events(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	events, err := svc.KubeNodeEvents(ctx.Request.Context(), cli, param)
 	if err != nil {

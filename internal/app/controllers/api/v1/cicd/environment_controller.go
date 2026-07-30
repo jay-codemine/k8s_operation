@@ -10,6 +10,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
@@ -40,7 +41,7 @@ func (c *EnvironmentController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.EnvironmentList(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("EnvironmentList error", zap.Error(err))
@@ -69,7 +70,7 @@ func (c *EnvironmentController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	env, err := svc.EnvironmentDetail(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("EnvironmentDetail error", zap.Error(err))
@@ -99,7 +100,7 @@ func (c *EnvironmentController) Create(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	id, err := svc.EnvironmentCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("EnvironmentCreate error", zap.Error(err))
@@ -127,7 +128,7 @@ func (c *EnvironmentController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.EnvironmentUpdate(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("EnvironmentUpdate error", zap.Error(err))
@@ -155,7 +156,7 @@ func (c *EnvironmentController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.EnvironmentDelete(ctx.Request.Context(), param.ID)
 	if err != nil {
 		global.Logger.Error("EnvironmentDelete error", zap.Error(err))
@@ -195,7 +196,7 @@ func (c *ApprovalController) List(ctx *gin.Context) {
 	}
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 权限判断：有 cicd:approval:action 权限的是审批人，可看全部；否则只能看自己提交的
 	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
@@ -240,7 +241,7 @@ func (c *ApprovalController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	approval, err := svc.ApprovalDetail(ctx.Request.Context(), id)
 	if err != nil {
 		global.Logger.Error("ApprovalDetail error", zap.Error(err))
@@ -270,7 +271,7 @@ func (c *ApprovalController) Create(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	id, err := svc.ApprovalCreate(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("ApprovalCreate error", zap.Error(err))
@@ -300,7 +301,7 @@ func (c *ApprovalController) Action(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.ApprovalAction(ctx.Request.Context(), param, userID)
 	if err != nil {
 		global.Logger.Error("ApprovalAction error", zap.Error(err))
@@ -340,7 +341,7 @@ func (c *ApprovalController) BatchAction(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	success, failures := svc.ApprovalBatchAction(ctx.Request.Context(), param.IDs, param.Action, param.Reason, userID)
 
 	rsp.Success(gin.H{
@@ -367,7 +368,7 @@ func (c *ApprovalController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.ApprovalUpdate(ctx.Request.Context(), param)
 	if err != nil {
 		global.Logger.Error("ApprovalUpdate error", zap.Error(err))
@@ -395,7 +396,7 @@ func (c *ApprovalController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.ApprovalDelete(ctx.Request.Context(), param.ID)
 	if err != nil {
 		global.Logger.Error("ApprovalDelete error", zap.Error(err))
@@ -420,7 +421,7 @@ func (c *ApprovalController) Pending(ctx *gin.Context) {
 
 	userID := ctx.GetInt64("user_id")
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.ApprovalPendingList(ctx.Request.Context(), userID)
 	if err != nil {
 		global.Logger.Error("ApprovalPendingList error", zap.Error(err))
@@ -442,7 +443,7 @@ func (c *ApprovalController) Stats(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
 	userID := ctx.GetInt64("user_id")
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 权限判断：有审批操作权限的看全局统计，否则只看自己的
 	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
@@ -494,7 +495,7 @@ func (c *ApprovalController) FeishuCallback(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.HandleFeishuApprovalCallback(ctx.Request.Context(), req)
 	if err != nil {
 		global.Logger.Error("FeishuCallback error", zap.Error(err))

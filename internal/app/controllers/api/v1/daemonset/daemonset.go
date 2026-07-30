@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -47,7 +46,7 @@ func (c *KubeDaemonSetController) Create(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 调用 Service 层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ds, svcObj, err := svc.KubeDaemonSetCreate(ctx.Request.Context(), cli, req)
 	if err != nil {
 		ctx.Error(err)
@@ -76,7 +75,7 @@ func (c *KubeDaemonSetController) CreateFromYaml(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ds, createdResources, err := svc.KubeDaemonSetCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
 	if err != nil {
 		ctx.Error(err)
@@ -124,7 +123,7 @@ func (c *KubeDaemonSetController) List(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	daemonsets, total, err := svc.KubeDaemonSetList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("获取DaemonSet列表失败", zap.String("error", err.Error()))
@@ -154,7 +153,7 @@ func (c *KubeDaemonSetController) Detail(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ds, err := svc.KubeDaemonSetDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -190,7 +189,7 @@ func (c *KubeDaemonSetController) Delete(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeDaemonSetDelete(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeDaemonSetDelete error", zap.Error(err))
 		ctx.Error(err)
@@ -226,7 +225,7 @@ func (c *KubeDaemonSetController) DeleteService(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubeDaemonSetDeleteService(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Error("service.KubeDaemonSetDeleteService error", zap.Error(err))
 		ctx.Error(err)
@@ -258,7 +257,7 @@ func (c *KubeDaemonSetController) UpdateImage(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	ds, err := svc.KubeDaemonSetUpdateImage(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -294,7 +293,7 @@ func (c *KubeDaemonSetController) Restart(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	err := svc.KubeDaemonSetRestart(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -326,7 +325,7 @@ func (c *KubeDaemonSetController) Rollback(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	_, err := svc.KubeDaemonSetRollback(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -357,7 +356,7 @@ func (c *KubeDaemonSetController) Pods(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pods, err := svc.KubeDaemonSetPods(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -386,7 +385,7 @@ func (c *KubeDaemonSetController) History(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	history, err := svc.KubeDaemonSetHistory(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -413,7 +412,7 @@ func (c *KubeDaemonSetController) Events(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	events, _, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
@@ -509,7 +508,7 @@ func (c *KubeDaemonSetController) UpdateResources(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.KubeUpdateDaemonSetResources(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)
