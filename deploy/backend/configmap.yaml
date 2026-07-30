@@ -99,8 +99,8 @@ data:
       Username: "${JENKINS_USERNAME}"
       APIToken: "${JENKINS_API_TOKEN}"
       TriggerTimeout: 60
-      CallbackURL: "${PLATFORM_FRONTEND_URL}"                     # 审批按钮回调地址（走前端 Nginx 反代 /api/ → 后端）
-      PlatformURL: "${PLATFORM_FRONTEND_URL}"                     # 前端公网地址（通知链接用）
+      CallbackURL: "http://k8soperation.k8soperation.svc.cluster.local:8080"  # Jenkins 回调 → 后端 Service
+      PlatformURL: "${PLATFORM_FRONTEND_URL}"                                      # 前端公网地址（通知/审批链接）
       DefaultBranch: "main"                                        # 默认 Git 分支
       DefaultImageRegistry: "${DEFAULT_IMAGE_REGISTRY}"           # 默认镜像仓库前缀
       # 凭证 ID（对应 Jenkins Credentials 中的 ID）
