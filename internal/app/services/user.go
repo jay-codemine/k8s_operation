@@ -8,7 +8,7 @@ import (
 
 // UserCreate 创建用户
 func (s *Services) UserCreate(parm *requests.UserCreateRequest) (*models.User, error) {
-	return s.dao.UserCreate(parm.Username, parm.Password)
+	return s.dao.UserCreate(parm.Username, parm.Password, parm.TenantID)
 }
 
 // UserDelete 删除用户

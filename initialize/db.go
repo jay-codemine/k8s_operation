@@ -831,7 +831,7 @@ func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
 	if _, err := d.UserGetByName("admin"); err == nil {
 		return
 	}
-	user, err := d.UserCreate("admin", "123456")
+	user, err := d.UserCreate("admin", "123456", 0) // 0 = 默认租户
 	if err != nil {
 		log.Printf("[InitData] create admin failed: %v", err)
 		return

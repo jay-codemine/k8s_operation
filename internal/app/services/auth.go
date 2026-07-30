@@ -55,6 +55,6 @@ func (s *Services) AuthRegister(param *requests.AuthRegisterRequest) error {
 	}
 
 	// 创建用户（这里建议密码做 hash：bcrypt）
-	_, err = s.dao.UserCreate(param.Username, param.Password)
+	_, err = s.dao.UserCreate(param.Username, param.Password, 0) // 0 = 默认租户
 	return err
 }

@@ -180,6 +180,12 @@
             <input v-model="createForm.phone" placeholder="请输入手机号" />
           </div>
           <div class="form-group">
+            <label>归属租户</label>
+            <select v-model="createForm.tenant_id" class="form-select">
+              <option v-for="t in tenantList" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>分配角色</label>
             <div class="role-checkboxes">
               <label v-for="role in allRoles" :key="role.id" class="checkbox-item">
@@ -271,6 +277,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import http from '@/api/http'
 import { getUserList, createUser, updateUserStatus } from '@/api/user'
 import { getAllRoles, getUserRBACInfo, assignUserRole } from '@/api/rbac'
 
@@ -294,12 +301,21 @@ const roleForm = ref({
 // 创建用户
 const showCreateModal = ref(false)
 const createError = ref('')
+const tenantList = ref([])
+const loadTenants = async () => {
+  try {
+    const res = await http.get('/api/v1/tenants')
+    tenantList.value = res.data?.items || []
+  } catch { tenantList.value = [{ id: 1, name: '默认租户' }] }
+}
+
 const createForm = ref({
   username: '',
   password: '',
   confirm_password: '',
   email: '',
   phone: '',
+  tenant_id: 1,
   role_ids: []
 })
 
@@ -432,6 +448,7 @@ const openCreateModal = () => {
     confirm_password: '',
     email: '',
     phone: '',
+    tenant_id: 1,
     role_ids: []
   }
   createError.value = ''
@@ -463,7 +480,8 @@ const submitCreateUser = async () => {
     const res = await createUser({
       username: createForm.value.username,
       password: createForm.value.password,
-      password_confirm: createForm.value.confirm_password
+      password_confirm: createForm.value.confirm_password,
+      tenant_id: createForm.value.tenant_id
     })
     if (res.code === 0) {
       // 如果选了角色，分配角色
@@ -488,6 +506,7 @@ const submitCreateUser = async () => {
 onMounted(() => {
   loadUsers()
   loadRoles()
+  loadTenants()
 })
 </script>
 
@@ -1174,10 +1193,20 @@ th {
   box-sizing: border-box;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.form-group select {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
 }
 
 .form-error {

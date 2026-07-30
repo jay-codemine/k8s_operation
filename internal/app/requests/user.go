@@ -15,6 +15,7 @@ type UserCreateRequest struct {
 	Username        string `json:"username" form:"username" valid:"username"`
 	Password        string `json:"password" form:"password" valid:"password"`
 	PasswordConfirm string `json:"password_confirm" form:"password_confirm" valid:"password_confirm"`
+	TenantID        uint32 `json:"tenant_id" form:"tenant_id"`
 }
 
 func NewUserUserCreateRequest() *UserCreateRequest {
@@ -83,11 +84,12 @@ func VaildUserCreateRequest(data interface{}, ctx *gin.Context) map[string][]str
 }
 
 type UserUpdateRequest struct {
-	ID       uint32 `json:"id" form:"id" valid:"id"`
-	Username string `json:"username" form:"username" valid:"username"`
-	Password string `json:"password,omitempty" form:"password"`
-	Role     string `json:"role,omitempty" form:"role"`
-	Status   int8   `json:"status" form:"status"`
+	ID       uint32  `json:"id" form:"id" valid:"id"`
+	Username string  `json:"username" form:"username" valid:"username"`
+	Password string  `json:"password,omitempty" form:"password"`
+	Role     string  `json:"role,omitempty" form:"role"`
+	Status   int8    `json:"status" form:"status"`
+	TenantID *uint32 `json:"tenant_id,omitempty" form:"tenant_id"`
 }
 
 func NewUserUpdateRequest() *UserUpdateRequest {

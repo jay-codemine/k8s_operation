@@ -7,19 +7,22 @@ import (
 )
 
 // UserCreate 创建用户（密码使用 bcrypt 加密存储）
-func (d *Dao) UserCreate(name, password string) (*models.User, error) {
-	// 对密码进行 bcrypt 加密
+func (d *Dao) UserCreate(name, password string, tenantID uint32) (*models.User, error) {
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	// 获取当前时间戳并转换为uint32类型
+	if tenantID == 0 {
+		tenantID = models.DefaultTenantID
+	}
+
 	nowTime := uint32(time.Now().Unix())
 	user := &models.User{
 		Username: name,
 		Password: hashedPassword,
 		Base: &models.Base{
+			TenantID:   tenantID,
 			CreatedAt:  nowTime,
 			ModifiedAt: nowTime,
 			IsDel:      0,
