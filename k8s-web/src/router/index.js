@@ -77,6 +77,7 @@ const router = createRouter({
         // ⭐ 平台管理（IAM 统一收口）
         { path: 'admin/users', component: () => import('@/views/security/UserManagement.vue') },
         { path: 'admin/roles', component: () => import('@/views/admin/PermissionRoles.vue') },
+        { path: 'admin/tenants', component: () => import('@/views/platform/TenantManagement.vue') },
         { path: 'admin/identity', component: () => import('@/views/admin/IdentitySource.vue') },
         { path: 'admin/approvals', component: () => import('@/views/admin/ApprovalCenter.vue') },
         { path: 'admin/audit', component: () => import('@/views/admin/AuditCenter.vue') },

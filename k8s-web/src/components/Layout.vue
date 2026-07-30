@@ -259,6 +259,7 @@ const menuPermissions = {
   
   // ==================== 平台管理（IAM 统一收口） ====================
   '/admin/users': ['super_admin', 'platform_admin'],
+  '/admin/tenants': ['super_admin', 'platform_admin'],
   '/admin/roles': ['super_admin', 'platform_admin'],
   '/admin/identity': ['super_admin', 'platform_admin'],
   '/admin/approvals': ['super_admin', 'platform_admin', 'cluster_admin', 'developer', 'viewer'],
@@ -451,12 +452,13 @@ const menuGroupsConfig = reactive([
   {
     name: '平台管理',
     icon: 'settings',
-    count: 7,
+    count: 8,
     collapsed: true,
     match: ['/admin'],
     items: [
       { path: '/admin/users', label: '用户与组织' },
       { path: '/admin/roles', label: '权限与角色' },
+      { path: '/admin/tenants', label: '多租户管理' },
       { path: '/admin/identity', label: '身份认证' },
       { path: '/admin/approvals', label: '审批中心' },
       { path: '/admin/audit', label: '审计中心' },
