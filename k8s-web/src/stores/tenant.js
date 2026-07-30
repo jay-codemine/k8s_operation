@@ -14,7 +14,7 @@ export const useTenantStore = defineStore('tenant', () => {
   const fetchTenants = async () => {
     loading.value = true
     try {
-      const res = await http.get('/api/v1/platform/tenants')
+      const res = await http.get('/api/v1/tenants')
       if (res.code === 0 && res.data) {
         list.value = res.data.items || res.data || []
         // 从 JWT 或缓存取当前租户
