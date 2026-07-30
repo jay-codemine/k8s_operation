@@ -130,6 +130,12 @@
           </button>
         </div>
         <div class="nav-right">
+          <!-- 租户选择器 -->
+          <div class="tenant-selector" v-if="tenantStore.isMultiTenant">
+            <select v-model="tenantStore.current" @change="onTenantChange" class="tenant-select">
+              <option v-for="t in tenantStore.list" :key="t.id" :value="t">{{ t.name }}</option>
+            </select>
+          </div>
           <!-- 简化的操作区域 -->
           <div class="nav-actions">
             <button class="nav-action-btn" title="通知">
@@ -169,6 +175,7 @@ import {useRoute, useRouter} from 'vue-router'
 import {Message} from '@arco-design/web-vue'
 import {logout} from '@/api/auth'
 import permissionStore from '@/stores/permission'
+import { useTenantStore } from '@/stores/tenant'
 import AiAssistant from '@/components/AiAssistant.vue'
 
 const router = useRouter()
@@ -177,6 +184,11 @@ const route = useRoute()
 const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches
 const sidebarCollapsed = ref(isMobileViewport())
 const showHelp = ref(false)
+const tenantStore = useTenantStore()
+
+const onTenantChange = () => {
+  tenantStore.switchTenant(tenantStore.current)
+}
 
 // 用户名
 const username = computed(() => {
@@ -494,6 +506,7 @@ const syncMenuWithRoute = () => {
 onMounted(async () => {
   try {
     await permissionStore.loadPermissions()
+    await tenantStore.fetchTenants()
   } catch (e) {
     console.error('加载权限失败', e)
   }
@@ -1056,4 +1069,22 @@ watch(
   opacity: 0;
   transform: translateY(-4px);
 }
+
+/* ===== 租户选择器 ===== */
+.tenant-selector { margin-right: 8px; }
+.tenant-select {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.tenant-select:hover { border-color: #6366f1; }
+.tenant-select:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }
 </style>

@@ -152,6 +152,12 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	platform.NewPlatformHealthRouterWithFactory(factory).Inject(protected)
 
 	// ======================================================
+	// 租户管理（需要 JWT）
+	// /api/v1/platform/tenants
+	// ======================================================
+	platform.NewTenantRouter().Inject(protected)
+
+	// ======================================================
 	// 平台系统设置分组（需要 JWT）
 	// /api/v1/platform/settings/...
 	// ======================================================
