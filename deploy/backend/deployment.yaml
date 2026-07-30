@@ -269,6 +269,12 @@ spec:
                   name: k8soperation-secret
                   key: GIT_TOKEN
                   optional: true
+            - name: AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: k8soperation-secret
+                  key: AI_API_KEY
+                  optional: true
 
           # ==================== 健康检查探针 ====================
           # 存活探针：只要进程能响应即可（不检查外部依赖）
