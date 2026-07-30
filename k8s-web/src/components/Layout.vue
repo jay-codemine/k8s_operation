@@ -138,6 +138,13 @@
           </div>
           <!-- 简化的操作区域 -->
           <div class="nav-actions">
+            <button class="nav-action-btn theme-btn" @click="themeStore.toggle()" :title="themeStore.isDark ? '切换亮色' : '切换暗色'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle v-if="themeStore.isDark" cx="12" cy="12" r="5"/>
+                <path v-if="themeStore.isDark" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                <path v-if="!themeStore.isDark" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            </button>
             <button class="nav-action-btn" title="通知">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -176,6 +183,7 @@ import {Message} from '@arco-design/web-vue'
 import {logout} from '@/api/auth'
 import permissionStore from '@/stores/permission'
 import { useTenantStore } from '@/stores/tenant'
+import { useThemeStore } from '@/stores/theme'
 import AiAssistant from '@/components/AiAssistant.vue'
 
 const router = useRouter()
@@ -185,6 +193,7 @@ const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches
 const sidebarCollapsed = ref(isMobileViewport())
 const showHelp = ref(false)
 const tenantStore = useTenantStore()
+const themeStore = useThemeStore()
 
 const onTenantChange = () => {
   tenantStore.switchTenant(tenantStore.current)
