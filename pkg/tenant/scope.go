@@ -14,12 +14,16 @@ const DBKey contextKey = "tenant_db"
 // 用法：db.Scopes(tenant.Scope(tid)).Find(&users)
 func Scope(tenantID uint32) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
+		tbl := db.Statement.Table
+		if tbl != "" {
+			// 表名前缀避免 JOIN 时列名歧义
+			return db.Where(db.Statement.Quote(tbl)+".tenant_id = ?", tenantID)
+		}
 		return db.Where("tenant_id = ?", tenantID)
 	}
 }
 
 // NewScopedDB 创建一个带租户过滤的 DB 实例
-// 后续所有查询自动带 WHERE tenant_id = tid
 func NewScopedDB(db *gorm.DB, tenantID uint32) *gorm.DB {
 	return db.Scopes(Scope(tenantID))
 }
