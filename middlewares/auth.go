@@ -96,6 +96,16 @@ func AuthJWT() gin.HandlerFunc {
 		// 设置当前用户对象到上下文中
 		ctx.Set("current_user", u)
 
+		// 多租户：从 JWT 提取 tenant_id，兜底用用户记录
+		tid := claims.TenantID
+		if tid == 0 {
+			tid = u.TenantID
+		}
+		if tid == 0 {
+			tid = models.DefaultTenantID
+		}
+		ctx.Set("tenant_id", tid)
+
 		// 5) 记录用户活跃时间（异步，用于"在线用户"统计，不阻塞请求）
 		go recordUserOnline(int64(u.ID))
 

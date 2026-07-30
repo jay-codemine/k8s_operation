@@ -28,23 +28,20 @@ func NewManager() *Manager {
 	}
 }
 
-// IssueToken 根据用户ID和用户名生成JWT Token
-// userID: 用户唯一标识
-// userName: 用户名称
-// 返回: 生成的Token字符串和可能的错误
-func (m *Manager) IssueToken(userID, userName string) (string, error) {
-	now := utils.TimenowInTimezone().Unix() // 获取当前时间戳
-	exp := m.expireAtTime()                 // 计算Token过期时间
+// IssueToken 根据用户ID、用户名和租户ID生成JWT Token
+func (m *Manager) IssueToken(userID, userName string, tenantID uint32) (string, error) {
+	now := utils.TimenowInTimezone().Unix()
+	exp := m.expireAtTime()
 
-	// 创建Token的声明(Claims)信息
 	claims := Claims{
-		UserID:   userID,   // 用户ID
-		UserName: userName, // 用户名
-		StandardClaims: jwtpkg.StandardClaims{ // JWT标准声明
-			NotBefore: now,                       // 生效时间
-			IssuedAt:  now,                       // 签发时间
-			ExpiresAt: exp,                       // 过期时间
-			Issuer:    global.AppSetting.AppName, // 签发者
+		UserID:   userID,
+		UserName: userName,
+		TenantID: tenantID,
+		StandardClaims: jwtpkg.StandardClaims{
+			NotBefore: now,
+			IssuedAt:  now,
+			ExpiresAt: exp,
+			Issuer:    global.AppSetting.AppName,
 		},
 	}
 	return m.createToken(claims)

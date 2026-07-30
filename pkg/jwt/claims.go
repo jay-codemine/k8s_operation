@@ -6,5 +6,6 @@ import jwtpkg "github.com/golang-jwt/jwt"
 type Claims struct {
 	UserID   string `json:"user_id"`
 	UserName string `json:"user_name"`
+	TenantID uint32 `json:"tenant_id"` // 多租户：租户ID
 	jwtpkg.StandardClaims
 }

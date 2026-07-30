@@ -101,7 +101,7 @@ func (u *AuthController) Login(ctx *gin.Context) {
 
 	// ====== 签发 JWT ======
 	mgr := jwt.NewManager()
-	token, err := mgr.IssueToken(cast.ToString(user.ID), user.Username)
+	token, err := mgr.IssueToken(cast.ToString(user.ID), user.Username, user.TenantID)
 	if err != nil {
 		global.Logger.Error("颁发 token 失败", zap.String("error", err.Error()))
 		response.ToErrorResponse(errorcode.ErrorAuthLoginFail)

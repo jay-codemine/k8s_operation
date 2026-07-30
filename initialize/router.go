@@ -122,10 +122,11 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	}
 
 	// ======================================================
-	// Protected 分组（需要 JWT）
+	// Protected 分组（需要 JWT + 多租户隔离）
 	// ======================================================
 	protected := v1.Group("")
 	protected.Use(middlewares.AuthJWT())
+	protected.Use(middlewares.TenantScope())
 	for _, r := range []injector{
 		userrouter.NewUserRouter(),
 	} {

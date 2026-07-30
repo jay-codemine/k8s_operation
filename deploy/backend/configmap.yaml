@@ -159,8 +159,32 @@ data:
       LocalFallback: true
 
     AIAssistant:
-      Enabled: false                        # 按需开启
-      DefaultProvider: "qwen"
+      Enabled: true                          # 启用 AI 助手 + AIOps 智能运维
+      DefaultProvider: "deepseek"
+      APIKey: "${AI_API_KEY}"                # 从 Secret 注入
+      BaseURL: "https://api.deepseek.com"
+      Model: "deepseek-chat"
+      MaxTokens: 4096
+      Temperature: 0.7
       SystemPrompt: "你是 K8s 管理平台的 AI 助手，擅长 Kubernetes 集群管理、资源运维、故障诊断。请用中文回复，简洁专业。"
       ApprovalExpire: 30
       MaxHistoryRound: 20
+      Providers:
+        - ID: "deepseek"
+          Name: "DeepSeek"
+          Icon: "deepseek"
+          APIKey: "${AI_API_KEY}"
+          BaseURL: "https://api.deepseek.com"
+          MaxTokens: 4096
+          Temperature: 0.7
+          Models:
+            - ID: "deepseek-chat"
+              Name: "DeepSeek-Chat"
+              MaxTokens: 4096
+              Description: "通用对话模型"
+              Capability: "chat"
+            - ID: "deepseek-reasoner"
+              Name: "DeepSeek-Reasoner"
+              MaxTokens: 4096
+              Description: "深度推理模型"
+              Capability: "reasoning"
