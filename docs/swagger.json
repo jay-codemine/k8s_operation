@@ -17051,6 +17051,67 @@
                 }
             }
         },
+        "/api/v1/platform/license/activate": {
+            "post": {
+                "description": "校验 License（签名/机器码/有效期）并持久化，激活后立即生效",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "License授权"
+                ],
+                "summary": "激活 License",
+                "parameters": [
+                    {
+                        "description": "License 文本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.activateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/license.Status"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/platform/license/status": {
+            "get": {
+                "description": "返回授权状态、被授权方、到期时间与本机机器码（机器码用于向供应商申请 License）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "License授权"
+                ],
+                "summary": "查询 License 授权状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/license.Status"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/platform/settings": {
             "get": {
                 "description": "获取所有平台配置项",
@@ -18154,6 +18215,39 @@
         }
     },
     "definitions": {
+        "license.Status": {
+            "type": "object",
+            "properties": {
+                "edition": {
+                    "description": "版本",
+                    "type": "string"
+                },
+                "expire_at": {
+                    "description": "到期时间（unix 秒）",
+                    "type": "integer"
+                },
+                "issued_at": {
+                    "description": "签发时间（unix 秒）",
+                    "type": "integer"
+                },
+                "licensed": {
+                    "description": "是否已授权且有效",
+                    "type": "boolean"
+                },
+                "licensee": {
+                    "description": "被授权方",
+                    "type": "string"
+                },
+                "machine_id": {
+                    "description": "本机机器码（用于向供应商申请 License）",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "未授权原因（未激活/已过期/机器码不匹配等）",
+                    "type": "string"
+                }
+            }
+        },
         "models.AboutSettings": {
             "type": "object",
             "properties": {
@@ -22896,6 +22990,10 @@
                     "description": "协程数",
                     "type": "integer"
                 },
+                "online_users": {
+                    "description": "当前在线用户数（15分钟内活跃）",
+                    "type": "string"
+                },
                 "panics": {
                     "description": "Panic恢复次数",
                     "type": "integer"
@@ -23149,6 +23247,17 @@
                 },
                 "platformRole": {
                     "description": "平台角色标识",
+                    "type": "string"
+                }
+            }
+        },
+        "v1.activateRequest": {
+            "type": "object",
+            "required": [
+                "license"
+            ],
+            "properties": {
+                "license": {
                     "type": "string"
                 }
             }
