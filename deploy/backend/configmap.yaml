@@ -64,7 +64,7 @@ data:
       JWTExpireTime: 120000
       AppName: "k8soperation"
       GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
-      DefaultClusterID: 10
+      DefaultClusterID: 11
       AutoInitK8s: true
       AllowEmptyStart: true
       SkipAutoMigrate: true                 # 生产环境已通过 init.sql 初始化，跳过 GORM AutoMigrate
@@ -164,7 +164,7 @@ data:
       APIKey: "${AI_API_KEY}"                # 从 Secret 注入
       BaseURL: "https://api.deepseek.com"
       Model: "deepseek-v4-pro"
-      MaxTokens: 4096
+      MaxTokens: 8192
       Temperature: 0.7
       SystemPrompt: "你是 K8s 管理平台的 AI 助手，擅长 Kubernetes 集群管理、资源运维、故障诊断。请用中文回复，简洁专业。"
       ApprovalExpire: 30
@@ -175,16 +175,16 @@ data:
           Icon: "deepseek"
           APIKey: "${AI_API_KEY}"
           BaseURL: "https://api.deepseek.com"
-          MaxTokens: 4096
+          MaxTokens: 8192
           Temperature: 0.7
           Models:
             - ID: "deepseek-v4-pro"
               Name: "DeepSeek V4 Pro"
-              MaxTokens: 4096
+              MaxTokens: 8192
               Description: "旗舰通用（non-thinking）"
               Capability: "chat"
             - ID: "deepseek-v4-pro:thinking"
               Name: "DeepSeek V4 Pro (Thinking)"
-              MaxTokens: 4096
+              MaxTokens: 8192
               Description: "深度推理模式"
               Capability: "reasoning"
