@@ -163,7 +163,7 @@ data:
       DefaultProvider: "deepseek"
       APIKey: "${AI_API_KEY}"                # 从 Secret 注入
       BaseURL: "https://api.deepseek.com"
-      Model: "deepseek-chat"
+      Model: "deepseek-v4-pro"
       MaxTokens: 4096
       Temperature: 0.7
       SystemPrompt: "你是 K8s 管理平台的 AI 助手，擅长 Kubernetes 集群管理、资源运维、故障诊断。请用中文回复，简洁专业。"
@@ -178,13 +178,13 @@ data:
           MaxTokens: 4096
           Temperature: 0.7
           Models:
-            - ID: "deepseek-chat"
-              Name: "DeepSeek-Chat"
+            - ID: "deepseek-v4-pro"
+              Name: "DeepSeek V4 Pro"
               MaxTokens: 4096
-              Description: "通用对话模型"
+              Description: "旗舰通用（non-thinking）"
               Capability: "chat"
-            - ID: "deepseek-reasoner"
-              Name: "DeepSeek-Reasoner"
+            - ID: "deepseek-v4-pro:thinking"
+              Name: "DeepSeek V4 Pro (Thinking)"
               MaxTokens: 4096
-              Description: "深度推理模型"
+              Description: "深度推理模式"
               Capability: "reasoning"
