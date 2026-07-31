@@ -5,6 +5,15 @@ import http from '../http'
 
 const BASE_URL = '/api/v1/k8s/cicd/pipeline'
 
+// 校验 ID 为有效正整数，无效时抛出错误（避免 Number(undefined) → NaN 拼入 URL）
+const toValidId = (id, label = 'ID') => {
+  const num = Number(id)
+  if (!Number.isInteger(num) || num <= 0) {
+    throw new Error(`无效的${label}`)
+  }
+  return num
+}
+
 /**
  * 获取流水线列表
  * @param {Object} params - 查询参数
@@ -22,7 +31,7 @@ export const getPipelines = (params = {}) => {
  * @param {number} id - 流水线ID
  */
 export const getPipelineDetail = (id) => {
-  return http.get(`${BASE_URL}/detail`, { params: { id: Number(id) } })
+  return http.get(`${BASE_URL}/detail`, { params: { id: toValidId(id, '流水线ID') } })
 }
 
 /**
@@ -94,7 +103,7 @@ export const updatePipeline = (data) => {
  * @param {number} id - 流水线ID
  */
 export const deletePipeline = (id) => {
-  return http.post(`${BASE_URL}/delete`, { id: Number(id) })
+  return http.post(`${BASE_URL}/delete`, { id: toValidId(id, '流水线ID') })
 }
 
 /**
@@ -108,7 +117,7 @@ export const deletePipeline = (id) => {
  * @param {string} options.deploy_env - 目标环境：dev/test/staging/prod
  */
 export const runPipeline = (id, options = {}) => {
-  return http.post(`${BASE_URL}/run`, { id: Number(id), ...options })
+  return http.post(`${BASE_URL}/run`, { id: toValidId(id, '流水线ID'), ...options })
 }
 
 /**
@@ -117,9 +126,9 @@ export const runPipeline = (id, options = {}) => {
  * @param {number} buildNumber - 可选：指定构建号
  */
 export const stopPipeline = (id, buildNumber = null) => {
-  const data = { id: Number(id) }
+  const data = { id: toValidId(id, '流水线ID') }
   if (buildNumber) {
-    data.build_number = Number(buildNumber)
+    data.build_number = toValidId(buildNumber, '构建号')
   }
   return http.post(`${BASE_URL}/stop`, data)
 }
@@ -129,7 +138,7 @@ export const stopPipeline = (id, buildNumber = null) => {
  * @param {Array<number>} ids - 流水线 ID 列表
  */
 export const batchRunPipelines = (ids) => {
-  return http.post(`${BASE_URL}/batch-run`, { ids: ids.map(id => Number(id)) })
+  return http.post(`${BASE_URL}/batch-run`, { ids: ids.map(id => toValidId(id, '流水线ID')) })
 }
 
 /**
@@ -137,7 +146,7 @@ export const batchRunPipelines = (ids) => {
  * @param {Array<number>} ids - 流水线 ID 列表
  */
 export const batchStopPipelines = (ids) => {
-  return http.post(`${BASE_URL}/batch-stop`, { ids: ids.map(id => Number(id)) })
+  return http.post(`${BASE_URL}/batch-stop`, { ids: ids.map(id => toValidId(id, '流水线ID')) })
 }
 
 /**
@@ -147,7 +156,11 @@ export const batchStopPipelines = (ids) => {
  * @param {number} startLine - 可选：起始行号（增量获取）
  */
 export const getPipelineLogs = (id, buildNumber = null, startLine = 0) => {
-  const params = { id: Number(id) }
+  const numId = Number(id)
+  if (!Number.isInteger(numId) || numId <= 0) {
+    return Promise.reject(new Error('无效的流水线ID'))
+  }
+  const params = { id: numId }
   if (buildNumber) {
     params.build_number = Number(buildNumber)
   }
@@ -162,7 +175,7 @@ export const getPipelineLogs = (id, buildNumber = null, startLine = 0) => {
  * @param {number} id - 流水线ID
  */
 export const getPipelineStatus = (id) => {
-  return http.get(`${BASE_URL}/status`, { params: { id: Number(id) } })
+  return http.get(`${BASE_URL}/status`, { params: { id: toValidId(id, '流水线ID') } })
 }
 
 /**
@@ -173,7 +186,7 @@ export const getPipelineStatus = (id) => {
  */
 export const getPipelineHistory = (id, page = 1, pageSize = 10) => {
   return http.get(`${BASE_URL}/history`, {
-    params: { id: Number(id), page, page_size: pageSize }
+    params: { id: toValidId(id, '流水线ID'), page, page_size: pageSize }
   })
 }
 
@@ -183,7 +196,7 @@ export const getPipelineHistory = (id, page = 1, pageSize = 10) => {
  * @param {number} buildNumber - 构建号（可选）
  */
 export const getPipelineStages = (id, buildNumber = null) => {
-  const params = { id: Number(id) }
+  const params = { id: toValidId(id, '流水线ID') }
   if (buildNumber) {
     params.build_number = Number(buildNumber)
   }
@@ -214,7 +227,7 @@ const STAGE_URL = '/api/v1/k8s/cicd/stage'
  * @param {number} runId - 运行记录ID
  */
 export const getRunStages = (runId) => {
-  return http.get(`${STAGE_URL}/list`, { params: { run_id: Number(runId) } })
+  return http.get(`${STAGE_URL}/list`, { params: { run_id: toValidId(runId, '运行记录ID') } })
 }
 
 /**
@@ -222,7 +235,7 @@ export const getRunStages = (runId) => {
  * @param {number} stageId - 阶段ID
  */
 export const getStageLogs = (stageId) => {
-  return http.get(`${STAGE_URL}/logs`, { params: { id: Number(stageId) } })
+  return http.get(`${STAGE_URL}/logs`, { params: { id: toValidId(stageId, '阶段ID') } })
 }
 
 /**
@@ -233,7 +246,7 @@ export const getStageLogs = (stageId) => {
  */
 export const approveStage = (stageId, action, comment = '') => {
   return http.post(`${STAGE_URL}/approve`, {
-    stage_id: Number(stageId),
+    stage_id: toValidId(stageId, '阶段ID'),
     action,
     comment
   })
@@ -246,7 +259,7 @@ export const approveStage = (stageId, action, comment = '') => {
  */
 export const executeDeployStage = (stageId, options = {}) => {
   return http.post(`${STAGE_URL}/deploy`, {
-    stage_id: Number(stageId),
+    stage_id: toValidId(stageId, '阶段ID'),
     ...options
   })
 }
@@ -256,7 +269,7 @@ export const executeDeployStage = (stageId, options = {}) => {
  * @param {number} stageId - 阶段ID
  */
 export const cancelDeployStage = (stageId) => {
-  return http.post(`${STAGE_URL}/cancel`, null, { params: { stage_id: Number(stageId) } })
+  return http.post(`${STAGE_URL}/cancel`, null, { params: { stage_id: toValidId(stageId, '阶段ID') } })
 }
 
 /**
@@ -265,7 +278,7 @@ export const cancelDeployStage = (stageId) => {
  * @param {string} targetRS - 目标 ReplicaSet 名称
  */
 export const rollbackDeployStage = (stageId, targetRS) => {
-  return http.post(`${STAGE_URL}/rollback`, null, { params: { stage_id: Number(stageId), target_rs: targetRS } })
+  return http.post(`${STAGE_URL}/rollback`, null, { params: { stage_id: toValidId(stageId, '阶段ID'), target_rs: targetRS } })
 }
 
 /**
@@ -273,7 +286,7 @@ export const rollbackDeployStage = (stageId, targetRS) => {
  * @param {number} stageId - 阶段ID
  */
 export const getDeployHistory = (stageId) => {
-  return http.get(`${STAGE_URL}/history`, { params: { stage_id: Number(stageId) } })
+  return http.get(`${STAGE_URL}/history`, { params: { stage_id: toValidId(stageId, '阶段ID') } })
 }
 
 /**
@@ -283,7 +296,7 @@ export const getDeployHistory = (stageId) => {
  * @param {number} stageId - 阶段ID
  */
 export const getDeployStatus = (stageId) => {
-  return http.get(`${STAGE_URL}/deploy-status`, { params: { stage_id: Number(stageId) } })
+  return http.get(`${STAGE_URL}/deploy-status`, { params: { stage_id: toValidId(stageId, '阶段ID') } })
 }
 
 // ==================== Jenkins 配置信息 ====================

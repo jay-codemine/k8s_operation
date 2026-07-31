@@ -2282,6 +2282,7 @@ export default {
 
     // 加载日志（支持增量加载，避免闪烁）
     const loadLogs = async (forceRefresh = false) => {
+      if (!isValidPipelineId()) return
       // 首次加载或强制刷新时显示 loading
       if (isFirstLoad.value || forceRefresh) {
         logsLoading.value = true
@@ -2351,6 +2352,7 @@ export default {
 
     // 加载历史
     const loadHistory = async () => {
+      if (!isValidPipelineId()) return
       historyLoading.value = true
       try {
         const response = await getPipelineHistory(pipelineId.value)
@@ -2366,6 +2368,10 @@ export default {
 
     // 操作
     const handleRun = async () => {
+      if (!isValidPipelineId()) {
+        Message.error({ content: '无效的流水线ID' })
+        return
+      }
       try {
         Message.info({ content: '正在获取最新配置...' })
         
