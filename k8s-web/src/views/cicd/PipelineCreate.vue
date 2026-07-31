@@ -3078,7 +3078,7 @@ export default {
       }
     }
     
-    // 加载命名空间列表（显式传递集群ID，不依赖全局 store 避免时序问题）
+    // 加载命名空间列表（显式传递集群ID + 更新全局 store，确保下游 API 也能获取正确集群）
     const loadNamespaces = async () => {
       const cid = pipelineData.value.target_cluster_id
       if (!cid) {
@@ -3088,6 +3088,11 @@ export default {
 
       loadingNamespaces.value = true
       try {
+        // 同步更新全局 store，workload API 依赖 store 获取 X-Cluster-ID
+        const cluster = clusters.value.find(c => c.id === cid)
+        if (cluster) {
+          clusterStore.setCurrent(cluster)
+        }
         const res = await getNamespaces(cid, { page: 1, limit: 1000 })
         if (res.code === 0 && res.data) {
           namespaces.value = res.data.list || res.data || []

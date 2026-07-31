@@ -104,7 +104,8 @@ http.interceptors.request.use(
 
     // 2) X-Cluster-ID：只在访问集群资源接口时才携带
     //    登录/RBAC/集群CRUD/CICD 等接口不需要 cluster_id
-    if (needsClusterID(config.url)) {
+    //    注意：不覆盖调用方显式传入的 X-Cluster-ID（如 getNamespaces(clusterId)）
+    if (needsClusterID(config.url) && !config.headers['X-Cluster-ID']) {
       const clusterStore = useClusterStore(pinia)
       const cid = clusterStore.current?.id ?? getClusterIdFromPath()
 
