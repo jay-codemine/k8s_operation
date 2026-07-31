@@ -1567,7 +1567,7 @@
                     目标命名空间
                     <span class="required">*</span>
                   </label>
-                  <input v-model="nsSearch" class="form-input" style="margin-bottom:6px" placeholder="🔍 搜索命名空间..." :disabled="loadingNamespaces || !pipelineData.target_cluster_id" />
+                  <input v-model="nsSearch" class="form-input" style="margin-bottom:6px" placeholder="搜索命名空间... (输入名称过滤)" :disabled="loadingNamespaces || !pipelineData.target_cluster_id" />
                   <div class="select-wrapper">
                     <select
                       v-model="pipelineData.target_namespace"
@@ -1622,7 +1622,7 @@
                     <span class="required">*</span>
                   </label>
                   <div class="select-wrapper">
-                    <input v-if="workloads.length > 0" v-model="wlSearch" class="form-input" style="margin-bottom:6px" placeholder="🔍 搜索工作负载... (输入名称模糊过滤)" />
+                    <input v-if="workloads.length > 0" v-model="wlSearch" class="form-input" style="margin-bottom:6px" placeholder="搜索工作负载... (输入名称模糊过滤)" />
                     <select
                       v-if="workloads.length > 0"
                       v-model="pipelineData.target_workload_name"
@@ -1630,16 +1630,16 @@
                       @change="onWorkloadChange"
                     >
                       <option value="">请选择工作负载</option>
-                      <option v-for="w in filteredWorkloads" :key="w.name" :value="w.name">
-                        {{ w.name }}
+                      <option v-for="w in filteredWorkloads" :key="w._kind + '/' + w.name" :value="w.name">
+                        [{{ w._kind }}] {{ w.name }}
                       </option>
                     </select>
-                    <input 
+                    <input
                       v-else
-                      type="text" 
-                      v-model="pipelineData.target_workload_name" 
+                      type="text"
+                      v-model="pipelineData.target_workload_name"
                       class="form-input"
-                      placeholder="输入工作负载名称"
+                      placeholder="输入工作负载名称（或先选择命名空间自动列出）"
                     />
                     <button 
                       type="button" 
@@ -1998,7 +1998,6 @@ import { checkPipelineName, getJenkinsConfig, runPipeline } from '@/api/platform
 import { getClusterList } from '@/api/cluster.js'
 import { getEnvironmentList } from '@/api/cicd/environment.js'
 import { getNamespaces } from '@/api/namespace.js'
-import namespaceApi from '@/api/cluster/namespaces'
 import deploymentsApi from '@/api/cluster/workloads/deployments'
 import statefulsetsApi from '@/api/cluster/workloads/statefulsets'
 import daemonsetsApi from '@/api/cluster/workloads/daemonsets'
@@ -2235,7 +2234,10 @@ export default {
     const wlSearch = ref('')
     const filteredWorkloads = computed(() => {
       const q = wlSearch.value.toLowerCase().trim()
-      return q ? workloads.value.filter(w => w.name.toLowerCase().includes(q)) : workloads.value
+      const kind = pipelineData.value.target_workload_kind || 'Deployment'
+      // 先按类型筛选，再按搜索词过滤
+      const byKind = workloads.value.filter(w => w._kind === kind)
+      return q ? byKind.filter(w => w.name.toLowerCase().includes(q)) : byKind
     })
     const loadingWorkloads = ref(false)
     
@@ -3076,76 +3078,60 @@ export default {
       }
     }
     
-    // 加载命名空间列表
+    // 加载命名空间列表（显式传递集群ID，不依赖全局 store 避免时序问题）
     const loadNamespaces = async () => {
-      if (!pipelineData.value.target_cluster_id) {
+      const cid = pipelineData.value.target_cluster_id
+      if (!cid) {
         namespaces.value = []
         return
       }
-      
+
       loadingNamespaces.value = true
       try {
-        // 设置当前集群（必须在 API 请求前完成，确保 X-Cluster-ID Header 正确注入）
-        const cluster = clusters.value.find(c => c.id === pipelineData.value.target_cluster_id)
-        if (cluster) {
-          clusterStore.setCurrent(cluster)
-        }
-        
-        const res = await namespaceApi.list({ page: 1, limit: 1000 })
+        const res = await getNamespaces(cid, { page: 1, limit: 1000 })
         if (res.code === 0 && res.data) {
-          // 直接展示所有命名空间，所有用户（开发、运维、管理员）都可以选择
-          // 部署权限由 K8s 和审批流程控制，前端不做限制
           namespaces.value = res.data.list || res.data || []
         }
       } catch (error) {
         console.error('加载命名空间失败:', error)
-        // 回退到常用命名空间
-        namespaces.value = [
-          { name: 'default' },
-          { name: 'kube-system' },
-          { name: 'kube-public' }
-        ]
+        namespaces.value = []
       } finally {
         loadingNamespaces.value = false
       }
     }
     
-    // 加载工作负载列表
+    // 加载工作负载列表（一次性加载所有类型，方便用户从下拉列表选择）
     const loadWorkloads = async () => {
-      if (!pipelineData.value.target_namespace) {
+      const ns = pipelineData.value.target_namespace
+      if (!ns) {
         workloads.value = []
         return
       }
-      
+
       loadingWorkloads.value = true
       try {
-        let res
-        const kind = pipelineData.value.target_workload_kind
-        const ns = pipelineData.value.target_namespace
-        
-        switch (kind) {
-          case 'StatefulSet':
-            res = await statefulsetsApi.list({ namespace: ns, page: 1, limit: 1000 })
-            break
-          case 'DaemonSet':
-            res = await daemonsetsApi.list({ namespace: ns, page: 1, limit: 1000 })
-            break
-          case 'CronJob':
-            res = await cronjobsApi.list({ namespace: ns, page: 1, limit: 1000 })
-            break
-          case 'Job':
-            res = await jobsApi.list({ namespace: ns, page: 1, limit: 1000 })
-            break
-          case 'Pod':
-            res = await podsApi.list({ namespace: ns, page: 1, limit: 1000 })
-            break
-          default:
-            res = await deploymentsApi.list({ namespace: ns, page: 1, limit: 1000 })
-        }
-        
-        if (res.code === 0 && res.data) {
-          workloads.value = res.data.list || res.data || []
-        }
+        const kindApis = [
+          { api: deploymentsApi, kind: 'Deployment' },
+          { api: statefulsetsApi, kind: 'StatefulSet' },
+          { api: daemonsetsApi, kind: 'DaemonSet' },
+          { api: cronjobsApi, kind: 'CronJob' },
+          { api: jobsApi, kind: 'Job' },
+          { api: podsApi, kind: 'Pod' },
+        ]
+
+        const results = await Promise.allSettled(
+          kindApis.map(({ api }) => api.list({ namespace: ns, page: 1, limit: 1000 }))
+        )
+
+        const allWorkloads = []
+        results.forEach((result, i) => {
+          if (result.status === 'fulfilled' && result.value?.code === 0 && result.value?.data) {
+            const items = result.value.data.list || result.value.data || []
+            items.forEach(w => allWorkloads.push({ ...w, _kind: kindApis[i].kind }))
+          }
+        })
+
+        workloads.value = allWorkloads
       } catch (error) {
         console.error('加载工作负载失败:', error)
         workloads.value = []
@@ -3181,20 +3167,27 @@ export default {
       }
     }
     
-    // 工作负载变化 - 自动填充容器名称
+    // 工作负载变化 - 自动设置工作负载类型 + 填充容器名称
     const onWorkloadChange = () => {
       const selectedName = pipelineData.value.target_workload_name
       if (!selectedName) {
         pipelineData.value.target_container = ''
         return
       }
-      // 从已加载的工作负载列表中找到选中项，获取第一个容器名称
+      // 从已加载的工作负载列表中找到选中项
       const workload = workloads.value.find(w => w.name === selectedName)
-      if (workload && workload.containers && workload.containers.length > 0) {
-        // 使用工作负载的第一个容器名称
-        pipelineData.value.target_container = workload.containers[0]
+      if (workload) {
+        // 自动设置工作负载类型
+        if (workload._kind) {
+          pipelineData.value.target_workload_kind = workload._kind
+        }
+        // 自动填充第一个容器名称
+        if (workload.containers && workload.containers.length > 0) {
+          pipelineData.value.target_container = workload.containers[0]
+        } else {
+          pipelineData.value.target_container = selectedName
+        }
       } else {
-        // 回退：容器名默认使用工作负载名称（与后端智能默认值一致）
         pipelineData.value.target_container = selectedName
       }
     }
@@ -3256,8 +3249,10 @@ export default {
     const selectWorkloadKind = (kind) => {
       pipelineData.value.target_workload_kind = kind
       pipelineData.value.target_workload_name = ''
-      workloads.value = []
-      if (pipelineData.value.target_namespace) {
+      pipelineData.value.target_container = ''
+      wlSearch.value = ''
+      // 所有类型已在 loadWorkloads 中预加载，切换类型时只在未加载时重新请求
+      if (!workloads.value.length && pipelineData.value.target_namespace) {
         loadWorkloads()
       }
     }
