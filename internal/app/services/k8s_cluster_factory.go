@@ -197,14 +197,14 @@ func (f *ClusterClientFactory) Get(ctx context.Context, clusterID uint32) (*K8sC
 				return nil, e
 			}
 			latestVer := int64(latest.ModifiedAt)
-			useVer := latestVer
+			
 
 			// 初始化集群客户端（带超时）
 			cli, e := f.s.K8sClusterInit(connectCtx, &requests.K8sClusterInitRequest{ID: clusterID})
 			if e != nil {
 				// 初始化失败：驱逐缓存并记录失败（负缓存）
 				f.Invalidate(clusterID)
-				f.markFailure(clusterID, useVer)
+				f.markFailure(clusterID, latestVer)
 				return nil, e
 			}
 
@@ -213,7 +213,7 @@ func (f *ClusterClientFactory) Get(ctx context.Context, clusterID uint32) (*K8sC
 			f.mu.Lock()
 			f.m[clusterID] = &cachedClients{
 				clients:   cli,
-				version:   useVer,
+				version:   latestVer,
 				createdAt: time.Now(),
 				expiresAt: exp,
 			}
