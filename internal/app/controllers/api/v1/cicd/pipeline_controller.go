@@ -461,11 +461,26 @@ func (c *PipelineController) Stop(ctx *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "内部错误"
 // @Router /api/v1/k8s/cicd/pipeline/logs [get]
 func (c *PipelineController) Logs(ctx *gin.Context) {
-	param := &requests.PipelineLogsRequest{}
 	rsp := response.NewResponse(ctx)
 
-	if ok := valid.Validate(ctx, param, requests.ValidPipelineLogsRequest); !ok {
+	idStr := ctx.Query("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的流水线ID"))
 		return
+	}
+
+	param := &requests.PipelineLogsRequest{
+		ID:        id,
+		StartLine: 0,
+	}
+	if bnStr := ctx.Query("build_number"); bnStr != "" {
+		bn, _ := strconv.Atoi(bnStr)
+		param.BuildNumber = bn
+	}
+	if slStr := ctx.Query("start_line"); slStr != "" {
+		sl, _ := strconv.Atoi(slStr)
+		param.StartLine = sl
 	}
 
 	svc := middlewares.NewServicesFromContext(ctx)
@@ -534,11 +549,33 @@ func (c *PipelineController) Status(ctx *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "内部错误"
 // @Router /api/v1/k8s/cicd/pipeline/history [get]
 func (c *PipelineController) History(ctx *gin.Context) {
-	param := requests.NewPipelineHistoryRequest()
 	rsp := response.NewResponse(ctx)
 
-	if ok := valid.Validate(ctx, param, requests.ValidPipelineHistoryRequest); !ok {
+	idStr := ctx.Query("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的流水线ID"))
 		return
+	}
+
+	// 分页参数，带默认值
+	page := 1
+	if pStr := ctx.Query("page"); pStr != "" {
+		if p, e := strconv.Atoi(pStr); e == nil && p > 0 {
+			page = p
+		}
+	}
+	pageSize := 10
+	if psStr := ctx.Query("page_size"); psStr != "" {
+		if ps, e := strconv.Atoi(psStr); e == nil && ps > 0 {
+			pageSize = ps
+		}
+	}
+
+	param := &requests.PipelineHistoryRequest{
+		ID:       id,
+		Page:     page,
+		PageSize: pageSize,
 	}
 
 	svc := middlewares.NewServicesFromContext(ctx)
