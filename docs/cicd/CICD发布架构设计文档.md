@@ -458,3 +458,60 @@ CicdWorker（Redis Stream 消费者）
 | 前端详情页 | `k8s-web/src/views/cicd/PipelineDetail.vue` |
 | 前端 API | `k8s-web/src/api/platform/pipeline.js`, `k8s-web/src/api/cicd.js` |
 | 前端阶段组件 | `k8s-web/src/components/cicd/*.vue` |
+
+---
+
+## 十五、与传统 Jenkins Pipeline 对比
+
+| 维度 | 传统 Jenkins | K8sOperation |
+|------|-------------|-------------|
+| Job 管理 | 每个项目一个 Job，N 个项目 = N 个 Jenkinsfile | **4 个通用 Job**（Go/Java/前端/Python），参数化驱动 |
+| 构建配置 | Jenkinsfile 散落在各仓库，运维不可见 | 配置集中在平台，前端表单修改，不碰 Groovy |
+| 部署方式 | Jenkins 内嵌 shell/kubectl 脚本 | 回调平台 → client-go Patch 镜像 + WaitRollout |
+| 状态感知 | Jenkins 单向通知，不知道真实 Rollout 结果 | 平台是状态中心：构建→部署→Rollout 全链路追踪 |
+| 多集群 | 一个流水线一个集群，多集群要复制 | 一条流水线 + target_cluster_id，发布单扇出 |
+| 镜像策略 | 靠 tag（可覆盖），dev 的包可能流到 prod | image@sha256:digest 不可变，同 digest 跨环境晋级 |
+| 审批 | Jenkins input 步骤卡住构建，审批人不明确 | 平台角色审批 + 飞书卡片 + 多级级联 |
+| 回滚 | 手动 kubectl rollback 或重新构建 | 一键回滚到前 ReplicaSet，自动保存 PrevImage |
+
+## 十六、与标准 GitOps (ArgoCD) 对比
+
+| 维度 | 标准 GitOps | K8sOperation |
+|------|------------|-------------|
+| 部署模式 | 仅 Pull（Git 是唯一真相源） | **Push + Pull 双模式**，可选 jenkins 或 gitops |
+| CI 整合 | 需另配 CI，ArgoCD 只管 CD | **CI+CD 一体化**，构建/质量/制品/部署全流程 |
+| 镜像更新 | 需额外工具（argocd-image-updater）或手动改 Git | 自动 Patch 或自动提交 manifest |
+| 可见性 | 看 Git diff 才知道部署了什么 | 图形化：阶段流水线、实时日志、版本对比 |
+| 审批 | 靠 Git PR review，非运维不友好 | 飞书卡片一键审批，非技术人员可用 |
+| 金丝雀 | Argo Rollouts CRD + AnalysisTemplate，YAML 配置 | 表单化：副本数/流量比/时长/Prometheus 规则 |
+| 多集群 | 每集群部署一个 ArgoCD，Application 手动分发 | 一个发布单自动扇出，Redis Stream 并发执行 |
+| 通知 | ArgoCD Notifications 配置繁重 | 构建/部署/审批/回滚全事件通知，开箱即用 |
+
+## 十七、核心差异化总结
+
+```
+传统 Jenkins：每个项目 → Jenkinsfile → kubectl → 单向通知
+标准 GitOps： CI ≠ CD → Git 仓库 → ArgoCD → Pull only
+K8sOperation：  ┌─────────────────────────────────────────┐
+               │         平台（唯一控制平面+状态中心）        │
+               │                                         │
+  Jenkins ─────┤  构建 → 回调 → 质量门禁 → 审批            │
+  ArgoWF ──────┤                  ↓                      │
+               │  镜像@digest（不可变，跨环境晋级）          │
+               │         ↓                               │
+               │  ┌──────┼──────┐                        │
+               │ Push    Git    金丝雀                     │
+               │ 直接    提交    渐进                       │
+               │ Patch   manifest                         │
+               │         ↓                               │
+               │  多集群扇出（Redis Stream）                │
+               │         ↓                               │
+               │  WaitRollout → 通知 → 审计                │
+               └─────────────────────────────────────────┘
+```
+
+**最核心的三点：**
+
+1. **统一控制平面**：Jenkins/Argo 只是执行引擎，平台是大脑。构建配置、审批策略、部署目标、通知规则全在平台，不散落各工具
+2. **不可变镜像 + 环境晋级**：同一个 `image@sha256:digest` dev→test→staging→prod，不是重新构建，是一次构建逐级放行
+3. **构建引擎可插拔**：Jenkins 和 Argo Workflows 共存，每条流水线自由选，切换只需改 `deploy_mode` 字段
