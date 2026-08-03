@@ -15,15 +15,13 @@ import (
 )
 
 // AIApprovalController 高危操作审批控制器
+// factory 必须用启动期创建的共享实例，理由同 AIAssistantController
 type AIApprovalController struct {
 	factory *services.ClusterClientFactory
 }
 
-func NewAIApprovalController() *AIApprovalController {
-	svc := services.NewServices()
-	return &AIApprovalController{
-		factory: services.NewClusterClientFactory(svc),
-	}
+func NewAIApprovalController(factory *services.ClusterClientFactory) *AIApprovalController {
+	return &AIApprovalController{factory: factory}
 }
 
 // isApprovalAdmin 检查当前用户是否有审批管理权限

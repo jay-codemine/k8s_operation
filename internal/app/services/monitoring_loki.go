@@ -57,7 +57,7 @@ func (s *LokiService) resolveClient() (*loki.Client, string, bool) {
 	if url == "" {
 		return nil, "", false
 	}
-	return loki.NewClient(url, 30*time.Second), url, true
+	return loki.NewClient(url, queryTimeout()), url, true
 }
 
 // GetLokiURL 返回当前 Loki 地址（实时解析）

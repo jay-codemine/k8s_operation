@@ -106,11 +106,13 @@ func AuthJWT() gin.HandlerFunc {
 			tid = models.DefaultTenantID
 		}
 
-		// 是否超级管理员（写入上下文，供权限相关控制器复用）
-		isSuperAdmin := models.IsSuperAdmin(global.DB, int64(u.ID))
-		ctx.Set("is_super_admin", isSuperAdmin)
-
 		ctx.Set("tenant_id", tid)
+
+		// 是否超级管理员（写入上下文，供权限相关控制器复用）
+		// 必须传租户隔离 DB：IsSuperAdmin 依赖 Statement.Context 中的 tenant_id，
+		// 直接传 global.DB 会因取不到 tenant_id 而恒返回 false
+		isSuperAdmin := models.IsSuperAdmin(GetTenantDB(ctx), int64(u.ID))
+		ctx.Set("is_super_admin", isSuperAdmin)
 
 		// 5) 记录用户活跃时间（异步，用于"在线用户"统计，不阻塞请求）
 		go recordUserOnline(int64(u.ID))
@@ -144,7 +146,7 @@ func RequireCICDPermission(permissionName string) gin.HandlerFunc {
 		}
 
 		// 检查细粒度权限
-		if !models.HasUserPermission(global.DB, userID, permissionName) {
+		if !models.HasUserPermission(GetTenantDB(ctx), userID, permissionName) {
 			rsp := response.NewResponse(ctx)
 			rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
 			ctx.Abort()
@@ -164,7 +166,7 @@ func CheckCICDPermission(ctx *gin.Context, permissionName string) bool {
 		rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 		return false
 	}
-	if !models.HasUserPermission(global.DB, userID, permissionName) {
+	if !models.HasUserPermission(GetTenantDB(ctx), userID, permissionName) {
 		rsp := response.NewResponse(ctx)
 		rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
 		return false

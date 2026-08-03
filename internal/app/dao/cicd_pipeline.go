@@ -2,7 +2,9 @@ package dao
 
 import (
 	"context"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	"k8soperation/pkg/tenant"
 	"time"
 )
 
@@ -487,11 +489,16 @@ func (d *Dao) EnvironmentList(ctx context.Context, page, pageSize int, keyword s
 	var list []*models.EnvironmentListItem
 	var total int64
 
-	query := d.db.WithContext(ctx).
+	tid, ok := tenant.GetTenantID(d.db)
+	if !ok {
+		return nil, 0, nil
+	}
+
+	query := global.DB.WithContext(ctx).
 		Table("cicd_environment AS e").
 		Select("e.*, c.cluster_name AS cluster_name").
-		Joins("LEFT JOIN kube_cluster c ON c.id = e.cluster_id").
-		Where("e.is_del = 0")
+		Joins("LEFT JOIN kube_cluster c ON c.id = e.cluster_id AND c.tenant_id = ? AND c.is_del = 0", tid).
+		Where("e.is_del = 0 AND e.tenant_id = ?", tid)
 
 	if keyword != "" {
 		query = query.Where("e.name LIKE ? OR e.display_name LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
@@ -591,16 +598,22 @@ func (d *Dao) ApprovalGetByID(ctx context.Context, id int64) (*models.CicdApprov
 func (d *Dao) ApprovalList(ctx context.Context, page, pageSize int, status string, pipelineID int64) ([]*models.ApprovalListItem, int64, error) {
 	var list []*models.ApprovalListItem
 	var total int64
+	tid, ok := tenant.GetTenantID(d.db)
+	if !ok {
+		return nil, 0, nil
+	}
 
-	query := d.db.WithContext(ctx).
+
+	query := global.DB.WithContext(ctx).
 		Table("cicd_approval AS a").
 		Select(`a.*, 
 			COALESCE(p.name, '') AS pipeline_name,
 			COALESCE(u1.username, '') AS request_username,
 			COALESCE(u2.username, '') AS approve_username`).
-		Joins("LEFT JOIN cicd_pipeline AS p ON a.pipeline_id = p.id").
-		Joins("LEFT JOIN `user` AS u1 ON a.request_user_id = u1.id").
-		Joins("LEFT JOIN `user` AS u2 ON a.approve_user_id = u2.id")
+		Joins("LEFT JOIN cicd_pipeline AS p ON a.pipeline_id = p.id AND p.tenant_id = ?", tid).
+		Joins("LEFT JOIN `user` AS u1 ON a.request_user_id = u1.id AND u1.tenant_id = ?", tid).
+		Joins("LEFT JOIN `user` AS u2 ON a.approve_user_id = u2.id AND u2.tenant_id = ?", tid).
+		Where("a.tenant_id = ?", tid)
 
 	if status != "" {
 		query = query.Where("a.status = ?", status)
@@ -625,17 +638,22 @@ func (d *Dao) ApprovalList(ctx context.Context, page, pageSize int, status strin
 func (d *Dao) ApprovalListByUser(ctx context.Context, userID int64, page, pageSize int, status string, pipelineID int64) ([]*models.ApprovalListItem, int64, error) {
 	var list []*models.ApprovalListItem
 	var total int64
+	tid2, ok2 := tenant.GetTenantID(d.db)
+	if !ok2 {
+		return nil, 0, nil
+	}
 
-	query := d.db.WithContext(ctx).
+
+	query := global.DB.WithContext(ctx).
 		Table("cicd_approval AS a").
 		Select(`a.*, 
 			COALESCE(p.name, '') AS pipeline_name,
 			COALESCE(u1.username, '') AS request_username,
 			COALESCE(u2.username, '') AS approve_username`).
-		Joins("LEFT JOIN cicd_pipeline AS p ON a.pipeline_id = p.id").
-		Joins("LEFT JOIN `user` AS u1 ON a.request_user_id = u1.id").
-		Joins("LEFT JOIN `user` AS u2 ON a.approve_user_id = u2.id").
-		Where("a.request_user_id = ?", userID)
+		Joins("LEFT JOIN cicd_pipeline AS p ON a.pipeline_id = p.id AND p.tenant_id = ?", tid2).
+		Joins("LEFT JOIN `user` AS u1 ON a.request_user_id = u1.id AND u1.tenant_id = ?", tid2).
+		Joins("LEFT JOIN `user` AS u2 ON a.approve_user_id = u2.id AND u2.tenant_id = ?", tid2).
+		Where("a.tenant_id = ? AND a.request_user_id = ?", tid2, userID)
 
 	if status != "" {
 		query = query.Where("a.status = ?", status)

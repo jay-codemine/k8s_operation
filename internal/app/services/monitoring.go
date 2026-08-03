@@ -78,13 +78,21 @@ func (s *MonitoringService) resolveURL(ctx context.Context) string {
 	return s.staticURL
 }
 
+// queryTimeout 单条查询的超时，取 config.yaml.Monitoring.QueryTimeout
+func queryTimeout() time.Duration {
+	if global.MonitoringSetting != nil && global.MonitoringSetting.QueryTimeout > 0 {
+		return time.Duration(global.MonitoringSetting.QueryTimeout) * time.Second
+	}
+	return 30 * time.Second
+}
+
 // resolveClient 解析 URL 并返回临时 client（每次调用新建）
 func (s *MonitoringService) resolveClient(ctx context.Context) (*prom.Client, string, bool) {
 	url := s.resolveURL(ctx)
 	if url == "" {
 		return nil, "", false
 	}
-	return prom.NewClient(url, 30*time.Second), url, true
+	return prom.NewClient(url, queryTimeout()), url, true
 }
 
 // GetPrometheusURL 返回当前使用的 Prometheus 地址（实时解析）

@@ -1904,7 +1904,17 @@ WHERE u.username = 'admin' AND r.role_type = 'super_admin';
 -- ============================================================
 -- 多租户扩展（2026-07-30）
 -- 所有业务表增加 tenant_id 列，默认归属租户 ID=1
--- 可重复执行（IF NOT EXISTS 保护）
+--
+-- !!! 警告：本段下面的 ALTER TABLE 只能在 MariaDB 上执行 !!!
+--   `ADD COLUMN IF NOT EXISTS` / `ADD INDEX IF NOT EXISTS` 是 MariaDB 专有语法，
+--   MySQL 8.x 会报 ERROR 1064，48 条 ALTER 全部失败；若用 --force 执行还会
+--   被当成警告跳过，表现为「脚本跑完了但一个 tenant_id 列都没建出来」。
+--
+--   在 MySQL 上请改为执行（幂等、可重复跑）：
+--     scripts/migrations/20260803_add_tenant_id_missing_tables.sql
+--   该脚本覆盖本段全部表，另外还补齐了 6 张既不在本段列表、
+--   也没有 Go model 的表（cicd_language_profile / iam_group / iam_group_user /
+--   iam_project / iam_project_member / iam_role_template）。
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS `tenant` (

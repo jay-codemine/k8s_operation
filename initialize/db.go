@@ -10,6 +10,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/pkg/database"
+	"k8soperation/pkg/tenant"
 	"log"
 	"time"
 )
@@ -60,6 +61,12 @@ func SetupDB() error {
 	defer cancel()
 	if err := global.SQLDB.PingContext(ctx); err != nil {
 		return fmt.Errorf("db ping failed: %w", err)
+	}
+
+	// 注册多租户写入回调：INSERT 时按请求上下文自动填充 tenant_id
+	// 不注册的话租户隔离只有读没有写，新建数据会全部落到默认租户
+	if err := tenant.RegisterCallbacks(global.DB); err != nil {
+		return fmt.Errorf("register tenant callbacks failed: %w", err)
 	}
 
 	// 自动迁移表结构
@@ -214,6 +221,9 @@ func initDefaultData() error {
 
 	// ⚠️ 管理员角色自修复（防止admin自锁后无法恢复）
 	repairAdminRole()
+
+	// 存量修复：为没有默认角色的租户补齐（否则该租户所有用户权限判定恒为 false）
+	repairTenantRBAC()
 
 	// 初始化应用商城种子数据
 	svc := services.NewServices()
@@ -850,6 +860,24 @@ func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
 		return
 	}
 	log.Printf("[InitData] Admin (ID=%d) assigned super_admin role", user.ID)
+}
+
+// repairTenantRBAC 为存量的不可用租户补齐默认角色。
+// 早期的租户创建接口只往 tenant 表插一行，这些租户在 sys_role 里没有任何记录，
+// 其用户登录后 IsSuperAdmin/HasUserPermission 全部返回 false，租户等于废的。
+func repairTenantRBAC() {
+	ids, err := dao.TenantsMissingSuperAdmin(global.DB)
+	if err != nil {
+		log.Printf("[InitData] 租户 RBAC 检查失败: %v", err)
+		return
+	}
+	for _, id := range ids {
+		if err := dao.TenantSeedRBAC(global.DB, id); err != nil {
+			log.Printf("[InitData] 租户 %d 默认角色补齐失败: %v", id, err)
+			continue
+		}
+		log.Printf("[InitData] ⚠️ 租户 %d 缺少默认角色，已补齐", id)
+	}
 }
 
 // seedDefaultRoles 初始化默认角色（超级管理员/平台管理员/DevOps）

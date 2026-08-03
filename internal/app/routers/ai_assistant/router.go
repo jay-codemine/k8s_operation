@@ -4,19 +4,25 @@ import (
 	"github.com/gin-gonic/gin"
 
 	ai "k8soperation/internal/app/controllers/api/v1/ai"
+	"k8soperation/internal/app/services"
 )
 
-type AIAssistantRouter struct{}
+type AIAssistantRouter struct {
+	factory *services.ClusterClientFactory
+}
 
-func NewAIAssistantRouter() *AIAssistantRouter {
-	return &AIAssistantRouter{}
+// NewAIAssistantRouterWithFactory 注入启动期创建的共享集群客户端工厂。
+// AI 对话的工具调用要连目标集群，必须复用共享工厂的客户端缓存与租户校验，
+// 不能让 controller 自建。
+func NewAIAssistantRouterWithFactory(factory *services.ClusterClientFactory) *AIAssistantRouter {
+	return &AIAssistantRouter{factory: factory}
 }
 
 // Inject 注入 AI 助手 & 审批管理 & AIOps 路由
 // 路由前缀: /api/v1/ai/...
 func (r *AIAssistantRouter) Inject(router *gin.RouterGroup) {
-	chatCtrl := ai.NewAIAssistantController()
-	approvalCtrl := ai.NewAIApprovalController()
+	chatCtrl := ai.NewAIAssistantController(r.factory)
+	approvalCtrl := ai.NewAIApprovalController(r.factory)
 	aiopsCtrl := ai.NewAIOpsController()
 
 	g := router.Group("/ai")

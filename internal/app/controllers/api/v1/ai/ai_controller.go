@@ -21,15 +21,14 @@ import (
 )
 
 // AIAssistantController AI 助手控制器
+// factory 必须用启动期创建的共享实例：自建一个会多出一份独立的集群客户端缓存，
+// 且其内部按 ID 查 kube_cluster 时走的是 global.DB，绕过租户过滤。
 type AIAssistantController struct {
 	factory *services.ClusterClientFactory
 }
 
-func NewAIAssistantController() *AIAssistantController {
-	svc := services.NewServices()
-	return &AIAssistantController{
-		factory: services.NewClusterClientFactory(svc),
-	}
+func NewAIAssistantController(factory *services.ClusterClientFactory) *AIAssistantController {
+	return &AIAssistantController{factory: factory}
 }
 
 // getUserID 从上下文获取当前用户ID

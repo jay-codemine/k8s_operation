@@ -6,7 +6,67 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/pkg/tenant"
 	"time"
+
+	"gorm.io/gorm"
 )
+
+// ==================== 租户 RBAC 初始化 ====================
+
+// TenantSeedRBAC 为指定租户克隆一份默认角色及其权限授权。
+//
+// 新建租户必须做这一步，否则该租户完全不可用：读路径（models.IsSuperAdmin /
+// GetUserRoles）按 tenant_id 过滤 sys_role，租户下没有 super_admin 行时，
+// 它的所有用户都判不出任何权限，连租户管理页都进不去。
+//
+// 从默认租户 SELECT-INSERT 克隆而非硬编码字段值，这样 scope_platform/scope_cluster/
+// scope_cicd 等平台默认值日后调整时新租户自动跟随。sys_permission 是全局共享目录，
+// 只克隆 sys_role_permission 的授权关系，按 role_type 对齐新旧角色。
+// db 传事务句柄即可与租户记录本身同生共死。
+func TenantSeedRBAC(db *gorm.DB, tenantID uint32) error {
+	if tenantID == 0 || tenantID == models.DefaultTenantID {
+		return nil
+	}
+	now := uint64(time.Now().Unix())
+
+	if err := db.Exec(`
+		INSERT INTO sys_role
+			(tenant_id, name, display_name, description, role_type,
+			 scope_platform, scope_cluster, scope_cicd,
+			 is_system, color, icon, sort_order, created_at, modified_at, is_del)
+		SELECT ?, name, display_name, description, role_type,
+			   scope_platform, scope_cluster, scope_cicd,
+			   is_system, color, icon, sort_order, ?, ?, 0
+		FROM sys_role
+		WHERE tenant_id = ? AND is_del = 0 AND role_type IN (?, ?, ?)`,
+		tenantID, now, now, models.DefaultTenantID,
+		models.RoleTypeSuperAdmin, models.RoleTypePlatformAdmin, models.RoleTypeDevOps,
+	).Error; err != nil {
+		return err
+	}
+
+	return db.Exec(`
+		INSERT INTO sys_role_permission (tenant_id, role_id, permission_id, created_at)
+		SELECT ?, dst.id, rp.permission_id, ?
+		FROM sys_role_permission rp
+		JOIN sys_role src ON src.id = rp.role_id AND src.tenant_id = ? AND src.is_del = 0
+		JOIN sys_role dst ON dst.tenant_id = ? AND dst.role_type = src.role_type AND dst.is_del = 0`,
+		tenantID, now, models.DefaultTenantID, tenantID,
+	).Error
+}
+
+// TenantsMissingSuperAdmin 列出启用中但没有 super_admin 角色的租户 ID（即不可用的租户）
+func TenantsMissingSuperAdmin(db *gorm.DB) ([]uint32, error) {
+	var ids []uint32
+	err := db.Raw(`
+		SELECT t.id FROM tenant t
+		WHERE t.is_del = 0 AND t.status = 1
+		  AND NOT EXISTS (
+			SELECT 1 FROM sys_role r
+			WHERE r.tenant_id = t.id AND r.role_type = ? AND r.is_del = 0
+		  )
+		ORDER BY t.id`, models.RoleTypeSuperAdmin).Scan(&ids).Error
+	return ids, err
+}
 
 // ==================== 角色管理 ====================
 
@@ -461,10 +521,14 @@ func (d *Dao) GetUserAccessibleClusters(userID int64) ([]*models.K8sCluster, err
 	}
 
 	// 否则只返回有权限的集群（兼容旧 can_view + 新 access_level）
+	tid, ok := tenant.GetTenantID(d.db)
+	if !ok {
+		return nil, nil
+	}
 	var clusters []*models.K8sCluster
-	err := d.db.Table("kube_cluster").
-		Joins("JOIN sys_user_cluster ON kube_cluster.id = sys_user_cluster.cluster_id").
-		Where("sys_user_cluster.user_id = ? AND (sys_user_cluster.access_level IN ('read','write','admin') OR sys_user_cluster.can_view = 1) AND kube_cluster.is_del = 0", userID).
+	err := global.DB.Table("kube_cluster").
+		Joins("JOIN sys_user_cluster ON kube_cluster.id = sys_user_cluster.cluster_id AND sys_user_cluster.tenant_id = ?", tid).
+		Where("sys_user_cluster.user_id = ? AND (sys_user_cluster.access_level IN ('read','write','admin') OR sys_user_cluster.can_view = 1) AND kube_cluster.is_del = 0 AND kube_cluster.tenant_id = ?", userID, tid).
 		Find(&clusters).Error
 	return clusters, err
 }

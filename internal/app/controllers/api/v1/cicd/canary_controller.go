@@ -2,142 +2,156 @@ package cicd
 
 import (
 	"errors"
-	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/app/services"
+	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
+	"k8soperation/pkg/app/response"
+	"k8soperation/pkg/valid"
 )
 
 // CanaryDeployController 金丝雀部署控制器
+//
+// factory 是启动期创建的共享实例（由 router 注入），内部持有集群客户端缓存，
+// 不能在这里自建。业务用的 Services 一律按请求从 context 取租户隔离实例，
+// 不长期持有 global.DB。
 type CanaryDeployController struct {
-	svc     *services.Services
 	factory *services.ClusterClientFactory
 }
 
 // NewCanaryDeployController 创建金丝雀控制器
-func NewCanaryDeployController() *CanaryDeployController {
-	svc := services.NewServices()
-	return &CanaryDeployController{
-		svc:     svc,
-		factory: services.NewClusterClientFactory(svc),
-	}
+func NewCanaryDeployController(factory *services.ClusterClientFactory) *CanaryDeployController {
+	return &CanaryDeployController{factory: factory}
 }
 
-// getK8sClient 从上下文获取 K8s 客户端（支持多集群）
-func (c *CanaryDeployController) getK8sClient(ctx *gin.Context) (*services.K8sClients, error) {
-	clusterIDStr := ctx.GetHeader("X-Cluster-ID")
-	if clusterIDStr == "" {
-		// 使用默认管理集群
-		if global.ManagementKubeClient == nil {
-			return nil, errors.New("cluster unavailable")
-		}
-		return &services.K8sClients{Kube: global.ManagementKubeClient}, nil
+// resolveCluster 解析目标集群客户端。返回 false 时响应已写好，调用方直接 return。
+// 这些路由没有挂 ClusterMiddleware，所以必须走 ResolveClusterClients 补上
+// 授权与租户校验，不能直接调 factory。
+func (c *CanaryDeployController) resolveCluster(ctx *gin.Context, rsp *response.Response) (*services.K8sClients, bool) {
+	clients, err := middlewares.ResolveClusterClients(ctx, c.factory)
+	if err == nil {
+		return clients, true
 	}
 
-	clusterID, err := strconv.ParseInt(clusterIDStr, 10, 64)
-	if err != nil {
-		return nil, errors.New("invalid X-Cluster-ID")
+	switch {
+	case errors.Is(err, middlewares.ErrClusterMissingID), errors.Is(err, middlewares.ErrClusterInvalidID):
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails(err.Error()))
+	case errors.Is(err, middlewares.ErrClusterNoAuth):
+		rsp.ToErrorResponse(errorcode.UserNotLogin)
+	case errors.Is(err, middlewares.ErrClusterForbidden):
+		rsp.ToErrorResponse(errorcode.ErrorClusterForbidden)
+	case errors.Is(err, middlewares.ErrClusterNotFound):
+		rsp.ToErrorResponse(errorcode.ErrorClusterNotFound)
+	default:
+		// 连接/证书/超时等，err 原文只进日志，不回给前端（含 apiserver 地址）
+		global.Logger.Warn("canary: 集群客户端获取失败", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ErrorClusterUnhealthy)
 	}
-
-	clients, err := c.factory.GetClient(ctx.Request.Context(), clusterID)
-	if err != nil {
-		return nil, errors.New("cluster unavailable")
-	}
-	return clients, nil
+	return nil, false
 }
 
 // Promote 手动晋升金丝雀
 // POST /api/v1/k8s/cicd/canary/promote
 func (c *CanaryDeployController) Promote(ctx *gin.Context) {
-	var req requests.CanaryPromoteRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误: " + err.Error()})
+	param := &requests.CanaryPromoteRequest{}
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCanaryPromoteRequest); !ok {
 		return
 	}
 
-	cli, err := c.getK8sClient(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error()})
+	cli, ok := c.resolveCluster(ctx, rsp)
+	if !ok {
 		return
 	}
 
-	if err := c.svc.CanaryPromote(ctx.Request.Context(), cli.Kube, &req); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+	svc := middlewares.NewServicesFromContext(ctx)
+	if err := svc.CanaryPromote(ctx.Request.Context(), cli.Kube, param); err != nil {
+		global.Logger.Error("CanaryPromote error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "OK", "data": "金丝雀已晋升为稳定版本"})
+	rsp.Success(gin.H{"message": "金丝雀已晋升为稳定版本"})
 }
 
 // Rollback 回滚金丝雀
 // POST /api/v1/k8s/cicd/canary/rollback
 func (c *CanaryDeployController) Rollback(ctx *gin.Context) {
-	var req requests.CanaryRollbackRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误: " + err.Error()})
+	param := &requests.CanaryRollbackRequest{}
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCanaryRollbackRequest); !ok {
 		return
 	}
 
-	cli, err := c.getK8sClient(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error()})
+	cli, ok := c.resolveCluster(ctx, rsp)
+	if !ok {
 		return
 	}
 
-	if err := c.svc.CanaryRollback(ctx.Request.Context(), cli.Kube, &req); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+	svc := middlewares.NewServicesFromContext(ctx)
+	if err := svc.CanaryRollback(ctx.Request.Context(), cli.Kube, param); err != nil {
+		global.Logger.Error("CanaryRollback error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "OK", "data": "金丝雀已回滚"})
+	rsp.Success(gin.H{"message": "金丝雀已回滚"})
 }
 
 // Status 获取金丝雀状态
 // GET /api/v1/k8s/cicd/canary/status
 func (c *CanaryDeployController) Status(ctx *gin.Context) {
-	var req requests.CanaryStatusRequest
-	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误: " + err.Error()})
+	param := &requests.CanaryStatusRequest{}
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCanaryStatusRequest); !ok {
 		return
 	}
 
-	cli, err := c.getK8sClient(ctx)
+	cli, ok := c.resolveCluster(ctx, rsp)
+	if !ok {
+		return
+	}
+
+	svc := middlewares.NewServicesFromContext(ctx)
+	info, err := svc.CanaryGetStatus(ctx.Request.Context(), cli.Kube, param)
 	if err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error()})
+		global.Logger.Error("CanaryGetStatus error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
 
-	info, err := c.svc.CanaryGetStatus(ctx.Request.Context(), cli.Kube, &req)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "OK", "data": info})
+	rsp.Success(info)
 }
 
 // SetTrafficSplit 调整金丝雀流量比例
 // POST /api/v1/k8s/cicd/canary/traffic-split
 func (c *CanaryDeployController) SetTrafficSplit(ctx *gin.Context) {
-	var req requests.CanaryTrafficSplitRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误: " + err.Error()})
+	param := &requests.CanaryTrafficSplitRequest{}
+	rsp := response.NewResponse(ctx)
+
+	if ok := valid.Validate(ctx, param, requests.ValidCanaryTrafficSplitRequest); !ok {
 		return
 	}
 
-	cli, err := c.getK8sClient(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": err.Error()})
+	cli, ok := c.resolveCluster(ctx, rsp)
+	if !ok {
 		return
 	}
 
-	if err := c.svc.CanarySetTrafficSplit(ctx.Request.Context(), cli.Kube, &req); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+	svc := middlewares.NewServicesFromContext(ctx)
+	if err := svc.CanarySetTrafficSplit(ctx.Request.Context(), cli.Kube, param); err != nil {
+		global.Logger.Error("CanarySetTrafficSplit error", zap.Error(err))
+		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "OK", "data": "流量比例已调整"})
+	rsp.Success(gin.H{"message": "流量比例已调整"})
 }

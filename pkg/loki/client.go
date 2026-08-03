@@ -6,10 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
 )
+
+// 拨号超时。默认 Transport 用 30s，Loki 地址不可达时（SYN 被丢弃而非拒绝）
+// 每个请求都要干等满，日志页会一直转圈到前端放弃。
+const dialTimeout = 2 * time.Second
 
 // Client Loki HTTP API 客户端
 type Client struct {
@@ -23,6 +28,13 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: timeout,
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
+				TLSHandshakeTimeout:   5 * time.Second,
+				ResponseHeaderTimeout: timeout,
+				MaxIdleConnsPerHost:   2,
+				IdleConnTimeout:       30 * time.Second,
+			},
 		},
 	}
 }

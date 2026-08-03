@@ -9,6 +9,7 @@ import (
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/health"
 	"k8soperation/middlewares"
+	"os"
 	"time"
 
 	// 引入 metrics 包，触发 promauto 注册
@@ -25,7 +26,7 @@ type Engine struct {
 // 返回一个初始化完成的 Engine 指针
 func NewEngine(factory *services.ClusterClientFactory) *Engine {
 	g := &Engine{
-		Mode:    gin.ReleaseMode,
+		Mode:    resolveGinMode(),
 		Factory: factory,
 	}
 
@@ -35,6 +36,20 @@ func NewEngine(factory *services.ClusterClientFactory) *Engine {
 	g.injectRouters()
 
 	return g
+}
+
+// resolveGinMode 默认 release；仅当显式设置 GIN_MODE 时才切换
+// 设为 debug 可让 gin 在注册路由时把完整路由表打到 stdout（[GIN-debug] 行），
+// 接口巡检脚本据此枚举全部路由，无需手工维护清单
+func resolveGinMode() string {
+	switch os.Getenv("GIN_MODE") {
+	case gin.DebugMode:
+		return gin.DebugMode
+	case gin.TestMode:
+		return gin.TestMode
+	default:
+		return gin.ReleaseMode
+	}
 }
 
 func (s *Engine) injectMiddlewares() {

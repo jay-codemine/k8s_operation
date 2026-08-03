@@ -2,9 +2,10 @@ package dao
 
 import (
 	"context"
-	"time"
-
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	"k8soperation/pkg/tenant"
+	"time"
 )
 
 // ==================== PipelineTarget CRUD（流水线多环境部署目标）====================
@@ -12,11 +13,16 @@ import (
 // PipelineTargetListByPipeline 获取某条流水线的全部环境目标（按 sort_order 升序）
 func (d *Dao) PipelineTargetListByPipeline(ctx context.Context, pipelineID int64) ([]*models.CicdPipelineTargetView, error) {
 	var list []*models.CicdPipelineTargetView
-	err := d.db.WithContext(ctx).
+	tid, ok := tenant.GetTenantID(d.db)
+	if !ok {
+		return nil, nil
+	}
+
+	err := global.DB.WithContext(ctx).
 		Table("cicd_pipeline_target AS t").
 		Select("t.*, COALESCE(c.cluster_name, '') AS cluster_name").
-		Joins("LEFT JOIN kube_cluster c ON c.id = t.cluster_id").
-		Where("t.pipeline_id = ? AND t.is_del = 0", pipelineID).
+		Joins("LEFT JOIN kube_cluster c ON c.id = t.cluster_id AND c.tenant_id = ? AND c.is_del = 0", tid).
+		Where("t.pipeline_id = ? AND t.is_del = 0 AND t.tenant_id = ?", pipelineID, tid).
 		Order("t.sort_order ASC, t.id ASC").
 		Find(&list).Error
 	if err != nil {

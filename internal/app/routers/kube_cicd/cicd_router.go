@@ -3,6 +3,7 @@ package kube_cicd
 import (
 	"github.com/gin-gonic/gin"
 	"k8soperation/internal/app/controllers/api/v1/cicd"
+	"k8soperation/internal/app/services"
 	"k8soperation/middlewares"
 )
 
@@ -19,9 +20,13 @@ type CicdRouter struct {
 	agentCtrl       *cicd.BuildAgentController
 	onboardCtrl     *cicd.QuickOnboardController
 	promoteCtrl     *cicd.PromoteController
+	canaryCtrl      *cicd.CanaryDeployController
 }
 
-func NewCicdRouter() *CicdRouter {
+// NewCicdRouterWithFactory 注入启动期创建的共享集群客户端工厂。
+// 金丝雀相关接口要直连目标集群，且这组路由没有挂 ClusterMiddleware，
+// 授权与租户校验由 middlewares.ResolveClusterClients 在 controller 内补上。
+func NewCicdRouterWithFactory(factory *services.ClusterClientFactory) *CicdRouter {
 	return &CicdRouter{
 		releaseCtrl:     cicd.NewCicdReleaseController(),
 		pipelineCtrl:    cicd.NewPipelineController(),
@@ -35,6 +40,7 @@ func NewCicdRouter() *CicdRouter {
 		agentCtrl:       cicd.NewBuildAgentController(),
 		onboardCtrl:     cicd.NewQuickOnboardController(),
 		promoteCtrl:     cicd.NewPromoteController(),
+		canaryCtrl:      cicd.NewCanaryDeployController(factory),
 	}
 }
 
@@ -73,13 +79,12 @@ func (r *CicdRouter) Inject(rg *gin.RouterGroup) {
 
 	// ==================== 发布单管理 ====================
 	// ==================== 金丝雀部署 ====================
-	canaryCtrl := cicd.NewCanaryDeployController()
 	canary := rg.Group("/canary")
 	{
-		canary.POST("/promote", middlewares.RequireCICDPermission("cicd:deploy:dev"), canaryCtrl.Promote)
-		canary.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), canaryCtrl.Rollback)
-		canary.GET("/status", canaryCtrl.Status)
-		canary.POST("/traffic-split", middlewares.RequireCICDPermission("cicd:deploy:dev"), canaryCtrl.SetTrafficSplit)
+		canary.POST("/promote", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.canaryCtrl.Promote)
+		canary.POST("/rollback", middlewares.RequireCICDPermission("cicd:deploy:rollback"), r.canaryCtrl.Rollback)
+		canary.GET("/status", r.canaryCtrl.Status)
+		canary.POST("/traffic-split", middlewares.RequireCICDPermission("cicd:deploy:dev"), r.canaryCtrl.SetTrafficSplit)
 	}
 	// /api/v1/k8s/cicd/release/...
 	release := rg.Group("/release")

@@ -105,9 +105,14 @@ const (
 // ==================== 系统角色表 ====================
 
 // SysRole 系统角色
+// 注意 TenantID 不能省略：读路径（IsSuperAdmin/GetUserRoles）强制按 tenant_id 过滤，
+// 若结构体没有该字段，INSERT 就不带这一列、由 MySQL 的 DEFAULT 1 兜住，
+// 于是非默认租户创建的角色全部落进 1 号租户，该租户自己再也查不到 -> 租户不可用。
+// 字段存在后 tenant.RegisterCallbacks 注册的 create 回调会自动填充当前租户。
 type SysRole struct {
 	ID            int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name          string `gorm:"column:name;size:50;uniqueIndex" json:"name"`          // 角色标识（唯一）
+	TenantID      uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"`   // 所属租户
+	Name          string `gorm:"column:name;size:50" json:"name"`                      // 角色标识（租户内唯一，见 uk_sys_role_tenant_name）
 	DisplayName   string `gorm:"column:display_name;size:100" json:"display_name"`    // 显示名称
 	Description   string `gorm:"column:description;size:500" json:"description"`      // 描述
 	RoleType      string `gorm:"column:role_type;size:30" json:"role_type"`           // 角色类型
@@ -166,6 +171,7 @@ func (SysPermission) TableName() string { return "sys_permission" }
 // SysRolePermission 角色权限关联
 type SysRolePermission struct {
 	ID           int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	TenantID     uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"` // 所属租户
 	RoleID       int64  `gorm:"column:role_id;index" json:"role_id"`           // 角色ID
 	PermissionID int64  `gorm:"column:permission_id;index" json:"permission_id"` // 权限ID
 	CreatedAt    uint64 `gorm:"column:created_at" json:"created_at"`
@@ -178,6 +184,7 @@ func (SysRolePermission) TableName() string { return "sys_role_permission" }
 // SysUserRole 用户角色关联
 type SysUserRole struct {
 	ID         int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	TenantID   uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"` // 所属租户
 	UserID     int64  `gorm:"column:user_id;index" json:"user_id"`     // 用户ID
 	RoleID     int64  `gorm:"column:role_id;index" json:"role_id"`     // 角色ID
 	CreatedAt  uint64 `gorm:"column:created_at" json:"created_at"`

@@ -6,10 +6,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
+
+// 拨号超时。默认 Transport 用的是 30s，数据源地址不可达时每条查询都要干等满，
+// 而看板一次请求会串行发很多条 PromQL，累计起来远超前端超时。
+const dialTimeout = 2 * time.Second
+
+// unreachableTTL 失败负缓存时长
+const unreachableTTL = 15 * time.Second
+
+// 不可达数据源的负缓存，按 baseURL 记录最近一次网络级失败。
+//
+// 为什么必须有：一次看板请求会串行发 8~10 条查询，地址不可达时每条都要等满拨号超时，
+// 接口表现为一直挂住直到前端放弃。有了它，只有第一条查询付拨号超时的代价，
+// 其余立即失败，整个请求被压到一次拨号超时以内。
+// 思路与 services.ClusterClientFactory 的失败负缓存一致。
+//
+// 放在包级而非 Client 上：调用方（MonitoringService.resolveClient）每次查询都新建 Client，
+// 实例上的状态活不过一次调用。
+var (
+	unreachableMu sync.Mutex
+	unreachableAt = map[string]time.Time{}
+)
+
+func unreachable(baseURL string) bool {
+	unreachableMu.Lock()
+	defer unreachableMu.Unlock()
+	at, ok := unreachableAt[baseURL]
+	return ok && time.Since(at) < unreachableTTL
+}
+
+func markUnreachable(baseURL string) {
+	unreachableMu.Lock()
+	unreachableAt[baseURL] = time.Now()
+	unreachableMu.Unlock()
+}
+
+func clearUnreachable(baseURL string) {
+	unreachableMu.Lock()
+	delete(unreachableAt, baseURL)
+	unreachableMu.Unlock()
+}
 
 // Client Prometheus HTTP API 客户端
 type Client struct {
@@ -23,8 +65,33 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: timeout,
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
+				TLSHandshakeTimeout:   5 * time.Second,
+				ResponseHeaderTimeout: timeout,
+				MaxIdleConnsPerHost:   2,
+				IdleConnTimeout:       30 * time.Second,
+			},
 		},
 	}
+}
+
+// do 发请求，并维护数据源可达性的负缓存
+func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	if unreachable(c.baseURL) {
+		return nil, fmt.Errorf("prometheus %s 近期不可达，已跳过本次查询", c.baseURL)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		// 只把网络级失败记为数据源不可达；上层 ctx 被取消（前端断开）不算
+		if ctx.Err() == nil {
+			markUnreachable(c.baseURL)
+		}
+		return nil, err
+	}
+	clearUnreachable(c.baseURL)
+	return resp, nil
 }
 
 // QueryResult Prometheus 查询返回的数据结构
@@ -93,7 +160,7 @@ func (c *Client) Healthy(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return false
 	}
@@ -110,7 +177,7 @@ func (c *Client) doQuery(ctx context.Context, path string, params url.Values) (*
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("prometheus query failed: %w", err)
 	}

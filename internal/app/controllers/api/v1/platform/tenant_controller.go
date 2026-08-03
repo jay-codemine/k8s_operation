@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"k8soperation/global"
+	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
@@ -87,7 +89,15 @@ func (c *TenantController) Create(ctx *gin.Context) {
 			ModifiedAt: now,
 		},
 	}
-	if err := global.DB.Create(&tenant).Error; err != nil {
+	// 租户记录和它的默认角色必须同生共死：只建了 tenant 行、没建 super_admin 角色的
+	// 租户是个不可用的半成品（该租户所有用户的权限判定都会返回 false）
+	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&tenant).Error; err != nil {
+			return err
+		}
+		return dao.TenantSeedRBAC(tx, tenant.ID)
+	})
+	if err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}

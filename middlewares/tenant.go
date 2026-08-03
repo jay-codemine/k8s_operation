@@ -37,11 +37,21 @@ func TenantScope() gin.HandlerFunc {
 	}
 }
 
-// GetTenantDB 从 gin context 获取租户隔离的 DB（兜底 global.DB）
+// GetTenantDB 从 gin context 获取租户隔离的 DB
+// 优先取 TenantScope 注入的 db；若尚未注入（例如 AuthJWT 阶段），
+// 则按 context 中的 tenant_id 现场构造，避免退化成不带租户上下文的 global.DB
+// —— 后者会让 tenant.GetTenantID 取不到值，使 IsSuperAdmin/HasUserPermission 恒为 false
 func GetTenantDB(c *gin.Context) *gorm.DB {
 	if db, exists := c.Get("db"); exists {
 		if gdb, ok := db.(*gorm.DB); ok {
 			return gdb
+		}
+	}
+	if global.DB != nil {
+		if tidVal, exists := c.Get("tenant_id"); exists {
+			if tid, ok := tidVal.(uint32); ok && tid > 0 {
+				return tenant.NewScopedDB(global.DB, tid)
+			}
 		}
 	}
 	return global.DB

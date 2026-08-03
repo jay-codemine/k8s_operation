@@ -181,7 +181,7 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// /api/v1/ai/...
 	// 包含 AI 对话、高危操作审批等
 	// ======================================================
-	ai_assistant.NewAIAssistantRouter().Inject(protected)
+	ai_assistant.NewAIAssistantRouterWithFactory(factory).Inject(protected)
 
 	// ======================================================
 	// LDAP 认证管理分组（需要 JWT）
@@ -247,7 +247,7 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// ======================================================
 	cicdGroup := k8sRoot.Group("/cicd")
 	for _, r := range []injector{
-		kube_cicd.NewCicdRouter(),
+		kube_cicd.NewCicdRouterWithFactory(factory),
 	} {
 		r.Inject(cicdGroup)
 	}

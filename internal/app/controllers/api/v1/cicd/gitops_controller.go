@@ -7,20 +7,19 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 )
 
 // GitOpsController GitOps 控制器
+// 不持有 Services：启动期构造的 Services 绑的是 global.DB，绕过租户过滤。
+// 每个 handler 按请求从 context 取租户隔离实例。
 type GitOpsController struct {
-	svc *services.Services
 }
 
 func NewGitOpsController() *GitOpsController {
-	return &GitOpsController{
-		svc: services.NewServices(),
-	}
+	return &GitOpsController{}
 }
 
 // SyncCallback ArgoCD 同步状态 Webhook 回调
@@ -36,8 +35,9 @@ func (c *GitOpsController) SyncCallback(ctx *gin.Context) {
 	}
 
 	// HMAC 签名验证
+	svc := middlewares.NewServicesFromContext(ctx)
 	sig := ctx.GetHeader("X-Signature")
-	if !c.svc.GitOpsVerifyHMAC(sig, body) {
+	if !svc.GitOpsVerifyHMAC(sig, body) {
 		global.Logger.Warn("[GitOps] HMAC 签名验证失败")
 		rsp.ToErrorResponse(errorcode.UnauthorizedTokenError.WithDetails("HMAC 签名验证失败"))
 		return
@@ -68,7 +68,7 @@ func (c *GitOpsController) SyncCallback(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.GitOpsSyncCallback(ctx, param); err != nil {
+	if err := svc.GitOpsSyncCallback(ctx, param); err != nil {
 		global.Logger.Errorf("[GitOps] 同步回调处理失败: %v", err)
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -96,7 +96,7 @@ func (c *GitOpsController) GetAppStatus(ctx *gin.Context) {
 		return
 	}
 
-	status, err := c.svc.GitOpsGetAppStatus(ctx, appName)
+	status, err := middlewares.NewServicesFromContext(ctx).GitOpsGetAppStatus(ctx, appName)
 	if err != nil {
 		global.Logger.Errorf("[GitOps] 查询 Application 状态失败: %v", err)
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -140,7 +140,7 @@ func (c *GitOpsController) TriggerSync(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.GitOpsTriggerSyncByPipeline(ctx, req.PipelineID); err != nil {
+	if err := middlewares.NewServicesFromContext(ctx).GitOpsTriggerSyncByPipeline(ctx, req.PipelineID); err != nil {
 		global.Logger.Errorf("[GitOps] 手动触发同步失败: %v", err)
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
