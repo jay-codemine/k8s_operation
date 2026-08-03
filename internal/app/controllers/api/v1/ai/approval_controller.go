@@ -10,6 +10,7 @@ import (
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 )
 
@@ -32,7 +33,7 @@ func isApprovalAdmin(ctx *gin.Context) bool {
 	if userID == 0 {
 		return false
 	}
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	return svc.IsApprovalAdmin(int64(userID))
 }
 
@@ -77,7 +78,7 @@ func (c *AIApprovalController) List(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	viewAll := ctx.DefaultQuery("view", "") == "all" // 独立管理页面传 view=all 查看全部
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	admin := isApprovalAdmin(ctx)
 
 	var list []*models.AIApprovalRequest
@@ -149,7 +150,7 @@ func (c *AIApprovalController) MyList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.AIApprovalMyList(ctx.Request.Context(), userID, page, pageSize)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -175,7 +176,7 @@ func (c *AIApprovalController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	req, logs, err := svc.AIApprovalDetail(ctx.Request.Context(), uint32(approvalID))
 	if err != nil {
 		resp.ToErrorResponse(errorcode.AIApprovalNotFound)
@@ -224,7 +225,7 @@ func (c *AIApprovalController) Approve(ctx *gin.Context) {
 	}
 	_ = ctx.ShouldBindJSON(&body)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIApprovalApprove(ctx.Request.Context(), uint32(approvalID), userID, body.Comment, c.factory, body.AdminOverride); err != nil {
 		global.Logger.Error("审批通过失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AIApprovalProcessed.WithDetails(err.Error()))
@@ -275,7 +276,7 @@ func (c *AIApprovalController) Reject(ctx *gin.Context) {
 	}
 	_ = ctx.ShouldBindJSON(&body)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIApprovalReject(ctx.Request.Context(), uint32(approvalID), userID, body.Comment, body.AdminOverride); err != nil {
 		global.Logger.Error("审批拒绝失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AIApprovalProcessed.WithDetails(err.Error()))
@@ -306,7 +307,7 @@ func (c *AIApprovalController) Cancel(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIApprovalCancel(ctx.Request.Context(), uint32(approvalID), userID); err != nil {
 		global.Logger.Error("审批取消失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AIApprovalForbidden.WithDetails(err.Error()))
@@ -328,7 +329,7 @@ func (c *AIApprovalController) PendingCount(ctx *gin.Context) {
 	userID := getUserID(ctx)
 	admin := isApprovalAdmin(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	var count int64
 	var err error
 
@@ -371,7 +372,7 @@ func (c *AIApprovalController) Delete(ctx *gin.Context) {
 	}
 
 	admin := isApprovalAdmin(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIApprovalDelete(ctx.Request.Context(), uint32(approvalID), userID, admin); err != nil {
 		global.Logger.Error("删除审批失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.AIApprovalForbidden.WithDetails(err.Error()))
@@ -411,7 +412,7 @@ func (c *AIApprovalController) Update(ctx *gin.Context) {
 	_ = ctx.ShouldBindJSON(&body)
 
 	admin := isApprovalAdmin(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIApprovalUpdate(ctx.Request.Context(), uint32(approvalID), userID, body.Comment, admin); err != nil {
 		resp.ToErrorResponse(errorcode.AIApprovalForbidden.WithDetails(err.Error()))
 		return
@@ -429,7 +430,7 @@ func (c *AIApprovalController) Update(ctx *gin.Context) {
 func (c *AIApprovalController) Stats(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	stats, err := svc.AIApprovalStats(ctx.Request.Context())
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

@@ -64,7 +64,7 @@ data:
       JWTExpireTime: 120000
       AppName: "k8soperation"
       GlobalKubeConfigPath: ""              # K8s 内部署时留空，自动使用 InCluster 配置
-      DefaultClusterID: 10
+      DefaultClusterID: 12
       AutoInitK8s: true
       AllowEmptyStart: true
       SkipAutoMigrate: true                 # 生产环境已通过 init.sql 初始化，跳过 GORM AutoMigrate

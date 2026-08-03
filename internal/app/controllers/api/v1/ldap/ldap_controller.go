@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"k8soperation/global"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	ldapclient "k8soperation/pkg/ldap"
 )
@@ -27,7 +27,7 @@ func NewLDAPController() *LDAPController {
 // @Router /api/v1/ldap/config [get]
 func (c *LDAPController) GetConfig(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	config := svc.LDAPGetConfig()
 	resp.Success(config)
 }
@@ -48,7 +48,7 @@ func (c *LDAPController) TestConnection(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.LDAPTestConnection(); err != nil {
 		global.Logger.Error("LDAP 连接测试失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -77,7 +77,7 @@ func (c *LDAPController) SyncUsers(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.LDAPSyncAllUsers()
 	if err != nil {
 		global.Logger.Error("LDAP 用户同步失败", zap.Error(err))

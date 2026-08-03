@@ -472,23 +472,28 @@ func PatchWorkloadImage(ctx context.Context, client kubernetes.Interface, patchF
 	return nil
 }
 
+// buildPodSpecPatch 构造 Pod 模板 patch（仅更新容器镜像）
+func buildPodSpecPatch(container, image string) string {
+	return fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, container, image)
+}
+
 // PatchDeploymentImageFn Deployment 镜像 patch 函数签名
 func PatchDeploymentImageFn(ctx context.Context, client kubernetes.Interface, namespace, name, container, image string) error {
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, container, image)
+	patch := buildPodSpecPatch(container, image)
 	_, err := client.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	return err
 }
 
 // PatchStatefulSetImageFn StatefulSet 镜像 patch 函数签名
 func PatchStatefulSetImageFn(ctx context.Context, client kubernetes.Interface, namespace, name, container, image string) error {
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, container, image)
+	patch := buildPodSpecPatch(container, image)
 	_, err := client.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	return err
 }
 
 // PatchDaemonSetImageFn DaemonSet 镜像 patch 函数签名
 func PatchDaemonSetImageFn(ctx context.Context, client kubernetes.Interface, namespace, name, container, image string) error {
-	patch := fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, container, image)
+	patch := buildPodSpecPatch(container, image)
 	_, err := client.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	return err
 }

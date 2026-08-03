@@ -11,17 +11,19 @@
           <input ref="searchRef" v-model="keyword" class="ss-input" :placeholder="searchPlaceholder || '搜索...'" @input="onSearch" @click.stop />
         </div>
         <div class="ss-list" ref="listRef">
-          <div v-if="recentItems.length && !keyword" class="ss-group-label">⭐ 最近使用</div>
-          <div v-for="item in (keyword ? filteredOptions : (recentItems.length && !keyword ? recentItems : filteredOptions))" :key="item.value" class="ss-option" :class="{ 'ss-sel': modelValue === item.value }" @click.stop="select(item)">
+          <template v-if="recentItems.length && !keyword">
+            <div class="ss-group-label">⭐ 最近使用</div>
+            <div v-for="item in recentItems" :key="'recent-' + item.value" class="ss-option" :class="{ 'ss-sel': modelValue === item.value }" @click.stop="select(item)">
+              <span class="ss-opt-label">{{ item.label }}</span>
+              <span v-if="item.sub" class="ss-opt-sub">{{ item.sub }}</span>
+            </div>
+            <div v-if="filteredOptions.length" class="ss-group-label">全部</div>
+          </template>
+          <div v-for="item in filteredOptions" :key="item.value" class="ss-option" :class="{ 'ss-sel': modelValue === item.value }" @click.stop="select(item)">
             <span class="ss-opt-label">{{ item.label }}</span>
             <span v-if="item.sub" class="ss-opt-sub">{{ item.sub }}</span>
           </div>
-          <div v-if="!keyword && recentItems.length && filteredOptions.length" class="ss-group-label">全部</div>
-          <div v-if="keyword || !recentItems.length" v-for="item in filteredOptions" :key="item.value" class="ss-option" :class="{ 'ss-sel': modelValue === item.value }" @click.stop="select(item)">
-            <span class="ss-opt-label">{{ item.label }}</span>
-            <span v-if="item.sub" class="ss-opt-sub">{{ item.sub }}</span>
-          </div>
-          <div v-if="!filteredOptions.length && !recentItems.length" class="ss-empty">无匹配结果</div>
+          <div v-if="!filteredOptions.length" class="ss-empty">{{ keyword ? '无匹配结果' : emptyText }}</div>
         </div>
       </div>
     </transition>
@@ -29,7 +31,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue: [String, Number],
@@ -38,6 +40,7 @@ const props = defineProps({
   searchable: { type: Boolean, default: true },
   searchPlaceholder: String,
   disabled: Boolean,
+  emptyText: { type: String, default: '暂无可选项' },
   recentKey: String   // localStorage key for recent items
 })
 
@@ -57,10 +60,12 @@ const selectedLabel = computed(() => {
 
 const filteredOptions = computed(() => {
   if (!props.searchable || !keyword.value) return props.options
-  const q = keyword.value.toLowerCase()
+  const q = keyword.value.toLowerCase().trim()
+  if (!q) return props.options
   return props.options.filter(o =>
-    o.label.toLowerCase().includes(q) ||
-    (o.sub || '').toLowerCase().includes(q)
+    String(o.label).toLowerCase().includes(q) ||
+    String(o.sub || '').toLowerCase().includes(q) ||
+    String(o.value).toLowerCase().includes(q)
   )
 })
 
@@ -104,44 +109,46 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 </script>
 
 <style scoped>
-.ss-wrap { position:relative; width:100%; }
+/* 与平台表单控件（.form-input/.form-select）一致的浅色风格；
+   暗色主题由 App.vue 的 [data-theme="dark"] .ss-* 全局规则覆盖 */
+.ss-wrap { position:relative; width:100%; flex:1; min-width:0; }
 .ss-trigger {
   display:flex; align-items:center; justify-content:space-between;
-  height:40px; padding:0 12px; border:1px solid rgba(255,255,255,.12);
-  border-radius:8px; background:rgba(255,255,255,.05); color:#e2e8f0;
-  font-size:13px; cursor:pointer; transition:border-color .15s;
+  width:100%; padding:12px 16px; border:2px solid #e2e8f0;
+  border-radius:10px; background:#f7fafc; color:#2d3748;
+  font-size:14px; cursor:pointer; transition:all .3s;
 }
-.ss-trigger:hover:not(.ss-disabled) { border-color:rgba(58,132,255,.4); }
-.ss-open { border-color:#3A84FF !important; box-shadow:0 0 0 3px rgba(58,132,255,.12); }
-.ss-disabled { opacity:.5; cursor:not-allowed; }
-.ss-placeholder { color:#5a6273; }
-.ss-val { color:#e2e8f0; }
-.ss-arrow { font-size:10px; color:#5a6273; margin-left:8px; }
+.ss-trigger:hover:not(.ss-disabled) { border-color:#cbd5e1; }
+.ss-open { border-color:#4299e1 !important; background:#fff; box-shadow:0 0 0 4px rgba(66,153,225,.1); }
+.ss-disabled { opacity:.6; cursor:not-allowed; }
+.ss-placeholder { color:#a0aec0; }
+.ss-val { color:#2d3748; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ss-arrow { font-size:10px; color:#a0aec0; margin-left:8px; flex-shrink:0; }
 
 .ss-drop {
-  position:absolute; top:44px; left:0; right:0; z-index:500;
-  background:#1e293b; border:1px solid #334155; border-radius:10px;
-  box-shadow:0 12px 40px rgba(0,0,0,.4); overflow:hidden;
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:500;
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px;
+  box-shadow:0 12px 40px rgba(0,0,0,.12); overflow:hidden;
 }
-.ss-search { padding:8px 10px; border-bottom:1px solid #334155; }
+.ss-search { padding:10px 12px; border-bottom:1px solid #e2e8f0; }
 .ss-input {
-  width:100%; height:32px; padding:0 10px; border-radius:6px;
-  border:1px solid #334155; background:rgba(255,255,255,.05);
-  color:#e2e8f0; font-size:12px; outline:none;
+  width:100%; padding:8px 12px; border-radius:8px;
+  border:1px solid #e2e8f0; background:#f7fafc;
+  color:#2d3748; font-size:13px; outline:none; transition:border-color .2s;
 }
-.ss-input:focus { border-color:#3A84FF; }
-.ss-input::placeholder { color:#5a6273; }
+.ss-input:focus { border-color:#4299e1; background:#fff; }
+.ss-input::placeholder { color:#a0aec0; }
 .ss-list { max-height:240px; overflow-y:auto; padding:4px 0; }
-.ss-group-label { padding:6px 14px; font-size:11px; color:#64748b; font-weight:600; }
+.ss-group-label { padding:6px 16px; font-size:11px; color:#a0aec0; font-weight:600; }
 .ss-option {
   display:flex; align-items:center; justify-content:space-between;
-  padding:8px 14px; font-size:13px; cursor:pointer; transition:background .1s;
+  padding:10px 16px; font-size:13px; cursor:pointer; transition:background .15s;
 }
-.ss-option:hover { background:rgba(58,132,255,.08); }
-.ss-sel { background:rgba(58,132,255,.12); color:#60a5fa; font-weight:600; }
-.ss-opt-label { color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ss-opt-sub { font-size:11px; color:#64748b; margin-left:12px; flex-shrink:0; }
-.ss-empty { padding:24px; text-align:center; color:#64748b; font-size:13px; }
+.ss-option:hover { background:#edf2f7; }
+.ss-sel { background:linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%); font-weight:600; }
+.ss-opt-label { color:#2d3748; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ss-opt-sub { font-size:11px; color:#a0aec0; margin-left:12px; flex-shrink:0; }
+.ss-empty { padding:24px; text-align:center; color:#a0aec0; font-size:13px; }
 
 .ss-drop-enter-active { transition:all .15s ease; }
 .ss-drop-leave-active { transition:all .1s ease; }

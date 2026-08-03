@@ -5,8 +5,8 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
 )
@@ -40,7 +40,7 @@ func (c *UserController) Create(ctx *gin.Context) {
 	}
 
 	// 创建一个新的服务对象
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	// 调用服务层的用户创建方法，如果创建失败则记录错误并返回错误响应
 	user, err := svc.UserCreate(param)
 	if err != nil {
@@ -73,7 +73,7 @@ func (c *UserController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.UserDelete(param); err != nil {
 		global.Logger.Error("删除用户失败,", zap.String("error", err.Error()))
 		resp.ToErrorResponse(errorcode.ErrorUserDeleteFail)
@@ -102,7 +102,7 @@ func (u *UserController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.UserUpdate(param); err != nil {
 		global.Logger.Error("更新用户失败,", zap.String("error", err.Error()))
 		resp.ToErrorResponse(errorcode.ErrorUserUpdateFail)
@@ -137,7 +137,7 @@ func (c *UserController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	users, total, err := svc.UserList(param)
 	if err != nil {
 		global.Logger.Error("获取用户列表失败,", zap.String("error", err.Error()))

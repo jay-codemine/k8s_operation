@@ -9,7 +9,6 @@ import (
 	"io"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
@@ -50,7 +49,7 @@ func (c *PodController) Evict(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 3) 调 Service
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePodEvict(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubePodEvict error", zap.Error(err))
@@ -86,7 +85,7 @@ func (c *PodController) Create(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	podObj, err := svc.KubePodCreate(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Error("创建Pod失败", zap.String("error", err.Error()))
@@ -118,7 +117,7 @@ func (c *PodController) CreateFromYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用 Service 层创建逻辑
 	podObj, createdResources, err := svc.KubePodCreateFromYaml(ctx.Request.Context(), cli, req.Yaml)
@@ -169,7 +168,7 @@ func (c *PodController) List(ctx *gin.Context) {
 	cli := middlewares.MustGetK8sClients(ctx)
 
 	// 创建服务实例，传入上下文ctx
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	// 调用服务实例的KubePodList方法获取Pod列表，传入参数param
 	pods, total, err := svc.KubePodList(ctx.Request.Context(), cli, param)
 	// 检查获取Pod列表时是否发生错误
@@ -208,7 +207,7 @@ func (c *PodController) Update(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePodUpdate(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Errorf("更新Pod失败: %v", err)
 		resp.ToErrorResponse(errorcode.ErrorK8sPodUpdateFail.WithDetails(err.Error()))
@@ -239,7 +238,7 @@ func (c *PodController) PatchImage(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.PatchPodImage(ctx.Request.Context(), cli, param); err != nil {
 		global.Logger.Errorf("PatchPodImage 失败: %v", err)
 		resp.ToErrorResponse(errorcode.ErrorK8sPodPatchFail.WithDetails(err.Error()))
@@ -275,7 +274,7 @@ func (c *PodController) PatchLabels(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	if err := svc.KubePodPatchLabels(ctx.Request.Context(), cli, param); err != nil {
 		ctx.Error(err)
@@ -312,7 +311,7 @@ func (c *PodController) DeletePod(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.KubePodDelete(ctx.Request.Context(), cli, param); err != nil {
 		resp.ToErrorResponse(errorcode.ErrorK8sPodDeleteFail.WithDetails(err.Error()))
 		return
@@ -349,7 +348,7 @@ func (c *PodController) Detail(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	pod, err := svc.KubePodDetail(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Errorf("获取Pod详情失败: %v", err)
@@ -382,7 +381,7 @@ func (c *PodController) GetContainerName(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	containerName, err := svc.GetContainerNames(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Errorf("获取Pod容器名失败: %v", err)
@@ -416,7 +415,7 @@ func (c *PodController) GetInitContainerName(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	initContainerName, err := svc.GetInitContainerNames(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Errorf("获取Pod的Init容器名失败: %v", err)
@@ -450,7 +449,7 @@ func (c *PodController) GetContainerImages(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	containerImages, err := svc.GetContainerImages(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Errorf("获取Pod容器镜像失败: %v", err)
@@ -485,7 +484,7 @@ func (c *PodController) GetInitContainerImages(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	initContainerImages, err := svc.GetInitContainerImages(ctx.Request.Context(), cli, param)
 	if err != nil {
 		global.Logger.Errorf("获取Pod的Init容器镜像失败: %v", err)
@@ -522,7 +521,7 @@ func (c *PodController) GetContainerLogs(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	rctx := ctx.Request.Context()
 
 	if param.Follow {
@@ -633,7 +632,7 @@ func (k *PodController) GetContainerLog(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	logs, err := svc.KubePodLog(ctx.Request.Context(), cli, param.Name, param.Namespace, param.Container, param.Tail)
 	if err != nil {
 		global.Logger.Error("获取 Pod 日志失败",
@@ -682,7 +681,7 @@ func (c *PodController) Metrics(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	metrics, err := svc.KubePodMetrics(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 Pod metrics 失败",
@@ -727,7 +726,7 @@ func (c *PodController) MetricsList(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	metricsMap, err := svc.KubePodsMetrics(ctx.Request.Context(), cli, namespace)
 	if err != nil {
 		global.Logger.Error("批量获取 Pod metrics 失败",
@@ -842,7 +841,7 @@ func (c *PodController) EventList(ctx *gin.Context) {
 		return
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	items, next, err := svc.KubeEventList(ctx.Request.Context(), cli, param)
 	if err != nil {
 		ctx.Error(err)

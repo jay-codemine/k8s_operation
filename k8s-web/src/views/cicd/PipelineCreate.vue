@@ -1567,20 +1567,17 @@
                     目标命名空间
                     <span class="required">*</span>
                   </label>
-                  <input v-model="nsSearch" class="form-input" style="margin-bottom:6px" placeholder="搜索命名空间... (输入名称过滤)" :disabled="loadingNamespaces || !pipelineData.target_cluster_id" />
                   <div class="select-wrapper">
-                    <select
+                    <SearchSelect
                       v-model="pipelineData.target_namespace"
-                      class="form-select"
-                      @change="onNamespaceChange"
+                      :options="nsOptions"
+                      placeholder="请选择命名空间"
+                      search-placeholder="搜索命名空间... (输入名称过滤)"
+                      empty-text="暂无可选项，请先选择集群"
                       :disabled="loadingNamespaces || !pipelineData.target_cluster_id"
-                    >
-                      <option value="">请选择命名空间</option>
-                      <option v-for="ns in filteredNamespaces" :key="ns.name" :value="ns.name">
-                        {{ ns.name }}
-                      </option>
-                    </select>
-                    <button 
+                      @update:modelValue="onNamespaceChange"
+                    />
+                    <button
                       type="button" 
                       class="btn-refresh" 
                       @click="loadNamespaces" 
@@ -1622,18 +1619,14 @@
                     <span class="required">*</span>
                   </label>
                   <div class="select-wrapper">
-                    <input v-if="workloads.length > 0" v-model="wlSearch" class="form-input" style="margin-bottom:6px" placeholder="搜索工作负载... (输入名称模糊过滤)" />
-                    <select
+                    <SearchSelect
                       v-if="workloads.length > 0"
                       v-model="pipelineData.target_workload_name"
-                      class="form-select"
-                      @change="onWorkloadChange"
-                    >
-                      <option value="">请选择工作负载</option>
-                      <option v-for="w in filteredWorkloads" :key="w._kind + '/' + w.name" :value="w.name">
-                        [{{ w._kind }}] {{ w.name }}
-                      </option>
-                    </select>
+                      :options="wlOptions"
+                      placeholder="请选择工作负载"
+                      search-placeholder="搜索工作负载... (输入名称模糊过滤)"
+                      @update:modelValue="onWorkloadChange"
+                    />
                     <input
                       v-else
                       type="text"
@@ -2006,9 +1999,11 @@ import jobsApi from '@/api/cluster/workloads/jobs'
 import podsApi from '@/api/cluster/workloads/pods'
 import { useClusterStore } from '@/stores/cluster'
 import permissionStore from '@/stores/permission'
+import SearchSelect from '@/components/SearchSelect.vue'
 
 export default {
   name: 'PipelineCreate',
+  components: { SearchSelect },
   setup() {
     const router = useRouter()
     const route = useRoute()
@@ -2228,6 +2223,8 @@ export default {
       const q = nsSearch.value.toLowerCase().trim()
       return q ? namespaces.value.filter(n => n.name.toLowerCase().includes(q)) : namespaces.value
     })
+    // SearchSelect 选项（组件自带输入过滤）
+    const nsOptions = computed(() => namespaces.value.map(n => ({ value: n.name, label: n.name })))
 
     // 工作负载列表
     const workloads = ref([])
@@ -2239,6 +2236,8 @@ export default {
       const byKind = workloads.value.filter(w => w._kind === kind)
       return q ? byKind.filter(w => w.name.toLowerCase().includes(q)) : byKind
     })
+    // SearchSelect 选项（已按工作负载类型过滤，组件内再做关键字过滤）
+    const wlOptions = computed(() => filteredWorkloads.value.map(w => ({ value: w.name, label: `[${w._kind}] ${w.name}` })))
     const loadingWorkloads = ref(false)
     
     // 部署环境选项
@@ -3687,10 +3686,12 @@ export default {
       namespaces,
       nsSearch,
       filteredNamespaces,
+      nsOptions,
       loadingNamespaces,
       workloads,
       wlSearch,
       filteredWorkloads,
+      wlOptions,
       loadingWorkloads,
       deployEnvOptions,
       workloadKindOptions,

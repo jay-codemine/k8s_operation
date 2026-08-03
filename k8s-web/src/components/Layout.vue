@@ -145,14 +145,8 @@
                 <path v-if="!themeStore.isDark" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
               </svg>
             </button>
-            <button class="nav-action-btn" title="通知">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              <span class="notification-badge">3</span>
-            </button>
-            <button class="nav-action-btn" title="搜索">
+            <NotificationBell />
+            <button class="nav-action-btn" title="搜索 (Ctrl+K)" @click="searchVisible = true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -173,6 +167,9 @@
 
     <!-- AI 助手悬浮组件 -->
     <AiAssistant />
+
+    <!-- 全局搜索弹窗 -->
+    <GlobalSearch v-model:visible="searchVisible" />
   </div>
 </template>
 
@@ -185,6 +182,8 @@ import permissionStore from '@/stores/permission'
 import { useTenantStore } from '@/stores/tenant'
 import { useThemeStore } from '@/stores/theme'
 import AiAssistant from '@/components/AiAssistant.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
+import GlobalSearch from '@/components/GlobalSearch.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -192,11 +191,20 @@ const route = useRoute()
 const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches
 const sidebarCollapsed = ref(isMobileViewport())
 const showHelp = ref(false)
+const searchVisible = ref(false)
 const tenantStore = useTenantStore()
 const themeStore = useThemeStore()
 
 const onTenantChange = () => {
   tenantStore.switchTenant(tenantStore.current)
+}
+
+// Ctrl+K / Cmd+K 打开全局搜索
+const onGlobalKeydown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchVisible.value = true
+  }
 }
 
 // 用户名
@@ -522,10 +530,12 @@ onMounted(async () => {
     console.error('加载权限失败', e)
   }
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', onGlobalKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 
 const handleResize = () => {

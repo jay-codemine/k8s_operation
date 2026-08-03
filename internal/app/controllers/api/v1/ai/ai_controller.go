@@ -15,6 +15,7 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/openai"
 )
@@ -88,7 +89,7 @@ func (c *AIAssistantController) Chat(ctx *gin.Context) {
 	aiCtx, aiCancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer aiCancel()
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.AIChat(aiCtx, &req, c.factory)
 	if err != nil {
 		global.Logger.Error("AI 对话失败", zap.Error(err))
@@ -138,7 +139,7 @@ func (c *AIAssistantController) ChatStream(ctx *gin.Context) {
 	ctx.Writer.Header().Set("X-Accel-Buffering", "no")
 
 	// SSE 流式使用 request context（连接断开自动停止）
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	result, err := svc.AIChatStream(ctx.Request.Context(), &req, func(chunk string) error {
 		ctx.SSEvent("message", chunk)
 		ctx.Writer.Flush()
@@ -177,7 +178,7 @@ func (c *AIAssistantController) ConversationList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	list, total, err := svc.AIConversationList(ctx.Request.Context(), userID, page, pageSize)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -208,7 +209,7 @@ func (c *AIAssistantController) ConversationMessages(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	messages, err := svc.AIMessageHistory(ctx.Request.Context(), uint32(convID), userID)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.AIConversationNotFound.WithDetails(err.Error()))
@@ -238,7 +239,7 @@ func (c *AIAssistantController) ConversationDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AIConversationDelete(ctx.Request.Context(), uint32(convID), userID); err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -333,7 +334,7 @@ func (c *AIAssistantController) Status(ctx *gin.Context) {
 	// 获取待审批数量
 	var pendingCount int64
 	if enabled {
-		svc := services.NewServices()
+		svc := middlewares.NewServicesFromContext(ctx)
 		pendingCount, _ = svc.AIApprovalPendingCount(ctx.Request.Context())
 	}
 

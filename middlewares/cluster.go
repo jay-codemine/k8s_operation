@@ -66,7 +66,7 @@ func ClusterMiddleware(factory *services.ClusterClientFactory) gin.HandlerFunc {
 		}
 
 		action := inferClusterAction(c)
-		svc := services.NewServices()
+		svc := NewServicesFromContext(c)
 		if !svc.CheckClusterPermission(userID, int64(clusterID), action) {
 			global.Logger.Warn("cluster request forbidden",
 				zap.Int64("user_id", userID),

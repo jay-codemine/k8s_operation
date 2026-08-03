@@ -8,8 +8,8 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
 )
@@ -29,13 +29,13 @@ func currentUserID(ctx *gin.Context) int64 {
 	return 0
 }
 
-func requirePlatformAdmin(ctx *gin.Context, resp *response.Response, svc *services.Services) (int64, bool) {
+func requirePlatformAdmin(ctx *gin.Context, resp *response.Response) (int64, bool) {
 	userID := currentUserID(ctx)
 	if userID <= 0 {
 		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
 		return 0, false
 	}
-	if !svc.CheckScopePermission(userID, models.ScopePlatform, models.AccessLevelAdmin) {
+	if !middlewares.NewServicesFromContext(ctx).CheckScopePermission(userID, models.ScopePlatform, models.AccessLevelAdmin) {
 		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
 		return userID, false
 	}
@@ -64,7 +64,7 @@ func (c *RBACController) RoleList(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	roles, total, err := svc.RoleList(param)
 	if err != nil {
 		global.Logger.Error("获取角色列表失败", zap.Error(err))
@@ -85,7 +85,7 @@ func (c *RBACController) RoleList(ctx *gin.Context) {
 // @Router /api/v1/rbac/role/all [get]
 func (c *RBACController) RoleListAll(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	roles, err := svc.RoleListAll()
 	if err != nil {
@@ -116,7 +116,7 @@ func (c *RBACController) RoleDetail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	role, err := svc.RoleGetByID(id)
 	if err != nil {
 		global.Logger.Error("获取角色详情失败", zap.Error(err))
@@ -145,8 +145,8 @@ func (c *RBACController) RoleCreate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	role, err := svc.RoleCreate(param)
@@ -177,8 +177,8 @@ func (c *RBACController) RoleUpdate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	if err := svc.RoleUpdate(param); err != nil {
@@ -209,8 +209,8 @@ func (c *RBACController) RoleDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	if err := svc.RoleDelete(id); err != nil {
@@ -241,7 +241,7 @@ func (c *RBACController) RolePermissions(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	permissions, err := svc.RolePermissionList(roleID)
 	if err != nil {
 		global.Logger.Error("获取角色权限失败", zap.Error(err))
@@ -270,8 +270,8 @@ func (c *RBACController) RolePermissionsUpdate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	if err := svc.RolePermissionUpdate(param.RoleID, param.PermissionIDs); err != nil {
@@ -302,8 +302,8 @@ func (c *RBACController) RoleUsers(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	users, err := svc.RoleUserList(roleID)
@@ -328,7 +328,7 @@ func (c *RBACController) RoleUsers(ctx *gin.Context) {
 // @Router /api/v1/rbac/permission/list [get]
 func (c *RBACController) PermissionList(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	permissions, err := svc.PermissionList()
 	if err != nil {
@@ -361,8 +361,8 @@ func (c *RBACController) UserRoleAssign(ctx *gin.Context) {
 	}
 
 	// 获取当前操作者ID（从JWT中获取）
-	svc := services.NewServices()
-	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	svc := middlewares.NewServicesFromContext(ctx)
+	operatorID, ok := requirePlatformAdmin(ctx, resp)
 	if !ok {
 		return
 	}
@@ -394,10 +394,10 @@ func (c *RBACController) UserRoleList(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	currentID := currentUserID(ctx)
 	if userID != currentID {
-		if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 			return
 		}
 	}
@@ -431,8 +431,8 @@ func (c *RBACController) ClusterPermissionCreate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	svc := middlewares.NewServicesFromContext(ctx)
+	operatorID, ok := requirePlatformAdmin(ctx, resp)
 	if !ok {
 		return
 	}
@@ -464,8 +464,8 @@ func (c *RBACController) ClusterPermissionUpdate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	if err := svc.ClusterPermissionUpdate(param); err != nil {
@@ -496,8 +496,8 @@ func (c *RBACController) ClusterPermissionDelete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	if err := svc.ClusterPermissionDelete(id); err != nil {
@@ -529,8 +529,8 @@ func (c *RBACController) ClusterPermissionList(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+	svc := middlewares.NewServicesFromContext(ctx)
+	if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 		return
 	}
 	permissions, total, err := svc.ClusterPermissionList(param)
@@ -561,8 +561,8 @@ func (c *RBACController) BatchClusterPermissionCreate(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
-	operatorID, ok := requirePlatformAdmin(ctx, resp, svc)
+	svc := middlewares.NewServicesFromContext(ctx)
+	operatorID, ok := requirePlatformAdmin(ctx, resp)
 	if !ok {
 		return
 	}
@@ -596,10 +596,10 @@ func (c *RBACController) UserRBACInfo(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	currentID := currentUserID(ctx)
 	if userID != currentID {
-		if _, ok := requirePlatformAdmin(ctx, resp, svc); !ok {
+		if _, ok := requirePlatformAdmin(ctx, resp); !ok {
 			return
 		}
 	}
@@ -634,7 +634,7 @@ func (c *RBACController) UserAccessibleClusters(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	clusters, err := svc.GetUserAccessibleClusters(userID)
 	if err != nil {
 		global.Logger.Error("获取用户可访问集群失败", zap.Error(err))
@@ -675,7 +675,7 @@ func (c *RBACController) CheckPermission(ctx *gin.Context) {
 		userID = uid.(int64)
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	hasPermission := svc.CheckClusterPermission(userID, clusterID, action)
 
 	resp.Success(gin.H{
@@ -706,7 +706,7 @@ func (c *RBACController) UserPermissions(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	
 	// 获取用户完整RBAC信息
 	userInfo, err := svc.GetUserWithRBACInfo(userID)
@@ -758,7 +758,7 @@ func (c *RBACController) UserAccessibleNamespaces(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	namespaces, err := svc.GetUserAccessibleNamespaces(userID, clusterID)
 	if err != nil {
 		global.Logger.Error("获取用户可访问命名空间失败", zap.Error(err))

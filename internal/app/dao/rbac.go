@@ -2,7 +2,9 @@ package dao
 
 import (
 	"encoding/json"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	"k8soperation/pkg/tenant"
 	"time"
 )
 
@@ -179,10 +181,14 @@ func (d *Dao) UserRoleList(userID int64) ([]*models.SysRole, error) {
 
 // RoleUserList 获取角色绑定的用户列表
 func (d *Dao) RoleUserList(roleID int64) ([]*models.User, error) {
+	tid, ok := tenant.GetTenantID(d.db)
+	if !ok {
+		return nil, nil
+	}
 	var users []*models.User
-	err := d.db.Table("user").
+	err := global.DB.Table("user").
 		Joins("JOIN sys_user_role ON user.id = sys_user_role.user_id").
-		Where("sys_user_role.role_id = ? AND user.is_del = 0", roleID).
+		Where("sys_user_role.role_id = ? AND user.is_del = 0 AND user.tenant_id = ? AND sys_user_role.tenant_id = ?", roleID, tid, tid).
 		Find(&users).Error
 	return users, err
 }

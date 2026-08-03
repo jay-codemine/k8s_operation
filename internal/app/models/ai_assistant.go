@@ -158,21 +158,31 @@ func (a *AIApprovalRequest) GetByID(db *gorm.DB, id uint32) (*AIApprovalRequest,
 func (a *AIApprovalRequest) ListPending(db *gorm.DB, page, pageSize int) ([]*AIApprovalRequest, int64, error) {
 	var list []*AIApprovalRequest
 	var total int64
-	query := db.Where("status = ?", AIApprovalPending)
-	query.Model(&AIApprovalRequest{}).Count(&total)
-	err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	if err := db.Session(&gorm.Session{}).Where("status = ?", AIApprovalPending).Model(&AIApprovalRequest{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return list, 0, nil
+	}
+	err := db.Session(&gorm.Session{}).Where("status = ?", AIApprovalPending).Model(&AIApprovalRequest{}).
+		Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
 	return list, total, err
 }
 
-func (a *AIApprovalRequest) ListAll(db *gorm.DB, status uint8, page, pageSize int) ([]*AIApprovalRequest, int64, error) {
+func (a *AIApprovalRequest) ListAll(db *gorm.DB, st uint8, page, pageSize int) ([]*AIApprovalRequest, int64, error) {
 	var list []*AIApprovalRequest
 	var total int64
-	query := db.Model(&AIApprovalRequest{})
-	if status > 0 {
-		query = query.Where("status = ?", status)
+	base := db.Model(&AIApprovalRequest{})
+	if st > 0 {
+		base = base.Where("status = ?", st)
 	}
-	query.Count(&total)
-	err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	if err := base.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return list, 0, nil
+	}
+	err := base.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
 	return list, total, err
 }
 
@@ -187,9 +197,14 @@ func (a *AIApprovalRequest) UpdateStatus(db *gorm.DB, id uint32, status uint8, a
 func (a *AIApprovalRequest) ListByUser(db *gorm.DB, userID uint32, page, pageSize int) ([]*AIApprovalRequest, int64, error) {
 	var list []*AIApprovalRequest
 	var total int64
-	query := db.Where("request_user_id = ?", userID)
-	query.Model(&AIApprovalRequest{}).Count(&total)
-	err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	if err := db.Where("request_user_id = ?", userID).Model(&AIApprovalRequest{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return list, 0, nil
+	}
+	err := db.Where("request_user_id = ?", userID).Model(&AIApprovalRequest{}).
+		Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
 	return list, total, err
 }
 

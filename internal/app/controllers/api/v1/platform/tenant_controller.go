@@ -15,12 +15,32 @@ type TenantController struct{}
 
 func NewTenantController() *TenantController { return &TenantController{} }
 
+// requireSuperAdmin 仅超级管理员可管理租户，无权限时返回 false（已自动响应错误）
+func requireSuperAdmin(ctx *gin.Context) bool {
+	if !ctx.GetBool("is_super_admin") {
+		rsp := response.NewResponse(ctx)
+		rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("仅超级管理员可管理租户"))
+		return false
+	}
+	return true
+}
+
 // List 获取租户列表（超级管理员看全部，普通用户只看自己的）
 func (c *TenantController) List(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
 
 	var tenants []models.Tenant
 	db := global.DB.Where("is_del = 0")
+
+	// 普通用户只能看到自己所属的租户
+	// 注意：auth 中间件写入的是 uint32，gin 的 GetUint 只断言 uint（64位），会静默得到 0
+	if !ctx.GetBool("is_super_admin") {
+		if v, exists := ctx.Get("tenant_id"); exists {
+			if tid, ok := v.(uint32); ok {
+				db = db.Where("id = ?", tid)
+			}
+		}
+	}
 
 	if err := db.Find(&tenants).Error; err != nil {
 		rsp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -35,12 +55,24 @@ func (c *TenantController) List(ctx *gin.Context) {
 // Create 创建租户
 func (c *TenantController) Create(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
+	if !requireSuperAdmin(ctx) {
+		return
+	}
+
 	var req struct {
 		Name string `json:"name"`
 		Code string `json:"code"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Name == "" || req.Code == "" {
 		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("name 和 code 为必填"))
+		return
+	}
+
+	// code 唯一（含已软删记录，uk_code 唯一索引不含 is_del）
+	var cnt int64
+	global.DB.Model(&models.Tenant{}).Where("code = ?", req.Code).Count(&cnt)
+	if cnt > 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("租户编码已存在"))
 		return
 	}
 
@@ -65,9 +97,21 @@ func (c *TenantController) Create(ctx *gin.Context) {
 // Update 更新租户
 func (c *TenantController) Update(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
+	if !requireSuperAdmin(ctx) {
+		return
+	}
+
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的租户ID"))
+		return
+	}
+
+	// 记录必须存在
+	var exist int64
+	global.DB.Model(&models.Tenant{}).Where("id = ? AND is_del = 0", id).Count(&exist)
+	if exist == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("租户不存在"))
 		return
 	}
 
@@ -79,6 +123,16 @@ func (c *TenantController) Update(ctx *gin.Context) {
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		rsp.ToErrorResponse(errorcode.InvalidParams)
 		return
+	}
+
+	// code 与其他租户冲突时拒绝（uk_code 唯一索引不含 is_del）
+	if req.Code != "" {
+		var cnt int64
+		global.DB.Model(&models.Tenant{}).Where("code = ? AND id <> ?", req.Code, id).Count(&cnt)
+		if cnt > 0 {
+			rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("租户编码已存在"))
+			return
+		}
 	}
 
 	values := map[string]interface{}{"modified_at": uint32(time.Now().Unix())}
@@ -102,6 +156,10 @@ func (c *TenantController) Update(ctx *gin.Context) {
 // Delete 删除租户（软删除）
 func (c *TenantController) Delete(ctx *gin.Context) {
 	rsp := response.NewResponse(ctx)
+	if !requireSuperAdmin(ctx) {
+		return
+	}
+
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
 		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("无效的租户ID"))
@@ -109,6 +167,14 @@ func (c *TenantController) Delete(ctx *gin.Context) {
 	}
 	if id == 1 {
 		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("不能删除默认租户"))
+		return
+	}
+
+	// 记录必须存在
+	var exist int64
+	global.DB.Model(&models.Tenant{}).Where("id = ? AND is_del = 0", id).Count(&exist)
+	if exist == 0 {
+		rsp.ToErrorResponse(errorcode.InvalidParams.WithDetails("租户不存在"))
 		return
 	}
 

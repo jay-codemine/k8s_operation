@@ -19338,6 +19338,16 @@ const docTemplate = `{
                         "type": "integer"
                     }
                 },
+                "cluster_nodes": {
+                    "description": "可选：按集群指定发布节点（key=集群ID，value=节点名列表），空=不限制调度",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
                 "concurrency": {
                     "type": "integer"
                 },
@@ -22370,6 +22380,9 @@ const docTemplate = `{
                 "password_confirm": {
                     "type": "string"
                 },
+                "tenant_id": {
+                    "type": "integer"
+                },
                 "username": {
                     "type": "string"
                 }
@@ -22402,6 +22415,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
                     "type": "integer"
                 },
                 "username": {

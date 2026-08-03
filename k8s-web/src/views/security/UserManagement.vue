@@ -506,7 +506,6 @@ const submitCreateUser = async () => {
 onMounted(() => {
   loadUsers()
   loadRoles()
-  loadTenants()
 })
 </script>
 

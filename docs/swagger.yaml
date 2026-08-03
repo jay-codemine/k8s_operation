@@ -756,6 +756,13 @@ definitions:
         items:
           type: integer
         type: array
+      cluster_nodes:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        description: 可选：按集群指定发布节点（key=集群ID，value=节点名列表），空=不限制调度
+        type: object
       concurrency:
         type: integer
       container_name:
@@ -2852,6 +2859,8 @@ definitions:
         type: string
       password_confirm:
         type: string
+      tenant_id:
+        type: integer
       username:
         type: string
     type: object
@@ -2873,6 +2882,8 @@ definitions:
       role:
         type: string
       status:
+        type: integer
+      tenant_id:
         type: integer
       username:
         type: string

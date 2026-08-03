@@ -213,16 +213,17 @@ func (e *CicdTaskExecutor) executeCronJob(ctx context.Context, kube kubernetes.I
 	result.PrevImage = e.getContainerImage(cj.Spec.JobTemplate.Spec.Template.Spec.Containers, release.ContainerName)
 
 	// 3. Patch 更新镜像（CronJob 的容器在 spec.jobTemplate.spec.template.spec.containers 中）
+	podSpec := map[string]interface{}{
+		"containers": []map[string]interface{}{
+			{"name": release.ContainerName, "image": task.TargetImage},
+		},
+	}
 	patchData := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"jobTemplate": map[string]interface{}{
 				"spec": map[string]interface{}{
 					"template": map[string]interface{}{
-						"spec": map[string]interface{}{
-							"containers": []map[string]interface{}{
-								{"name": release.ContainerName, "image": task.TargetImage},
-							},
-						},
+						"spec": podSpec,
 					},
 				},
 			},

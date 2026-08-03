@@ -608,11 +608,14 @@
                   <input v-model="createForm.image" placeholder="harbor.example.com/proj/app:v1.0.0" />
                 </div>
                 <div class="field">
-                  <label>目标集群 <span class="required">*</span></label>
-                  <select v-model="createForm.cluster_id">
-                    <option value="">请选择目标集群</option>
-                    <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.cluster_name || c.name }}</option>
-                  </select>
+                  <label>目标集群 <span class="required">*</span> <span class="optional">(可多选，多集群并行发布)</span></label>
+                  <div class="cluster-check-list">
+                    <label v-for="c in clusters" :key="c.id" class="check-item">
+                      <input type="checkbox" :checked="createForm.cluster_ids.includes(c.id)" @change="toggleCluster(c, $event.target.checked)" />
+                      <span>{{ c.cluster_name || c.name }}</span>
+                    </label>
+                    <div v-if="clusters.length === 0" class="text-muted">暂无可用集群</div>
+                  </div>
                 </div>
               </template>
               <div class="field">
@@ -1001,8 +1004,18 @@ export default {
     // 创建
     const showCreateDialog = ref(false)
     const creating = ref(false)
-    const createForm = ref({ pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' })
+    const createForm = ref({ pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_ids: [] })
     const selectedPipelineInfo = ref(null)
+
+    const toggleCluster = (c, checked) => {
+      const ids = createForm.value.cluster_ids
+      const idx = ids.indexOf(c.id)
+      if (checked && idx === -1) {
+        ids.push(c.id)
+      } else if (!checked && idx !== -1) {
+        ids.splice(idx, 1)
+      }
+    }
 
     // 选择应用后自动显示部署目标信息
     const onPipelineSelect = () => {
@@ -1035,7 +1048,7 @@ export default {
       if (!createForm.value.pipeline_id && !createForm.value.name) {
         Message.warning({ content: '请填写应用名称' }); return
       }
-      if (!createForm.value.pipeline_id && !createForm.value.cluster_id) {
+      if (!createForm.value.pipeline_id && createForm.value.cluster_ids.length === 0) {
         Message.warning({ content: '请选择目标集群' }); return
       }
       creating.value = true
@@ -1073,12 +1086,12 @@ export default {
           payload.workload_kind = createForm.value.workload_kind || 'Deployment'
           payload.workload_name = createForm.value.workload_name || appName
           payload.container_name = createForm.value.container_name || ''
-          payload.cluster_ids = [Number(createForm.value.cluster_id)]
+          payload.cluster_ids = createForm.value.cluster_ids.map(Number)
         }
         const r = await createRelease(payload)
         if (r.code === 0) {
           showCreateDialog.value = false
-          createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_id: '' }
+          createForm.value = { pipeline_id: '', name: '', version: '', namespace: 'production', image: '', remark: '', workload_kind: 'Deployment', workload_name: '', container_name: '', cluster_ids: [] }
           selectedPipelineInfo.value = null
           // 手动发布：直接入队部署，显示成功提示并刷新列表
           Message.success({ content: `发布单已创建，使用镜像标签: ${imageTag}`, duration: 4000 })
@@ -1360,6 +1373,7 @@ export default {
       loading, releases, searchKeyword, searchFocused, statusFilter, releaseViewMode, currentPage, totalPages, total,
       statsData, setFilter, pipelines, clusters, showCreateDialog, creating, createForm, handleCreate,
       selectedPipelineInfo, onPipelineSelect,
+      toggleCluster,
       showEditDialog, editing, editForm, editRelease, handleEdit, canEdit, canDelete, deleteRelease,
       showConfirmDialog, confirmTitle, confirmMessage, confirmBtnText, confirmType, confirming, confirmAction,
       viewRelease, cancelRelease, rollbackRelease, retryRelease, handleSearch, clearSearch,
@@ -2089,4 +2103,14 @@ export default {
 .rc-act-btn.danger-text:hover { background: #fef2f2; color: #ef4444; }
 .rc-act-btn svg { width: 13px; height: 13px; }
 .rc-act-btn + .rc-act-btn { border-left: 1px solid #f8fafc; }
+
+/* ---- 多集群选择 ---- */
+.cluster-check-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.check-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  font-size: 13px; color: #334155; cursor: pointer; transition: all 0.2s;
+}
+.check-item:hover { border-color: #4e7cf6; }
+.check-item input[type="checkbox"] { accent-color: #4e7cf6; cursor: pointer; margin: 0; }
 </style>

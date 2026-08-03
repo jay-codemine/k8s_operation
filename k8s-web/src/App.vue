@@ -133,8 +133,7 @@ body {
 [data-theme="dark"] body,
 [data-theme="dark"] #app,
 [data-theme="dark"] .home-page,
-[data-theme="dark"] .health-dashboard,
-[data-theme="dark"] .tenant-page {
+[data-theme="dark"] .health-dashboard {
   background: #0b1120 !important;
 }
 
@@ -278,5 +277,220 @@ body {
 [data-theme="dark"] .arco-pagination li {
   background: #1e293b !important;
   color: #e2e8f0 !important;
+}
+
+/* ===== 暗色模式补充：业务页面浅色硬编码覆盖 ===== */
+/* 页面顶层容器（浅色渐变/白色背景） */
+[data-theme="dark"] .pipeline-wizard,
+[data-theme="dark"] .page-wrapper,
+[data-theme="dark"] .page-container,
+[data-theme="dark"] .list-container,
+[data-theme="dark"] .detail-container {
+  background: #0b1120 !important;
+}
+
+/* 向导/表单内的浅色区块 */
+[data-theme="dark"] .wizard-card,
+[data-theme="dark"] .form-card,
+[data-theme="dark"] .step-content,
+[data-theme="dark"] .config-summary,
+[data-theme="dark"] .branch-selector,
+[data-theme="dark"] .branch-search,
+[data-theme="dark"] .env-chip,
+[data-theme="dark"] .kind-card,
+[data-theme="dark"] .deploy-preview,
+[data-theme="dark"] .preview-item {
+  background: #1a2332 !important;
+  border-color: #334155 !important;
+}
+
+/* 表单文字 */
+[data-theme="dark"] label,
+[data-theme="dark"] .form-label {
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] p,
+[data-theme="dark"] .input-hint,
+[data-theme="dark"] .summary-label,
+[data-theme="dark"] .confirm-label,
+[data-theme="dark"] .preview-label,
+[data-theme="dark"] .kind-desc {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .summary-value,
+[data-theme="dark"] .branch-item,
+[data-theme="dark"] .kind-name,
+[data-theme="dark"] .env-chip,
+[data-theme="dark"] .confirm-value,
+[data-theme="dark"] .preview-value,
+[data-theme="dark"] .form-group h4,
+[data-theme="dark"] .section-title {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .branch-item:hover {
+  background: #1e293b !important;
+}
+[data-theme="dark"] .branch-item.selected {
+  background: rgba(99,102,241,0.15) !important;
+}
+[data-theme="dark"] .env-chip.selected,
+[data-theme="dark"] .kind-card.selected {
+  background: rgba(99,102,241,0.15) !important;
+  border-color: #6366f1 !important;
+  color: #818cf8 !important;
+}
+
+/* 弹窗 */
+[data-theme="dark"] .confirm-modal,
+[data-theme="dark"] .k8s-import-modal,
+[data-theme="dark"] .topology-card {
+  background: #1a2332 !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* SearchSelect 可搜索下拉 */
+[data-theme="dark"] .ss-trigger {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .ss-open {
+  background: #1e293b !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.15) !important;
+}
+[data-theme="dark"] .ss-val,
+[data-theme="dark"] .ss-opt-label {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .ss-placeholder,
+[data-theme="dark"] .ss-arrow {
+  color: #64748b !important;
+}
+[data-theme="dark"] .ss-drop {
+  background: #1a2332 !important;
+  border-color: #334155 !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5) !important;
+}
+[data-theme="dark"] .ss-search {
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .ss-input {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .ss-option:hover {
+  background: #1e293b !important;
+}
+[data-theme="dark"] .ss-sel {
+  background: rgba(99,102,241,0.18) !important;
+}
+[data-theme="dark"] .ss-group-label,
+[data-theme="dark"] .ss-opt-sub,
+[data-theme="dark"] .ss-empty {
+  color: #64748b !important;
+}
+
+/* 顶栏操作按钮（通知/搜索/主题） */
+[data-theme="dark"] .nav-action-btn {
+  color: #94a3b8 !important;
+}
+[data-theme="dark"] .nav-action-btn:hover {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+/* 通知铃铛面板 */
+[data-theme="dark"] .nb-panel {
+  background: #1a2332 !important;
+  border-color: #334155 !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5) !important;
+}
+[data-theme="dark"] .nb-header {
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .nb-title {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .nb-read-all {
+  color: #818cf8 !important;
+}
+[data-theme="dark"] .nb-item {
+  border-color: #243044 !important;
+}
+[data-theme="dark"] .nb-item:hover {
+  background: #1e293b !important;
+}
+[data-theme="dark"] .nb-unread {
+  background: rgba(99,102,241,.10) !important;
+}
+[data-theme="dark"] .nb-unread:hover {
+  background: rgba(99,102,241,.16) !important;
+}
+[data-theme="dark"] .nb-rule {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .nb-summary,
+[data-theme="dark"] .nb-time,
+[data-theme="dark"] .nb-empty {
+  color: #64748b !important;
+}
+[data-theme="dark"] .nb-footer {
+  border-color: #334155 !important;
+  color: #818cf8 !important;
+}
+[data-theme="dark"] .nb-footer:hover {
+  background: #1e293b !important;
+}
+[data-theme="dark"] .nb-status.firing {
+  background: rgba(220,38,38,.15) !important;
+  color: #f87171 !important;
+}
+[data-theme="dark"] .nb-status.resolved {
+  background: rgba(5,150,105,.15) !important;
+  color: #34d399 !important;
+}
+[data-theme="dark"] .nb-status.silenced {
+  background: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+/* 全局搜索弹窗 */
+[data-theme="dark"] .gs-modal {
+  background: #1a2332 !important;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6) !important;
+}
+[data-theme="dark"] .gs-input-row {
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .gs-input {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .gs-item:hover,
+[data-theme="dark"] .gs-active {
+  background: #24304a !important;
+}
+[data-theme="dark"] .gs-item-label {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .gs-item-label mark {
+  background: rgba(250,204,21,.25) !important;
+  color: #fde047 !important;
+}
+[data-theme="dark"] .gs-item-group,
+[data-theme="dark"] .gs-group-label,
+[data-theme="dark"] .gs-hint-title,
+[data-theme="dark"] .gs-empty {
+  color: #64748b !important;
+}
+[data-theme="dark"] .gs-footer {
+  border-color: #334155 !important;
+  color: #64748b !important;
+}
+[data-theme="dark"] .gs-kbd {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
 }
 </style>

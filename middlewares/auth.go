@@ -79,8 +79,9 @@ func AuthJWT() gin.HandlerFunc {
 		metrics.AuthTokenValidationTotal.WithLabelValues("success").Inc()
 
 		// 3) 按用户ID查库，确保用户存在/可用
+		// 注意：User 嵌入 *Base 指针，查不到记录时 Base 为 nil，必须先判空再访问 u.ID
 		u := models.NewUser().GetUserByID(claims.UserID)
-		if u.ID == 0 {
+		if u.Base == nil || u.ID == 0 {
 			rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 			ctx.Abort()
 			return
@@ -96,7 +97,7 @@ func AuthJWT() gin.HandlerFunc {
 		// 设置当前用户对象到上下文中
 		ctx.Set("current_user", u)
 
-		// 多租户：从 JWT 提取 tenant_id，兜底用用户记录
+		// 归属租户ID：从 JWT 提取，兜底用用户记录（仅作为数据归属标记，不做查询隔离）
 		tid := claims.TenantID
 		if tid == 0 {
 			tid = u.TenantID
@@ -104,6 +105,11 @@ func AuthJWT() gin.HandlerFunc {
 		if tid == 0 {
 			tid = models.DefaultTenantID
 		}
+
+		// 是否超级管理员（写入上下文，供权限相关控制器复用）
+		isSuperAdmin := models.IsSuperAdmin(global.DB, int64(u.ID))
+		ctx.Set("is_super_admin", isSuperAdmin)
+
 		ctx.Set("tenant_id", tid)
 
 		// 5) 记录用户活跃时间（异步，用于"在线用户"统计，不阻塞请求）
