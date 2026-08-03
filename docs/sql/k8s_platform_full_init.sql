@@ -1902,19 +1902,18 @@ WHERE u.username = 'admin' AND r.role_type = 'super_admin';
 -- Dump completed on 2026-07-14 16:38:24
 
 -- ============================================================
--- 多租户扩展（2026-07-30）
+-- 多租户扩展（2026-08-03 更新）
 -- 所有业务表增加 tenant_id 列，默认归属租户 ID=1
 --
--- !!! 警告：本段下面的 ALTER TABLE 只能在 MariaDB 上执行 !!!
---   `ADD COLUMN IF NOT EXISTS` / `ADD INDEX IF NOT EXISTS` 是 MariaDB 专有语法，
---   MySQL 8.x 会报 ERROR 1064，48 条 ALTER 全部失败；若用 --force 执行还会
---   被当成警告跳过，表现为「脚本跑完了但一个 tenant_id 列都没建出来」。
+-- 本段已包含 scripts/migrations 下全部多租户迁移的内容，MySQL 8.x 上可直接
+-- 一键导入，无需再手动执行迁移脚本：
+--   - 20260803_add_tenant_id_missing_tables.sql（57 张表补 tenant_id + 索引）
+--   - 20260803_rbac_role_tenant_unique.sql（角色名改为按租户唯一）
+-- scripts/migrations 下的脚本保留给存量库单独补齐用。
 --
---   在 MySQL 上请改为执行（幂等、可重复跑）：
---     scripts/migrations/20260803_add_tenant_id_missing_tables.sql
---   该脚本覆盖本段全部表，另外还补齐了 6 张既不在本段列表、
---   也没有 Go model 的表（cicd_language_profile / iam_group / iam_group_user /
---   iam_project / iam_project_member / iam_role_template）。
+-- 早先这里用的是 `ADD COLUMN IF NOT EXISTS`，那是 MariaDB 专有语法，在 MySQL
+-- 8.x 上报 ERROR 1064 导致整段失效（带 --force 时还会被当成警告跳过，表现为
+-- 「脚本跑完了但一个 tenant_id 列都没建出来」）。现改为存储过程 + 动态 DDL。
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS `tenant` (
@@ -1935,58 +1934,162 @@ CREATE TABLE IF NOT EXISTS `tenant` (
 INSERT IGNORE INTO `tenant` (`id`, `name`, `code`, `status`, `tenant_id`, `created_at`)
 VALUES (1, '默认租户', 'default', 1, 1, UNIX_TIMESTAMP());
 
--- 业务表批量加 tenant_id 列
-ALTER TABLE `user`                     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `sys_user_role`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `sys_user_cluster`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `kube_cluster`             ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_pipeline`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_pipeline_run`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_pipeline_stage`      ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_pipeline_target`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_pipeline_template`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_release`             ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_release_stage`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_release_task`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_artifact`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_build`               ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_build_agent`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_environment`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_approval`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_resource_template`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_env_resource_rule`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_deploy_approval`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `cicd_resource_change_log` ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_datasource`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_alert_rule`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_alert_event`      ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_notify_channel`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_silence_rule`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_inhibit_rule`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_aggregate_rule`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_notify_template`   ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `monitor_notify_route_policy` ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `image_registry`           ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `image_cleanup_policy`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `image_cleanup_log`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `audit_log`                ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `platform_settings`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `ai_conversations`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `ai_messages`              ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `ai_approval_requests`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `ai_approval_logs`         ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `aiops_analysis_record`    ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `aiops_inspection_report`  ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `app_store_apps`            ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `app_store_components`     ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `app_store_installs`       ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+-- 业务表批量加 tenant_id 列（MySQL 8.x 幂等实现）
+--
+-- 这里不能用 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`：那是 MariaDB 专有语法，
+-- MySQL 8.x 会报 ERROR 1064，几十条 ALTER 会整段失败；若导入时带了 --force
+-- 还会被当成警告跳过，表现为「脚本跑完了但一个 tenant_id 列都没建出来」。
+-- 改用 information_schema 判定 + PREPARE 动态 DDL，重复导入安全。
+DROP PROCEDURE IF EXISTS `__add_tenant_id`;
 
--- RBAC 共享表（超管跨租户查询用）
-ALTER TABLE `sys_role`                 ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `sys_permission`           ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `sys_role_permission`      ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+DELIMITER $$
+CREATE PROCEDURE `__add_tenant_id`(IN tbl VARCHAR(64))
+BEGIN
+  -- 表不存在则跳过：不同版本部署的表集合不完全一致
+  IF (SELECT COUNT(*) FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl) > 0 THEN
 
--- IAM 环境管理
-ALTER TABLE `iam_env_audit_log`        ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `iam_env_binding`          ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
-ALTER TABLE `iam_grant`                ADD COLUMN IF NOT EXISTS `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1, ADD INDEX IF NOT EXISTS `idx_tenant_id` (`tenant_id`);
+    -- 1) 补列
+    IF (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl
+          AND COLUMN_NAME = 'tenant_id') = 0 THEN
+      SET @ddl = CONCAT('ALTER TABLE `', tbl,
+        '` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT ''归属租户ID(tenant.id)''');
+      PREPARE s FROM @ddl; EXECUTE s; DEALLOCATE PREPARE s;
+    END IF;
+
+    -- 2) 补索引
+    IF (SELECT COUNT(*) FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl
+          AND INDEX_NAME = 'idx_tenant_id') = 0 THEN
+      SET @idx = CONCAT('ALTER TABLE `', tbl, '` ADD INDEX `idx_tenant_id` (`tenant_id`)');
+      PREPARE s2 FROM @idx; EXECUTE s2; DEALLOCATE PREPARE s2;
+    END IF;
+
+  END IF;
+END$$
+DELIMITER ;
+
+-- 用户与权限
+CALL `__add_tenant_id`('user');
+CALL `__add_tenant_id`('sys_user_role');
+CALL `__add_tenant_id`('sys_user_cluster');
+CALL `__add_tenant_id`('kube_cluster');
+
+-- CICD
+CALL `__add_tenant_id`('cicd_pipeline');
+CALL `__add_tenant_id`('cicd_pipeline_run');
+CALL `__add_tenant_id`('cicd_pipeline_stage');
+CALL `__add_tenant_id`('cicd_pipeline_target');
+CALL `__add_tenant_id`('cicd_pipeline_template');
+CALL `__add_tenant_id`('cicd_release');
+CALL `__add_tenant_id`('cicd_release_stage');
+CALL `__add_tenant_id`('cicd_release_task');
+CALL `__add_tenant_id`('cicd_artifact');
+CALL `__add_tenant_id`('cicd_build');
+CALL `__add_tenant_id`('cicd_build_agent');
+CALL `__add_tenant_id`('cicd_environment');
+CALL `__add_tenant_id`('cicd_approval');
+CALL `__add_tenant_id`('cicd_resource_template');
+CALL `__add_tenant_id`('cicd_env_resource_rule');
+CALL `__add_tenant_id`('cicd_deploy_approval');
+CALL `__add_tenant_id`('cicd_resource_change_log');
+CALL `__add_tenant_id`('cicd_language_profile');
+
+-- 监控与告警
+CALL `__add_tenant_id`('monitor_datasource');
+CALL `__add_tenant_id`('monitor_alert_rule');
+CALL `__add_tenant_id`('monitor_alert_event');
+CALL `__add_tenant_id`('monitor_notify_channel');
+CALL `__add_tenant_id`('monitor_silence_rule');
+CALL `__add_tenant_id`('monitor_inhibit_rule');
+CALL `__add_tenant_id`('monitor_aggregate_rule');
+CALL `__add_tenant_id`('monitor_notify_template');
+CALL `__add_tenant_id`('monitor_notify_route_policy');
+
+-- 镜像仓库
+CALL `__add_tenant_id`('image_registry');
+CALL `__add_tenant_id`('image_cleanup_policy');
+CALL `__add_tenant_id`('image_cleanup_log');
+
+-- 平台与审计
+CALL `__add_tenant_id`('audit_log');
+CALL `__add_tenant_id`('platform_settings');
+
+-- AI / AIOps
+CALL `__add_tenant_id`('ai_conversations');
+CALL `__add_tenant_id`('ai_messages');
+CALL `__add_tenant_id`('ai_approval_requests');
+CALL `__add_tenant_id`('ai_approval_logs');
+CALL `__add_tenant_id`('aiops_analysis_record');
+CALL `__add_tenant_id`('aiops_inspection_report');
+
+-- 应用商店
+CALL `__add_tenant_id`('app_store_apps');
+CALL `__add_tenant_id`('app_store_components');
+CALL `__add_tenant_id`('app_store_installs');
+
+-- RBAC 表：models.SysRole/SysUserRole/SysPermission/SysRolePermission 都没有定义
+-- TenantID 字段，列只能由本段建出；而 models.IsSuperAdmin/HasUserPermission 的
+-- SQL 又强制过滤 sys_role.tenant_id 与 sys_user_role.tenant_id，缺列会直接报错
+CALL `__add_tenant_id`('sys_role');
+CALL `__add_tenant_id`('sys_permission');
+CALL `__add_tenant_id`('sys_role_permission');
+
+-- IAM 项目/环境
+CALL `__add_tenant_id`('iam_env_audit_log');
+CALL `__add_tenant_id`('iam_env_binding');
+CALL `__add_tenant_id`('iam_grant');
+CALL `__add_tenant_id`('iam_group');
+CALL `__add_tenant_id`('iam_group_user');
+CALL `__add_tenant_id`('iam_project');
+CALL `__add_tenant_id`('iam_project_member');
+CALL `__add_tenant_id`('iam_role_template');
+
+DROP PROCEDURE IF EXISTS `__add_tenant_id`;
+
+-- ============================================================
+-- 角色名按租户唯一
+--
+-- sys_role.name 原来带全局 UNIQUE 索引 idx_sys_role_name，于是给第二个租户
+-- 播种默认角色时会撞 ER_DUP_ENTRY 1062 —— 每个租户都需要自己的 super_admin 行，
+-- 新建租户会因此不可用。换成 (tenant_id, name) 复合唯一键。
+--
+-- sys_permission.name 保持全局唯一：权限是共享目录，租户隔离靠 sys_user_role.tenant_id。
+-- ============================================================
+
+SET @has_old := (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_role'
+    AND INDEX_NAME = 'idx_sys_role_name'
+);
+SET @sql := IF(@has_old > 0,
+  'ALTER TABLE `sys_role` DROP INDEX `idx_sys_role_name`',
+  'SET @noop = 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has_new := (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_role'
+    AND INDEX_NAME = 'uk_sys_role_tenant_name'
+);
+SET @sql := IF(@has_new = 0,
+  'ALTER TABLE `sys_role` ADD UNIQUE KEY `uk_sys_role_tenant_name` (`tenant_id`, `name`)',
+  'SET @noop = 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- 自检：两个值都应为 0，否则多租户隔离会在运行期报错
+--   tables_missing_tenant_id  缺 tenant_id 列的业务表数量
+--   legacy_role_name_index    残留的全局角色名唯一索引数量
+-- ============================================================
+SELECT
+  (SELECT COUNT(*) FROM information_schema.TABLES t
+   WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.COLUMNS c
+       WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
+         AND c.COLUMN_NAME = 'tenant_id')) AS tables_missing_tenant_id,
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_role'
+     AND INDEX_NAME = 'idx_sys_role_name') AS legacy_role_name_index;
