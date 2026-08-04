@@ -123,6 +123,7 @@ spec:
         string(name: 'SONAR_DUPLICATIONS_MAX', defaultValue: '3', description: '重复率阈值')
         string(name: 'SONAR_GATE_ACTION', defaultValue: 'block', description: '门禁策略: block | warn | skip')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传')
+        booleanParam(name: 'ENABLE_BUILD_CACHE', defaultValue: true, description: '启用镜像构建缓存（Kaniko --cache；关闭后每次全量构建，便于排查缓存层导致的构建异常）')
         booleanParam(name: 'ENABLE_TRACING', defaultValue: false, description: '启用 APM 探针自动注入')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
@@ -432,6 +433,15 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                             auths: [(registryHost): [username: env.REGISTRY_CREDS_USR, password: env.REGISTRY_CREDS_PSW]]
                         ])
                         writeFile file: '.docker-config.json', text: dockerConfigJson
+
+                        // 构建缓存开关：由平台下发 ENABLE_BUILD_CACHE 控制，模板内不写死
+                        // 用字符串比较兼容布尔/字符串两种参数类型；参数缺失时按"开启"处理
+                        def enableCache = "${params.ENABLE_BUILD_CACHE}" != 'false'
+                        def cacheArgs = enableCache
+                            ? "--cache=true --cache-repo=${registryHost}/k8s-gos/kaniko-cache"
+                            : "--cache=false"
+                        echo "[Build Image] 构建缓存: ${enableCache ? '启用' : '禁用（全量构建）'}"
+
                         sh """
                             mkdir -p /kaniko/.docker
                             cp .docker-config.json /kaniko/.docker/config.json
@@ -446,8 +456,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
                                 --snapshot-mode=redo \
                                 --push-retry=5 \
                                 --use-new-run \
-                                --cache=true \
-                                --cache-repo=${registryHost}/k8s-gos/kaniko-cache \
+                                ${cacheArgs} \
                         """
                         // 验证：Kaniko 成功输出含 @sha256: 则表示镜像已完整推送
                         echo "[Verify] ✅ 镜像已推送: ${env.FULL_IMAGE}"

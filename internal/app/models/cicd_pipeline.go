@@ -191,6 +191,9 @@ type CicdPipeline struct {
 	CanaryAnalysisRules string `gorm:"column:canary_analysis_rules;type:text" json:"canary_analysis_rules"`
 	EnableSonar          bool   `gorm:"column:enable_sonar" json:"enable_sonar"`                        // 是否启用 SonarQube 代码扫描
 	EnableArtifactUpload bool   `gorm:"column:enable_artifact_upload" json:"enable_artifact_upload"`    // 是否启用制品上传
+	// 是否启用镜像构建缓存（对应 Kaniko --cache / --cache-repo）。
+	// 不加 gorm default 标签：否则 GORM 会在值为 false 时省略该列，导致"创建时显式关闭"被数据库默认值 1 覆盖。
+	EnableBuildCache     bool   `gorm:"column:enable_build_cache" json:"enable_build_cache"`
 
 	// 发布联动告警静默
 	EnableDeploySilence  bool   `gorm:"column:enable_deploy_silence" json:"enable_deploy_silence"`      // 部署时自动创建静默规则

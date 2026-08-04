@@ -714,6 +714,7 @@ var PipelineBoolParams = map[string]bool{
 	"SONAR_QUALITY_GATE":     true,
 	"ENABLE_ARTIFACT_UPLOAD": true,
 	"ENABLE_TRACING":         true,
+	"ENABLE_BUILD_CACHE":     true,
 }
 
 // xmlEscaper 用于转义注入 config.xml 的参数默认值（仓库地址/分支可能含 & < > 等字符）

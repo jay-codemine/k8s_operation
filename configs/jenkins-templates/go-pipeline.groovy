@@ -166,6 +166,7 @@ spec:
        // APM 探针注入
         booleanParam(name: 'ENABLE_TRACING', defaultValue: false, description: '启用 APM 探针自动注入（SkyWalking/OpenTelemetry）')
         booleanParam(name: 'ENABLE_ARTIFACT_UPLOAD', defaultValue: true, description: '启用制品上传到平台制品库')
+        booleanParam(name: 'ENABLE_BUILD_CACHE', defaultValue: true, description: '启用镜像构建缓存（Kaniko --cache；关闭后每次全量构建，便于排查缓存层导致的构建异常）')
 
         // 并发控制（由平台 config.yaml 的 MaxConcurrentBuilds 自动注入，无需手动修改）
         string(name: 'MAX_CONCURRENT_BUILDS', defaultValue: '10', description: '最大并发构建数（平台自动注入，勿手动修改）')
@@ -989,6 +990,14 @@ ENTRYPOINT ["/app/${appName}"]
                             rm -f .docker-config.json
                         """
 
+                        // 构建缓存开关：由平台下发 ENABLE_BUILD_CACHE 控制，模板内不写死
+                        // 用字符串比较兼容布尔/字符串两种参数类型；参数缺失时按"开启"处理
+                        def enableCache = "${params.ENABLE_BUILD_CACHE}" != 'false'
+                        def cacheArgs = enableCache
+                            ? "--cache=true --cache-repo=${registryHost}/k8s-gos/kaniko-cache"
+                            : "--cache=false"
+                        echo "[Build Image] 构建缓存: ${enableCache ? '启用' : '禁用（全量构建）'}"
+
                         // Kaniko 构建 + 推送（一步完成）
                         sh """
                             /kaniko/executor \
@@ -1003,8 +1012,7 @@ ENTRYPOINT ["/app/${appName}"]
                                 --snapshot-mode=redo \
                                 --push-retry=5 \
                                 --use-new-run \
-                                --cache=false \
-                                --cache-repo=${registryHost}/k8s-gos/kaniko-cache \
+                                ${cacheArgs} \
                         """
 
                         // 验证：Kaniko 成功输出含 @sha256: 则表示镜像已完整推送

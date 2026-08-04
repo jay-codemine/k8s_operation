@@ -213,6 +213,8 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		RequireApproval:    requireApproval,
 		EnableSonar:        req.EnableSonar,
 		EnableArtifactUpload: req.EnableArtifactUpload,
+		// 构建缓存：未传（nil）视为开启，与前端默认值一致
+		EnableBuildCache:     req.EnableBuildCache == nil || *req.EnableBuildCache,
 		// 发布联动告警静默
 		EnableDeploySilence:  req.EnableDeploySilence,
 		SilenceBufferMinutes: req.SilenceBufferMinutes,
@@ -364,6 +366,9 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	}
 	if req.EnableArtifactUpload != nil {
 		updates["enable_artifact_upload"] = *req.EnableArtifactUpload
+	}
+	if req.EnableBuildCache != nil {
+		updates["enable_build_cache"] = *req.EnableBuildCache
 	}
 	// 发布联动告警静默
 	if req.EnableDeploySilence != nil {
@@ -571,6 +576,7 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 			RequireApproval:    item.RequireApproval,
 			EnableSonar:        item.EnableSonar,
 			EnableArtifactUpload: item.EnableArtifactUpload,
+			EnableBuildCache:     item.EnableBuildCache == nil || *item.EnableBuildCache,
 			// 发布联动告警静默
 			EnableDeploySilence:  item.EnableDeploySilence,
 			SilenceBufferMinutes: item.SilenceBufferMinutes,
@@ -2378,6 +2384,14 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 	} else {
 		setDefault(params, "ENABLE_ARTIFACT_UPLOAD", "false")
 	}
+
+	// 镜像构建缓存（所有语言统一）：关闭后 Kaniko 走 --cache=false 全量构建，
+	// 便于排查缓存层导致的构建异常；开关由前端逐条流水线控制
+	if pipeline.EnableBuildCache {
+		setDefault(params, "ENABLE_BUILD_CACHE", "true")
+	} else {
+		setDefault(params, "ENABLE_BUILD_CACHE", "false")
+	}
 }
 
 // setDefault 设置默认参数（不覆盖已有值）
@@ -2484,7 +2498,7 @@ func (s *Services) TemplateSimulateRun(ctx context.Context, languageType, gitRep
 	}
 
 	// 3. 注入语言参数
-	mockPipeline := &models.CicdPipeline{LanguageType: languageType}
+	mockPipeline := &models.CicdPipeline{LanguageType: languageType, EnableBuildCache: true}
 	s.injectLanguageParams(mockPipeline, params)
 
 	// 4. 检查 Jenkins 配置

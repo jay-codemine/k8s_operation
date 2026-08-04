@@ -36,6 +36,8 @@ type PipelineCreateRequest struct {
 	RequireApproval    bool   `json:"require_approval"`     // 是否需要审批
 	EnableSonar        bool   `json:"enable_sonar"`         // 是否启用 SonarQube
 	EnableArtifactUpload bool `json:"enable_artifact_upload"` // 是否启用制品上传
+	// 是否启用镜像构建缓存（Kaniko --cache）。用指针以区分"未传"与"显式关闭"，未传时默认开启
+	EnableBuildCache     *bool `json:"enable_build_cache"`
 
 	// 发布联动告警静默
 	EnableDeploySilence  bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则
@@ -95,6 +97,7 @@ type PipelineBatchItem struct {
 	RequireApproval    bool   `json:"require_approval"`
 	EnableSonar        bool   `json:"enable_sonar"`
 	EnableArtifactUpload bool `json:"enable_artifact_upload"`
+	EnableBuildCache     *bool `json:"enable_build_cache"` // 镜像构建缓存，未传时默认开启
 
 	// 发布联动告警静默
 	EnableDeploySilence  bool   `json:"enable_deploy_silence"`
@@ -139,6 +142,7 @@ type PipelineUpdateRequest struct {
 	RequireApproval    *bool   `json:"require_approval"`     // 是否需要审批
 	EnableSonar        *bool   `json:"enable_sonar"`         // 是否启用 SonarQube
 	EnableArtifactUpload *bool `json:"enable_artifact_upload"` // 是否启用制品上传
+	EnableBuildCache     *bool `json:"enable_build_cache"`     // 是否启用镜像构建缓存（Kaniko --cache）
 
 	// 发布联动告警静默
 	EnableDeploySilence  *bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则

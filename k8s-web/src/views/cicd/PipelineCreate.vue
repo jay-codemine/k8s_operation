@@ -751,6 +751,23 @@
                 </div>
               </div>
 
+              <!-- 镜像构建缓存开关（Kaniko --cache），默认开启 -->
+              <div class="form-group">
+                <div class="toggle-row">
+                  <div class="toggle-info">
+                    <label class="form-label">
+                      镜像构建缓存
+                      <span class="env-tag" style="background:#52c41a;color:#fff;font-size:11px;padding:1px 6px;border-radius:3px;margin-left:6px;">默认开启</span>
+                    </label>
+                    <p class="toggle-desc">开启后 Kaniko 复用缓存层加速构建（--cache=true）；构建异常需要排查时关闭，改为每次全量构建</p>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="pipelineData.enable_build_cache" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
               <!-- ==================== 构建核心参数 ==================== -->
               <div class="build-params-section">
                 <div class="section-divider">
@@ -2312,6 +2329,7 @@ export default {
       enable_sonar: false,  // SonarQube 代码质量扫描开关（Java 项目默认启用）
       enable_artifact_upload: false,  // 制品上传到平台制品库开关
       enable_tracing: false,  // SkyWalking/OpenTelemetry 链路跟踪开关
+      enable_build_cache: true,  // 镜像构建缓存开关（Kaniko --cache），默认开启；关闭后全量构建便于排查
 
       deploy_config: {
         replicas: 1,
@@ -2771,6 +2789,8 @@ export default {
               env_vars: filteredEnvVars,
               enable_sonar: hasSonar,
               enable_artifact_upload: data.enable_artifact_upload || false,
+              // 构建缓存：后端未返回该字段时按"开启"回显，与新建默认值保持一致
+              enable_build_cache: data.enable_build_cache !== false,
               deploy_config: data.deploy_config || pipelineData.value.deploy_config,
               // 自动部署配置
               auto_deploy: data.auto_deploy || false,
@@ -2987,7 +3007,7 @@ export default {
         }
         submitData.env_vars = envVars
         // enable_sonar 后端需要此字段写入 DB 列，同时通过 env_vars 传递 ENABLE_SONAR 给 Jenkins
-        // 注意：enable_artifact_upload 是后端独立字段，保留传递
+        // 注意：enable_artifact_upload / enable_build_cache 是后端独立字段，保留传递
         // 清理前端独立字段，后端不需要
         delete submitData.image_repo
         delete submitData.image_tag

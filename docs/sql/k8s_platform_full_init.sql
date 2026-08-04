@@ -646,6 +646,7 @@ CREATE TABLE `cicd_pipeline` (
   `canary_analysis_rules` text COLLATE utf8mb4_unicode_ci COMMENT '金丝雀分析规则JSON',
   `enable_sonar` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否启用SonarQube代码扫描',
   `enable_artifact_upload` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否启用制品上传',
+  `enable_build_cache` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用镜像构建缓存(Kaniko --cache)',
   `enable_deploy_silence` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'silence flag',
   `silence_buffer_minutes` int NOT NULL DEFAULT '10' COMMENT 'silence buffer',
   `silence_severities` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'warning,info' COMMENT 'silence severities',
