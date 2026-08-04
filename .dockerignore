@@ -5,7 +5,14 @@
 # 项目里没有任何 go:embed，所以非 Go 资源都可以安全排除。
 
 # 构建产物与本地二进制
-bin/
+#
+# 不能整体排除 bin/：平台的 Go 流水线 go build -o bin/${APP_NAME}，随后
+# 自动生成的运行时 Dockerfile 会 COPY bin/${APP_NAME}。排掉整个目录会让
+# Kaniko 只报一句 WARN No files to copy，真正的失败推迟到下一条 chmod
+# 才炸（chmod: /app/xxx: No such file or directory），极难定位。
+# 这里只排除本地 Windows 二进制（体积大头），Linux 编译产物必须留在上下文里。
+**/*.exe
+**/*.exe~
 *.exe
 *.exe~
 dist/
