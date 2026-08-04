@@ -43,8 +43,12 @@ RUN go mod download && go mod verify
 COPY . .
 
 # 编译（静态链接 + 压缩符号表）
-RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
+# safe.directory：COPY 进来的 .git 属主是 root 而构建用户未必是，git 会判定
+# dubious ownership 并拒绝工作，rev-parse 静默落到 "unknown"。
+RUN git config --global --add safe.directory /build && \
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
     BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
+    echo "building from commit=${GIT_COMMIT} at ${BUILD_TIME}" && \
     go build -trimpath \
         -ldflags="-s -w -X main.GitCommit=${GIT_COMMIT} -X main.BuildTime=${BUILD_TIME}" \
         -o /app/devops-be ./cmd/k8soperation

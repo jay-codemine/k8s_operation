@@ -4,7 +4,19 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/bootstrap"
 	"k8soperation/internal/server"
+	"log"
 	"time"
+)
+
+// 构建信息，由 docker/backend/Dockerfile 的 -ldflags -X 注入。
+//
+// 必须在 main 包里真实声明：-X 作用于不存在的符号时链接器会静默忽略，
+// 于是镜像里查不出自己是哪个 commit 编出来的。v1.1.2 就是这么变成一笔
+// 糊涂账的——二进制经 -trimpath 剥离，又因 Docker 内 git 的 dubious
+// ownership 没能留下 vcs.revision，只能靠构建时间去反推基线。
+var (
+	GitCommit = "unknown"
+	BuildTime = "unknown"
 )
 
 // @title K8s管理平台
@@ -14,6 +26,8 @@ import (
 // 省略 import…
 
 func main() {
+	log.Printf("[Build] commit=%s build_time=%s", GitCommit, BuildTime)
+
 	// 初始化所有组件，如果初始化失败则panic
 	if err := bootstrap.InitAll(); err != nil {
 		panic(err)

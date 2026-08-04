@@ -1,0 +1,36 @@
+# 后端镜像构建上下文裁剪（docker/backend/Dockerfile，context = 仓库根）
+#
+# 不加这个文件时上下文约 1.1GB，其中绝大部分是构建根本用不到的东西。
+# 注意 .git 必须保留：Dockerfile 用 git rev-parse 生成 -X main.GitCommit 的构建戳。
+# 项目里没有任何 go:embed，所以非 Go 资源都可以安全排除。
+
+# 构建产物与本地二进制
+bin/
+*.exe
+*.exe~
+dist/
+
+# 依赖目录（Go 走 go mod download，不需要 node 依赖）
+node_modules/
+
+# 前端整体与后端构建无关（前端有自己的 k8s-web/.dockerignore）
+k8s-web/
+
+# 运行期数据
+storage/logs/
+storage/artifacts/
+storage/agents/
+
+# IDE 与本地调试残留
+.idea/
+.vscode/
+*.bak
+*.bak[0-9]
+*.log
+
+# 含凭证的本地文件，绝对不能进镜像
+local_kubeconfig.yaml
+login_resp.json
+configs/config.yaml
+configs/license-keys/
+storage/license.lic
