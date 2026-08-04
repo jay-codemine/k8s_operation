@@ -166,11 +166,29 @@ func (u *User) GetByName(db *gorm.DB) (*User, error) {
 	return &user, nil
 }
 
-// 通过ID查找用户
+// GetUserByID 通过ID查找用户，查不到或查询出错时返回 ID 为 0 的空用户。
+// 返回值的 Base 保证非 nil：User 嵌入的是 *Base 指针，若不预分配，
+// 调用方写 u.ID（等价 u.Base.ID）会直接 nil pointer dereference。
+// 需要区分"用户不存在"和"数据库不可用"时请改用 GetUserByIDE。
 func (u *User) GetUserByID(id string) User {
-	var user = NewUser()
-	global.DB.Where("id", id).First(&user)
-	return *user
+	user, _ := u.GetUserByIDE(id)
+	return user
+}
+
+// GetUserByIDE 通过ID查找用户并返回查询错误。
+// 记录不存在时返回 (空用户, gorm.ErrRecordNotFound)，数据库故障时返回底层错误，
+// 调用方据此区分 401（登录态无效）与 500（服务端依赖异常），
+// 避免把数据库连接超时伪装成"登录失效"把用户踢到登录页。
+func (u *User) GetUserByIDE(id string) (User, error) {
+	user := User{Base: &Base{}}
+	if id == "" {
+		return user, gorm.ErrRecordNotFound
+	}
+	if err := global.DB.Where("id = ?", id).First(&user).Error; err != nil {
+		// First 失败时 GORM 不会写回字段，这里重置以免返回半填充的记录
+		return User{Base: &Base{}}, err
+	}
+	return user, nil
 }
 
 // GetStringID 是 User 结构体的一个方法，用于将用户ID转换为字符串格式

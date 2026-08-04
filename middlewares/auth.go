@@ -2,11 +2,14 @@ package middlewares
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/errorcode"
@@ -79,9 +82,24 @@ func AuthJWT() gin.HandlerFunc {
 		metrics.AuthTokenValidationTotal.WithLabelValues("success").Inc()
 
 		// 3) 按用户ID查库，确保用户存在/可用
-		// 注意：User 嵌入 *Base 指针，查不到记录时 Base 为 nil，必须先判空再访问 u.ID
-		u := models.NewUser().GetUserByID(claims.UserID)
-		if u.Base == nil || u.ID == 0 {
+		// 用带 error 的版本：数据库不可用时必须返回 500，若沿用吞掉 error 的
+		// GetUserByID，DB 连接超时会被伪装成 401 把用户踢到登录页，真因无从排查
+		u, err := models.NewUser().GetUserByIDE(claims.UserID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// 用户已被删除，登录态确实无效
+				rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
+			} else {
+				global.Logger.Error("鉴权查询用户失败",
+					zap.String("user_id", claims.UserID),
+					zap.Error(err),
+				)
+				rsp.ToErrorResponse(errorcode.ServerError.WithDetails("用户信息查询失败，请稍后重试"))
+			}
+			ctx.Abort()
+			return
+		}
+		if u.ID == 0 {
 			rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 			ctx.Abort()
 			return
