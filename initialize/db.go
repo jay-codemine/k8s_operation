@@ -84,6 +84,8 @@ func SetupDB() error {
 
 // autoMigrateTables 自动迁移表结构（仅当 SkipAutoMigrate=false 时执行）
 // 生产环境已通过 init.sql 初始化完成，建议设为 true 跳过
+// 注意：表结构变更（含新增列）统一由 docs/sql/k8s_platform_full_init.sql 维护，
+// 代码里不再做运行时 ALTER 补列
 func autoMigrateTables() error {
 	if global.AppSetting != nil && global.AppSetting.SkipAutoMigrate {
 		log.Println("[DB] SkipAutoMigrate=true, 跳过自动建表（依赖 init.sql 已完成初始化）")
@@ -112,26 +114,6 @@ func autoMigrateTables() error {
 	); err != nil {
 		log.Printf("[AutoMigrate] RBAC 表迁移失败: %v", err)
 		// 不 return，允许降级运行
-	}
-
-	// cicd_pipeline 表字段补全（不用 AutoMigrate 避免 GORM 与已有 UNIQUE KEY 冲突）
-	if err := ensurePipelineColumns(); err != nil {
-		log.Printf("[AutoMigrate] cicd_pipeline 字段补全失败: %v", err)
-	}
-
-	// monitor_notify_channel 表字段补全（兼容旧版本初始化脚本缺少该列的情况）
-	if err := ensureNotifyChannelColumns(); err != nil {
-		log.Printf("[AutoMigrate] monitor_notify_channel 字段补全失败: %v", err)
-	}
-
-	// cicd_pipeline_run 表字段补全（兼容旧版本初始化脚本缺少该列的情况）
-	if err := ensurePipelineRunColumns(); err != nil {
-		log.Printf("[AutoMigrate] cicd_pipeline_run 字段补全失败: %v", err)
-	}
-
-	// cicd_release 表字段补全（镜像晋级链追踪字段，兼容旧初始化脚本）
-	if err := ensureReleaseColumns(); err != nil {
-		log.Printf("[AutoMigrate] cicd_release 字段补全失败: %v", err)
 	}
 
 	// AI 助手模块（逐表迁移，确保每张表都成功）
@@ -409,46 +391,6 @@ func repairCorruptedAlertRules() {
 	}
 }
 
-// ensurePipelineColumns 检查并补全 cicd_pipeline 表缺失的列
-// 不使用 AutoMigrate 是因为 GORM 会尝试将 varchar 改为 longtext，与 UNIQUE KEY 冲突
-func ensurePipelineColumns() error {
-
-	// 检查 cicd_pipeline 表是否存在
-	var count int64
-	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline'").Scan(&count)
-	if count == 0 {
-		return nil // 表不存在，跳过（全新安装由 SQL 初始化脚本负责）
-	}
-
-	// 所有可能缺失的列（模型新增但旧表可能没有的）
-	type colDef struct {
-		name string
-		sql  string
-	}
-	columns := []colDef{
-		{"language_type", "ALTER TABLE `cicd_pipeline` ADD COLUMN `language_type` varchar(20) NOT NULL DEFAULT 'custom' COMMENT '语言类型' AFTER `jenkins_credential_id`"},
-		{"enable_sonar", "ALTER TABLE `cicd_pipeline` ADD COLUMN `enable_sonar` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否启用SonarQube代码扫描' AFTER `require_approval`"},
-		{"last_deploy_image", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_image` varchar(500) DEFAULT '' COMMENT '最新部署镜像' AFTER `enable_sonar`"},
-		{"last_deploy_digest", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_digest` varchar(100) DEFAULT '' COMMENT '镜像摘要' AFTER `last_deploy_image`"},
-		{"last_deploy_time", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_time` bigint DEFAULT NULL COMMENT '最新部署时间' AFTER `last_deploy_digest`"},
-		{"last_deploy_status", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_status` varchar(32) DEFAULT '' COMMENT '最新部署状态' AFTER `last_deploy_time`"},
-		{"last_deploy_version", "ALTER TABLE `cicd_pipeline` ADD COLUMN `last_deploy_version` varchar(100) DEFAULT '' COMMENT '最新部署版本' AFTER `last_deploy_status`"},
-		{"environment_id", "ALTER TABLE `cicd_pipeline` ADD COLUMN `environment_id` bigint NOT NULL DEFAULT 0 COMMENT '关联环境ID(cicd_environment)，0=未绑定' AFTER `auto_deploy`"},
-	}
-
-	for _, col := range columns {
-		var exists int64
-		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline' AND column_name = ?", col.name).Scan(&exists)
-		if exists == 0 {
-			if err := global.DB.Exec(col.sql).Error; err != nil {
-				return fmt.Errorf("add column %s: %w", col.name, err)
-			}
-			log.Printf("[AutoMigrate] cicd_pipeline 补全列: %s", col.name)
-		}
-	}
-	return nil
-}
-
 // backfillPipelineEnvironmentID 将未绑定环境（environment_id=0）的存量流水线，
 // 按 target_namespace 匹配 cicd_environment.namespace 回填 environment_id（幂等，不覆盖已绑定的）
 func backfillPipelineEnvironmentID() {
@@ -481,101 +423,6 @@ WHERE p.environment_id = 0 AND p.is_del = 0 AND COALESCE(p.target_namespace, '')
 	if result.RowsAffected > 0 {
 		log.Printf("[InitData] 流水线 environment_id 存量回填完成，影响 %d 条", result.RowsAffected)
 	}
-}
-
-// ensurePipelineRunColumns 检查并补全 cicd_pipeline_run 表缺失的列
-func ensurePipelineRunColumns() error {
-	var count int64
-	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline_run'").Scan(&count)
-	if count == 0 {
-		return nil
-	}
-	type colDef struct {
-		name string
-		sql  string
-	}
-	columns := []colDef{
-		{"workflow_name", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `workflow_name` varchar(200) NOT NULL DEFAULT '' COMMENT 'workflow name' AFTER `jenkins_build_url`"},
-		{"argo_app_name", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `argo_app_name` varchar(200) NOT NULL DEFAULT '' COMMENT 'argo app name' AFTER `workflow_name`"},
-		{"sync_revision", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `sync_revision` varchar(100) NOT NULL DEFAULT '' COMMENT 'sync revision' AFTER `argo_app_name`"},
-		{"sync_status", "ALTER TABLE `cicd_pipeline_run` ADD COLUMN `sync_status` varchar(50) NOT NULL DEFAULT '' COMMENT 'sync status' AFTER `sync_revision`"},
-	}
-	for _, col := range columns {
-		var exists int64
-		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_pipeline_run' AND column_name = ?", col.name).Scan(&exists)
-		if exists == 0 {
-			if err := global.DB.Exec(col.sql).Error; err != nil {
-				return fmt.Errorf("add column %s: %w", col.name, err)
-			}
-			log.Printf("[AutoMigrate] cicd_pipeline_run 补全列: %s", col.name)
-		}
-	}
-	return nil
-}
-
-// ensureReleaseColumns 检查并补全 cicd_release 表缺失的镜像晋级链追踪列
-// cicd_release 由 init.sql 建表，这里幂等补齐新增列，避免旧库缺列导致写入报错
-func ensureReleaseColumns() error {
-	var count int64
-	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'cicd_release'").Scan(&count)
-	if count == 0 {
-		return nil
-	}
-	type colDef struct {
-		name string
-		sql  string
-	}
-	columns := []colDef{
-		{"pipeline_id", "ALTER TABLE `cicd_release` ADD COLUMN `pipeline_id` bigint NOT NULL DEFAULT 0 COMMENT '关联流水线ID' AFTER `image_digest`"},
-		{"env", "ALTER TABLE `cicd_release` ADD COLUMN `env` varchar(32) NOT NULL DEFAULT '' COMMENT '目标环境' AFTER `pipeline_id`"},
-		{"source_env", "ALTER TABLE `cicd_release` ADD COLUMN `source_env` varchar(32) NOT NULL DEFAULT '' COMMENT '晋级来源环境' AFTER `env`"},
-		{"source_run_id", "ALTER TABLE `cicd_release` ADD COLUMN `source_run_id` bigint NOT NULL DEFAULT 0 COMMENT '构建镜像的流水线运行ID' AFTER `source_env`"},
-	}
-	for _, col := range columns {
-		var exists int64
-		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cicd_release' AND column_name = ?", col.name).Scan(&exists)
-		if exists == 0 {
-			if err := global.DB.Exec(col.sql).Error; err != nil {
-				return fmt.Errorf("add column %s: %w", col.name, err)
-			}
-			log.Printf("[AutoMigrate] cicd_release 补全列: %s", col.name)
-		}
-	}
-	return nil
-}
-
-// ensureNotifyChannelColumns 检查并补全 monitor_notify_channel 表缺失的列
-// 兼容旧版本初始化脚本中未包含 security_keyword 列的情况
-func ensureNotifyChannelColumns() error {
-	// 检查表是否存在
-	var count int64
-	global.DB.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'monitor_notify_channel'").Scan(&count)
-	if count == 0 {
-		return nil // 表不存在，跳过（全新安装由 SQL 初始化脚本负责）
-	}
-
-	type colDef struct {
-		name string
-		sql  string
-	}
-	columns := []colDef{
-		{
-			"security_keyword",
-			"ALTER TABLE `monitor_notify_channel` ADD COLUMN `security_keyword` varchar(100) NOT NULL DEFAULT '' COMMENT '钉钉安全关键字（多个用逗号分隔）' AFTER `secret`",
-		},
-	}
-
-	for _, col := range columns {
-		var exists int64
-		global.DB.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'monitor_notify_channel' AND column_name = ?", col.name).Scan(&exists)
-		if exists == 0 {
-			if err := global.DB.Exec(col.sql).Error; err != nil {
-				return fmt.Errorf("add column %s: %w", col.name, err)
-			}
-			log.Printf("[AutoMigrate] monitor_notify_channel 补全列: %s", col.name)
-		}
-	}
-	return nil
 }
 
 // backfillRBACScopes 回填存量角色的 scope 值（仅当三域均为默认 none 时才触发，不会覆盖已配置的值）
