@@ -19,6 +19,7 @@ output/
 # local configs (only ignore sensitive config files, keep templates)
 configs/config.yaml
 configs/k8s.yaml
+local_kubeconfig.yaml
 storage/logs/*
 storage/artifacts/*
 !storage/artifacts/.gitkeep
