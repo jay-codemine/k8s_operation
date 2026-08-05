@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -143,6 +144,15 @@ func (k *K8sCluster) GetByID(db *gorm.DB, id uint32) (*K8sCluster, error) {
 
 // Update 通用更新（未删除）
 func (k *K8sCluster) Update(db *gorm.DB, values map[string]interface{}) error {
+	// 先确认记录存在，避免把"值未变化导致 RowsAffected=0"误判为记录不存在
+	var exist K8sCluster
+	if err := db.Where("id = ? AND is_del = 0", k.ID).First(&exist).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("集群不存在或已删除: id=%d", k.ID)
+		}
+		return err
+	}
+
 	tx := db.Model(&K8sCluster{}).
 		Where("id = ? AND is_del = 0", k.ID).
 		Updates(values)
@@ -153,9 +163,6 @@ func (k *K8sCluster) Update(db *gorm.DB, values map[string]interface{}) error {
 			zap.Error(tx.Error),
 		)
 		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return fmt.Errorf("集群不存在或已删除: id=%d", k.ID)
 	}
 	return nil
 }
