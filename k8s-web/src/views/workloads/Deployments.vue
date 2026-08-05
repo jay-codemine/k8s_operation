@@ -3298,6 +3298,7 @@ import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import RollbackDialog from '@/components/RollbackDialog.vue'
 import permissionStore from '@/stores/permission'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 // ===== 容器终端 =====
 const showTerminal = ref(false)
@@ -4924,7 +4925,7 @@ const fetchPodStaticLogs = async () => {
   }
   
   podLogAbortController = new AbortController()
-  const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
     signal: podLogAbortController.signal,
     headers: getAuthHeaders()  // ✅ 使用认证头
   })
@@ -4957,7 +4958,7 @@ const fetchPodStreamLogs = async () => {
     }, podLogsForm.value.duration * 1000)
   }
   
-  const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
     signal: podLogAbortController.signal,
     headers: getAuthHeaders()  // ✅ 使用认证头
   })
@@ -5404,7 +5405,7 @@ const fetchDeploymentStaticLogs = async () => {
     }
 
     deploymentLogAbortController = new AbortController()
-    const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+    const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
       signal: deploymentLogAbortController.signal,
       headers: getAuthHeaders()  // ✅ 使用认证头
     })
@@ -5430,7 +5431,7 @@ const fetchDeploymentStaticLogs = async () => {
       }
 
       try {
-        const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+        const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
           headers: getAuthHeaders()  // ✅ 使用认证头
         })
         if (response.ok) {
@@ -5465,7 +5466,7 @@ const fetchDeploymentStreamLogs = async () => {
     params.set('tail', deploymentLogsForm.value.tail)
   }
 
-  const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
     signal: deploymentLogAbortController.signal,
     headers: getAuthHeaders()  // ✅ 使用认证头
   })

@@ -405,11 +405,13 @@ func (s *Services) buildServicePorts(req *requests.QuickOnboardRequest) []corev1
 	for _, p := range sourcePorts {
 		proto := corev1.ProtocolTCP
 		if strings.EqualFold(p.Protocol, "UDP") { proto = corev1.ProtocolUDP }
-		// 多端口 Service 要求每个端口有名字，缺失时按端口号生成
 		name := p.Name
 		if name == "" { name = fmt.Sprintf("port-%d", p.Port) }
-		// TargetPort 按端口号匹配，避免容器端口未命名导致转发失败
-		ports = append(ports, corev1.ServicePort{Name: name, Port: p.Port, TargetPort: intstr.FromInt(int(p.Port)), Protocol: proto})
+		targetPort := p.TargetPort
+		if targetPort == 0 { targetPort = p.Port }
+		sp := corev1.ServicePort{Name: name, Port: p.Port, TargetPort: intstr.FromInt(int(targetPort)), Protocol: proto}
+		if p.NodePort > 0 { sp.NodePort = p.NodePort }
+		ports = append(ports, sp)
 	}
 	return ports
 }

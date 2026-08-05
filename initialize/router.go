@@ -194,10 +194,12 @@ func (s *Engine) injectRouterGroup(root *gin.RouterGroup, factory *services.Clus
 	// /api/v1/monitoring/...
 	// ======================================================
 	prometheusURL := ""
+	lokiURL := ""
 	if global.MonitoringSetting != nil && global.MonitoringSetting.Enabled {
 		prometheusURL = global.MonitoringSetting.PrometheusURL
+		lokiURL = global.MonitoringSetting.LokiURL
 	}
-	monitoring.NewMonitoringRouter(prometheusURL).Inject(protected)
+	monitoring.NewMonitoringRouter(prometheusURL, lokiURL).Inject(protected)
 
 	// ======================================================
 	// 镜像管理分组（需要 JWT）

@@ -1337,6 +1337,7 @@ import namespaceApi from '@/api/cluster/namespaces'
 import permissionStore from '@/stores/permission'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 const { confirm } = useConfirmDialog()
 
@@ -1432,7 +1433,7 @@ const terminalPod = ref({ namespace: '', name: '', container: '' })
 const openTerminal = async (job) => {
   // 获取 Job 关联的 Pod
   try {
-    const res = await fetch(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
+    const res = await fetchWithAuth(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
       headers: getAuthHeaders()
     })
     if (res.ok) {
@@ -1569,7 +1570,7 @@ const parseYamlPreview = async () => {
 
   try {
     // 调用后端 API 解析 YAML
-    const res = await fetch('/api/v1/k8s/multi-resource/parse-yaml', {
+    const res = await fetchWithAuth('/api/v1/k8s/multi-resource/parse-yaml', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2324,7 +2325,7 @@ const viewJobLogs = async (job) => {
   
   // 获取 Job 关联的 Pod 列表
   try {
-    const res = await fetch(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
+    const res = await fetchWithAuth(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
       headers: getAuthHeaders()
     })
     if (res.ok) {
@@ -2426,7 +2427,7 @@ const fetchJobStaticLogs = async () => {
     }
     
     jobLogAbortController = new AbortController()
-    const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+    const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
       signal: jobLogAbortController.signal,
       headers: getAuthHeaders()
     })
@@ -2452,7 +2453,7 @@ const fetchJobStaticLogs = async () => {
       }
       
       try {
-        const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+        const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
           headers: getAuthHeaders()
         })
         if (response.ok) {
@@ -2489,7 +2490,7 @@ const fetchJobStreamLogs = async () => {
     params.set('tail', jobLogsForm.value.tail)
   }
   
-  const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
     signal: jobLogAbortController.signal,
     headers: getAuthHeaders()
   })
@@ -3019,7 +3020,7 @@ const applyMultiResourceYaml = async () => {
 
   creating.value = true
   try {
-    const res = await fetch('/api/v1/k8s/multi-resource/apply-yaml', {
+    const res = await fetchWithAuth('/api/v1/k8s/multi-resource/apply-yaml', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

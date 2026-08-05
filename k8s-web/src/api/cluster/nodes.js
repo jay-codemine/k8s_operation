@@ -1,6 +1,5 @@
-import http from '../http'
-
-const K8S_BASE = '/api/v1/k8s'
+import http from '@/api/http'
+import {K8S_BASE} from '@/api/paths'
 
 const nodesApi = {
   // Node 列表

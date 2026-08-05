@@ -123,9 +123,7 @@ const panelStyle = computed(() => {
 // ========== WebSocket URL ==========
 const buildWsUrl = () => {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  // 判断是否是远程穿透访问
-  const isRemoteAccess = !['localhost', '127.0.0.1'].includes(window.location.hostname)
-  const host = isRemoteAccess ? 'james521.gnway.cc:80' : window.location.host
+  const host = import.meta.env.VITE_WS_HOST || window.location.host
   const base = `${proto}//${host}`
 
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''

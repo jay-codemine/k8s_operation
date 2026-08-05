@@ -1038,6 +1038,7 @@ import { useClusterStore } from '@/stores/cluster'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 const { confirm } = useConfirmDialog()
 
@@ -2335,7 +2336,7 @@ const fetchPodStaticLogs = async (container) => {
   }
   
   podLogAbortController = new AbortController()
-  const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
     signal: podLogAbortController.signal,
     headers: getAuthHeaders()
   })
@@ -2368,7 +2369,7 @@ const fetchPodStreamLogs = async (container) => {
     }, podLogsForm.value.duration * 1000)
   }
   
-  const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
     signal: podLogAbortController.signal,
     headers: getAuthHeaders()
   })
@@ -2617,7 +2618,7 @@ const fetchDaemonsetStaticLogs = async () => {
       params.set('tail', daemonsetLogsForm.value.tail)
     }
     
-    const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+    const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
       headers: getAuthHeaders()
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -2649,7 +2650,7 @@ const fetchDaemonsetStaticLogs = async () => {
       }
       
       try {
-        const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+        const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
           headers: getAuthHeaders()
         })
         if (response.ok) {
@@ -2686,7 +2687,7 @@ const fetchDaemonsetStreamLogs = async () => {
     params.set('tail', daemonsetLogsForm.value.tail)
   }
   
-  const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+  const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
     signal: daemonsetLogAbortController.signal,
     headers: getAuthHeaders()
   })

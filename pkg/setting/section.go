@@ -282,6 +282,7 @@ type PlatformAboutSettings struct {
 type MonitoringSettingS struct {
 	Enabled       bool   `mapstructure:"Enabled"`       // 是否启用监控
 	PrometheusURL string `mapstructure:"PrometheusURL"` // Prometheus 地址
+	LokiURL       string `mapstructure:"LokiURL"`       // Loki 日志地址
 	QueryTimeout  int    `mapstructure:"QueryTimeout"`  // 查询超时（秒）
 }
 

@@ -440,6 +440,7 @@ func (c *KubeDeploymentController) EventList(ctx *gin.Context) {
 	if err != nil {
 		ctx.Error(err)
 		global.Logger.Error("service.KubeDeploymentGetEvent error", zap.Error(err))
+		return
 	}
 	r.Success(gin.H{
 		"events":  items,         // 事件记录

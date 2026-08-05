@@ -92,9 +92,11 @@ type KVDef struct {
 
 // PortDef 端口定义
 type PortDef struct {
-	Name     string `json:"name"`
-	Port     int32  `json:"port"`
-	Protocol string `json:"protocol"` // TCP/UDP，默认 TCP
+	Name       string `json:"name"`
+	Port       int32  `json:"port"`
+	TargetPort int32  `json:"target_port"` // Service 目标端口（映射到 Pod 的容器端口），为 0 时默认等于 Port
+	NodePort   int32  `json:"node_port"`   // NodePort Service 的宿主机端口（30000-32767），为 0 时自动分配
+	Protocol   string `json:"protocol"`    // TCP/UDP，默认 TCP
 }
 
 // EnvVarDef 环境变量定义

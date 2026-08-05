@@ -1144,6 +1144,7 @@ import { useFilteredNamespaces } from '@/composables/useFilteredNamespaces'
 import permissionStore from '@/stores/permission'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useRoute } from 'vue-router'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 const route = useRoute()
 
@@ -2265,7 +2266,7 @@ const fetchLogs = async () => {
         params.set('tail', logsForm.value.tail);
       }
       
-      const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+      const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
         signal: logAbortController.signal,
         headers: getAuthHeaders(),
       });
@@ -2317,7 +2318,7 @@ const fetchStreamLogs = async (container) => {
       params.set('tail', logsForm.value.tail);
     }
     
-    const response = await fetch(`/api/v1/k8s/pod/container_log?${params}`, {
+    const response = await fetchWithAuth(`/api/v1/k8s/pod/container_log?${params}`, {
       signal: logAbortController.signal,
       headers: getAuthHeaders(),
     });

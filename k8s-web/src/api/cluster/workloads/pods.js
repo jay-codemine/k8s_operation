@@ -347,8 +347,7 @@ const podsApi = {
    */
   terminalUrl(params) {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const isRemoteAccess = !['localhost', '127.0.0.1'].includes(window.location.hostname)
-    const host = isRemoteAccess ? 'james521.gnway.cc:80' : window.location.host
+    const host = import.meta.env.VITE_WS_HOST || window.location.host
     const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
     const qs = new URLSearchParams({
       namespace: params.namespace,

@@ -12,13 +12,15 @@ import (
 
 // MonitoringRouter 监控路由
 type MonitoringRouter struct {
-	svc *services.MonitoringService
+	svc     *services.MonitoringService
+	lokiURL string
 }
 
-// NewMonitoringRouter 创建监控路由（传入 Prometheus URL）
-func NewMonitoringRouter(prometheusURL string) *MonitoringRouter {
+// NewMonitoringRouter 创建监控路由（传入 Prometheus 和 Loki URL）
+func NewMonitoringRouter(prometheusURL, lokiURL string) *MonitoringRouter {
 	return &MonitoringRouter{
-		svc: services.NewMonitoringService(prometheusURL),
+		svc:     services.NewMonitoringService(prometheusURL),
+		lokiURL: lokiURL,
 	}
 }
 
@@ -57,7 +59,7 @@ func (r *MonitoringRouter) Inject(router *gin.RouterGroup) {
 	NewMonitorCRUDRouter().Inject(g)
 
 	// Loki 日志查询路由
-	NewLokiRouter("").Inject(g)
+	NewLokiRouter(r.lokiURL).Inject(g)
 }
 
 // GetOverview 获取集群监控总览

@@ -368,7 +368,12 @@ func (r *MonitorCRUDRouter) GetAlertEvent(c *gin.Context) {
 func (r *MonitorCRUDRouter) AckAlertEvent(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	// TODO: 从 JWT 获取 userID
-	userID := int64(1)
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": "未登录"})
+		return
+	}
+	userID := userIDVal.(int64)
 	if err := r.svc.AckAlertEvent(c.Request.Context(), id, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return

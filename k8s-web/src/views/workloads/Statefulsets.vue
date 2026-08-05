@@ -1702,6 +1702,7 @@ import RollbackDialog from '@/components/RollbackDialog.vue'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import permissionStore from '@/stores/permission'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 // ===== 容器终端 =====
 const showTerminal = ref(false)
@@ -3000,7 +3001,7 @@ const fetchLogs = async () => {
       }
 
       logAbortController = new AbortController()
-      const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+      const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
         signal: logAbortController.signal,
         headers: getAuthHeaders()
       })
@@ -3026,7 +3027,7 @@ const fetchLogs = async () => {
         }
 
         try {
-          const response = await fetch(`/api/v1/k8s/pod/container_logs?${params}`, {
+          const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params}`, {
             headers: getAuthHeaders()
           })
           if (response.ok) {

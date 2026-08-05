@@ -1101,6 +1101,7 @@ import namespaceApi from '@/api/cluster/namespaces'
 import permissionStore from '@/stores/permission'
 import { useResourceWatcher } from '@/composables/useResourceWatcher'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import {fetchWithAuth} from '@/api/fetch-wrapper'
 
 const { confirm } = useConfirmDialog()
 
@@ -1226,7 +1227,7 @@ const startCronJobWatcher = (cj, jobName) => {
       getStatus: async () => {
         if (jobName) {
           // 监听触发的具体 Job
-          const res = await fetch(`/api/v1/k8s/job/detail?namespace=${cj.namespace}&name=${jobName}`, {
+          const res = await fetchWithAuth(`/api/v1/k8s/job/detail?namespace=${cj.namespace}&name=${jobName}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           })
           const data = await res.json()
@@ -1786,7 +1787,7 @@ const viewJobPods = async (job) => {
   jobPodsList.value = []
   
   try {
-    const res = await fetch(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
+    const res = await fetchWithAuth(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -1829,7 +1830,7 @@ const viewJobLogs = async (job) => {
   
   // 首先获取 Job 关联的 Pod 列表
   try {
-    const res = await fetch(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
+    const res = await fetchWithAuth(`/api/v1/k8s/pod/list?namespace=${job.namespace}&limit=100`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -1898,7 +1899,7 @@ const fetchJobLogs = async () => {
     loadingJobLogs.value = true
     
     try {
-      const response = await fetch(`/api/v1/k8s/pod/container_logs?${params.toString()}`, {
+      const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
@@ -1934,7 +1935,7 @@ const fetchJobLogs = async () => {
     loadingJobLogs.value = true
     
     try {
-      const response = await fetch(`/api/v1/k8s/pod/container_logs?${params.toString()}`, {
+      const response = await fetchWithAuth(`/api/v1/k8s/pod/container_logs?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -1989,7 +1990,7 @@ const viewJobDetail = async (job) => {
   jobDetailData.value = null
   
   try {
-    const res = await fetch(`/api/v1/k8s/job/detail?namespace=${job.namespace}&name=${job.name}`, {
+    const res = await fetchWithAuth(`/api/v1/k8s/job/detail?namespace=${job.namespace}&name=${job.name}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }

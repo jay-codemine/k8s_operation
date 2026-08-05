@@ -341,6 +341,40 @@
               </select>
             </div>
           </div>
+          <!-- 服务端口映射（仅在选择 Service 类型时显示） -->
+          <div v-if="form.service_type" class="service-ports-editor" style="margin-top:14px;">
+            <div class="service-ports-header">
+              <span class="sp-label">服务端口映射</span>
+              <span class="sp-hint">不填则使用上方"端口配置"作为服务端口</span>
+            </div>
+            <div v-for="(sp, idx) in form.service_ports" :key="idx" class="sp-row">
+              <input v-model="sp.name" class="form-input sp-name" placeholder="端口名（如 http）" />
+              <div class="sp-field">
+                <label class="sp-field-label">服务端口</label>
+                <input v-model.number="sp.port" type="number" class="form-input" placeholder="80" />
+              </div>
+              <div class="sp-field">
+                <label class="sp-field-label">目标端口</label>
+                <input v-model.number="sp.target_port" type="number" class="form-input" placeholder="容器端口" />
+              </div>
+              <div class="sp-field" v-if="form.service_type === 'NodePort'">
+                <label class="sp-field-label">NodePort</label>
+                <input v-model.number="sp.node_port" type="number" class="form-input" min="30000" max="32767" placeholder="30000-32767" />
+              </div>
+              <select v-model="sp.protocol" class="form-input sp-proto">
+                <option value="TCP">TCP</option>
+                <option value="UDP">UDP</option>
+              </select>
+              <button type="button" class="btn-icon-sm" @click="form.service_ports.splice(idx,1)" title="删除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                </svg>
+              </button>
+            </div>
+            <button type="button" class="btn-add-port" @click="form.service_ports.push({name:'',port:80,target_port:0,node_port:0,protocol:'TCP'})">
+              + 添加服务端口
+            </button>
+          </div>
         </div>
 
         <!-- === CI/CD === -->
@@ -553,6 +587,7 @@ export default {
         job_backoff_limit: null,
         job_ttl: null,
         service_type: '',
+        service_ports: [],
         cluster_id: 0,
         auto_deploy: false,
         git_repo: '',
@@ -691,6 +726,19 @@ export default {
 
       // 清理空端口（只要求端口号，名字缺失时后端自动生成）
       p.ports = (p.ports || []).filter(po => po.port)
+      // 服务端口：仅在选择 Service 类型且有端口时发送
+      p.service_ports = (p.service_ports || []).filter(sp => sp.port)
+      if (!p.service_ports.length) {
+        delete p.service_ports
+      } else {
+        // node_port=0 时后端自动分配，target_port=0 时回退为 port
+        p.service_ports = p.service_ports.map(sp => ({
+          name: sp.name, port: sp.port,
+          target_port: sp.target_port || 0,
+          node_port: sp.node_port || 0,
+          protocol: sp.protocol || 'TCP',
+        }))
+      }
       // 清理空环境变量
       p.env_vars = (p.env_vars || []).filter(ev => ev.name)
 
@@ -720,6 +768,7 @@ export default {
         job_backoff_limit: null,
         job_ttl: null,
         service_type: '',
+        service_ports: [],
         cluster_id: 0,
         auto_deploy: false,
         git_repo: '',
@@ -1156,6 +1205,44 @@ export default {
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
+}
+
+/* 服务端口编辑器 */
+.service-ports-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sp-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+.sp-hint {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.sp-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.sp-name { width: 100px; flex-shrink: 0; }
+.sp-proto { width: 90px; flex-shrink: 0; }
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100px;
+  flex-shrink: 0;
+}
+.sp-field-label {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 500;
 }
 
 /* Toggle */

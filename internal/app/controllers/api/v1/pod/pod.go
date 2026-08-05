@@ -846,6 +846,7 @@ func (c *PodController) EventList(ctx *gin.Context) {
 	if err != nil {
 		ctx.Error(err)
 		global.Logger.Error("pod.EventList error", zap.Error(err))
+		return
 	}
 	r.Success(gin.H{
 		"events":  items,

@@ -1,0 +1,141 @@
+Server:
+  RunMode: debug
+  Port: 8080
+  ReadTimeout: 3600
+  WriteTimeout: 3600
+  IdleTimeout: 300
+  ShutdownTimeout: 300
+  ReadinessTimeout: 3
+
+Database:
+  DBType: mysql
+  Username: root
+  Password: "123456"
+  Host: 127.0.0.1
+  Port: 3306
+  DBName: k8s-platform
+  Charset: utf8mb4
+  ParseTime: true
+  MaxIdleConns: 5
+  MaxOpenConns: 100
+  MaxLifeSeconds: 300
+
+Cache:
+  Type: redis
+  Name: sk_sid
+  Address: 127.0.0.1:6379
+  Username: ""
+  Password: ""
+  MaxConnect: 10
+  Network: tcp
+  Secret: "k8smana"
+
+App:
+  LogLevel: debug
+  TIMEZONE: "Asia/Shanghai"
+  LogType: single
+  LogFileName: storage/logs/app.log
+  LogMaxSize: 1
+  LogMaxBackup: 3
+  LogMaxAge: 30
+  LogCompress: true
+  BusinessLogFileName: storage/logs/biz.log
+  MirrorBusinessToSystem: false
+  JWTMaxRefreshTime: 86400
+  JWTSigningKey: "k8sop-local-dev-secret"
+  JWTExpireTime: 120000
+  AppName: "k8operation"
+  GlobalKubeConfigPath: configs/k8s.yaml
+  DefaultClusterID: 10
+  AutoInitK8s: false
+  SkipAutoMigrate: true
+
+PodLog:
+  EnableStreaming: false
+  TailDefault: 500
+  TailMax: 5000
+  LimitBytes: 2097152
+  Timestamps: false
+  Previous: false
+
+ErrorCode:
+  AllowOverride: true
+
+Security:
+  KubeConfigEncryptKey: "k8s-operation-default-secret-key"
+  PasswordBcryptCost: 10
+  AutoEncryptLegacyData: false
+
+ClusterClient:
+  TTL: 30m
+  TTLJitter: 3m
+  ConnectionTimeout: 30
+
+Pod:
+  eviction:
+    default_grace_seconds: 30
+
+Node:
+  drain:
+    max_grace_seconds: 300
+    ignore_daemon_sets: true
+    delete_empty_dir: false
+
+Jenkins:
+  URL: ""
+  Username: ""
+  APIToken: ""
+  TriggerTimeout: 60
+  CallbackURL: "http://127.0.0.1:8080"
+  PlatformURL: "http://127.0.0.1:5173"
+  GitCredentialID: "gitee-id"
+  RegistryCredentialID: "harbor-registry"
+  HMACCredentialID: "hmac-secret"
+  GitUsername: ""
+  GitToken: ""
+  HMACSecret: ""
+  PollInterval: 15
+  MaxBuildTime: 30
+  EnableDingTalk: false
+  DingTalkWebhook: ""
+  EnableFeishu: false
+  FeishuWebhook: ""
+  FeishuSecret: ""
+
+GitOps:
+  ArgoCDURL: ""
+  ArgoCDAuthToken: ""
+  ArgoWorkflowsURL: ""
+  ArgoWorkflowsToken: ""
+  CallbackURL: "http://127.0.0.1:8080"
+  HMACSecret: ""
+  GitManifestRepo: ""
+  GitManifestPath: "manifests"
+  GitCredentialID: "git-ssh-key"
+  EnableDingTalk: false
+  DingTalkWebhook: ""
+  EnableFeishu: false
+  FeishuWebhook: ""
+  FeishuSecret: ""
+  SyncPollInterval: 10
+  SyncMaxWaitTime: 600
+
+CicdWorker:
+  Concurrency: 3
+
+Monitoring:
+  Enabled: true
+  PrometheusURL: "http://127.0.0.1:9090"
+  LokiURL: ""
+  QueryTimeout: 30
+
+AIAssistant:
+  Enabled: false
+  APIKey: ""
+  BaseURL: ""
+  Model: "gpt-4o"
+  MaxTokens: 2048
+  Temperature: 0.7
+  SystemPrompt: ""
+  ApprovalExpire: 30
+  MaxHistoryRound: 20

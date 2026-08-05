@@ -8,6 +8,7 @@ package models
 // MonitorDatasource 监控数据源
 type MonitorDatasource struct {
 	ID             int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID       uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"`       // 所属租户
 	Name           string `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"`              // 数据源名称
 	Type           string `gorm:"type:varchar(30);not null;index" json:"type"`                     // 类型: prometheus/loki/alertmanager/grafana/victoriametrics
 	URL            string `gorm:"type:varchar(500);not null" json:"url"`                           // 连接地址
@@ -42,6 +43,7 @@ func (MonitorDatasource) TableName() string { return "monitor_datasource" }
 // MonitorAlertRule 告警规则
 type MonitorAlertRule struct {
 	ID             int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID       uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"`       // 所属租户
 	DatasourceID   int64  `gorm:"type:bigint;not null;index" json:"datasource_id"`  // 关联数据源
 	Name           string `gorm:"type:varchar(200);not null" json:"name"`           // 规则名称
 	Group          string `gorm:"type:varchar(100);default:'default'" json:"group"` // 规则分组
@@ -75,6 +77,7 @@ func (MonitorAlertRule) TableName() string { return "monitor_alert_rule" }
 // MonitorAlertEvent 告警事件
 type MonitorAlertEvent struct {
 	ID            int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID      uint32 `gorm:"column:tenant_id;default:1;index" json:"tenant_id"` // 所属租户
 	RuleID        int64  `gorm:"type:bigint;not null;index" json:"rule_id"`       // 关联告警规则
 	DatasourceID  int64  `gorm:"type:bigint;not null;index" json:"datasource_id"` // 关联数据源
 	RuleName      string `gorm:"type:varchar(200)" json:"rule_name"`              // 冗余规则名（快速查询）
