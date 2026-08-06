@@ -948,7 +948,7 @@ func (s *Services) getEnvDisplayNameWithCluster(env string, clusterID int64) str
 
 	if clusterID > 0 {
 		var cluster models.K8sCluster
-		if err := global.DB.Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+		if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
 			clusterName := cluster.ClusterName
 			if strings.Contains(clusterName, "生产") || strings.Contains(clusterName, "prod") {
 				return "🚀 生产环境"
@@ -984,7 +984,7 @@ func (s *Services) getEnvDisplayLabel(env string, clusterID int64) string {
 	// 从集群名推断
 	if clusterID > 0 {
 		var cluster models.K8sCluster
-		if err := global.DB.Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+		if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
 			name := cluster.ClusterName
 			if strings.Contains(name, "生产") || strings.Contains(name, "prod") {
 				return "生产环境"
@@ -1010,7 +1010,7 @@ func (s *Services) getClusterName(clusterID int64) string {
 		return "default"
 	}
 	var cluster models.K8sCluster
-	if err := global.DB.Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+	if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
 		return cluster.ClusterName
 	}
 	return "default"

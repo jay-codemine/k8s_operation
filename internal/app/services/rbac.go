@@ -3,7 +3,6 @@ package services
 import (
 	"encoding/json"
 	"errors"
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 )
@@ -125,7 +124,7 @@ func (s *Services) UserRoleAssign(req *requests.UserRoleAssignRequest, operatorI
 		hasAdmin := false
 		for _, rid := range req.RoleIDs {
 			var role models.SysRole
-			if err := global.DB.Where("id = ? AND is_del = 0", rid).First(&role).Error; err == nil {
+			if err := s.dao.DB().Where("id = ? AND is_del = 0", rid).First(&role).Error; err == nil {
 				if role.RoleType == models.RoleTypeSuperAdmin || role.RoleType == models.RoleTypePlatformAdmin {
 					hasAdmin = true
 					break
@@ -373,9 +372,9 @@ func (s *Services) getUserPermissionNames(userID int64, isSuperAdmin bool) []str
 	if isSuperAdmin {
 		// 超管返回所有权限
 		var names []string
-		global.DB.Model(&models.SysPermission{}).Pluck("name", &names)
+		s.dao.DB().Model(&models.SysPermission{}).Pluck("name", &names)
 		return names
 	}
-	names, _ := models.GetUserPermissionNames(global.DB, userID)
+	names, _ := models.GetUserPermissionNames(s.dao.DB(), userID)
 	return names
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
@@ -20,11 +21,13 @@ import (
 // =========================================================================
 
 // AIOpsService AIOps 服务
-type AIOpsService struct{}
+type AIOpsService struct {
+	db *gorm.DB
+}
 
 // NewAIOpsService 创建 AIOps 服务
-func NewAIOpsService() *AIOpsService {
-	return &AIOpsService{}
+func NewAIOpsService(db *gorm.DB) *AIOpsService {
+	return &AIOpsService{db: db}
 }
 
 // =========================================================================
@@ -53,19 +56,19 @@ type AlertAnalysisResult struct {
 
 // AnalyzeAlert AI 分析告警事件
 func (s *AIOpsService) AnalyzeAlert(ctx context.Context, req *AlertAnalysisRequest, userID int64) (*AlertAnalysisResult, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 
 	// 1. 查询告警事件
 	var event models.MonitorAlertEvent
-	if err := global.DB.WithContext(ctx).Where("id = ?", req.EventID).First(&event).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ?", req.EventID).First(&event).Error; err != nil {
 		return nil, fmt.Errorf("告警事件不存在: %w", err)
 	}
 
 	// 2. 查询关联规则
 	var rule models.MonitorAlertRule
-	global.DB.WithContext(ctx).Where("id = ?", event.RuleID).First(&rule)
+	s.db.WithContext(ctx).Where("id = ?", event.RuleID).First(&rule)
 
 	// 3. 构建 AI 分析 Prompt
 	prompt := buildAlertAnalysisPrompt(&event, &rule)
@@ -182,7 +185,7 @@ func (s *AIOpsService) DiagnoseLogs(ctx context.Context, req *LogDiagnosisReques
 	}
 
 	// 2. 查询 Loki 日志
-	lokiSvc := NewLokiService("")
+	lokiSvc := NewLokiService(s.db, "")
 	if !lokiSvc.IsEnabled() {
 		return nil, fmt.Errorf("Loki 未配置，请先添加 Loki 数据源")
 	}
@@ -300,7 +303,7 @@ type InspectionSummary struct {
 
 // RunInspection 执行一次巡检（会创建巡检报告并调用 AI 分析）
 func (s *AIOpsService) RunInspection(ctx context.Context, triggerBy int64) (*models.AIOpsInspectionReport, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 
@@ -317,7 +320,7 @@ func (s *AIOpsService) RunInspection(ctx context.Context, triggerBy int64) (*mod
 		Level:       models.InspectionLevelHealthy,
 		TriggeredBy: triggerBy,
 	}
-	if err := global.DB.WithContext(ctx).Create(report).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(report).Error; err != nil {
 		return nil, fmt.Errorf("创建巡检报告失败: %w", err)
 	}
 
@@ -342,7 +345,7 @@ func (s *AIOpsService) executeInspection(ctx context.Context, reportID int64) {
 	}()
 
 	// 1. 收集平台健康数据
-	healthSvc := NewPlatformHealthService()
+	healthSvc := NewPlatformHealthService(s.db)
 	health, err := healthSvc.GetFullHealth(ctx)
 	if err != nil {
 		s.updateReport(ctx, reportID, map[string]interface{}{
@@ -355,10 +358,10 @@ func (s *AIOpsService) executeInspection(ctx context.Context, reportID int64) {
 	// 2. 收集告警数据
 	var firingAlerts []models.MonitorAlertEvent
 	var firingCount, criticalCount int64
-	if global.DB != nil {
-		global.DB.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
-		global.DB.Model(&models.MonitorAlertEvent{}).Where("status = 'firing' AND severity = 'critical'").Count(&criticalCount)
-		global.DB.Where("status = 'firing'").Order("fired_at DESC").Limit(10).Find(&firingAlerts)
+	if s.db != nil {
+		s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
+		s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing' AND severity = 'critical'").Count(&criticalCount)
+		s.db.Where("status = 'firing'").Order("fired_at DESC").Limit(10).Find(&firingAlerts)
 	}
 
 	// 3. 构建巡检摘要
@@ -521,7 +524,7 @@ func (s *AIOpsService) NotifyReport(ctx context.Context, req *NotifyReportReques
 
 	// 获取通知渠道列表
 	var channels []models.MonitorNotifyChannel
-	if err := global.DB.WithContext(ctx).Where("id IN ? AND is_del = 0 AND enabled = 1", req.ChannelIDs).Find(&channels).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ? AND is_del = 0 AND enabled = 1", req.ChannelIDs).Find(&channels).Error; err != nil {
 		return nil, fmt.Errorf("获取通知渠道失败: %w", err)
 	}
 	if len(channels) == 0 {
@@ -560,11 +563,11 @@ func (s *AIOpsService) NotifyReport(ctx context.Context, req *NotifyReportReques
 
 // GetNotifyChannels 获取可用通知渠道（复用监控通知渠道）
 func (s *AIOpsService) GetNotifyChannels(ctx context.Context) ([]map[string]interface{}, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 	var channels []models.MonitorNotifyChannel
-	if err := global.DB.WithContext(ctx).Where("is_del = 0 AND enabled = 1").Order("id DESC").Find(&channels).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("is_del = 0 AND enabled = 1").Order("id DESC").Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	result := make([]map[string]interface{}, 0, len(channels))
@@ -615,14 +618,14 @@ func (s *AIOpsService) buildReportNotification(report *models.AIOpsInspectionRep
 
 // GetAnalysisRecords 获取分析记录列表
 func (s *AIOpsService) GetAnalysisRecords(ctx context.Context, recordType string, page, pageSize int) ([]models.AIOpsAnalysisRecord, int64, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, 0, fmt.Errorf("数据库未初始化")
 	}
 
 	var records []models.AIOpsAnalysisRecord
 	var total int64
 
-	db := global.DB.WithContext(ctx).Model(&models.AIOpsAnalysisRecord{})
+	db := s.db.WithContext(ctx).Model(&models.AIOpsAnalysisRecord{})
 	if recordType != "" {
 		db = db.Where("type = ?", recordType)
 	}
@@ -641,14 +644,14 @@ func (s *AIOpsService) GetAnalysisRecords(ctx context.Context, recordType string
 
 // GetInspectionReports 获取巡检报告列表
 func (s *AIOpsService) GetInspectionReports(ctx context.Context, page, pageSize int) ([]models.AIOpsInspectionReport, int64, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, 0, fmt.Errorf("数据库未初始化")
 	}
 
 	var reports []models.AIOpsInspectionReport
 	var total int64
 
-	db := global.DB.WithContext(ctx).Model(&models.AIOpsInspectionReport{})
+	db := s.db.WithContext(ctx).Model(&models.AIOpsInspectionReport{})
 	db.Count(&total)
 
 	if page <= 0 {
@@ -664,11 +667,11 @@ func (s *AIOpsService) GetInspectionReports(ctx context.Context, page, pageSize 
 
 // GetInspectionReport 获取单个巡检报告
 func (s *AIOpsService) GetInspectionReport(ctx context.Context, id int64) (*models.AIOpsInspectionReport, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 	var report models.AIOpsInspectionReport
-	if err := global.DB.WithContext(ctx).Where("id = ?", id).First(&report).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&report).Error; err != nil {
 		return nil, fmt.Errorf("巡检报告不存在")
 	}
 	return &report, nil
@@ -676,7 +679,7 @@ func (s *AIOpsService) GetInspectionReport(ctx context.Context, id int64) (*mode
 
 // GetDashboardStats AIOps 仪表盘统计
 func (s *AIOpsService) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
-	if global.DB == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 
@@ -686,17 +689,17 @@ func (s *AIOpsService) GetDashboardStats(ctx context.Context) (map[string]interf
 
 	// 今日分析次数
 	var todayAnalysis int64
-	global.DB.Model(&models.AIOpsAnalysisRecord{}).Where("created_at >= ?", today).Count(&todayAnalysis)
+	s.db.Model(&models.AIOpsAnalysisRecord{}).Where("created_at >= ?", today).Count(&todayAnalysis)
 	stats["today_analysis"] = todayAnalysis
 
 	// 总分析次数
 	var totalAnalysis int64
-	global.DB.Model(&models.AIOpsAnalysisRecord{}).Count(&totalAnalysis)
+	s.db.Model(&models.AIOpsAnalysisRecord{}).Count(&totalAnalysis)
 	stats["total_analysis"] = totalAnalysis
 
 	// 最近巡检评分
 	var lastReport models.AIOpsInspectionReport
-	if global.DB.Where("status = 'completed'").Order("created_at DESC").First(&lastReport).Error == nil {
+	if s.db.Where("status = 'completed'").Order("created_at DESC").First(&lastReport).Error == nil {
 		stats["last_health_score"] = lastReport.HealthScore
 		stats["last_health_level"] = lastReport.Level
 		stats["last_inspection_at"] = lastReport.CompletedAt
@@ -704,13 +707,13 @@ func (s *AIOpsService) GetDashboardStats(ctx context.Context) (map[string]interf
 
 	// 当前 firing 告警数
 	var firingCount int64
-	global.DB.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
+	s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
 	stats["firing_alerts"] = firingCount
 
 	// 本周分析次数
 	weekStart := now.AddDate(0, 0, -int(now.Weekday())).Unix()
 	var weekAnalysis int64
-	global.DB.Model(&models.AIOpsAnalysisRecord{}).Where("created_at >= ?", weekStart).Count(&weekAnalysis)
+	s.db.Model(&models.AIOpsAnalysisRecord{}).Where("created_at >= ?", weekStart).Count(&weekAnalysis)
 	stats["week_analysis"] = weekAnalysis
 
 	return stats, nil
@@ -721,19 +724,19 @@ func (s *AIOpsService) GetDashboardStats(ctx context.Context) (map[string]interf
 // =========================================================================
 
 func (s *AIOpsService) saveRecord(ctx context.Context, record *models.AIOpsAnalysisRecord) {
-	if global.DB == nil {
+	if s.db == nil {
 		return
 	}
-	if err := global.DB.WithContext(ctx).Create(record).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(record).Error; err != nil {
 		global.Logger.Warn("[AIOps] 保存分析记录失败", zap.Error(err))
 	}
 }
 
 func (s *AIOpsService) updateReport(ctx context.Context, reportID int64, updates map[string]interface{}) {
-	if global.DB == nil {
+	if s.db == nil {
 		return
 	}
-	if err := global.DB.WithContext(ctx).Model(&models.AIOpsInspectionReport{}).Where("id = ?", reportID).Updates(updates).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.AIOpsInspectionReport{}).Where("id = ?", reportID).Updates(updates).Error; err != nil {
 		global.Logger.Error("[AIOps] 更新巡检报告失败", zap.Int64("report_id", reportID), zap.Error(err))
 	}
 }

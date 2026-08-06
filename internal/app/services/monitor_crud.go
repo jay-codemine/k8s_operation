@@ -11,7 +11,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 )
 
@@ -76,7 +75,7 @@ func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req A
 	// 预加载路由策略（auto_route 模式下用于自动匹配渠道）
 	var routePolicies []models.MonitorNotifyRoutePolicy
 	if req.AutoRoute {
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Where("enabled = 1 AND is_del = 0").
 			Order("priority ASC, id ASC").
 			Find(&routePolicies)
@@ -140,7 +139,7 @@ func (s *MonitorCRUDService) ImportAlertRulesFromYAML(ctx context.Context, req A
 
 			// 检查是否已存在同名规则
 			var existing models.MonitorAlertRule
-			err := global.DB.WithContext(ctx).
+			err := s.db.WithContext(ctx).
 				Where("name = ? AND is_del = 0", item.Alert).
 				First(&existing).Error
 
@@ -320,7 +319,7 @@ func (s *MonitorCRUDService) policyMatches(policy *models.MonitorNotifyRoutePoli
 
 // ExportAlertRulesToYAML 导出告警规则为 PrometheusRule 兼容 YAML
 func (s *MonitorCRUDService) ExportAlertRulesToYAML(ctx context.Context, group string, ids []int64) (string, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0 AND enabled = 1")
+	db := s.db.WithContext(ctx).Where("is_del = 0 AND enabled = 1")
 
 	if group != "" {
 		db = db.Where("`group` = ?", group)
@@ -420,10 +419,12 @@ func (s *MonitorCRUDService) ExportAlertRulesToYAML(ctx context.Context, group s
 }
 
 // MonitorCRUDService 监控 CRUD 服务
-type MonitorCRUDService struct{}
+type MonitorCRUDService struct {
+	db *gorm.DB
+}
 
-func NewMonitorCRUDService() *MonitorCRUDService {
-	return &MonitorCRUDService{}
+func NewMonitorCRUDService(db *gorm.DB) *MonitorCRUDService {
+	return &MonitorCRUDService{db: db}
 }
 
 // ============================================================
@@ -448,7 +449,7 @@ type DatasourceListResp struct {
 
 // ListDatasources 列表
 func (s *MonitorCRUDService) ListDatasources(ctx context.Context, req DatasourceListReq) (*DatasourceListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Type != "" {
 		db = db.Where("type = ?", req.Type)
@@ -487,7 +488,7 @@ func (s *MonitorCRUDService) ListDatasources(ctx context.Context, req Datasource
 // GetDatasource 详情
 func (s *MonitorCRUDService) GetDatasource(ctx context.Context, id int64) (*models.MonitorDatasource, error) {
 	var ds models.MonitorDatasource
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&ds).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&ds).Error
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +498,7 @@ func (s *MonitorCRUDService) GetDatasource(ctx context.Context, id int64) (*mode
 // CreateDatasource 创建
 func (s *MonitorCRUDService) CreateDatasource(ctx context.Context, ds *models.MonitorDatasource) error {
 	ds.Status = "unknown"
-	db := global.DB.WithContext(ctx)
+	db := s.db.WithContext(ctx)
 	// 若新增的是默认，先把同 type 的其他默认取消，保证同 type 只有一条 is_default=1
 	if ds.IsDefault {
 		if err := db.Model(&models.MonitorDatasource{}).
@@ -511,7 +512,7 @@ func (s *MonitorCRUDService) CreateDatasource(ctx context.Context, ds *models.Mo
 
 // UpdateDatasource 更新
 func (s *MonitorCRUDService) UpdateDatasource(ctx context.Context, ds *models.MonitorDatasource) error {
-	db := global.DB.WithContext(ctx)
+	db := s.db.WithContext(ctx)
 	// 若本次更新把它设为默认，先把同 type 内其他记录的 is_default 全部置 false
 	if ds.IsDefault {
 		if err := db.Model(&models.MonitorDatasource{}).
@@ -541,7 +542,7 @@ func (s *MonitorCRUDService) UpdateDatasource(ctx context.Context, ds *models.Mo
 
 // DeleteDatasource 删除（软删除）
 func (s *MonitorCRUDService) DeleteDatasource(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorDatasource{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorDatasource{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -598,7 +599,7 @@ func (s *MonitorCRUDService) TestDatasourceConnection(ctx context.Context, ds *m
 
 func (s *MonitorCRUDService) updateDatasourceStatus(ctx context.Context, id int64, status string) {
 	if id > 0 {
-		global.DB.WithContext(ctx).Model(&models.MonitorDatasource{}).
+		s.db.WithContext(ctx).Model(&models.MonitorDatasource{}).
 			Where("id = ?", id).
 			Updates(map[string]interface{}{
 				"status":        status,
@@ -630,7 +631,7 @@ type AlertRuleListResp struct {
 
 // ListAlertRules 列表
 func (s *MonitorCRUDService) ListAlertRules(ctx context.Context, req AlertRuleListReq) (*AlertRuleListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.DatasourceID > 0 {
 		db = db.Where("datasource_id = ?", req.DatasourceID)
@@ -672,7 +673,7 @@ func (s *MonitorCRUDService) ListAlertRules(ctx context.Context, req AlertRuleLi
 // GetAlertRule 详情
 func (s *MonitorCRUDService) GetAlertRule(ctx context.Context, id int64) (*models.MonitorAlertRule, error) {
 	var rule models.MonitorAlertRule
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&rule).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&rule).Error
 	if err != nil {
 		return nil, err
 	}
@@ -681,12 +682,12 @@ func (s *MonitorCRUDService) GetAlertRule(ctx context.Context, id int64) (*model
 
 // CreateAlertRule 创建
 func (s *MonitorCRUDService) CreateAlertRule(ctx context.Context, rule *models.MonitorAlertRule) error {
-	return global.DB.WithContext(ctx).Create(rule).Error
+	return s.db.WithContext(ctx).Create(rule).Error
 }
 
 // UpdateAlertRule 更新
 func (s *MonitorCRUDService) UpdateAlertRule(ctx context.Context, rule *models.MonitorAlertRule) error {
-	return global.DB.WithContext(ctx).Model(rule).
+	return s.db.WithContext(ctx).Model(rule).
 		Where("id = ? AND is_del = 0", rule.ID).
 		Updates(map[string]interface{}{
 			"datasource_id":   rule.DatasourceID,
@@ -708,14 +709,14 @@ func (s *MonitorCRUDService) UpdateAlertRule(ctx context.Context, rule *models.M
 
 // DeleteAlertRule 删除
 func (s *MonitorCRUDService) DeleteAlertRule(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
 
 // ToggleAlertRule 启用/禁用告警规则
 func (s *MonitorCRUDService) ToggleAlertRule(ctx context.Context, id int64, enabled bool) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("enabled", enabled).Error
 }
@@ -745,7 +746,7 @@ func (s *MonitorCRUDService) BatchDeleteAlertRules(ctx context.Context, ids []in
 		return nil, fmt.Errorf("单次最多删除 200 条规则")
 	}
 
-	tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	tx := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("id IN ? AND is_del = 0", ids).
 		Update("is_del", 1)
 	if tx.Error != nil {
@@ -809,7 +810,7 @@ func (s *MonitorCRUDService) BatchUpdateAlertRules(ctx context.Context, req Batc
 		return nil, fmt.Errorf("没有要更新的字段")
 	}
 
-	tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	tx := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("id IN ? AND is_del = 0", req.IDs).
 		Updates(updates)
 	if tx.Error != nil {
@@ -891,7 +892,7 @@ func (s *MonitorCRUDService) resolveRuleIDsByFilter(ctx context.Context, req Bat
 		return nil, "", fmt.Errorf("请指定 rule_ids 或至少一个筛选条件(group/severity/keyword/datasource_id/match_all)")
 	}
 
-	db := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).Where("is_del = 0 AND enabled = 1")
+	db := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).Where("is_del = 0 AND enabled = 1")
 
 	var conditions []string
 
@@ -941,7 +942,7 @@ func (s *MonitorCRUDService) executeBatchBind(ctx context.Context, req BatchBind
 	switch mode {
 	case "replace":
 		// 直接批量更新
-		tx := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+		tx := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 			Where("id IN ? AND is_del = 0", req.RuleIDs).
 			Update("notify_channels", req.NotifyChannels)
 		if tx.Error != nil {
@@ -954,12 +955,12 @@ func (s *MonitorCRUDService) executeBatchBind(ctx context.Context, req BatchBind
 		// 逐条追加（去重）
 		for _, ruleID := range req.RuleIDs {
 			var rule models.MonitorAlertRule
-			if err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
+			if err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
 				result.Failed++
 				continue
 			}
 			merged := mergeChannelIDs(rule.NotifyChannels, req.NotifyChannels)
-			if err := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+			if err := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 				Where("id = ?", ruleID).Update("notify_channels", merged).Error; err != nil {
 				result.Failed++
 			} else {
@@ -971,12 +972,12 @@ func (s *MonitorCRUDService) executeBatchBind(ctx context.Context, req BatchBind
 		// 逐条移除
 		for _, ruleID := range req.RuleIDs {
 			var rule models.MonitorAlertRule
-			if err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
+			if err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", ruleID).First(&rule).Error; err != nil {
 				result.Failed++
 				continue
 			}
 			cleaned := removeChannelIDs(rule.NotifyChannels, req.NotifyChannels)
-			if err := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+			if err := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 				Where("id = ?", ruleID).Update("notify_channels", cleaned).Error; err != nil {
 				result.Failed++
 			} else {
@@ -1058,7 +1059,7 @@ type AlertEventListResp struct {
 
 // ListAlertEvents 列表
 func (s *MonitorCRUDService) ListAlertEvents(ctx context.Context, req AlertEventListReq) (*AlertEventListResp, error) {
-	db := global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{})
+	db := s.db.WithContext(ctx).Model(&models.MonitorAlertEvent{})
 
 	if req.RuleID > 0 {
 		db = db.Where("rule_id = ?", req.RuleID)
@@ -1112,7 +1113,7 @@ func (s *MonitorCRUDService) ListAlertEvents(ctx context.Context, req AlertEvent
 // GetAlertEvent 详情
 func (s *MonitorCRUDService) GetAlertEvent(ctx context.Context, id int64) (*models.MonitorAlertEvent, error) {
 	var event models.MonitorAlertEvent
-	err := global.DB.WithContext(ctx).Where("id = ?", id).First(&event).Error
+	err := s.db.WithContext(ctx).Where("id = ?", id).First(&event).Error
 	if err != nil {
 		return nil, err
 	}
@@ -1160,7 +1161,7 @@ func renderEventTemplate(tpl string, labelsJSON string, value string) string {
 
 // AckAlertEvent 确认告警
 func (s *MonitorCRUDService) AckAlertEvent(ctx context.Context, id int64, userID int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
 		Where("id = ? AND acked_by = 0", id).
 		Updates(map[string]interface{}{
 			"acked_by": userID,
@@ -1170,7 +1171,7 @@ func (s *MonitorCRUDService) AckAlertEvent(ctx context.Context, id int64, userID
 
 // ResolveAlertEvent 手动解决告警
 func (s *MonitorCRUDService) ResolveAlertEvent(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
 		Where("id = ? AND status = 'firing'", id).
 		Updates(map[string]interface{}{
 			"status":      "resolved",
@@ -1189,7 +1190,7 @@ type AlertStats struct {
 
 func (s *MonitorCRUDService) GetAlertStats(ctx context.Context) (*AlertStats, error) {
 	stats := &AlertStats{}
-	db := global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{})
+	db := s.db.WithContext(ctx).Model(&models.MonitorAlertEvent{})
 
 	db.Where("status = 'firing'").Count(&stats.TotalFiring)
 	db.Where("status = 'resolved'").Count(&stats.TotalResolved)
@@ -1203,7 +1204,7 @@ func (s *MonitorCRUDService) GetAlertStats(ctx context.Context) (*AlertStats, er
 // GetAlertRuleGroups 获取告警规则分组列表
 func (s *MonitorCRUDService) GetAlertRuleGroups(ctx context.Context) ([]string, error) {
 	var groups []string
-	err := global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	err := s.db.WithContext(ctx).Model(&models.MonitorAlertRule{}).
 		Where("is_del = 0").
 		Distinct("`group`").Pluck("`group`", &groups).Error
 	return groups, err
@@ -1224,7 +1225,7 @@ func (s *MonitorCRUDService) BatchDeleteAlertEvents(ctx context.Context, ids []i
 	if len(ids) > 200 {
 		return nil, fmt.Errorf("单次最多删除 200 条事件")
 	}
-	tx := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAlertEvent{})
+	tx := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAlertEvent{})
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -1272,7 +1273,7 @@ func (s *MonitorCRUDService) BatchUpdateNotifyChannels(ctx context.Context, req 
 		return nil, fmt.Errorf("没有要更新的字段")
 	}
 
-	tx := global.DB.WithContext(ctx).Model(&models.MonitorNotifyChannel{}).
+	tx := s.db.WithContext(ctx).Model(&models.MonitorNotifyChannel{}).
 		Where("id IN ?", req.IDs).
 		Updates(updates)
 	if tx.Error != nil {
@@ -1295,7 +1296,7 @@ func (s *MonitorCRUDService) BatchDeleteNotifyChannels(ctx context.Context, ids 
 	if len(ids) > 100 {
 		return nil, fmt.Errorf("单次最多删除 100 个渠道")
 	}
-	tx := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorNotifyChannel{})
+	tx := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorNotifyChannel{})
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -1316,15 +1317,15 @@ func (s *MonitorCRUDService) BatchDeleteSilenceRules(ctx context.Context, ids []
 	}
 	// 尝试从三个表中删除
 	var totalAffected int64
-	tx1 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorSilenceRule{})
+	tx1 := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorSilenceRule{})
 	if tx1.Error == nil {
 		totalAffected += tx1.RowsAffected
 	}
-	tx2 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorInhibitRule{})
+	tx2 := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorInhibitRule{})
 	if tx2.Error == nil {
 		totalAffected += tx2.RowsAffected
 	}
-	tx3 := global.DB.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAggregateRule{})
+	tx3 := s.db.WithContext(ctx).Where("id IN ?", ids).Delete(&models.MonitorAggregateRule{})
 	if tx3.Error == nil {
 		totalAffected += tx3.RowsAffected
 	}

@@ -270,7 +270,7 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 
 	// 路由策略兜底：如果规则没有直接绑定渠道，尝试通过路由策略自动匹配
 	if notifyChannels == "" {
-		svc := services.NewMonitorCRUDService()
+		svc := services.NewMonitorCRUDService(global.DB)
 		notifyChannels = svc.ResolveRoutePolicyChannels(ctx, rule)
 	}
 

@@ -19,13 +19,13 @@ type PlatformHealthController struct {
 
 func NewPlatformHealthController() *PlatformHealthController {
 	return &PlatformHealthController{
-		service: services.NewPlatformHealthService(),
+		service: services.NewPlatformHealthService(global.DB),
 	}
 }
 
 func NewPlatformHealthControllerWithFactory(factory *services.ClusterClientFactory) *PlatformHealthController {
 	return &PlatformHealthController{
-		service: services.NewPlatformHealthServiceWithFactory(factory),
+		service: services.NewPlatformHealthServiceWithFactory(global.DB, factory),
 	}
 }
 

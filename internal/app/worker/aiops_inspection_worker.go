@@ -25,7 +25,7 @@ func NewAIOpsInspectionWorker() *AIOpsInspectionWorker {
 	return &AIOpsInspectionWorker{
 		interval: 6 * time.Hour,
 		stopCh:   make(chan struct{}),
-		svc:      services.NewAIOpsService(),
+		svc:      services.NewAIOpsService(global.DB),
 	}
 }
 

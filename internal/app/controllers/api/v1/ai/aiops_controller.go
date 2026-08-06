@@ -20,7 +20,7 @@ type AIOpsController struct {
 // NewAIOpsController 创建 AIOps 控制器
 func NewAIOpsController() *AIOpsController {
 	return &AIOpsController{
-		svc: services.NewAIOpsService(),
+		svc: services.NewAIOpsService(global.DB),
 	}
 }
 

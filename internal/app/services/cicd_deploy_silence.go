@@ -87,7 +87,7 @@ func (s *Services) CreateDeploySilence(ctx context.Context, pipeline *models.Cic
 		Enabled:  true,
 	}
 
-	if err := global.DB.WithContext(ctx).Create(rule).Error; err != nil {
+	if err := s.dao.DB().WithContext(ctx).Create(rule).Error; err != nil {
 		return nil, fmt.Errorf("创建发布静默规则失败: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func (s *Services) ReleaseDeploySilence(ctx context.Context, silenceRuleID int64
 	if success {
 		// 成功：将结束时间缩短到现在+2分钟（给新 Pod 短暂观察期）
 		newEndsAt := time.Now().Add(2 * time.Minute).Unix()
-		err := global.DB.WithContext(ctx).Model(&models.MonitorSilenceRule{}).
+		err := s.dao.DB().WithContext(ctx).Model(&models.MonitorSilenceRule{}).
 			Where("id = ? AND is_del = 0", silenceRuleID).
 			Updates(map[string]interface{}{
 				"ends_at": newEndsAt,
@@ -136,7 +136,7 @@ func (s *Services) ReleaseDeploySilence(ctx context.Context, silenceRuleID int64
 		}
 	} else {
 		// 失败：立即解除（禁用规则）
-		err := global.DB.WithContext(ctx).Model(&models.MonitorSilenceRule{}).
+		err := s.dao.DB().WithContext(ctx).Model(&models.MonitorSilenceRule{}).
 			Where("id = ? AND is_del = 0", silenceRuleID).
 			Updates(map[string]interface{}{
 				"enabled": false,
@@ -158,7 +158,7 @@ func (s *Services) GetActiveDeploySilences(ctx context.Context, pipelineID int64
 	now := time.Now().Unix()
 	var rules []models.MonitorSilenceRule
 
-	query := global.DB.WithContext(ctx).
+	query := s.dao.DB().WithContext(ctx).
 		Where("is_del = 0 AND enabled = 1 AND type = 'silence'").
 		Where("name LIKE ?", "[发布静默]%").
 		Where("ends_at > ?", now)
@@ -174,7 +174,7 @@ func (s *Services) GetActiveDeploySilences(ctx context.Context, pipelineID int64
 // CleanExpiredDeploySilences 清理过期的发布静默规则（可选：定期清理）
 func (s *Services) CleanExpiredDeploySilences(ctx context.Context) (int64, error) {
 	now := time.Now().Unix()
-	result := global.DB.WithContext(ctx).Model(&models.MonitorSilenceRule{}).
+	result := s.dao.DB().WithContext(ctx).Model(&models.MonitorSilenceRule{}).
 		Where("is_del = 0 AND type = 'silence' AND name LIKE ?", "[发布静默]%").
 		Where("ends_at > 0 AND ends_at <= ?", now).
 		Update("enabled", false)

@@ -167,11 +167,11 @@ func (s *Services) CanaryAnalyze(ctx context.Context, kube kubernetes.Interface,
 
 // getDefaultPromClient 获取默认 Prometheus 客户端
 func (s *Services) getDefaultPromClient() *prom.Client {
-	if global.DB == nil {
+	if s.dao.DB() == nil {
 		return nil
 	}
 	var ds models.MonitorDatasource
-	if err := global.DB.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
+	if err := s.dao.DB().Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
 		"prometheus", "victoriametrics", "thanos").First(&ds).Error; err != nil {
 		return nil
 	}
@@ -183,14 +183,14 @@ func (s *Services) getDefaultPromClient() *prom.Client {
 
 // updateCanaryStage 更新金丝雀阶段状态
 func (s *Services) updateCanaryStage(ctx context.Context, runID int64, status, message string) {
-	if runID <= 0 || global.DB == nil {
+	if runID <= 0 || s.dao.DB() == nil {
 		return
 	}
 
 	now := uint64(time.Now().Unix())
 	logs := fmt.Sprintf("[%s] %s\n%s", time.Now().Format("2006-01-02 15:04:05"), message, status)
 
-	result := global.DB.Model(&models.CicdPipelineStage{}).
+	result := s.dao.DB().Model(&models.CicdPipelineStage{}).
 		Where("run_id = ? AND stage_type = ?", runID, "canary_deploy").
 		Updates(map[string]interface{}{
 			"status":      status,
@@ -208,7 +208,7 @@ func (s *Services) updateCanaryStage(ctx context.Context, runID int64, status, m
 			StartedAt:  now,
 			FinishedAt: now,
 		}
-		if err := global.DB.Create(stage).Error; err != nil {
+		if err := s.dao.DB().Create(stage).Error; err != nil {
 			global.Logger.Warn("[Canary] 创建金丝雀 stage 失败", zap.Error(err))
 		}
 	}

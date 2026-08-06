@@ -16,7 +16,6 @@ import (
 	"text/template"
 	"time"
 
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 )
 
@@ -40,7 +39,7 @@ type NotifyChannelListResp struct {
 
 // ListNotifyChannels 列表
 func (s *MonitorCRUDService) ListNotifyChannels(ctx context.Context, req NotifyChannelListReq) (*NotifyChannelListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Type != "" {
 		db = db.Where("type = ?", req.Type)
@@ -73,7 +72,7 @@ func (s *MonitorCRUDService) ListNotifyChannels(ctx context.Context, req NotifyC
 // GetNotifyChannel 详情
 func (s *MonitorCRUDService) GetNotifyChannel(ctx context.Context, id int64) (*models.MonitorNotifyChannel, error) {
 	var ch models.MonitorNotifyChannel
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&ch).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&ch).Error
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +81,7 @@ func (s *MonitorCRUDService) GetNotifyChannel(ctx context.Context, id int64) (*m
 
 // CreateNotifyChannel 创建
 func (s *MonitorCRUDService) CreateNotifyChannel(ctx context.Context, ch *models.MonitorNotifyChannel) error {
-	return global.DB.WithContext(ctx).Create(ch).Error
+	return s.db.WithContext(ctx).Create(ch).Error
 }
 
 // UpdateNotifyChannel 更新
@@ -111,14 +110,14 @@ func (s *MonitorCRUDService) UpdateNotifyChannel(ctx context.Context, ch *models
 		updates["smtp_pass"] = ch.SMTPPass
 	}
 
-	return global.DB.WithContext(ctx).Model(ch).
+	return s.db.WithContext(ctx).Model(ch).
 		Where("id = ? AND is_del = 0", ch.ID).
 		Updates(updates).Error
 }
 
 // DeleteNotifyChannel 删除（软删除）
 func (s *MonitorCRUDService) DeleteNotifyChannel(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorNotifyChannel{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorNotifyChannel{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -1148,7 +1147,7 @@ type RoutePolicyListResp struct {
 
 // ListRoutePolicies 列表查询
 func (s *MonitorCRUDService) ListRoutePolicies(ctx context.Context, req RoutePolicyListReq) (*RoutePolicyListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Keyword != "" {
 		db = db.Where("name LIKE ? OR description LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
@@ -1178,7 +1177,7 @@ func (s *MonitorCRUDService) ListRoutePolicies(ctx context.Context, req RoutePol
 // GetRoutePolicy 详情
 func (s *MonitorCRUDService) GetRoutePolicy(ctx context.Context, id int64) (*models.MonitorNotifyRoutePolicy, error) {
 	var policy models.MonitorNotifyRoutePolicy
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&policy).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&policy).Error
 	if err != nil {
 		return nil, err
 	}
@@ -1189,22 +1188,22 @@ func (s *MonitorCRUDService) GetRoutePolicy(ctx context.Context, id int64) (*mod
 func (s *MonitorCRUDService) CreateRoutePolicy(ctx context.Context, policy *models.MonitorNotifyRoutePolicy) error {
 	// 如果设为默认策略，取消其他默认
 	if policy.IsDefault {
-		global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+		s.db.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
 			Where("is_default = 1 AND is_del = 0").
 			Update("is_default", false)
 	}
-	return global.DB.WithContext(ctx).Create(policy).Error
+	return s.db.WithContext(ctx).Create(policy).Error
 }
 
 // UpdateRoutePolicy 更新路由策略
 func (s *MonitorCRUDService) UpdateRoutePolicy(ctx context.Context, policy *models.MonitorNotifyRoutePolicy) error {
 	// 如果设为默认策略，取消其他默认
 	if policy.IsDefault {
-		global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+		s.db.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
 			Where("is_default = 1 AND is_del = 0 AND id != ?", policy.ID).
 			Update("is_default", false)
 	}
-	return global.DB.WithContext(ctx).Model(policy).
+	return s.db.WithContext(ctx).Model(policy).
 		Where("id = ? AND is_del = 0", policy.ID).
 		Updates(map[string]interface{}{
 			"name":        policy.Name,
@@ -1222,7 +1221,7 @@ func (s *MonitorCRUDService) UpdateRoutePolicy(ctx context.Context, policy *mode
 
 // DeleteRoutePolicy 删除路由策略
 func (s *MonitorCRUDService) DeleteRoutePolicy(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorNotifyRoutePolicy{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -1231,7 +1230,7 @@ func (s *MonitorCRUDService) DeleteRoutePolicy(ctx context.Context, id int64) er
 // 用于 Worker 评估时：当 rule.NotifyChannels 为空时，通过路由策略自动匹配
 func (s *MonitorCRUDService) ResolveRoutePolicyChannels(ctx context.Context, rule *models.MonitorAlertRule) string {
 	var policies []models.MonitorNotifyRoutePolicy
-	global.DB.WithContext(ctx).
+	s.db.WithContext(ctx).
 		Where("enabled = 1 AND is_del = 0").
 		Order("priority ASC, id ASC").
 		Find(&policies)

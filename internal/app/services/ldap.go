@@ -74,7 +74,7 @@ func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*models.User, er
 		// 确保用户状态为激活
 		values["status"] = int8(1)
 
-		_ = existing.Update(global.DB, values)
+		_ = existing.Update(s.dao.DB(), values)
 		return existing, nil
 	}
 

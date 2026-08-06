@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"k8soperation/global"
+	"gorm.io/gorm"
 	"k8soperation/internal/app/models"
 	"k8soperation/pkg/loki"
 )
@@ -20,12 +20,13 @@ import (
 //     这样用户在前端【数据源管理】页面新增/启用/修改 Loki 数据源后无需重启即可生效。
 //   - 数据源筛选优先级：is_default=1 优先；若无默认则取任一 enabled=1 且未删除的 Loki 数据源（按 ID DESC）。
 type LokiService struct {
+	db        *gorm.DB
 	staticURL string // 构造时传入的固定 URL（来自 config.yaml），优先级最高
 }
 
 // NewLokiService 创建 Loki 服务
-func NewLokiService(lokiURL string) *LokiService {
-	return &LokiService{staticURL: lokiURL}
+func NewLokiService(db *gorm.DB, lokiURL string) *LokiService {
+	return &LokiService{db: db, staticURL: lokiURL}
 }
 
 // resolveURL 实时解析当前应使用的 Loki 地址
@@ -34,17 +35,17 @@ func (s *LokiService) resolveURL() string {
 	if s.staticURL != "" {
 		return s.staticURL
 	}
-	if global.DB == nil {
+	if s.db == nil {
 		return ""
 	}
 	var ds models.MonitorDatasource
 	// 1) 优先取默认 Loki 数据源
-	if err := global.DB.Where("type = ? AND is_default = 1 AND enabled = 1 AND is_del = 0", "loki").
+	if err := s.db.Where("type = ? AND is_default = 1 AND enabled = 1 AND is_del = 0", "loki").
 		First(&ds).Error; err == nil && ds.URL != "" {
 		return ds.URL
 	}
 	// 2) 回退：取任一启用的 Loki 数据源（按 ID DESC，最新创建优先）
-	if err := global.DB.Where("type = ? AND enabled = 1 AND is_del = 0", "loki").
+	if err := s.db.Where("type = ? AND enabled = 1 AND is_del = 0", "loki").
 		Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
 		return ds.URL
 	}

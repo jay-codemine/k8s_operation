@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 )
 
@@ -30,7 +29,7 @@ type NotifyTemplateListResp struct {
 
 // ListNotifyTemplates 列表
 func (s *MonitorCRUDService) ListNotifyTemplates(ctx context.Context, req NotifyTemplateListReq) (*NotifyTemplateListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Type != "" {
 		db = db.Where("type = ?", req.Type)
@@ -63,7 +62,7 @@ func (s *MonitorCRUDService) ListNotifyTemplates(ctx context.Context, req Notify
 // GetNotifyTemplate 详情
 func (s *MonitorCRUDService) GetNotifyTemplate(ctx context.Context, id int64) (*models.MonitorNotifyTemplate, error) {
 	var tpl models.MonitorNotifyTemplate
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&tpl).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&tpl).Error
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +71,12 @@ func (s *MonitorCRUDService) GetNotifyTemplate(ctx context.Context, id int64) (*
 
 // CreateNotifyTemplate 创建
 func (s *MonitorCRUDService) CreateNotifyTemplate(ctx context.Context, tpl *models.MonitorNotifyTemplate) error {
-	return global.DB.WithContext(ctx).Create(tpl).Error
+	return s.db.WithContext(ctx).Create(tpl).Error
 }
 
 // UpdateNotifyTemplate 更新
 func (s *MonitorCRUDService) UpdateNotifyTemplate(ctx context.Context, tpl *models.MonitorNotifyTemplate) error {
-	return global.DB.WithContext(ctx).Model(tpl).
+	return s.db.WithContext(ctx).Model(tpl).
 		Where("id = ? AND is_del = 0", tpl.ID).
 		Updates(map[string]interface{}{
 			"name":        tpl.Name,
@@ -93,7 +92,7 @@ func (s *MonitorCRUDService) UpdateNotifyTemplate(ctx context.Context, tpl *mode
 
 // DeleteNotifyTemplate 删除（软删除）
 func (s *MonitorCRUDService) DeleteNotifyTemplate(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -133,16 +132,16 @@ func (s *MonitorCRUDService) PreviewNotifyTemplate(ctx context.Context, tpl *mod
 // SetDefaultTemplate 设置默认模板（同类型+场景只能有一个默认）
 func (s *MonitorCRUDService) SetDefaultTemplate(ctx context.Context, id int64) error {
 	var tpl models.MonitorNotifyTemplate
-	if err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&tpl).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&tpl).Error; err != nil {
 		return fmt.Errorf("模板不存在")
 	}
 
 	// 取消同类型+场景的其他默认
-	global.DB.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
+	s.db.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
 		Where("type = ? AND scene = ? AND is_del = 0 AND id != ?", tpl.Type, tpl.Scene, id).
 		Update("is_default", false)
 
 	// 设为默认
-	return global.DB.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorNotifyTemplate{}).
 		Where("id = ?", id).Update("is_default", true).Error
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
 	prom "k8soperation/pkg/prometheus"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
@@ -19,12 +20,13 @@ import (
 //   - 否则每次调用从 monitor_datasource 表实时查询，用户在【数据源管理】修改后无需重启即可生效
 //   - 筛选优先级：context 中的 datasource_id（前端切换） > is_default=1 > 任一 enabled=1 的 prometheus/victoriametrics/thanos
 type MonitoringService struct {
+	db        *gorm.DB
 	staticURL string // 构造时传入的固定 URL（config.yaml），最高优先级
 }
 
 // NewMonitoringService 创建监控服务
-func NewMonitoringService(prometheusURL string) *MonitoringService {
-	return &MonitoringService{staticURL: prometheusURL}
+func NewMonitoringService(db *gorm.DB, prometheusURL string) *MonitoringService {
+	return &MonitoringService{db: db, staticURL: prometheusURL}
 }
 
 // dsIDCtxKey 用于在 ctx 中传递前端选择的 datasource_id
@@ -54,22 +56,22 @@ func datasourceIDFromCtx(ctx context.Context) int64 {
 // resolveURL 实时解析当前应使用的 Prometheus 地址
 // 优先级：ctx.datasource_id（前端指定）> 数据库 is_default=1 > 数据库任一 enabled=1 > config.yaml.staticURL（首次启动兑底）
 func (s *MonitoringService) resolveURL(ctx context.Context) string {
-	if global.DB != nil {
+	if s.db != nil {
 		// 0) 最高优先：ctx 中携带的 datasource_id（前端切换）
 		if id := datasourceIDFromCtx(ctx); id > 0 {
 			var ds models.MonitorDatasource
-			if err := global.DB.Where("id = ? AND enabled = 1 AND is_del = 0", id).First(&ds).Error; err == nil && ds.URL != "" {
+			if err := s.db.Where("id = ? AND enabled = 1 AND is_del = 0", id).First(&ds).Error; err == nil && ds.URL != "" {
 				return ds.URL
 			}
 		}
 		var ds models.MonitorDatasource
 		// 1) 优先取默认数据源
-		if err := global.DB.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
+		if err := s.db.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").First(&ds).Error; err == nil && ds.URL != "" {
 			return ds.URL
 		}
 		// 2) 回退：取任一启用的 prometheus/victoriametrics/thanos数据源（按 ID DESC，最新优先）
-		if err := global.DB.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
+		if err := s.db.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
 			return ds.URL
 		}

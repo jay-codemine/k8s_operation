@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 )
@@ -19,7 +20,7 @@ type MonitorCRUDRouter struct {
 // NewMonitorCRUDRouter 创建监控 CRUD 路由
 func NewMonitorCRUDRouter() *MonitorCRUDRouter {
 	return &MonitorCRUDRouter{
-		svc: services.NewMonitorCRUDService(),
+		svc: services.NewMonitorCRUDService(global.DB),
 	}
 }
 

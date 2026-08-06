@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"k8soperation/global"
 	"k8soperation/internal/app/services"
 )
 
@@ -19,7 +20,7 @@ type MonitoringRouter struct {
 // NewMonitoringRouter 创建监控路由（传入 Prometheus 和 Loki URL）
 func NewMonitoringRouter(prometheusURL, lokiURL string) *MonitoringRouter {
 	return &MonitoringRouter{
-		svc:     services.NewMonitoringService(prometheusURL),
+		svc:     services.NewMonitoringService(global.DB, prometheusURL),
 		lokiURL: lokiURL,
 	}
 }

@@ -2570,7 +2570,7 @@ func getTemplateFile(languageType string) string {
 
 // GetSonarReport 获取流水线的 SonarQube 代码质量报告
 func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID int64) (map[string]interface{}, error) {
-	db := global.DB.WithContext(ctx)
+	db := s.dao.DB().WithContext(ctx)
 
 	// 获取流水线信息
 	var pipeline models.CicdPipeline
@@ -2688,7 +2688,7 @@ func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID i
 
 // SaveSonarReport 保存 SonarQube 扫描结果
 func (s *Services) SaveSonarReport(ctx context.Context, pipelineID int64, runID int64, info *models.StageSonarInfo) error {
-	db := global.DB.WithContext(ctx)
+	db := s.dao.DB().WithContext(ctx)
 
 	info.ScanTime = uint64(time.Now().Unix())
 

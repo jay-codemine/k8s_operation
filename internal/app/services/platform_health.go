@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	prom "k8soperation/pkg/prometheus"
@@ -24,15 +25,16 @@ import (
 
 // PlatformHealthService 平台健康检查服务
 type PlatformHealthService struct {
+	db      *gorm.DB
 	factory *ClusterClientFactory
 }
 
-func NewPlatformHealthService() *PlatformHealthService {
-	return &PlatformHealthService{}
+func NewPlatformHealthService(db *gorm.DB) *PlatformHealthService {
+	return &PlatformHealthService{db: db}
 }
 
-func NewPlatformHealthServiceWithFactory(factory *ClusterClientFactory) *PlatformHealthService {
-	return &PlatformHealthService{factory: factory}
+func NewPlatformHealthServiceWithFactory(db *gorm.DB, factory *ClusterClientFactory) *PlatformHealthService {
+	return &PlatformHealthService{db: db, factory: factory}
 }
 
 // ============ 数据结构 ============
@@ -276,8 +278,8 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 
 	// 数据库连接（真实）
 	dbConnections := "—"
-	if global.DB != nil {
-		if sqlDB, _ := global.DB.DB(); sqlDB != nil {
+	if s.db != nil {
+		if sqlDB, _ := s.db.DB(); sqlDB != nil {
 			stats := sqlDB.Stats()
 			dbConnections = fmt.Sprintf("%d/%d", stats.InUse, stats.MaxOpenConnections)
 		}
@@ -285,10 +287,10 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 
 	// 24h 登录次数（真实：audit_log 统计）
 	logins24h := "—"
-	if global.DB != nil {
+	if s.db != nil {
 		var loginCount int64
 		since := time.Now().Add(-24 * time.Hour).Unix()
-		if err := global.DB.Table("audit_log").
+		if err := s.db.Table("audit_log").
 			Where("module = ? AND action = ? AND status = ? AND created_at >= ?",
 				"auth", "login", "success", since).
 			Count(&loginCount).Error; err == nil {
@@ -320,20 +322,20 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 	// CICD 构建成功率（24h）：DB 统计 cicd_pipeline_run
 	buildSuccessRate := "—"
 	buildQueue := "—"
-	if global.DB != nil {
+	if s.db != nil {
 		since := time.Now().Add(-24 * time.Hour)
 		var totalRuns, successRuns int64
-		if err := global.DB.Table("cicd_pipeline_run").
+		if err := s.db.Table("cicd_pipeline_run").
 			Where("created_at >= ? AND status != ?", since, models.PipelineRunStatusPending).
 			Count(&totalRuns).Error; err == nil && totalRuns > 0 {
-			global.DB.Table("cicd_pipeline_run").
+			s.db.Table("cicd_pipeline_run").
 				Where("created_at >= ? AND status = ?", since, models.PipelineRunStatusSuccess).
 				Count(&successRuns)
 			buildSuccessRate = fmt.Sprintf("%.1f", float64(successRuns)/float64(totalRuns)*100)
 		}
 		// 构建队列积压：pending + running 状态的 run 数
 		var queueCount int64
-		if err := global.DB.Table("cicd_pipeline_run").
+		if err := s.db.Table("cicd_pipeline_run").
 			Where("status IN (?,?)", models.PipelineRunStatusPending, models.PipelineRunStatusRunning).
 			Count(&queueCount).Error; err == nil {
 			buildQueue = fmt.Sprintf("%d", queueCount)
@@ -369,13 +371,13 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 
 // resolvePromURL 解析 Prometheus 地址（DB 数据源优先，config.yaml 兜底）
 func (s *PlatformHealthService) resolvePromURL() string {
-	if global.DB != nil {
+	if s.db != nil {
 		var ds models.MonitorDatasource
-		if err := global.DB.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
+		if err := s.db.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").First(&ds).Error; err == nil && ds.URL != "" {
 			return ds.URL
 		}
-		if err := global.DB.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
+		if err := s.db.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
 			return ds.URL
 		}
@@ -449,9 +451,9 @@ func (s *PlatformHealthService) getOnlineUsers() string {
 	}
 
 	// 降级：审计日志近 15 分钟登录成功的去重用户数
-	if global.DB != nil {
+	if s.db != nil {
 		var userCount int64
-		err := global.DB.Table("audit_log").
+		err := s.db.Table("audit_log").
 			Where("module = ? AND action = ? AND status = ? AND created_at >= ?",
 				"auth", "login", "success", since).
 			Distinct("user_id").
@@ -470,14 +472,14 @@ func (s *PlatformHealthService) getClusterSummary(ctx context.Context) ClusterHe
 
 	// 从数据库获取集群统计
 	var total, online int64
-	if global.DB != nil {
-		global.DB.WithContext(ctx).
+	if s.db != nil {
+		s.db.WithContext(ctx).
 			Table("kube_cluster").
 			Where("is_del = 0").
 			Count(&total)
 
 		// status=0 表示在线，status=2 表示异常
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Table("kube_cluster").
 			Where("is_del = 0 AND status = ?", 0).
 			Count(&online)
@@ -495,7 +497,7 @@ func (s *PlatformHealthService) getClusterSummary(ctx context.Context) ClusterHe
 func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []ClusterDetail {
 	var details []ClusterDetail
 
-	if global.DB == nil {
+	if s.db == nil {
 		return details
 	}
 
@@ -506,7 +508,7 @@ func (s *PlatformHealthService) getClusterDetails(ctx context.Context) []Cluster
 		Status      int    `gorm:"column:status"`
 	}
 	var clusters []clusterInfo
-	global.DB.Table("kube_cluster").
+	s.db.Table("kube_cluster").
 		Select("id, cluster_name, status").
 		Where("is_del = 0").
 		Order("id ASC").
@@ -1218,9 +1220,9 @@ func (s *PlatformHealthService) getAllK8sClients(ctx context.Context) []*kuberne
 	var clients []*kubernetes.Clientset
 
 	// 优先从数据库获取所有在线集群
-	if s.factory != nil && global.DB != nil {
+	if s.factory != nil && s.db != nil {
 		var clusterIDs []int64
-		global.DB.Table("kube_cluster").
+		s.db.Table("kube_cluster").
 			Where("is_del = 0 AND status = ?", 0).
 			Pluck("id", &clusterIDs)
 
@@ -1243,9 +1245,9 @@ func (s *PlatformHealthService) getAllK8sClients(ctx context.Context) []*kuberne
 func (s *PlatformHealthService) getAllK8sFullClients(ctx context.Context) []*K8sClients {
 	var clients []*K8sClients
 
-	if s.factory != nil && global.DB != nil {
+	if s.factory != nil && s.db != nil {
 		var clusterIDs []int64
-		global.DB.Table("kube_cluster").
+		s.db.Table("kube_cluster").
 			Where("is_del = 0 AND status = ?", 0).
 			Pluck("id", &clusterIDs)
 
@@ -1273,8 +1275,8 @@ func (s *PlatformHealthService) getK8sClient() *kubernetes.Clientset {
 	if s.factory != nil {
 		// 从数据库获取第一个在线集群
 		var clusterID int64
-		if global.DB != nil {
-			global.DB.Table("kube_cluster").
+		if s.db != nil {
+			s.db.Table("kube_cluster").
 				Where("is_del = 0 AND status = ?", 0).
 				Order("id ASC").
 				Limit(1).
@@ -1311,25 +1313,25 @@ func (s *PlatformHealthService) getTaskQueueStatus(ctx context.Context) TaskQueu
 	}
 
 	// 从数据库获取流水线任务统计（真实表：cicd_pipeline_run）
-	if global.DB != nil {
+	if s.db != nil {
 		var pending, running, completed, failed int64
 
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Table("cicd_pipeline_run").
 			Where("status = ?", "pending").
 			Count(&pending)
 
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Table("cicd_pipeline_run").
 			Where("status = ?", "running").
 			Count(&running)
 
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Table("cicd_pipeline_run").
 			Where("status = ?", "success").
 			Count(&completed)
 
-		global.DB.WithContext(ctx).
+		s.db.WithContext(ctx).
 			Table("cicd_pipeline_run").
 			Where("status = ?", "failed").
 			Count(&failed)
@@ -1491,13 +1493,13 @@ func (s *PlatformHealthService) checkDatabase(ctx context.Context) ComponentStat
 		Status: "ok",
 	}
 
-	if global.DB == nil {
+	if s.db == nil {
 		status.Status = "error"
 		status.Description = "数据库未初始化"
 		return status
 	}
 
-	db, err := global.DB.DB()
+	db, err := s.db.DB()
 	if err != nil {
 		status.Status = "error"
 		status.Description = "获取数据库连接失败"
@@ -1649,8 +1651,8 @@ func (s *PlatformHealthService) CheckComponentHealth(ctx context.Context, compon
 // Ping 简单健康检查
 func (s *PlatformHealthService) Ping(ctx context.Context) error {
 	// 检查数据库
-	if global.DB != nil {
-		db, err := global.DB.DB()
+	if s.db != nil {
+		db, err := s.db.DB()
 		if err != nil {
 			return err
 		}
@@ -1681,9 +1683,9 @@ func (s *PlatformHealthService) CheckClusterConnectivity(ctx context.Context, cl
 	}
 
 	// 获取集群名称
-	if global.DB != nil {
+	if s.db != nil {
 		var clusterName string
-		global.DB.Table("kube_cluster").
+		s.db.Table("kube_cluster").
 			Select("cluster_name").
 			Where("id = ? AND is_del = 0", clusterID).
 			Pluck("cluster_name", &clusterName)
@@ -1762,7 +1764,7 @@ func (s *PlatformHealthService) CheckClusterConnectivity(ctx context.Context, cl
 
 // updateClusterHealthStatus 更新集群健康状态到数据库
 func (s *PlatformHealthService) updateClusterHealthStatus(clusterID int64, connected bool, errMsg string, checkTime time.Time) {
-	if global.DB == nil {
+	if s.db == nil {
 		return
 	}
 
@@ -1771,7 +1773,7 @@ func (s *PlatformHealthService) updateClusterHealthStatus(clusterID int64, conne
 		status = 1 // 1=异常
 	}
 
-	global.DB.Table("kube_cluster").
+	s.db.Table("kube_cluster").
 		Where("id = ? AND is_del = 0", clusterID).
 		Updates(map[string]interface{}{
 			"status":        status,

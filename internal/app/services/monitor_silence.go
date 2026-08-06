@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 )
 
@@ -31,7 +30,7 @@ type SilenceRuleListResp struct {
 
 // ListSilenceRules 列表
 func (s *MonitorCRUDService) ListSilenceRules(ctx context.Context, req SilenceRuleListReq) (*SilenceRuleListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Type != "" {
 		db = db.Where("type = ?", req.Type)
@@ -71,7 +70,7 @@ func (s *MonitorCRUDService) ListSilenceRules(ctx context.Context, req SilenceRu
 // GetSilenceRule 详情
 func (s *MonitorCRUDService) GetSilenceRule(ctx context.Context, id int64) (*models.MonitorSilenceRule, error) {
 	var rule models.MonitorSilenceRule
-	err := global.DB.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&rule).Error
+	err := s.db.WithContext(ctx).Where("id = ? AND is_del = 0", id).First(&rule).Error
 	if err != nil {
 		return nil, err
 	}
@@ -80,12 +79,12 @@ func (s *MonitorCRUDService) GetSilenceRule(ctx context.Context, id int64) (*mod
 
 // CreateSilenceRule 创建
 func (s *MonitorCRUDService) CreateSilenceRule(ctx context.Context, rule *models.MonitorSilenceRule) error {
-	return global.DB.WithContext(ctx).Create(rule).Error
+	return s.db.WithContext(ctx).Create(rule).Error
 }
 
 // UpdateSilenceRule 更新
 func (s *MonitorCRUDService) UpdateSilenceRule(ctx context.Context, rule *models.MonitorSilenceRule) error {
-	return global.DB.WithContext(ctx).Model(rule).
+	return s.db.WithContext(ctx).Model(rule).
 		Where("id = ? AND is_del = 0", rule.ID).
 		Updates(map[string]interface{}{
 			"name":        rule.Name,
@@ -103,7 +102,7 @@ func (s *MonitorCRUDService) UpdateSilenceRule(ctx context.Context, rule *models
 
 // DeleteSilenceRule 删除（软删除）
 func (s *MonitorCRUDService) DeleteSilenceRule(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorSilenceRule{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorSilenceRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -127,7 +126,7 @@ type InhibitRuleListResp struct {
 
 // ListInhibitRules 列表
 func (s *MonitorCRUDService) ListInhibitRules(ctx context.Context, req InhibitRuleListReq) (*InhibitRuleListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Keyword != "" {
 		db = db.Where("name LIKE ? OR description LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
@@ -156,12 +155,12 @@ func (s *MonitorCRUDService) ListInhibitRules(ctx context.Context, req InhibitRu
 
 // CreateInhibitRule 创建
 func (s *MonitorCRUDService) CreateInhibitRule(ctx context.Context, rule *models.MonitorInhibitRule) error {
-	return global.DB.WithContext(ctx).Create(rule).Error
+	return s.db.WithContext(ctx).Create(rule).Error
 }
 
 // UpdateInhibitRule 更新
 func (s *MonitorCRUDService) UpdateInhibitRule(ctx context.Context, rule *models.MonitorInhibitRule) error {
-	return global.DB.WithContext(ctx).Model(rule).
+	return s.db.WithContext(ctx).Model(rule).
 		Where("id = ? AND is_del = 0", rule.ID).
 		Updates(map[string]interface{}{
 			"name":            rule.Name,
@@ -175,7 +174,7 @@ func (s *MonitorCRUDService) UpdateInhibitRule(ctx context.Context, rule *models
 
 // DeleteInhibitRule 删除
 func (s *MonitorCRUDService) DeleteInhibitRule(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorInhibitRule{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorInhibitRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -199,7 +198,7 @@ type AggregateRuleListResp struct {
 
 // ListAggregateRules 列表
 func (s *MonitorCRUDService) ListAggregateRules(ctx context.Context, req AggregateRuleListReq) (*AggregateRuleListResp, error) {
-	db := global.DB.WithContext(ctx).Where("is_del = 0")
+	db := s.db.WithContext(ctx).Where("is_del = 0")
 
 	if req.Keyword != "" {
 		db = db.Where("name LIKE ?", "%"+req.Keyword+"%")
@@ -228,12 +227,12 @@ func (s *MonitorCRUDService) ListAggregateRules(ctx context.Context, req Aggrega
 
 // CreateAggregateRule 创建
 func (s *MonitorCRUDService) CreateAggregateRule(ctx context.Context, rule *models.MonitorAggregateRule) error {
-	return global.DB.WithContext(ctx).Create(rule).Error
+	return s.db.WithContext(ctx).Create(rule).Error
 }
 
 // UpdateAggregateRule 更新
 func (s *MonitorCRUDService) UpdateAggregateRule(ctx context.Context, rule *models.MonitorAggregateRule) error {
-	return global.DB.WithContext(ctx).Model(rule).
+	return s.db.WithContext(ctx).Model(rule).
 		Where("id = ? AND is_del = 0", rule.ID).
 		Updates(map[string]interface{}{
 			"name":            rule.Name,
@@ -249,7 +248,7 @@ func (s *MonitorCRUDService) UpdateAggregateRule(ctx context.Context, rule *mode
 
 // DeleteAggregateRule 删除
 func (s *MonitorCRUDService) DeleteAggregateRule(ctx context.Context, id int64) error {
-	return global.DB.WithContext(ctx).Model(&models.MonitorAggregateRule{}).
+	return s.db.WithContext(ctx).Model(&models.MonitorAggregateRule{}).
 		Where("id = ? AND is_del = 0", id).
 		Update("is_del", 1).Error
 }
@@ -270,7 +269,7 @@ func (s *MonitorCRUDService) IsAlertSilenced(ctx context.Context, labels map[str
 	now := time.Now().Unix()
 
 	var rules []models.MonitorSilenceRule
-	global.DB.WithContext(ctx).
+	s.db.WithContext(ctx).
 		Where("is_del = 0 AND enabled = 1 AND type = 'silence'").
 		Where("(starts_at = 0 OR starts_at <= ?) AND (ends_at = 0 OR ends_at > ?)", now, now).
 		Find(&rules)
@@ -286,7 +285,7 @@ func (s *MonitorCRUDService) IsAlertSilenced(ctx context.Context, labels map[str
 // IsAlertInhibited 判断告警是否被抑制
 func (s *MonitorCRUDService) IsAlertInhibited(ctx context.Context, labels map[string]string, severity string) (bool, string) {
 	var rules []models.MonitorInhibitRule
-	global.DB.WithContext(ctx).
+	s.db.WithContext(ctx).
 		Where("is_del = 0 AND enabled = 1").
 		Find(&rules)
 
@@ -310,7 +309,7 @@ func (s *MonitorCRUDService) IsAlertInhibited(ctx context.Context, labels map[st
 func (s *MonitorCRUDService) hasActiveFiringSource(ctx context.Context, sourceMatchersJSON string, targetLabels map[string]string, equalLabels []string) bool {
 	// 查找当前 firing 的告警事件，检查是否有匹配源条件的
 	var events []models.MonitorAlertEvent
-	global.DB.WithContext(ctx).
+	s.db.WithContext(ctx).
 		Where("status = 'firing'").
 		Limit(100).
 		Find(&events)

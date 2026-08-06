@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"k8soperation/global"
 	"k8soperation/internal/app/services"
 )
 
@@ -17,7 +18,7 @@ type LokiRouter struct {
 // NewLokiRouter 创建 Loki 路由
 func NewLokiRouter(lokiURL string) *LokiRouter {
 	return &LokiRouter{
-		svc: services.NewLokiService(lokiURL),
+		svc: services.NewLokiService(global.DB, lokiURL),
 	}
 }
 
