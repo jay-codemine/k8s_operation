@@ -12,6 +12,7 @@ import (
 
 	"gorm.io/gorm"
 	"k8soperation/global"
+	dm "k8soperation/internal/domain/monitor"
 	"k8soperation/internal/app/models"
 	prom "k8soperation/pkg/prometheus"
 
@@ -25,16 +26,28 @@ import (
 
 // PlatformHealthService 平台健康检查服务
 type PlatformHealthService struct {
-	db      *gorm.DB
-	factory *ClusterClientFactory
+	db         *gorm.DB
+	factory    *ClusterClientFactory
+	monitorSvc dm.PrometheusURLResolver
 }
 
-func NewPlatformHealthService(db *gorm.DB) *PlatformHealthService {
-	return &PlatformHealthService{db: db}
+func (s *Services) PlatformHealthSvc(factory *ClusterClientFactory) *PlatformHealthService {
+	// PlatformHealth 跨域（audit/cicd/k8s）聚合查询，部分表无 tenant_id 列，用 global.DB
+	return newPlatformHealthServiceWithFactory(global.DB, factory, nil)
 }
 
-func NewPlatformHealthServiceWithFactory(db *gorm.DB, factory *ClusterClientFactory) *PlatformHealthService {
-	return &PlatformHealthService{db: db, factory: factory}
+func newPlatformHealthService(db *gorm.DB, monitorSvc dm.PrometheusURLResolver) *PlatformHealthService {
+	if monitorSvc == nil {
+		monitorSvc = dm.NewMonitorCRUDService(db, nil)
+	}
+	return &PlatformHealthService{db: db, monitorSvc: monitorSvc}
+}
+
+func newPlatformHealthServiceWithFactory(db *gorm.DB, factory *ClusterClientFactory, monitorSvc dm.PrometheusURLResolver) *PlatformHealthService {
+	if monitorSvc == nil {
+		monitorSvc = dm.NewMonitorCRUDService(db, nil)
+	}
+	return &PlatformHealthService{db: db, factory: factory, monitorSvc: monitorSvc}
 }
 
 // ============ 数据结构 ============
@@ -371,21 +384,7 @@ func (s *PlatformHealthService) getPlatformStatus() PlatformHealthStatus {
 
 // resolvePromURL 解析 Prometheus 地址（DB 数据源优先，config.yaml 兜底）
 func (s *PlatformHealthService) resolvePromURL() string {
-	if s.db != nil {
-		var ds models.MonitorDatasource
-		if err := s.db.Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
-			"prometheus", "victoriametrics", "thanos").First(&ds).Error; err == nil && ds.URL != "" {
-			return ds.URL
-		}
-		if err := s.db.Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
-			"prometheus", "victoriametrics", "thanos").Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {
-			return ds.URL
-		}
-	}
-	if global.MonitoringSetting != nil && global.MonitoringSetting.Enabled {
-		return global.MonitoringSetting.PrometheusURL
-	}
-	return ""
+	return s.monitorSvc.ResolvePrometheusURL(context.Background())
 }
 
 // queryPromScalar 查询 Prometheus 即时查询，返回单值字符串（失败返回 "—"）

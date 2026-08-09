@@ -18,7 +18,7 @@ import (
 // TemplateCreate 创建流水线模板
 func (s *Services) TemplateCreate(ctx context.Context, req *requests.TemplateCreateRequest, userID int64) (int64, error) {
 	// 检查名称是否已存在
-	_, err := s.dao.TemplateGetByName(ctx, req.Name)
+	_, err := s.cicdSvc().TemplateGetByName(ctx, req.Name)
 	if err == nil {
 		return 0, errors.New("模板名称已存在")
 	}
@@ -55,7 +55,7 @@ func (s *Services) TemplateCreate(ctx context.Context, req *requests.TemplateCre
 		ModifiedAt:      now,
 	}
 
-	if err := s.dao.TemplateCreate(ctx, template); err != nil {
+	if err := s.cicdSvc().TemplateCreate(ctx, template); err != nil {
 		return 0, fmt.Errorf("创建模板失败: %w", err)
 	}
 
@@ -64,7 +64,7 @@ func (s *Services) TemplateCreate(ctx context.Context, req *requests.TemplateCre
 
 // TemplateDetail 获取模板详情
 func (s *Services) TemplateDetail(ctx context.Context, id int64) (*models.TemplateDetailResponse, error) {
-	template, err := s.dao.TemplateGetByID(ctx, id)
+	template, err := s.cicdSvc().TemplateGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("模板不存在")
@@ -76,7 +76,7 @@ func (s *Services) TemplateDetail(ctx context.Context, id int64) (*models.Templa
 
 // TemplateList 获取模板列表
 func (s *Services) TemplateList(ctx context.Context, req *requests.TemplateListRequest) ([]*models.TemplateListItem, int64, error) {
-	list, total, err := s.dao.TemplateList(ctx, req.Keyword, req.Type, req.Page, req.PageSize)
+	list, total, err := s.cicdSvc().TemplateList(ctx, req.Keyword, req.Type, req.Page, req.PageSize)
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询模板列表失败: %w", err)
 	}
@@ -93,7 +93,7 @@ func (s *Services) TemplateList(ctx context.Context, req *requests.TemplateListR
 // TemplateUpdate 更新模板
 func (s *Services) TemplateUpdate(ctx context.Context, req *requests.TemplateUpdateRequest) error {
 	// 检查模板是否存在
-	template, err := s.dao.TemplateGetByID(ctx, req.ID)
+	template, err := s.cicdSvc().TemplateGetByID(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("模板不存在")
@@ -103,7 +103,7 @@ func (s *Services) TemplateUpdate(ctx context.Context, req *requests.TemplateUpd
 
 	// 如果修改了名称，检查新名称是否已存在
 	if req.Name != "" && req.Name != template.Name {
-		_, err := s.dao.TemplateGetByName(ctx, req.Name)
+		_, err := s.cicdSvc().TemplateGetByName(ctx, req.Name)
 		if err == nil {
 			return errors.New("模板名称已存在")
 		}
@@ -137,13 +137,13 @@ func (s *Services) TemplateUpdate(ctx context.Context, req *requests.TemplateUpd
 
 	template.ModifiedAt = uint64(time.Now().Unix())
 
-	return s.dao.TemplateUpdate(ctx, template)
+	return s.cicdSvc().TemplateUpdate(ctx, template)
 }
 
 // TemplateDelete 删除模板
 func (s *Services) TemplateDelete(ctx context.Context, id int64) error {
 	// 检查是否存在
-	_, err := s.dao.TemplateGetByID(ctx, id)
+	_, err := s.cicdSvc().TemplateGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("模板不存在")
@@ -151,10 +151,10 @@ func (s *Services) TemplateDelete(ctx context.Context, id int64) error {
 		return fmt.Errorf("查询模板失败: %w", err)
 	}
 
-	return s.dao.TemplateDelete(ctx, id)
+	return s.cicdSvc().TemplateDelete(ctx, id)
 }
 
 // TemplateUse 使用模板（增加使用次数）
 func (s *Services) TemplateUse(ctx context.Context, id int64) error {
-	return s.dao.TemplateIncrUsageCount(ctx, id)
+	return s.cicdSvc().TemplateIncrUsageCount(ctx, id)
 }

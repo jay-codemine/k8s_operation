@@ -10,7 +10,6 @@ import (
 	"k8soperation/internal/errorcode"
 	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
-	nspkg "k8soperation/pkg/k8s/namespace"
 	"k8soperation/pkg/valid"
 )
 
@@ -327,7 +326,8 @@ func (c *KubeNamespaceController) Yaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := nspkg.GetYaml(ctx.Request.Context(), cli.Kube, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubeNamespaceGetYaml(ctx.Request.Context(), cli, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 Namespace YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -359,7 +359,8 @@ func (c *KubeNamespaceController) ApplyYaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := nspkg.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubeNamespaceApplyYaml(ctx.Request.Context(), cli, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 Namespace YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

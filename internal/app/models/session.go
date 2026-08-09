@@ -1,9 +1,5 @@
 package models
 
-import "time"
+import dm "k8soperation/internal/domain/session"
 
-type LoginSessionInfo struct {
-	Username  string    `json:"username"`
-	Token     string    `json:"token"`
-	LoginTime time.Time `json:"login_time"`
-}
+type LoginSessionInfo = dm.LoginSessionInfo

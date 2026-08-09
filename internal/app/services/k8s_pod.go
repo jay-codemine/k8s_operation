@@ -290,3 +290,13 @@ func (s *Services) KubePodPatchLabels(ctx context.Context, cli *K8sClients, para
 	global.Logger.Infof("patch Pod labels success: ns=%s name=%s", param.Namespace, param.Name)
 	return nil
 }
+
+// KubePodGetYaml 获取 Pod 的 YAML 配置
+func (s *Services) KubePodGetYaml(ctx context.Context, cli *K8sClients, namespace, name string) (string, error) {
+	return pod.GetYaml(ctx, cli.Kube, namespace, name)
+}
+
+// KubePodApplyYaml 应用 Pod YAML 配置
+func (s *Services) KubePodApplyYaml(ctx context.Context, cli *K8sClients, namespace, name, yamlContent string) (*corev1.Pod, error) {
+	return pod.ApplyYaml(ctx, cli.Kube, namespace, name, yamlContent)
+}

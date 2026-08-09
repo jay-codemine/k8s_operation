@@ -33,7 +33,7 @@ func (c *K8sRBACController) ListServiceAccounts(ctx *gin.Context) {
 	namespace := ctx.Query("namespace")
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	items, err := svc.ListServiceAccounts(ctx.Request.Context(), cli.Kube, namespace)
 	if err != nil {
@@ -66,7 +66,7 @@ func (c *K8sRBACController) GetServiceAccount(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	item, err := svc.GetServiceAccount(ctx.Request.Context(), cli.Kube, namespace, name)
 	if err != nil {
@@ -103,7 +103,7 @@ func (c *K8sRBACController) CreateServiceAccount(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	_, err := svc.CreateServiceAccount(ctx.Request.Context(), cli.Kube, req.Namespace, req.Name, req.Labels, req.AutoMountToken)
 	if err != nil {
@@ -136,7 +136,7 @@ func (c *K8sRBACController) DeleteServiceAccount(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.DeleteServiceAccount(ctx.Request.Context(), cli.Kube, namespace, name)
 	if err != nil {
@@ -174,7 +174,7 @@ func (c *K8sRBACController) UpdateServiceAccount(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.UpdateServiceAccount(ctx.Request.Context(), cli.Kube, req.Namespace, req.Name, req.Labels, req.Annotations, req.AutoMount)
 	if err != nil {
@@ -207,7 +207,7 @@ func (c *K8sRBACController) GetServiceAccountYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	yamlStr, err := svc.GetServiceAccountYaml(ctx.Request.Context(), cli.Kube, namespace, name)
 	if err != nil {
@@ -241,7 +241,7 @@ func (c *K8sRBACController) ApplyServiceAccountYaml(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.ApplyServiceAccountYaml(ctx.Request.Context(), cli.Kube, req.Yaml)
 	if err != nil {
@@ -274,7 +274,7 @@ func (c *K8sRBACController) GetServiceAccountEvents(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	events, err := svc.GetServiceAccountEvents(ctx.Request.Context(), cli.Kube, namespace, name)
 	if err != nil {
@@ -302,7 +302,7 @@ func (c *K8sRBACController) ListRoles(ctx *gin.Context) {
 	namespace := ctx.Query("namespace")
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	items, err := svc.ListRoles(ctx.Request.Context(), cli.Kube, namespace)
 	if err != nil {
@@ -344,7 +344,7 @@ func (c *K8sRBACController) CreateRole(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.CreateRole(ctx.Request.Context(), cli.Kube, req.Type, req.Namespace, req.Name, req.Rules)
 	if err != nil {
@@ -379,7 +379,7 @@ func (c *K8sRBACController) DeleteRole(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.DeleteRole(ctx.Request.Context(), cli.Kube, roleType, namespace, name)
 	if err != nil {
@@ -407,7 +407,7 @@ func (c *K8sRBACController) ListRoleBindings(ctx *gin.Context) {
 	namespace := ctx.Query("namespace")
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	items, err := svc.ListRoleBindings(ctx.Request.Context(), cli.Kube, namespace)
 	if err != nil {
@@ -450,7 +450,7 @@ func (c *K8sRBACController) CreateRoleBinding(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.CreateRoleBinding(ctx.Request.Context(), cli.Kube, req.Type, req.Namespace, req.Name, req.RoleRef, req.Subjects)
 	if err != nil {
@@ -485,7 +485,7 @@ func (c *K8sRBACController) DeleteRoleBinding(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	err := svc.DeleteRoleBinding(ctx.Request.Context(), cli.Kube, bindingType, namespace, name)
 	if err != nil {
@@ -534,7 +534,7 @@ func (c *K8sRBACController) CheckSubjectAccess(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	result, err := svc.CheckSubjectAccess(ctx.Request.Context(), cli.Kube, req)
 	if err != nil {
@@ -568,7 +568,7 @@ func (c *K8sRBACController) BatchCheckSubjectAccess(ctx *gin.Context) {
 	}
 
 	cli := middlewares.MustGetK8sClients(ctx)
-	svc := k8srbac.NewK8sRBACService()
+	svc := middlewares.NewServicesFromContext(ctx).K8sRBACSvc()
 
 	results, err := svc.BatchCheckSubjectAccess(ctx.Request.Context(), cli.Kube, req.Checks)
 	if err != nil {

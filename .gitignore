@@ -34,3 +34,7 @@ storage/license.lic
 *.exe~
 *.tar
 storage/agents/
+
+# DDD code review guide (local only)
+CODEVIEW.md
+.claude/skills/codeview.md

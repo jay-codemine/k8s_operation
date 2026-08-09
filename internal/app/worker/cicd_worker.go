@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/infra"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
@@ -20,7 +19,6 @@ import (
 // CicdWorker CICD 部署任务消费者
 type CicdWorker struct {
 	stream   *infra.RedisStream
-	dao      *dao.Dao
 	executor *services.CicdTaskExecutor
 	svc      *services.Services
 	callback *CicdCallback
@@ -46,9 +44,8 @@ func NewCicdWorker(rdb redis.Cmdable, factory *services.ClusterClientFactory) *C
 
 	return &CicdWorker{
 		stream:       infra.NewRedisStream(rdb),
-		dao:          dao.NewDao(global.DB),
 		executor:     services.NewCicdTaskExecutor(factory),
-		svc:          services.NewServices(),
+		svc:          services.NewBackgroundServices(),
 		callback:     NewCicdCallback(),
 		consumerName: hostname + "-" + strconv.FormatInt(time.Now().Unix(), 10),
 		concurrency:  concurrency,
@@ -173,7 +170,7 @@ func (w *CicdWorker) processMessage(ctx context.Context, msg redis.XMessage) {
 // executeTask 执行任务
 func (w *CicdWorker) executeTask(ctx context.Context, taskID, releaseID int64) {
 	// 1. 获取任务信息
-	task, err := w.dao.CicdTaskGetByID(ctx, taskID)
+	task, err := w.svc.CicdSvc().CicdTaskGetByID(ctx, taskID)
 	if err != nil {
 		global.Logger.Error("get task failed", zap.Int64("task_id", taskID), zap.Error(err))
 		return
@@ -186,7 +183,7 @@ func (w *CicdWorker) executeTask(ctx context.Context, taskID, releaseID int64) {
 	}
 
 	// 2. 获取发布单信息
-	release, err := w.dao.CicdReleaseGetByID(ctx, releaseID)
+	release, err := w.svc.CicdSvc().CicdReleaseGetByID(ctx, releaseID)
 	if err != nil {
 		global.Logger.Error("get release failed", zap.Int64("release_id", releaseID), zap.Error(err))
 		w.markTaskFailed(ctx, taskID, releaseID, "获取发布单失败")
@@ -201,12 +198,12 @@ func (w *CicdWorker) executeTask(ctx context.Context, taskID, releaseID int64) {
 	}
 
 	// 3. 标记任务开始执行
-	if err := w.dao.CicdTaskMarkStarted(ctx, taskID); err != nil {
+	if err := w.svc.CicdSvc().CicdTaskMarkStarted(ctx, taskID); err != nil {
 		global.Logger.Error("mark task started failed", zap.Int64("task_id", taskID), zap.Error(err))
 	}
 
 	// 更新 Release 状态为 Running（CAS，只有第一个任务开始时才更新）
-	_, _ = w.dao.CicdReleaseUpdateStatusCAS(ctx, releaseID,
+	_, _ = w.svc.CicdSvc().CicdReleaseUpdateStatusCAS(ctx, releaseID,
 		[]string{models.CicdReleaseStatusQueued},
 		models.CicdReleaseStatusRunning,
 		"deploying")
@@ -216,7 +213,7 @@ func (w *CicdWorker) executeTask(ctx context.Context, taskID, releaseID int64) {
 
 	// 5. 更新原镜像（用于回滚）
 	if result.PrevImage != "" {
-		_ = w.dao.CicdTaskUpdatePrevImage(ctx, taskID, result.PrevImage)
+		_ = w.svc.CicdSvc().CicdTaskUpdatePrevImage(ctx, taskID, result.PrevImage)
 	}
 
 	// 6. 更新任务状态
@@ -229,7 +226,7 @@ func (w *CicdWorker) executeTask(ctx context.Context, taskID, releaseID int64) {
 
 // markTaskSucceeded 标记任务成功
 func (w *CicdWorker) markTaskSucceeded(ctx context.Context, taskID, releaseID int64, message string) {
-	if err := w.dao.CicdTaskMarkFinished(ctx, taskID, models.CicdTaskStatusSucceeded, message); err != nil {
+	if err := w.svc.CicdSvc().CicdTaskMarkFinished(ctx, taskID, models.CicdTaskStatusSucceeded, message); err != nil {
 		global.Logger.Error("mark task succeeded failed", zap.Int64("task_id", taskID), zap.Error(err))
 	}
 
@@ -244,7 +241,7 @@ func (w *CicdWorker) markTaskSucceeded(ctx context.Context, taskID, releaseID in
 
 // markTaskFailed 标记任务失败
 func (w *CicdWorker) markTaskFailed(ctx context.Context, taskID, releaseID int64, message string) {
-	if err := w.dao.CicdTaskMarkFinished(ctx, taskID, models.CicdTaskStatusFailed, message); err != nil {
+	if err := w.svc.CicdSvc().CicdTaskMarkFinished(ctx, taskID, models.CicdTaskStatusFailed, message); err != nil {
 		global.Logger.Error("mark task failed error", zap.Int64("task_id", taskID), zap.Error(err))
 	}
 

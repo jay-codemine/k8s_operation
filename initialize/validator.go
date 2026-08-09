@@ -10,6 +10,10 @@ import (
 )
 
 func SetupValidator() error {
+	// 捕获启动期 DB 实例，避免闭包中直接引用 global.DB。
+	// 注意：此规则在请求路径中运行，当前无租户上下文——唯一性校验是跨租户的。
+	db := global.DB
+
 	// 注册一个名为 "not_exists" 的自定义规则
 	// 用途：验证请求数据在数据库中必须不存在，常用于唯一性校验
 	// 使用方式：
@@ -74,7 +78,7 @@ func SetupValidator() error {
 		}
 
 		// 5) 构造查询语句
-		q := global.DB.Table(tableName).Where(fmt.Sprintf("%s = ?", dbField), val)
+		q := db.Table(tableName).Where(fmt.Sprintf("%s = ?", dbField), val)
 		// 如果有逻辑删除，可以加上过滤条件：
 		// q = q.Where("is_del = 0")
 

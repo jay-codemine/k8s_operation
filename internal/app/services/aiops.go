@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"k8soperation/global"
+	dm "k8soperation/internal/domain/monitor"
 	"k8soperation/internal/app/models"
 	"k8soperation/pkg/openai"
 )
@@ -20,14 +21,21 @@ import (
 // 功能: AI 告警分析、AI 日志诊断、智能巡检
 // =========================================================================
 
-// AIOpsService AIOps 服务
-type AIOpsService struct {
-	db *gorm.DB
+func (s *Services) AIOpsSvc() *AIOpsService {
+	return &AIOpsService{
+		db:         s.db,
+		monitorSvc: s.MonitorCRUDSvc(),
+		lokiSvc:    dm.NewLokiService(s.db, "", monitoringTimeout()),
+		healthSvc:  newPlatformHealthService(s.db, nil),
+	}
 }
 
-// NewAIOpsService 创建 AIOps 服务
-func NewAIOpsService(db *gorm.DB) *AIOpsService {
-	return &AIOpsService{db: db}
+// AIOpsService AIOps 智能运维服务（编排 AI 分析、日志诊断、智能巡检）
+type AIOpsService struct {
+	db         *gorm.DB
+	monitorSvc *dm.MonitorCRUDService
+	lokiSvc    dm.LogQuerier
+	healthSvc  *PlatformHealthService
 }
 
 // =========================================================================
@@ -61,17 +69,16 @@ func (s *AIOpsService) AnalyzeAlert(ctx context.Context, req *AlertAnalysisReque
 	}
 
 	// 1. 查询告警事件
-	var event models.MonitorAlertEvent
-	if err := s.db.WithContext(ctx).Where("id = ?", req.EventID).First(&event).Error; err != nil {
+	event, err := s.monitorSvc.GetAlertEvent(ctx, req.EventID)
+	if err != nil {
 		return nil, fmt.Errorf("告警事件不存在: %w", err)
 	}
 
 	// 2. 查询关联规则
-	var rule models.MonitorAlertRule
-	s.db.WithContext(ctx).Where("id = ?", event.RuleID).First(&rule)
+	rule, _ := s.monitorSvc.GetAlertRule(ctx, event.RuleID)
 
 	// 3. 构建 AI 分析 Prompt
-	prompt := buildAlertAnalysisPrompt(&event, &rule)
+	prompt := buildAlertAnalysisPrompt(event, rule)
 
 	// 4. 调用 AI
 	start := time.Now()
@@ -185,7 +192,7 @@ func (s *AIOpsService) DiagnoseLogs(ctx context.Context, req *LogDiagnosisReques
 	}
 
 	// 2. 查询 Loki 日志
-	lokiSvc := NewLokiService(s.db, "")
+	lokiSvc := s.lokiSvc
 	if !lokiSvc.IsEnabled() {
 		return nil, fmt.Errorf("Loki 未配置，请先添加 Loki 数据源")
 	}
@@ -345,7 +352,7 @@ func (s *AIOpsService) executeInspection(ctx context.Context, reportID int64) {
 	}()
 
 	// 1. 收集平台健康数据
-	healthSvc := NewPlatformHealthService(s.db)
+	healthSvc := s.healthSvc
 	health, err := healthSvc.GetFullHealth(ctx)
 	if err != nil {
 		s.updateReport(ctx, reportID, map[string]interface{}{
@@ -356,11 +363,11 @@ func (s *AIOpsService) executeInspection(ctx context.Context, reportID int64) {
 	}
 
 	// 2. 收集告警数据
-	var firingAlerts []models.MonitorAlertEvent
+	var firingAlerts []dm.AlertEvent
 	var firingCount, criticalCount int64
 	if s.db != nil {
-		s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
-		s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing' AND severity = 'critical'").Count(&criticalCount)
+		s.db.Model(&dm.AlertEvent{}).Where("status = 'firing'").Count(&firingCount)
+		s.db.Model(&dm.AlertEvent{}).Where("status = 'firing' AND severity = 'critical'").Count(&criticalCount)
 		s.db.Where("status = 'firing'").Order("fired_at DESC").Limit(10).Find(&firingAlerts)
 	}
 
@@ -523,7 +530,7 @@ func (s *AIOpsService) NotifyReport(ctx context.Context, req *NotifyReportReques
 	}
 
 	// 获取通知渠道列表
-	var channels []models.MonitorNotifyChannel
+	var channels []dm.NotifyChannel
 	if err := s.db.WithContext(ctx).Where("id IN ? AND is_del = 0 AND enabled = 1", req.ChannelIDs).Find(&channels).Error; err != nil {
 		return nil, fmt.Errorf("获取通知渠道失败: %w", err)
 	}
@@ -566,7 +573,7 @@ func (s *AIOpsService) GetNotifyChannels(ctx context.Context) ([]map[string]inte
 	if s.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
-	var channels []models.MonitorNotifyChannel
+	var channels []dm.NotifyChannel
 	if err := s.db.WithContext(ctx).Where("is_del = 0 AND enabled = 1").Order("id DESC").Find(&channels).Error; err != nil {
 		return nil, err
 	}
@@ -707,7 +714,9 @@ func (s *AIOpsService) GetDashboardStats(ctx context.Context) (map[string]interf
 
 	// 当前 firing 告警数
 	var firingCount int64
-	s.db.Model(&models.MonitorAlertEvent{}).Where("status = 'firing'").Count(&firingCount)
+	if alertStats, err := s.monitorSvc.GetAlertStats(ctx); err == nil {
+		firingCount = alertStats.TotalFiring
+	}
 	stats["firing_alerts"] = firingCount
 
 	// 本周分析次数
@@ -854,7 +863,7 @@ const inspectionSystemPrompt = `你是一个专业的 Kubernetes 平台巡检专
 // Prompt 构建
 // =========================================================================
 
-func buildAlertAnalysisPrompt(event *models.MonitorAlertEvent, rule *models.MonitorAlertRule) string {
+func buildAlertAnalysisPrompt(event *dm.AlertEvent, rule *dm.AlertRule) string {
 	var sb strings.Builder
 	sb.WriteString("请分析以下 Kubernetes 告警事件：\n\n")
 	sb.WriteString(fmt.Sprintf("**告警名称**: %s\n", event.RuleName))

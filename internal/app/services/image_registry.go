@@ -9,19 +9,19 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"k8soperation/global"
-	"k8soperation/internal/app/models"
+	dm "k8soperation/internal/domain/image"
+	"k8soperation/pkg/logger"
 )
 
 // ImageRegistryService 镜像仓库服务
 type ImageRegistryService struct {
-	model *models.ImageRegistryModel
+	imgSvc *dm.ImageService
+	logger *logger.Logger
 }
 
-func NewImageRegistryService() *ImageRegistryService {
-	return &ImageRegistryService{
-		model: models.NewImageRegistryModel(),
-	}
+// ImageRegistrySvc 返回镜像仓库服务（Controller 使用）
+func (s *Services) ImageRegistrySvc() *ImageRegistryService {
+	return &ImageRegistryService{imgSvc: s.imageSvc(), logger: s.logger}
 }
 
 // RegistryListRequest 列表请求参数
@@ -39,9 +39,9 @@ type RegistryCreateRequest struct {
 	URL             string `json:"url" binding:"required,url"`
 	Username        string `json:"username"`
 	Password        string `json:"password"`
-	AccessKeyID     string `json:"access_key_id"`     // 阿里云 ACR 使用
-	AccessKeySecret string `json:"access_key_secret"` // 阿里云 ACR 使用
-	Region          string `json:"region"`            // 区域（如 cn-hangzhou）
+	AccessKeyID     string `json:"access_key_id"`
+	AccessKeySecret string `json:"access_key_secret"`
+	Region          string `json:"region"`
 	Insecure        bool   `json:"insecure"`
 	Description     string `json:"description"`
 	IsDefault       bool   `json:"is_default"`
@@ -86,14 +86,14 @@ type RegistryResponse struct {
 
 // RegistryStats 仓库统计
 type RegistryStats struct {
-	Total       int64 `json:"total"`
-	Connected   int64 `json:"connected"`
-	Disconnected int64 `json:"disconnected"`
-	TypeCounts  map[string]int64 `json:"type_counts"`
+	Total        int64            `json:"total"`
+	Connected    int64            `json:"connected"`
+	Disconnected int64            `json:"disconnected"`
+	TypeCounts   map[string]int64 `json:"type_counts"`
 }
 
 // toResponse 转换为响应结构
-func toResponse(r *models.ImageRegistry) *RegistryResponse {
+func toResponse(r *dm.ImageRegistry) *RegistryResponse {
 	return &RegistryResponse{
 		ID:           r.ID,
 		Name:         r.Name,
@@ -117,7 +117,7 @@ func toResponse(r *models.ImageRegistry) *RegistryResponse {
 
 // List 获取镜像仓库列表
 func (s *ImageRegistryService) List(req *RegistryListRequest) ([]RegistryResponse, int64, error) {
-	registries, total, err := s.model.List(req.Keyword, req.Type, req.Page, req.PageSize)
+	registries, total, err := s.imgSvc.RegistryList(req.Keyword, req.Type, req.Page, req.PageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -131,7 +131,7 @@ func (s *ImageRegistryService) List(req *RegistryListRequest) ([]RegistryRespons
 
 // ListAll 获取所有镜像仓库
 func (s *ImageRegistryService) ListAll() ([]RegistryResponse, error) {
-	registries, err := s.model.ListAll()
+	registries, err := s.imgSvc.RegistryListAll()
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *ImageRegistryService) ListAll() ([]RegistryResponse, error) {
 
 // GetByID 根据ID获取
 func (s *ImageRegistryService) GetByID(id int64) (*RegistryResponse, error) {
-	registry, err := s.model.GetByID(id)
+	registry, err := s.imgSvc.RegistryGetByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -154,38 +154,13 @@ func (s *ImageRegistryService) GetByID(id int64) (*RegistryResponse, error) {
 
 // Create 创建镜像仓库
 func (s *ImageRegistryService) Create(req *RegistryCreateRequest, userID int64) (*RegistryResponse, error) {
-	// 检查名称是否重复
-	exists, err := s.model.ExistsByName(req.Name, 0)
+	registry, err := s.imgSvc.RegistryCreateWithValidation(
+		req.Name, req.Type, req.URL, req.Username, req.Password,
+		req.AccessKeyID, req.AccessKeySecret, req.Region, req.Description,
+		req.Insecure, req.IsDefault, userID,
+	)
 	if err != nil {
 		return nil, err
-	}
-	if exists {
-		return nil, fmt.Errorf("仓库名称 '%s' 已存在", req.Name)
-	}
-
-	registry := &models.ImageRegistry{
-		Name:            req.Name,
-		Type:            req.Type,
-		URL:             strings.TrimSuffix(req.URL, "/"),
-		Username:        req.Username,
-		Password:        req.Password,
-		AccessKeyID:     req.AccessKeyID,
-		AccessKeySecret: req.AccessKeySecret,
-		Region:          req.Region,
-		Insecure:        req.Insecure,
-		Description:     req.Description,
-		IsDefault:       req.IsDefault,
-		Status:          "unknown",
-		CreatedBy:       userID,
-	}
-
-	if err := s.model.Create(registry); err != nil {
-		return nil, err
-	}
-
-	// 如果设置为默认，更新其他仓库
-	if req.IsDefault {
-		_ = s.model.SetDefault(registry.ID)
 	}
 
 	// 异步检测连接状态
@@ -196,64 +171,29 @@ func (s *ImageRegistryService) Create(req *RegistryCreateRequest, userID int64) 
 
 // Update 更新镜像仓库
 func (s *ImageRegistryService) Update(req *RegistryUpdateRequest) (*RegistryResponse, error) {
-	// 检查是否存在
-	existing, err := s.model.GetByID(req.ID)
-	if err != nil {
-		return nil, fmt.Errorf("仓库不存在")
-	}
-
-	// 检查名称是否重复
-	exists, err := s.model.ExistsByName(req.Name, req.ID)
+	registry, err := s.imgSvc.RegistryUpdateWithValidation(
+		req.ID, req.Name, req.Type, req.URL, req.Username, req.Password,
+		req.AccessKeyID, req.AccessKeySecret, req.Region, req.Description,
+		req.Insecure, req.IsDefault,
+	)
 	if err != nil {
 		return nil, err
-	}
-	if exists {
-		return nil, fmt.Errorf("仓库名称 '%s' 已存在", req.Name)
-	}
-
-	existing.Name = req.Name
-	existing.Type = req.Type
-	existing.URL = strings.TrimSuffix(req.URL, "/")
-	existing.Username = req.Username
-	if req.Password != "" {
-		existing.Password = req.Password
-	}
-	existing.AccessKeyID = req.AccessKeyID
-	if req.AccessKeySecret != "" {
-		existing.AccessKeySecret = req.AccessKeySecret
-	}
-	existing.Region = req.Region
-	existing.Insecure = req.Insecure
-	existing.Description = req.Description
-	existing.IsDefault = req.IsDefault
-
-	if err := s.model.Update(existing); err != nil {
-		return nil, err
-	}
-
-	// 如果设置为默认，更新其他仓库
-	if req.IsDefault {
-		_ = s.model.SetDefault(existing.ID)
 	}
 
 	// 异步检测连接状态
-	go s.CheckConnection(existing.ID)
+	go s.CheckConnection(registry.ID)
 
-	return toResponse(existing), nil
+	return toResponse(registry), nil
 }
 
 // Delete 删除镜像仓库
 func (s *ImageRegistryService) Delete(id int64) error {
-	_, err := s.model.GetByID(id)
-	if err != nil {
-		return fmt.Errorf("仓库不存在")
-	}
-	return s.model.Delete(id)
+	return s.imgSvc.RegistryDeleteWithValidation(id)
 }
 
 // CheckConnection 检测仓库连接状态
 func (s *ImageRegistryService) CheckConnection(id int64) error {
-	registry, err := s.model.GetByID(id)
+	registry, err := s.imgSvc.RegistryGetByID(id)
 	if err != nil {
 		return err
 	}
@@ -284,9 +224,8 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 				}
 			}
 		}
-		// 更新状态
-		if err := s.model.UpdateStatus(id, status, lastError, checkTime); err != nil {
-			global.Logger.Error("更新仓库状态失败", zap.Error(err))
+		if err := s.imgSvc.RegistryUpdateStatus(id, status, lastError, checkTime); err != nil {
+			s.logger.Error("更新仓库状态失败", zap.Error(err))
 		}
 		return nil
 	}
@@ -301,7 +240,6 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 		},
 	}
 
-	// 根据仓库类型检测不同的端点
 	checkURL := registry.URL
 	switch registry.Type {
 	case "docker":
@@ -320,7 +258,6 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 		status = "disconnected"
 		lastError = err.Error()
 	} else {
-		// 添加认证
 		if registry.Username != "" && registry.Password != "" {
 			req.SetBasicAuth(registry.Username, registry.Password)
 		}
@@ -331,7 +268,6 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 			lastError = err.Error()
 		} else {
 			defer resp.Body.Close()
-			// 2xx 或 401（需要认证但能连接）都算连接成功
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 || resp.StatusCode == 401 {
 				status = "connected"
 			} else {
@@ -341,9 +277,8 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 		}
 	}
 
-	// 更新状态
-	if err := s.model.UpdateStatus(id, status, lastError, checkTime); err != nil {
-		global.Logger.Error("更新仓库状态失败", zap.Error(err))
+	if err := s.imgSvc.RegistryUpdateStatus(id, status, lastError, checkTime); err != nil {
+		s.logger.Error("更新仓库状态失败", zap.Error(err))
 	}
 
 	return nil
@@ -351,7 +286,7 @@ func (s *ImageRegistryService) CheckConnection(id int64) error {
 
 // CheckAllConnections 检测所有仓库连接状态
 func (s *ImageRegistryService) CheckAllConnections() error {
-	registries, err := s.model.ListAll()
+	registries, err := s.imgSvc.RegistryListAll()
 	if err != nil {
 		return err
 	}
@@ -364,7 +299,7 @@ func (s *ImageRegistryService) CheckAllConnections() error {
 
 // GetStats 获取仓库统计
 func (s *ImageRegistryService) GetStats() (*RegistryStats, error) {
-	registries, err := s.model.ListAll()
+	registries, err := s.imgSvc.RegistryListAll()
 	if err != nil {
 		return nil, err
 	}
@@ -388,9 +323,5 @@ func (s *ImageRegistryService) GetStats() (*RegistryStats, error) {
 
 // SetDefault 设置默认仓库
 func (s *ImageRegistryService) SetDefault(id int64) error {
-	_, err := s.model.GetByID(id)
-	if err != nil {
-		return fmt.Errorf("仓库不存在")
-	}
-	return s.model.SetDefault(id)
+	return s.imgSvc.RegistrySetDefaultWithValidation(id)
 }

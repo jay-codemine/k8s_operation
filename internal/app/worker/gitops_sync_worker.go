@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/pkg/argocd"
@@ -17,8 +16,7 @@ import (
 // 定期检查 Argo Workflow 执行状态和 ArgoCD 同步状态
 // 防止 Webhook 丢失导致状态不更新（fallback 机制）
 type GitOpsSyncWorker struct {
-	dao          *dao.Dao
-	svc          *services.Services
+	svc *services.Services
 	pollInterval time.Duration
 	maxWaitTime  time.Duration
 	stopCh       chan struct{}
@@ -39,7 +37,6 @@ func NewGitOpsSyncWorker() *GitOpsSyncWorker {
 	}
 
 	return &GitOpsSyncWorker{
-		dao:          dao.NewDao(global.DB),
 		svc:          services.NewBackgroundServices(),
 		pollInterval: pollInterval,
 		maxWaitTime:  maxWait,
@@ -83,7 +80,7 @@ func (w *GitOpsSyncWorker) pollLoop(ctx context.Context) {
 // pollRunningWorkflows 轮询所有运行中的 GitOps 流水线
 func (w *GitOpsSyncWorker) pollRunningWorkflows(ctx context.Context) {
 	// 查询 deploy_mode=gitops 且 status=running 的 pipeline runs
-	runs, err := w.dao.PipelineRunListPendingForPoll(ctx, 30, 100)
+	runs, err := w.svc.CicdSvc().PipelineRunListPendingForPoll(ctx, 30, 100)
 	if err != nil {
 		global.Logger.Warnf("[GitOps] 查询运行中的流水线失败: %v", err)
 		return
@@ -95,7 +92,7 @@ func (w *GitOpsSyncWorker) pollRunningWorkflows(ctx context.Context) {
 			continue
 		}
 
-		pipeline, err := w.dao.PipelineGetByID(ctx, run.PipelineID)
+		pipeline, err := w.svc.CicdSvc().PipelineGetByID(ctx, run.PipelineID)
 		if err != nil || pipeline.DeployMode != models.DeployModeGitOps {
 			continue
 		}
@@ -137,8 +134,8 @@ func (w *GitOpsSyncWorker) checkWorkflowAndSyncStatus(ctx context.Context, pipel
 					global.Logger.Warnf("[GitOps] 更新构建阶段/审批状态失败: run=%d, err=%v", run.ID, err)
 				}
 
-				_ = w.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
-				_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
+				_ = w.svc.CicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
+				_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
 
 				// Workflow 成功，检查 ArgoCD sync 状态
 				if run.ArgoAppName != "" && run.SyncStatus != models.SyncStatusSynced {
@@ -153,8 +150,8 @@ func (w *GitOpsSyncWorker) checkWorkflowAndSyncStatus(ctx context.Context, pipel
 					global.Logger.Warnf("[GitOps] 更新失败阶段状态失败: run=%d, err=%v", run.ID, err)
 				}
 
-				_ = w.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
-				_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
+				_ = w.svc.CicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
+				_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 			}
 		}
 	}
@@ -182,11 +179,11 @@ func (w *GitOpsSyncWorker) checkArgoCDStatus(ctx context.Context, appName string
 		"sync_status":   status.SyncStatus,
 		"sync_revision": status.SyncRevision,
 	}
-	_ = w.dao.PipelineRunUpdate(ctx, run.ID, updates)
+	_ = w.svc.CicdSvc().PipelineRunUpdate(ctx, run.ID, updates)
 
 	// 同步完成
 	if status.SyncStatus == models.SyncStatusSynced && status.HealthStatus == "Healthy" {
-		_ = w.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
-		_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
+		_ = w.svc.CicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
+		_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
 	}
 }

@@ -1,7 +1,7 @@
 import http from '@/api/http'
 import {K8S_BASE} from '@/api/paths'
 
-const BASE = `${BASE}/ingress`
+const BASE = `${K8S_BASE}/ingress`
 
 const ingressApi = {
   // 创建 Ingress

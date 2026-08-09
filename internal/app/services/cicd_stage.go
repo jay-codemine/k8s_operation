@@ -80,7 +80,7 @@ func (s *Services) CreateRunStages(ctx context.Context, runID, pipelineID int64,
 		stageRecords = append(stageRecords, stage)
 	}
 
-	return s.dao.StageCreateBatch(ctx, stageRecords)
+	return s.cicdSvc().StageCreateBatch(ctx, stageRecords)
 }
 
 // getStageDefinitionsForPipeline 获取流水线的阶段定义
@@ -91,7 +91,7 @@ func (s *Services) getStageDefinitionsForPipeline(pipeline *models.CicdPipeline)
 	// 判断是否需要审批：pipeline 标志 OR 环境配置要求审批（双重保险）
 	needApproval := pipeline.RequireApproval
 	if !needApproval && pipeline.DeployEnv != "" {
-		env, err := s.dao.EnvironmentGetByName(context.Background(), pipeline.DeployEnv)
+		env, err := s.cicdSvc().EnvironmentGetByName(context.Background(), pipeline.DeployEnv)
 		if err == nil && env != nil && env.RequireApproval {
 			needApproval = true
 		}
@@ -120,16 +120,16 @@ func (s *Services) getStageDefinitionsForPipeline(pipeline *models.CicdPipeline)
 
 // GetRunStages 获取运行记录的所有阶段（用于前端展示）
 func (s *Services) GetRunStages(ctx context.Context, runID int64) ([]*models.StageDisplayInfo, error) {
-	stages, err := s.dao.StageListByRunID(ctx, runID)
+	stages, err := s.cicdSvc().StageListByRunID(ctx, runID)
 	if err != nil {
 		return nil, err
 	}
 	
 	// 获取流水线最新配置（用于检查部署参数是否完整）
 	var pipeline *models.CicdPipeline
-	run, _ := s.dao.PipelineRunGetByID(ctx, runID)
+	run, _ := s.cicdSvc().PipelineRunGetByID(ctx, runID)
 	if run != nil {
-		pipeline, _ = s.dao.PipelineGetByID(ctx, run.PipelineID)
+		pipeline, _ = s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	}
 	
 	result := make([]*models.StageDisplayInfo, 0, len(stages))
@@ -252,7 +252,7 @@ func (s *Services) formatStageDuration(seconds int) string {
 
 // GetStageLogs 获取阶段日志
 func (s *Services) GetStageLogs(ctx context.Context, stageID int64) (string, error) {
-	return s.dao.StageGetLogs(ctx, stageID)
+	return s.cicdSvc().StageGetLogs(ctx, stageID)
 }
 
 // ==================== 阶段状态更新 ====================
@@ -264,14 +264,14 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 	
 	// 优先用 run_id 精确匹配（避免 build_number 重用/多流水线共用同一 Jenkins Job 定位到旧记录）
 	if req.RunID > 0 {
-		if run, err := s.dao.PipelineRunGetByID(ctx, req.RunID); err == nil && run != nil {
+		if run, err := s.cicdSvc().PipelineRunGetByID(ctx, req.RunID); err == nil && run != nil {
 			runID = run.ID
 		}
 	}
 	
 	if runID == 0 && req.PipelineID > 0 {
 		// 根据 pipeline_id + build_number 查找
-		run, err := s.dao.PipelineRunGetByBuildNumber(ctx, req.PipelineID, req.BuildNumber)
+		run, err := s.cicdSvc().PipelineRunGetByBuildNumber(ctx, req.PipelineID, req.BuildNumber)
 		if err == nil && run != nil {
 			runID = run.ID
 		}
@@ -279,9 +279,9 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 	
 	if runID == 0 && req.JobName != "" {
 		// 根据 job_name + build_number 查找
-		pipeline, err := s.dao.PipelineGetByJenkinsJob(ctx, req.JobName)
+		pipeline, err := s.cicdSvc().PipelineGetByJenkinsJob(ctx, req.JobName)
 		if err == nil && pipeline != nil {
-			run, err := s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
+			run, err := s.cicdSvc().PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
 			if err == nil && run != nil {
 				runID = run.ID
 			}
@@ -298,7 +298,7 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 	}
 	
 	// 2. 查找对应的阶段
-	stage, err := s.dao.StageGetByRunIDAndType(ctx, runID, req.StageType)
+	stage, err := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, req.StageType)
 	if err != nil || stage == nil {
 		global.Logger.Debug("[阶段回调] 未找到对应阶段",
 			zap.Int64("run_id", runID),
@@ -325,7 +325,7 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 		}
 	}
 	
-	if err := s.dao.StageUpdate(ctx, stage.ID, updates); err != nil {
+	if err := s.cicdSvc().StageUpdate(ctx, stage.ID, updates); err != nil {
 		return err
 	}
 	
@@ -340,7 +340,7 @@ func (s *Services) StageCallback(ctx context.Context, req *requests.StageCallbac
 
 // UpdateStageFromJenkins 从 Jenkins 更新阶段状态
 func (s *Services) UpdateStageFromJenkins(ctx context.Context, runID int64, jenkinsStages []PipelineStageInfo) error {
-	dbStages, err := s.dao.StageListByRunID(ctx, runID)
+	dbStages, err := s.cicdSvc().StageListByRunID(ctx, runID)
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (s *Services) UpdateStageFromJenkins(ctx context.Context, runID int64, jenk
 			if jenkinsStage.Status == "success" || jenkinsStage.Status == "failed" {
 				updates["finished_at"] = time.Now().Unix()
 			}
-			_ = s.dao.StageUpdate(ctx, dbStage.ID, updates)
+			_ = s.cicdSvc().StageUpdate(ctx, dbStage.ID, updates)
 		}
 	}
 
@@ -467,7 +467,7 @@ func (s *Services) UpdateStageFromJenkins(ctx context.Context, runID int64, jenk
 // UpdateBuildStagesComplete 构建完成后更新阶段状态
 // errorMessage: Jenkins 回调时传递的错误信息，会保存到失败的阶段
 func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, status string, imageURL, imageDigest, errorMessage string) error {
-	dbStages, err := s.dao.StageListByRunID(ctx, runID)
+	dbStages, err := s.cicdSvc().StageListByRunID(ctx, runID)
 	if err != nil {
 		return err
 	}
@@ -514,33 +514,33 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 				updates["duration_sec"] = int(time.Now().Unix() - int64(stage.StartedAt))
 			}
 
-			_ = s.dao.StageUpdate(ctx, stage.ID, updates)
+			_ = s.cicdSvc().StageUpdate(ctx, stage.ID, updates)
 		}
 	}
 
 	// 如果构建成功，更新推送镜像阶段的镜像信息
 	if status == models.PipelineRunStatusSuccess && imageURL != "" {
-		pushStage, err := s.dao.StageGetByRunIDAndType(ctx, runID, models.StageTypePush)
+		pushStage, err := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, models.StageTypePush)
 		if err == nil && pushStage != nil {
-			_ = s.dao.StageUpdate(ctx, pushStage.ID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, pushStage.ID, map[string]interface{}{
 				"deploy_image": imageURL,
 			})
 		}
 	}
 
 	// 如果需要审批，将审批阶段设为等待状态
-	approvalStage, err := s.dao.StageGetByRunIDAndType(ctx, runID, models.StageTypeApproval)
+	approvalStage, err := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, models.StageTypeApproval)
 	if err == nil && approvalStage != nil && status == models.PipelineRunStatusSuccess {
 		// 幂等：只有 pending 状态才更新为 waiting，避免重复设置
 		if approvalStage.Status == models.StageStatusPending {
-			_ = s.dao.StageUpdateStatus(ctx, approvalStage.ID, models.StageStatusWaiting)
+			_ = s.cicdSvc().StageUpdateStatus(ctx, approvalStage.ID, models.StageStatusWaiting)
 		}
 
 		// 同步创建审批记录到 cicd_approval 表，对接审批管理页面
 		// 幂等：检查是否已存在审批记录，避免重复创建
-		exists, _ := s.dao.ApprovalExistsByStageID(ctx, approvalStage.ID)
+		exists, _ := s.cicdSvc().ApprovalExistsByStageID(ctx, approvalStage.ID)
 		if !exists {
-			run, _ := s.dao.PipelineRunGetByID(ctx, runID)
+			run, _ := s.cicdSvc().PipelineRunGetByID(ctx, runID)
 			if run != nil {
 				now := time.Now().Unix()
 				approval := &models.CicdApproval{
@@ -555,7 +555,7 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 					CreatedAt:     uint64(now),
 					ModifiedAt:    uint64(now),
 				}
-				_, _ = s.dao.ApprovalCreate(ctx, approval)
+				_, _ = s.cicdSvc().ApprovalCreate(ctx, approval)
 				global.Logger.Info("[流水线] 自动创建审批记录",
 					zap.Int64("stage_id", approvalStage.ID),
 					zap.Int64("pipeline_id", approvalStage.PipelineID),
@@ -563,7 +563,7 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 				)
 
 				// 发送飞书审批通知（开发自助发布 + 飞书审批模式）
-				pipeline, pErr := s.dao.PipelineGetByID(ctx, approvalStage.PipelineID)
+				pipeline, pErr := s.cicdSvc().PipelineGetByID(ctx, approvalStage.PipelineID)
 				if pErr == nil && pipeline != nil {
 					s.NotifyFeishuApproval(ctx, pipeline, run, approval)
 				}
@@ -572,12 +572,12 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 	}
 
 	// 如果不需要审批但需要部署，将部署阶段设为待执行
-	deployStage, err := s.dao.StageGetByRunIDAndType(ctx, runID, models.StageTypeDeploy)
+	deployStage, err := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, models.StageTypeDeploy)
 	if err == nil && deployStage != nil && status == models.PipelineRunStatusSuccess {
 		// 检查是否有审批阶段
 		if approvalStage == nil {
 			// 无审批阶段，部署阶段可以开始
-			_ = s.dao.StageUpdate(ctx, deployStage.ID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, deployStage.ID, map[string]interface{}{
 				"status":       models.StageStatusPending,
 				"deploy_image": imageURL,
 			})
@@ -591,7 +591,7 @@ func (s *Services) UpdateBuildStagesComplete(ctx context.Context, runID int64, s
 
 // ApproveStage 审批通过阶段
 func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64, comment string) error {
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return errors.New("阶段不存在")
 	}
@@ -615,13 +615,13 @@ func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64
 	}
 
 	// 更新审批信息
-	if err := s.dao.StageUpdateApproval(ctx, stageID, userID, "approved", comment); err != nil {
+	if err := s.cicdSvc().StageUpdateApproval(ctx, stageID, userID, "approved", comment); err != nil {
 		return err
 	}
 
 	// 同步更新 cicd_approval 表（如果存在关联记录）
-	if approval, err := s.dao.ApprovalGetByStageID(ctx, stageID); err == nil && approval != nil {
-		_ = s.dao.ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusApproved, userID, comment)
+	if approval, err := s.cicdSvc().ApprovalGetByStageID(ctx, stageID); err == nil && approval != nil {
+		_ = s.cicdSvc().ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusApproved, userID, comment)
 	}
 
 	global.Logger.Info("[流水线] 阶段审批通过",
@@ -630,12 +630,12 @@ func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64
 	)
 
 	// 检查是否有部署阶段需要启动
-	deployStage, err := s.dao.StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
+	deployStage, err := s.cicdSvc().StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
 	if err == nil && deployStage != nil {
 		// 获取构建产物镜像
-		run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+		run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 		if run != nil && run.ImageURL != "" {
-			_ = s.dao.StageUpdate(ctx, deployStage.ID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, deployStage.ID, map[string]interface{}{
 				"status":       models.StageStatusPending,
 				"deploy_image": run.ImageURL,
 			})
@@ -665,7 +665,7 @@ func (s *Services) ApproveStage(ctx context.Context, stageID int64, userID int64
 
 // RejectStage 审批拒绝阶段
 func (s *Services) RejectStage(ctx context.Context, stageID int64, userID int64, reason string) error {
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return errors.New("阶段不存在")
 	}
@@ -679,13 +679,13 @@ func (s *Services) RejectStage(ctx context.Context, stageID int64, userID int64,
 	}
 
 	// 更新审批信息
-	if err := s.dao.StageUpdateApproval(ctx, stageID, userID, "rejected", reason); err != nil {
+	if err := s.cicdSvc().StageUpdateApproval(ctx, stageID, userID, "rejected", reason); err != nil {
 		return err
 	}
 
 	// 同步更新 cicd_approval 表（如果存在关联记录）
-	if approval, err := s.dao.ApprovalGetByStageID(ctx, stageID); err == nil && approval != nil {
-		_ = s.dao.ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusRejected, userID, reason)
+	if approval, err := s.cicdSvc().ApprovalGetByStageID(ctx, stageID); err == nil && approval != nil {
+		_ = s.cicdSvc().ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusRejected, userID, reason)
 	}
 
 	global.Logger.Info("[流水线] 阶段审批拒绝",
@@ -695,20 +695,20 @@ func (s *Services) RejectStage(ctx context.Context, stageID int64, userID int64,
 	)
 
 	// 将后续阶段标记为跳过
-	stages, _ := s.dao.StageListByRunID(ctx, stage.RunID)
+	stages, _ := s.cicdSvc().StageListByRunID(ctx, stage.RunID)
 	for _, stg := range stages {
 		if stg.StageOrder > stage.StageOrder && stg.Status == models.StageStatusPending {
-			_ = s.dao.StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
+			_ = s.cicdSvc().StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
 		}
 	}
 
 	// 更新流水线运行状态为失败
-	_ = s.dao.PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
+	_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
 	
 	// 获取流水线ID并更新状态
-	run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+	run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 	if run != nil {
-		_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
+		_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 	}
 
 	return nil
@@ -719,7 +719,7 @@ func (s *Services) RejectStage(ctx context.Context, stageID int64, userID int64,
 // ExecuteDeployStage 执行部署阶段
 // 优化：重新部署时优先使用流水线最新配置
 func (s *Services) ExecuteDeployStage(ctx context.Context, req *requests.StageDeployRequest, userID int64) error {
-	stage, err := s.dao.StageGetByID(ctx, req.StageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, req.StageID)
 	if err != nil {
 		return errors.New("阶段不存在")
 	}
@@ -734,13 +734,13 @@ func (s *Services) ExecuteDeployStage(ctx context.Context, req *requests.StageDe
 	}
 
 	// 获取流水线运行记录
-	run, err := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+	run, err := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 	if err != nil {
 		return errors.New("运行记录不存在")
 	}
 
 	// 获取流水线最新配置（支持用户修改配置后手动执行）
-	pipeline, _ := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 
 	// 确定部署参数：优先级 请求参数 > 流水线最新配置 > 阶段记录
 	// 重新部署时，优先使用流水线最新配置，确保用户修改配置后生效
@@ -817,8 +817,8 @@ func (s *Services) ExecuteDeployStage(ctx context.Context, req *requests.StageDe
 	}
 
 	// 更新阶段为执行中
-	_ = s.dao.StageUpdateStatus(ctx, stage.ID, models.StageStatusRunning)
-	_ = s.dao.StageUpdateDeploy(ctx, stage.ID, clusterID, namespace, workloadKind, workloadName, container, image, 0)
+	_ = s.cicdSvc().StageUpdateStatus(ctx, stage.ID, models.StageStatusRunning)
+	_ = s.cicdSvc().StageUpdateDeploy(ctx, stage.ID, clusterID, namespace, workloadKind, workloadName, container, image, 0)
 
 	global.Logger.Info("[流水线] 开始执行部署阶段",
 		zap.Int64("stage_id", stage.ID),
@@ -847,7 +847,7 @@ func (s *Services) executeDeployAsync(ctx context.Context, stageID int64, run *m
 
 	// ===== 发布联动告警静默 =====
 	var silenceRuleID int64
-	pipeline, _ := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	if pipeline != nil && pipeline.EnableDeploySilence {
 		silenceInfo, silenceErr := s.CreateDeploySilence(ctx, pipeline, namespace, workloadName)
 		if silenceErr != nil {
@@ -1145,7 +1145,7 @@ func (s *Services) waitDeploymentRolloutWithUpdate(ctx context.Context, client k
 // updateStageLogsIfNeeded 更新阶段日志到数据库（实时日志）
 func (s *Services) updateStageLogsIfNeeded(ctx context.Context, stageID int64, logs string) {
 	if stageID > 0 && logs != "" {
-		_ = s.dao.StageUpdate(ctx, stageID, map[string]interface{}{
+		_ = s.cicdSvc().StageUpdate(ctx, stageID, map[string]interface{}{
 			"logs": logs,
 		})
 	}
@@ -1457,28 +1457,28 @@ func (s *Services) finishDeployStage(ctx context.Context, stageID int64, run *mo
 	if oldImage != "" {
 		updates["deploy_old_image"] = oldImage
 	}
-	_ = s.dao.StageUpdate(ctx, stageID, updates)
+	_ = s.cicdSvc().StageUpdate(ctx, stageID, updates)
 
 	// 更新流水线运行状态
 	runStatus := models.PipelineRunStatusSuccess
 	if status == models.StageStatusFailed {
 		runStatus = models.PipelineRunStatusFailed
 	}
-	_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, runStatus)
-	_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, runStatus)
+	_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, runStatus)
+	_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, runStatus)
 
 	// 如果部署失败，更新运行记录的错误信息
 	if status == models.StageStatusFailed && errMsg != "" {
-		_ = s.dao.PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
+		_ = s.cicdSvc().PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
 	}
 
 	// 获取阶段和流水线信息用于通知
-	stage, _ := s.dao.StageGetByID(ctx, stageID)
-	pipeline, _ := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	stage, _ := s.cicdSvc().StageGetByID(ctx, stageID)
+	pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 
 	// 如果成功，更新流水线部署信息
 	if status == models.StageStatusSuccess && stage != nil {
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(time.Now().Unix()), "success", version)
+		_ = s.cicdSvc().PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(time.Now().Unix()), "success", version)
 	}
 
 	// 发送钉钉通知（异步）
@@ -1518,7 +1518,7 @@ type RollbackResult struct {
 // 安全增强：权限校验、完整审计日志
 func (s *Services) CancelDeployStage(ctx context.Context, stageID int64, userID int64) (*CancelDeployStageResult, error) {
 	// 1. 获取阶段信息
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return nil, errors.New("阶段不存在")
 	}
@@ -1528,11 +1528,11 @@ func (s *Services) CancelDeployStage(ctx context.Context, stageID int64, userID 
 	}
 
 	// 2. 权限校验：验证用户是否有权操作该流水线
-	run, err := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+	run, err := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 	if err != nil {
 		return nil, errors.New("运行记录不存在")
 	}
-	pipeline, err := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	if err != nil {
 		return nil, errors.New("流水线不存在")
 	}
@@ -1541,7 +1541,7 @@ func (s *Services) CancelDeployStage(ctx context.Context, stageID int64, userID 
 
 	// 3. 如果是 pending 状态，直接取消
 	if stage.Status == models.StageStatusPending {
-		_ = s.dao.StageUpdate(ctx, stageID, map[string]interface{}{
+		_ = s.cicdSvc().StageUpdate(ctx, stageID, map[string]interface{}{
 			"status":        models.StageStatusSkipped,
 			"error_message": "用户取消",
 			"finished_at":   time.Now().Unix(),
@@ -1575,7 +1575,7 @@ func (s *Services) CancelDeployStage(ctx context.Context, stageID int64, userID 
 		}
 
 		// 更新阶段状态
-		_ = s.dao.StageUpdate(ctx, stageID, map[string]interface{}{
+		_ = s.cicdSvc().StageUpdate(ctx, stageID, map[string]interface{}{
 			"status":        models.StageStatusFailed,
 			"error_message": fmt.Sprintf("用户取消，已回滚到 %s", rsName),
 			"finished_at":   time.Now().Unix(),
@@ -1624,7 +1624,7 @@ func (s *Services) RollbackDeployStage(ctx context.Context, stageID int64, targe
 	}
 
 	// 2. 获取阶段信息
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return &RollbackResult{
 			Success:    false,
@@ -1657,7 +1657,7 @@ func (s *Services) RollbackDeployStage(ctx context.Context, stageID int64, targe
 	}
 
 	// 3. 权限校验：验证用户是否有权操作该流水线
-	run, err := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+	run, err := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 	if err != nil {
 		return &RollbackResult{
 			Success:    false,
@@ -1667,7 +1667,7 @@ func (s *Services) RollbackDeployStage(ctx context.Context, stageID int64, targe
 			Message:    "运行记录不存在",
 		}, errors.New("运行记录不存在")
 	}
-	pipeline, err := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	if err != nil {
 		return &RollbackResult{
 			Success:    false,
@@ -2089,7 +2089,7 @@ func (s *Services) rollbackDeployment(ctx context.Context, stage *models.CicdPip
 // GetDeploymentHistory 获取工作负载的历史版本列表
 // 支持 Deployment（ReplicaSet）、StatefulSet/DaemonSet（ControllerRevision）
 func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*DeploymentRevision, error) {
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return nil, errors.New("阶段不存在")
 	}
@@ -2101,9 +2101,9 @@ func (s *Services) GetDeploymentHistory(ctx context.Context, stageID int64) ([]*
 	// 确定工作负载类型：优先从流水线配置获取，回退到阶段记录
 	workloadKind := stage.DeployWorkloadKind
 	if workloadKind == "" {
-		run, runErr := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+		run, runErr := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 		if runErr == nil && run != nil {
-			pipeline, pipeErr := s.dao.PipelineGetByID(ctx, run.PipelineID)
+			pipeline, pipeErr := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 			if pipeErr == nil && pipeline != nil {
 				workloadKind = pipeline.TargetWorkloadKind
 			}

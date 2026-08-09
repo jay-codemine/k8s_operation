@@ -7,21 +7,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"k8soperation/global"
 	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 )
 
 // MonitoringRouter 监控路由
 type MonitoringRouter struct {
-	svc     *services.MonitoringService
-	lokiURL string
+	prometheusURL string
+	lokiURL       string
 }
 
 // NewMonitoringRouter 创建监控路由（传入 Prometheus 和 Loki URL）
 func NewMonitoringRouter(prometheusURL, lokiURL string) *MonitoringRouter {
 	return &MonitoringRouter{
-		svc:     services.NewMonitoringService(global.DB, prometheusURL),
-		lokiURL: lokiURL,
+		prometheusURL: prometheusURL,
+		lokiURL:       lokiURL,
 	}
 }
 
@@ -66,7 +66,7 @@ func (r *MonitoringRouter) Inject(router *gin.RouterGroup) {
 // GetOverview 获取集群监控总览
 func (r *MonitoringRouter) GetOverview(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	overview, err := r.svc.GetClusterOverview(ctx)
+	overview, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetClusterOverview(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -77,7 +77,7 @@ func (r *MonitoringRouter) GetOverview(c *gin.Context) {
 // GetNodeMetrics 获取节点指标
 func (r *MonitoringRouter) GetNodeMetrics(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	nodes, err := r.svc.GetNodeMetrics(ctx)
+	nodes, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetNodeMetrics(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -96,7 +96,7 @@ func (r *MonitoringRouter) GetTrend(c *gin.Context) {
 	}
 
 	ctx := ctxWithDS(c)
-	trends, err := r.svc.GetResourceTrend(ctx, resource, duration)
+	trends, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetResourceTrend(ctx, resource, duration)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -110,7 +110,7 @@ func (r *MonitoringRouter) GetTopPods(c *gin.Context) {
 	limit := 10
 
 	ctx := ctxWithDS(c)
-	pods, err := r.svc.GetTopPods(ctx, metric, limit)
+	pods, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetTopPods(ctx, metric, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -121,10 +121,10 @@ func (r *MonitoringRouter) GetTopPods(c *gin.Context) {
 // HealthCheck 检查 Prometheus 连通性
 func (r *MonitoringRouter) HealthCheck(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	healthy := r.svc.IsHealthy(ctx)
+	healthy := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).IsHealthy(ctx)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
-		"data":    gin.H{"prometheus": healthy, "url": r.svc.GetPrometheusURL(ctx)},
+		"data":    gin.H{"prometheus": healthy, "url": middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetPrometheusURL(ctx)},
 		"message": "ok",
 	})
 }
@@ -132,7 +132,7 @@ func (r *MonitoringRouter) HealthCheck(c *gin.Context) {
 // GetHealthScore 集群健康评分
 func (r *MonitoringRouter) GetHealthScore(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	score, err := r.svc.GetClusterHealthScore(ctx)
+	score, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetClusterHealthScore(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -149,7 +149,7 @@ func (r *MonitoringRouter) GetHeatmap(c *gin.Context) {
 		duration = 1 * time.Hour
 	}
 	ctx := ctxWithDS(c)
-	cells, err := r.svc.GetNodeHeatmap(ctx, metric, duration)
+	cells, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetNodeHeatmap(ctx, metric, duration)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -160,7 +160,7 @@ func (r *MonitoringRouter) GetHeatmap(c *gin.Context) {
 // GetPodStatus Pod 状态分布
 func (r *MonitoringRouter) GetPodStatus(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	items, err := r.svc.GetPodStatusDistribution(ctx)
+	items, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetPodStatusDistribution(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -171,7 +171,7 @@ func (r *MonitoringRouter) GetPodStatus(c *gin.Context) {
 // GetAbnormalPods 重启异常的 Pod
 func (r *MonitoringRouter) GetAbnormalPods(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	pods, err := r.svc.GetAbnormalPods(ctx, 1, 20)
+	pods, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetAbnormalPods(ctx, 1, 20)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -182,7 +182,7 @@ func (r *MonitoringRouter) GetAbnormalPods(c *gin.Context) {
 // GetNamespaceMetrics Namespace 聚合指标
 func (r *MonitoringRouter) GetNamespaceMetrics(c *gin.Context) {
 	ctx := ctxWithDS(c)
-	items, err := r.svc.GetNamespaceMetrics(ctx, 20)
+	items, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetNamespaceMetrics(ctx, 20)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -203,7 +203,7 @@ func (r *MonitoringRouter) GetNodeDetail(c *gin.Context) {
 		duration = 1 * time.Hour
 	}
 	ctx := ctxWithDS(c)
-	detail, err := r.svc.GetNodeDetail(ctx, instance, duration)
+	detail, err := middlewares.NewServicesFromContext(c).PrometheusSvc(r.prometheusURL).GetNodeDetail(ctx, instance, duration)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return

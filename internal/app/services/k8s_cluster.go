@@ -3,39 +3,46 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"go.uber.org/zap"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	"k8soperation/internal/errorcode"
+	"k8soperation/internal/infra/persistence"
 	"k8soperation/pkg/utils"
-	"strings"
-	"time"
+
+	dm "k8soperation/internal/domain/k8s"
 )
 
+func (s *Services) clusterSvc() *dm.ClusterService {
+	return dm.NewClusterService(persistence.NewClusterRepository(s.db), s.logger, s.eventBus)
+}
+
+func k8sConnTimeout() int {
+	if global.ClusterTTL != nil {
+		return global.ClusterTTL.ConnectionTimeout
+	}
+	return 0
+}
+
 func (s *Services) K8sClusterCreate(ctx context.Context, param *requests.K8sClusterCreateRequest) error {
-	return s.dao.KubeClusterCreate(ctx, param.ClusterName, param.ClusterVersion, param.KubeConfig)
+	return s.clusterSvc().Create(ctx, param.ClusterName, param.ClusterVersion, param.KubeConfig)
 }
 
 // K8sClusterGetByName 按名称查询集群（用于启动时复用已有记录，避免重复创建）
 func (s *Services) K8sClusterGetByName(ctx context.Context, name string) (*models.K8sCluster, error) {
-	return s.dao.KubeClusterGetByName(ctx, name)
+	return s.clusterSvc().GetByName(ctx, name)
 }
 
 func (s *Services) K8sClusterUpdate(ctx context.Context, param *requests.K8sClusterUpdateRequest) error {
-	// Update：不再接收 status
-	// kubeconfig 为空时：不覆盖 kube_config；同时也不强制改 status
-	// kubeconfig 非空时：覆盖 kube_config，并把 status 置 Pending(2)，清空 last_error/last_check_at
 	kubeConfigPlain := strings.TrimSpace(param.KubeConfig)
 	hasKC := kubeConfigPlain != ""
-	// 注：更新会刷新 modified_at，而客户端缓存与连接失败负缓存均以 modified_at 作为版本，
-	// 因此配置变更后两者自然失效，下次访问将按新配置重连。
-	return s.dao.KubeClusterUpdate(ctx,
+	return s.clusterSvc().Update(ctx,
 		param.ID,
 		param.ClusterName,
 		param.ClusterVersion,
@@ -45,7 +52,7 @@ func (s *Services) K8sClusterUpdate(ctx context.Context, param *requests.K8sClus
 }
 
 func (s *Services) K8sClusterDelete(ctx context.Context, param *requests.K8sClusterDeleteRequest) error {
-	return s.dao.KubeClusterDelete(ctx, param.ID)
+	return s.clusterSvc().Delete(ctx, param.ID)
 }
 
 // K8sClusterBatchDelete 批量删除集群
@@ -53,43 +60,64 @@ func (s *Services) K8sClusterBatchDelete(ctx context.Context, ids []uint32) (int
 	if len(ids) == 0 {
 		return 0, fmt.Errorf("集群ID列表不能为空")
 	}
-	return s.dao.KubeClusterBatchDelete(ctx, ids)
+	return s.clusterSvc().BatchDelete(ctx, ids)
 }
 
 func (s *Services) K8sClusterList(ctx context.Context, param *requests.K8sClusterListRequest,
 ) (list []*models.K8sCluster, total int64, err error) {
-	return s.dao.KubeClusterList(ctx, param)
+	return s.clusterSvc().List(ctx, param.ClusterName, param.Page, param.Limit)
 }
 
 func (s *Services) K8sClusterInit(ctx context.Context, param *requests.K8sClusterInitRequest) (*K8sClients, error) {
 	now := utils.NowUnix()
 
-	// 1) 取 kubeconfig（DAO 返回明文）
 	cfg, err := s.mustFromDB(ctx, param.ID)
 	if err != nil {
-		_ = s.dao.KubeClusterMarkCheckResult(ctx, param.ID, models.ClusterStatusBad, now, err.Error())
+		_ = s.clusterSvc().MarkCheckResult(ctx, param.ID, models.ClusterStatusBad, now, err.Error())
 		return nil, errorcode.ErrorClusterInitFailed
 	}
 
-	// 2) build clients
-	clients, err := s.buildClients(cfg)
+	clients, err := dm.BuildClients(cfg, k8sConnTimeout())
 	if err != nil {
-		_ = s.dao.KubeClusterMarkCheckResult(ctx, param.ID, models.ClusterStatusBad, now, err.Error())
+		_ = s.clusterSvc().MarkCheckResult(ctx, param.ID, models.ClusterStatusBad, now, err.Error())
 		return nil, errorcode.ErrorClusterInitFailed
 	}
 
-	// 3) 成功：写库 status=OK，清空 last_error
-	if err := s.dao.KubeClusterMarkCheckResult(ctx, param.ID, models.ClusterStatusOK, now, ""); err != nil {
-		// 写库失败不影响“已连通”的事实，但你可以选择返回错误
+	if err := s.clusterSvc().MarkCheckResult(ctx, param.ID, models.ClusterStatusOK, now, ""); err != nil {
 		global.Logger.Warn("mark check result failed", zap.Uint32("cluster_id", param.ID), zap.Error(err))
 	}
 
 	return clients, nil
 }
 
-// mustFromDB：DAO 已返回明文 kubeconfig（不要在 service 再 base64 decode）
+// GetCluster 实现 domain/k8s.ClusterClientProvider 接口
+func (s *Services) GetCluster(ctx context.Context, clusterID uint32) (*dm.Cluster, error) {
+	c, err := s.clusterSvc().GetByIDEncrypted(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return &dm.Cluster{
+		ID:             c.ID,
+		ClusterName:    c.ClusterName,
+		ClusterVersion: c.ClusterVersion,
+		KubeConfig:     c.KubeConfig,
+		Status:         c.Status,
+		ModifiedAt:     c.ModifiedAt,
+	}, nil
+}
+
+// BuildClientsForCluster 实现 domain/k8s.ClusterClientProvider 接口
+func (s *Services) BuildClientsForCluster(ctx context.Context, clusterID uint32) (*dm.K8sClients, error) {
+	cfg, err := s.mustFromDB(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return dm.BuildClients(cfg, k8sConnTimeout())
+}
+
+// mustFromDB 从DB获取明文kubeconfig
 func (s *Services) mustFromDB(ctx context.Context, clusterID uint32) (*rest.Config, error) {
-	kc, err := s.dao.KubeClusterGetByID(ctx, clusterID)
+	kc, err := s.clusterSvc().GetByID(ctx, clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,118 +134,4 @@ func (s *Services) mustFromDB(ctx context.Context, clusterID uint32) (*rest.Conf
 
 	global.Logger.Info("init from DB kubeconfig (plain)", zap.Uint32("cluster_id", clusterID))
 	return cfg, nil
-}
-
-func (s *Services) buildClients(cfg *rest.Config) (*K8sClients, error) {
-	tuneRESTConfig(cfg)
-
-	kube, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create kube client: %w", err)
-	}
-
-	// 关键：验证 API Server 连通性，避免缓存无效客户端
-	if _, err := kube.Discovery().ServerVersion(); err != nil {
-		return nil, fmt.Errorf("API Server connectivity check failed: %w", err)
-	}
-
-	// DynamicClient: 支持任意 CRD/CR 资源操作
-	dynClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	// metrics 非硬依赖：失败只告警
-	var mc *metricsclient.Clientset
-	if m, mErr := metricsclient.NewForConfig(cfg); mErr != nil {
-		global.Logger.Warn("init MetricsClient failed", zap.Error(mErr))
-	} else {
-		mc = m
-	}
-
-	// 探测 events.k8s.io/v1
-	supports := false
-	if _, err := kube.Discovery().ServerResourcesForGroupVersion("events.k8s.io/v1"); err == nil {
-		supports = true
-	}
-
-	return &K8sClients{
-		Config:       cfg,
-		Kube:         kube,
-		Dynamic:      dynClient,
-		Metrics:      mc,
-		SupportsEvV1: supports,
-	}, nil
-}
-
-func tuneRESTConfig(cfg *rest.Config) {
-	cfg.UserAgent = "k8soperation/1.0"
-	cfg.QPS = 50
-	cfg.Burst = 100
-	// 使用配置的超时时间，默认 30s
-	timeout := 30
-	if global.ClusterTTL != nil && global.ClusterTTL.ConnectionTimeout > 0 {
-		timeout = global.ClusterTTL.ConnectionTimeout
-	}
-	cfg.Timeout = time.Duration(timeout) * time.Second
-
-	// 强制跳过 TLS 验证，支持自签名证书集群
-	// 生产环境建议配置正确的 CA 证书
-	cfg.TLSClientConfig.Insecure = true
-	cfg.TLSClientConfig.CAData = nil
-	cfg.TLSClientConfig.CAFile = ""
-}
-
-// BuildClientsFromKubeconfig 从 kubeconfig 字符串直接构建客户端（不经过数据库）
-// 用于启动时本地 kubeconfig 回退场景
-func BuildClientsFromKubeconfig(kubeConfigPlain string) (*K8sClients, error) {
-	plain := strings.TrimSpace(kubeConfigPlain)
-	if plain == "" {
-		return nil, fmt.Errorf("empty kubeconfig")
-	}
-
-	cfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(plain))
-	if err != nil {
-		return nil, fmt.Errorf("parse kubeconfig failed: %w", err)
-	}
-
-	tuneRESTConfig(cfg)
-
-	kube, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create kube client: %w", err)
-	}
-
-	// 验证 API Server 连通性
-	if _, err := kube.Discovery().ServerVersion(); err != nil {
-		return nil, fmt.Errorf("API Server connectivity check failed: %w", err)
-	}
-
-	// DynamicClient
-	dynClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	// metrics 非硬依赖
-	var mc *metricsclient.Clientset
-	if m, mErr := metricsclient.NewForConfig(cfg); mErr != nil {
-		global.Logger.Warn("init MetricsClient failed", zap.Error(mErr))
-	} else {
-		mc = m
-	}
-
-	// 探测 events.k8s.io/v1
-	supports := false
-	if _, err := kube.Discovery().ServerResourcesForGroupVersion("events.k8s.io/v1"); err == nil {
-		supports = true
-	}
-
-	return &K8sClients{
-		Config:       cfg,
-		Kube:         kube,
-		Dynamic:      dynClient,
-		Metrics:      mc,
-		SupportsEvV1: supports,
-	}, nil
 }

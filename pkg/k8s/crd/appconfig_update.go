@@ -2,14 +2,13 @@ package crd
 
 import (
 	"context"
-	"k8soperation/internal/app/dao"
 
 	"k8soperation/internal/app/requests"
 
 	appv1alpha1 "gitee.com/jay-kim/appconfig-operator/api/v1alpha1"
 )
 
-func UpdateAppConfig(ctx context.Context, d *dao.KubeAppConfig, req *requests.KubeAppConfigUpdateRequest) (*appv1alpha1.AppConfig, error) {
+func UpdateAppConfig(ctx context.Context, d *KubeAppConfig, req *requests.KubeAppConfigUpdateRequest) (*appv1alpha1.AppConfig, error) {
 	app, err := d.Get(ctx, req.Namespace, req.AppName)
 	if err != nil {
 		return nil, err

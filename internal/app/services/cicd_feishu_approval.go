@@ -53,7 +53,7 @@ func (s *Services) NotifyFeishuApproval(ctx context.Context, pipeline *models.Ci
 	}
 
 	// 保存 Token 到审批记录
-	_ = s.dao.ApprovalUpdate(ctx, approval.ID, map[string]interface{}{
+	_ = s.cicdSvc().ApprovalUpdate(ctx, approval.ID, map[string]interface{}{
 		"feishu_token": token,
 	})
 
@@ -86,7 +86,7 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 	}
 
 	// 根据 Token 查找审批记录
-	approval, err := s.dao.ApprovalGetByFeishuToken(ctx, req.Token)
+	approval, err := s.cicdSvc().ApprovalGetByFeishuToken(ctx, req.Token)
 	if err != nil {
 		return errors.New("审批记录不存在或Token无效")
 	}
@@ -98,7 +98,7 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 
 	// 检查是否过期
 	if approval.ExpireTime > 0 && uint64(time.Now().Unix()) > approval.ExpireTime {
-		_ = s.dao.ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusExpired, 0, "")
+		_ = s.cicdSvc().ApprovalUpdateStatus(ctx, approval.ID, models.ApprovalStatusExpired, 0, "")
 		return errors.New("该审批申请已过期")
 	}
 
@@ -113,7 +113,7 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 	// 使用系统用户ID（飞书回调无登录态，用 0 表示飞书审批）
 	var approveUserID int64 = 0
 
-	if err := s.dao.ApprovalUpdateStatus(ctx, approval.ID, status, approveUserID, req.Reason); err != nil {
+	if err := s.cicdSvc().ApprovalUpdateStatus(ctx, approval.ID, status, approveUserID, req.Reason); err != nil {
 		return err
 	}
 
@@ -131,10 +131,10 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 				// 还有下一级，创建下一级审批
 				nextID, nextErr := s.CreateNextLevelApproval(ctx, approval)
 				if nextErr == nil && nextID > 0 {
-					nextApproval, _ := s.dao.ApprovalGetByID(ctx, nextID)
+					nextApproval, _ := s.cicdSvc().ApprovalGetByID(ctx, nextID)
 					if nextApproval != nil {
-						pipeline, _ := s.dao.PipelineGetByID(ctx, nextApproval.PipelineID)
-						run, _ := s.dao.PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
+						pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, nextApproval.PipelineID)
+						run, _ := s.cicdSvc().PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
 						if pipeline != nil && run != nil {
 							s.NotifyFeishuApproval(ctx, pipeline, run, nextApproval)
 						}
@@ -146,16 +146,16 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 			}
 
 			// 最后一级通过：更新阶段审批状态，启动部署
-			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, approveUserID, "approved", req.Reason)
+			_ = s.cicdSvc().StageUpdateApproval(ctx, approval.StageID, approveUserID, "approved", req.Reason)
 
 			// 启动部署阶段
-			stage, stageErr := s.dao.StageGetByID(ctx, approval.StageID)
+			stage, stageErr := s.cicdSvc().StageGetByID(ctx, approval.StageID)
 			if stageErr == nil && stage != nil {
-				deployStage, dErr := s.dao.StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
+				deployStage, dErr := s.cicdSvc().StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
 				if dErr == nil && deployStage != nil {
-					run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+					run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 					if run != nil && run.ImageURL != "" {
-						_ = s.dao.StageUpdate(ctx, deployStage.ID, map[string]interface{}{
+						_ = s.cicdSvc().StageUpdate(ctx, deployStage.ID, map[string]interface{}{
 							"status":       models.StageStatusPending,
 							"deploy_image": run.ImageURL,
 						})
@@ -168,21 +168,21 @@ func (s *Services) HandleFeishuApprovalCallback(ctx context.Context, req *Feishu
 			}
 		} else {
 			// 拒绝：标记后续阶段为跳过
-			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, approveUserID, "rejected", req.Reason)
+			_ = s.cicdSvc().StageUpdateApproval(ctx, approval.StageID, approveUserID, "rejected", req.Reason)
 
-			stage, stageErr := s.dao.StageGetByID(ctx, approval.StageID)
+			stage, stageErr := s.cicdSvc().StageGetByID(ctx, approval.StageID)
 			if stageErr == nil && stage != nil {
-				stages, _ := s.dao.StageListByRunID(ctx, stage.RunID)
+				stages, _ := s.cicdSvc().StageListByRunID(ctx, stage.RunID)
 				for _, stg := range stages {
 					if stg.StageOrder > stage.StageOrder && stg.Status == models.StageStatusPending {
-						_ = s.dao.StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
+						_ = s.cicdSvc().StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
 					}
 				}
 				// 更新流水线运行状态为失败
-				_ = s.dao.PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
-				run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+				_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
+				run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 				if run != nil {
-					_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
+					_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 				}
 			}
 		}
@@ -352,7 +352,7 @@ func (s *Services) notifyFeishuApprovalResult(ctx context.Context, approval *mod
 	// 获取流水线名称
 	pipelineName := "未知流水线"
 	if approval.PipelineID > 0 {
-		pipeline, err := s.dao.PipelineGetByID(ctx, approval.PipelineID)
+		pipeline, err := s.cicdSvc().PipelineGetByID(ctx, approval.PipelineID)
 		if err == nil && pipeline != nil {
 			pipelineName = pipeline.Name
 		}

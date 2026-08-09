@@ -4,38 +4,54 @@ import (
 	"gorm.io/gorm"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/infra"
+	"k8soperation/internal/domain/events"
+	"k8soperation/pkg/logger"
+	"k8soperation/pkg/tenant"
 )
 
+var sharedEventBus = events.NewEventBus(global.Logger)
+
 type Services struct {
-	dao    *dao.Dao
-	stream *infra.RedisStream
+	db        *gorm.DB
+	stream    *infra.RedisStream
+	logger    *logger.Logger
+	eventBus  *events.EventBus
+	tenantID  uint32
 }
 
 // NewServices 创建全局 Services 实例（启动期/后台 Worker 使用 global.DB）
 func NewServices() *Services {
 	return &Services{
-		dao:    dao.NewDao(global.DB),
-		stream: infra.NewRedisStream(global.RedisCli),
+		db:       global.DB,
+		stream:   infra.NewRedisStream(global.RedisCli),
+		logger:   global.Logger,
+		eventBus: sharedEventBus,
 	}
 }
 
 // NewServicesWithDB 创建租户隔离的 Services 实例（HTTP 请求使用）
-// db 应为 middlewares.GetTenantDB(c) 返回的租户隔离 DB
 func NewServicesWithDB(db *gorm.DB) *Services {
+	tid, _ := tenant.GetTenantID(db)
 	return &Services{
-		dao:    dao.NewDao(db),
-		stream: infra.NewRedisStream(global.RedisCli),
+		db:       db,
+		stream:   infra.NewRedisStream(global.RedisCli),
+		logger:   global.Logger,
+		eventBus: sharedEventBus,
+		tenantID: tid,
 	}
 }
 
 // NewBackgroundServices 启动期/后台任务使用 global.DB（跨租户）
 func NewBackgroundServices() *Services {
 	return &Services{
-		dao: dao.NewDao(global.DB),
+		db:       global.DB,
+		stream:   infra.NewRedisStream(global.RedisCli),
+		logger:   global.Logger,
+		eventBus: sharedEventBus,
 	}
 }
 
-// DB 返回底层 *gorm.DB，供 Service 层执行复杂查询（领域化过渡期使用）
-func (s *Services) DB() *gorm.DB { return s.dao.DB() }
+// EventBus 返回共享事件总线（用于注册全局事件处理器）
+func EventBus() *events.EventBus { return sharedEventBus }
+

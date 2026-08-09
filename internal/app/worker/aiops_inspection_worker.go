@@ -16,7 +16,7 @@ type AIOpsInspectionWorker struct {
 	interval time.Duration
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
-	svc      *services.AIOpsService
+	svc      *services.Services
 }
 
 // NewAIOpsInspectionWorker 创建巡检 Worker
@@ -25,7 +25,7 @@ func NewAIOpsInspectionWorker() *AIOpsInspectionWorker {
 	return &AIOpsInspectionWorker{
 		interval: 6 * time.Hour,
 		stopCh:   make(chan struct{}),
-		svc:      services.NewAIOpsService(global.DB),
+		svc:      services.NewBackgroundServices(),
 	}
 }
 
@@ -80,7 +80,7 @@ func (w *AIOpsInspectionWorker) runOnce() {
 		return
 	}
 
-	_, err := w.svc.RunInspection(ctx, 0) // triggerBy=0 表示系统定时
+	_, err := w.svc.AIOpsSvc().RunInspection(ctx, 0) // triggerBy=0 表示系统定时
 	if err != nil {
 		global.Logger.Warn("[AIOps-InspectionWorker] 巡检执行失败", zap.Error(err))
 		return

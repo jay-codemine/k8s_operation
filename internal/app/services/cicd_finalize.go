@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
-	st, err := s.dao.CicdTaskStatsByRelease(ctx, releaseID)
+	st, err := s.cicdSvc().CicdTaskStatsByRelease(ctx, releaseID)
 	if err != nil {
 		return
 	}
@@ -20,7 +20,7 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 	if st.Failed > 0 {
 		// 聚合失败任务的具体错误信息，返回给前端方便用户排查
 		failMsg := s.aggregateFailedTaskMessages(ctx, releaseID)
-		_, _ = s.dao.CicdReleaseUpdateStatusCAS(ctx, releaseID,
+		_, _ = s.cicdSvc().CicdReleaseUpdateStatusCAS(ctx, releaseID,
 			[]string{"Pending", "Queued", "Running"},
 			"Failed",
 			failMsg,
@@ -38,7 +38,7 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 	}
 
 	// 3) 全部结束且无失败 => Succeeded
-	_, _ = s.dao.CicdReleaseUpdateStatusCAS(ctx, releaseID,
+	_, _ = s.cicdSvc().CicdReleaseUpdateStatusCAS(ctx, releaseID,
 		[]string{"Pending", "Queued", "Running"},
 		"Succeeded",
 		"all tasks succeeded",
@@ -49,7 +49,7 @@ func (s *Services) tryFinalizeRelease(ctx context.Context, releaseID int64) {
 
 // aggregateFailedTaskMessages 聚合失败任务的错误信息，生成人类可读的失败原因
 func (s *Services) aggregateFailedTaskMessages(ctx context.Context, releaseID int64) string {
-	tasks, err := s.dao.CicdTasksByReleaseID(ctx, releaseID)
+	tasks, err := s.cicdSvc().CicdTasksByReleaseID(ctx, releaseID)
 	if err != nil {
 		return "部分任务执行失败"
 	}
@@ -81,7 +81,7 @@ func (s *Services) aggregateFailedTaskMessages(ctx context.Context, releaseID in
 // sendReleaseFinalizeNotification 发送发布单完结通知（飞书/钉钉）
 func (s *Services) sendReleaseFinalizeNotification(ctx context.Context, releaseID int64, success bool, message string) {
 	// 获取发布单信息
-	rel, err := s.dao.CicdReleaseGetByID(ctx, releaseID)
+	rel, err := s.cicdSvc().CicdReleaseGetByID(ctx, releaseID)
 	if err != nil {
 		global.Logger.Warn("[通知] 获取发布单失败，跳过通知",
 			zap.Int64("release_id", releaseID),
@@ -103,9 +103,9 @@ func (s *Services) sendReleaseFinalizeNotification(ctx context.Context, releaseI
 	buildURL := ""
 	platformURL := s.getPlatformURL()
 	if rel.BuildID > 0 {
-		run, runErr := s.dao.PipelineRunGetByID(ctx, rel.BuildID)
+		run, runErr := s.cicdSvc().PipelineRunGetByID(ctx, rel.BuildID)
 		if runErr == nil && run != nil {
-			pipeline, pErr := s.dao.PipelineGetByID(ctx, run.PipelineID)
+			pipeline, pErr := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 			if pErr == nil && pipeline != nil {
 				pipelineName = pipeline.Name
 				if platformURL != "" {

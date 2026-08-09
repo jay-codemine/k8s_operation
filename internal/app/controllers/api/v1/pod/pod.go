@@ -768,7 +768,8 @@ func (c *PodController) Yaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := podpkg.GetYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubePodGetYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 Pod YAML 失败",
 			zap.String("namespace", param.Namespace),
@@ -807,7 +808,8 @@ func (c *PodController) ApplyYaml(ctx *gin.Context) {
 
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := podpkg.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubePodApplyYaml(ctx.Request.Context(), cli, param.Namespace, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 Pod YAML 失败",
 			zap.String("namespace", param.Namespace),

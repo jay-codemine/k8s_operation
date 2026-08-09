@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
+	dm "k8soperation/internal/domain/monitor"
+	"k8soperation/middlewares"
 )
 
 // ==================== 通知渠道 ====================
@@ -18,7 +20,7 @@ func (r *MonitorCRUDRouter) ListNotifyChannels(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListNotifyChannels(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListNotifyChannels(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -28,7 +30,7 @@ func (r *MonitorCRUDRouter) ListNotifyChannels(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetNotifyChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	ch, err := r.svc.GetNotifyChannel(c.Request.Context(), id)
+	ch, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetNotifyChannel(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "通知渠道不存在"})
 		return
@@ -42,7 +44,7 @@ func (r *MonitorCRUDRouter) CreateNotifyChannel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateNotifyChannel(c.Request.Context(), &ch); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateNotifyChannel(c.Request.Context(), &ch); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -57,7 +59,7 @@ func (r *MonitorCRUDRouter) UpdateNotifyChannel(c *gin.Context) {
 		return
 	}
 	ch.ID = id
-	if err := r.svc.UpdateNotifyChannel(c.Request.Context(), &ch); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateNotifyChannel(c.Request.Context(), &ch); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -66,7 +68,7 @@ func (r *MonitorCRUDRouter) UpdateNotifyChannel(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteNotifyChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteNotifyChannel(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteNotifyChannel(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -75,12 +77,12 @@ func (r *MonitorCRUDRouter) DeleteNotifyChannel(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) TestNotifyChannel(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	ch, err := r.svc.GetNotifyChannel(c.Request.Context(), id)
+	ch, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetNotifyChannel(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "通知渠道不存在"})
 		return
 	}
-	ok, msg := r.svc.TestNotifyChannel(c.Request.Context(), ch)
+	ok, msg := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().TestNotifyChannel(c.Request.Context(), ch)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"success": ok, "message": msg}})
 }
 
@@ -92,7 +94,7 @@ func (r *MonitorCRUDRouter) ListSilenceRules(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListSilenceRules(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListSilenceRules(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -102,7 +104,7 @@ func (r *MonitorCRUDRouter) ListSilenceRules(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetSilenceRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	rule, err := r.svc.GetSilenceRule(c.Request.Context(), id)
+	rule, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetSilenceRule(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "规则不存在"})
 		return
@@ -116,7 +118,7 @@ func (r *MonitorCRUDRouter) CreateSilenceRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateSilenceRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateSilenceRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -131,7 +133,7 @@ func (r *MonitorCRUDRouter) UpdateSilenceRule(c *gin.Context) {
 		return
 	}
 	rule.ID = id
-	if err := r.svc.UpdateSilenceRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateSilenceRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -140,7 +142,7 @@ func (r *MonitorCRUDRouter) UpdateSilenceRule(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteSilenceRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteSilenceRule(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteSilenceRule(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -155,7 +157,7 @@ func (r *MonitorCRUDRouter) ListInhibitRules(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListInhibitRules(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListInhibitRules(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -169,7 +171,7 @@ func (r *MonitorCRUDRouter) CreateInhibitRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateInhibitRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateInhibitRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -184,7 +186,7 @@ func (r *MonitorCRUDRouter) UpdateInhibitRule(c *gin.Context) {
 		return
 	}
 	rule.ID = id
-	if err := r.svc.UpdateInhibitRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateInhibitRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -193,7 +195,7 @@ func (r *MonitorCRUDRouter) UpdateInhibitRule(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteInhibitRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteInhibitRule(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteInhibitRule(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -208,7 +210,7 @@ func (r *MonitorCRUDRouter) ListAggregateRules(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListAggregateRules(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListAggregateRules(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -222,7 +224,7 @@ func (r *MonitorCRUDRouter) CreateAggregateRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateAggregateRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateAggregateRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -237,7 +239,7 @@ func (r *MonitorCRUDRouter) UpdateAggregateRule(c *gin.Context) {
 		return
 	}
 	rule.ID = id
-	if err := r.svc.UpdateAggregateRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateAggregateRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -246,7 +248,7 @@ func (r *MonitorCRUDRouter) UpdateAggregateRule(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteAggregateRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteAggregateRule(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteAggregateRule(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -261,7 +263,7 @@ func (r *MonitorCRUDRouter) ListNotifyTemplates(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListNotifyTemplates(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListNotifyTemplates(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -271,7 +273,7 @@ func (r *MonitorCRUDRouter) ListNotifyTemplates(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetNotifyTemplate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	tpl, err := r.svc.GetNotifyTemplate(c.Request.Context(), id)
+	tpl, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetNotifyTemplate(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "模板不存在"})
 		return
@@ -285,7 +287,7 @@ func (r *MonitorCRUDRouter) CreateNotifyTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateNotifyTemplate(c.Request.Context(), &tpl); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateNotifyTemplate(c.Request.Context(), &tpl); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -300,7 +302,7 @@ func (r *MonitorCRUDRouter) UpdateNotifyTemplate(c *gin.Context) {
 		return
 	}
 	tpl.ID = id
-	if err := r.svc.UpdateNotifyTemplate(c.Request.Context(), &tpl); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateNotifyTemplate(c.Request.Context(), &tpl); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -309,7 +311,7 @@ func (r *MonitorCRUDRouter) UpdateNotifyTemplate(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteNotifyTemplate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteNotifyTemplate(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteNotifyTemplate(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -322,13 +324,13 @@ func (r *MonitorCRUDRouter) PreviewNotifyTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	preview := r.svc.PreviewNotifyTemplate(c.Request.Context(), &tpl)
+	preview := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().PreviewNotifyTemplate(c.Request.Context(), &tpl)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"rendered": preview}})
 }
 
 func (r *MonitorCRUDRouter) SetDefaultTemplate(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.SetDefaultTemplate(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().SetDefaultTemplate(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -338,12 +340,12 @@ func (r *MonitorCRUDRouter) SetDefaultTemplate(c *gin.Context) {
 // ==================== 批量绑定渠道 ====================
 
 func (r *MonitorCRUDRouter) BatchBindChannels(c *gin.Context) {
-	var req services.BatchBindChannelsReq
+	var req dm.BatchBindChannelsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchBindChannels(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchBindChannels(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -359,7 +361,7 @@ func (r *MonitorCRUDRouter) ListRoutePolicies(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListRoutePolicies(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListRoutePolicies(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -369,7 +371,7 @@ func (r *MonitorCRUDRouter) ListRoutePolicies(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetRoutePolicy(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	policy, err := r.svc.GetRoutePolicy(c.Request.Context(), id)
+	policy, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetRoutePolicy(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "路由策略不存在"})
 		return
@@ -383,7 +385,7 @@ func (r *MonitorCRUDRouter) CreateRoutePolicy(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateRoutePolicy(c.Request.Context(), &policy); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateRoutePolicy(c.Request.Context(), &policy); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -398,7 +400,7 @@ func (r *MonitorCRUDRouter) UpdateRoutePolicy(c *gin.Context) {
 		return
 	}
 	policy.ID = id
-	if err := r.svc.UpdateRoutePolicy(c.Request.Context(), &policy); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateRoutePolicy(c.Request.Context(), &policy); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -407,7 +409,7 @@ func (r *MonitorCRUDRouter) UpdateRoutePolicy(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteRoutePolicy(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteRoutePolicy(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteRoutePolicy(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -417,12 +419,12 @@ func (r *MonitorCRUDRouter) DeleteRoutePolicy(c *gin.Context) {
 // ==================== 批量删除: 告警事件 ====================
 
 func (r *MonitorCRUDRouter) BatchDeleteAlertEvents(c *gin.Context) {
-	var req services.BatchDeleteReq
+	var req dm.BatchDeleteReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchDeleteAlertEvents(c.Request.Context(), req.IDs)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchDeleteAlertEvents(c.Request.Context(), req.IDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -433,12 +435,12 @@ func (r *MonitorCRUDRouter) BatchDeleteAlertEvents(c *gin.Context) {
 // ==================== 批量删除: 通知渠道 ====================
 
 func (r *MonitorCRUDRouter) BatchDeleteNotifyChannels(c *gin.Context) {
-	var req services.BatchDeleteReq
+	var req dm.BatchDeleteReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchDeleteNotifyChannels(c.Request.Context(), req.IDs)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchDeleteNotifyChannels(c.Request.Context(), req.IDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -449,12 +451,12 @@ func (r *MonitorCRUDRouter) BatchDeleteNotifyChannels(c *gin.Context) {
 // ==================== 批量更新: 通知渠道 ====================
 
 func (r *MonitorCRUDRouter) BatchUpdateNotifyChannels(c *gin.Context) {
-	var req services.BatchUpdateNotifyChannelsReq
+	var req dm.BatchUpdateNotifyChannelsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchUpdateNotifyChannels(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchUpdateNotifyChannels(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -465,12 +467,12 @@ func (r *MonitorCRUDRouter) BatchUpdateNotifyChannels(c *gin.Context) {
 // ==================== 批量删除: 静默规则 ====================
 
 func (r *MonitorCRUDRouter) BatchDeleteSilenceRules(c *gin.Context) {
-	var req services.BatchDeleteReq
+	var req dm.BatchDeleteReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchDeleteSilenceRules(c.Request.Context(), req.IDs)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchDeleteSilenceRules(c.Request.Context(), req.IDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return

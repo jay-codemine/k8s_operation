@@ -7,9 +7,9 @@
           <value>
             <TabSessionState>
               <option name="provider" value="claude" />
-              <option name="sessionId" value="292d1886-bfda-4f54-892c-851612f1ebf6" />
-              <option name="cwd" value="D:\2026-7-11-k8sopearionn\k8s_operation-v16.7" />
-              <option name="model" value="claude-sonnet-4-6[1m]" />
+              <option name="sessionId" value="49da2a6d-a625-4075-a011-f272a491493f" />
+              <option name="cwd" value="D:\2026-7-11-k8sopearionn\k8s_operation" />
+              <option name="model" value="claude-opus-4-8[1m]" />
               <option name="permissionMode" value="bypassPermissions" />
             </TabSessionState>
           </value>

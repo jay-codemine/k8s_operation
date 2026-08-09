@@ -509,7 +509,8 @@ func (c *KubeStatefulSetController) Yaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := stsbuilder.GetYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubeStatefulSetGetYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 StatefulSet YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorStatefulSetQueryFail.WithDetails(err.Error()))
@@ -542,7 +543,8 @@ func (c *KubeStatefulSetController) ApplyYaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := stsbuilder.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubeStatefulSetApplyYaml(ctx.Request.Context(), cli, param.Namespace, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 StatefulSet YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorStatefulSetQueryFail.WithDetails(err.Error()))

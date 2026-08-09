@@ -142,3 +142,13 @@ func (s *Services) KubeNodeEvents(ctx context.Context, cli *K8sClients, param *r
 	}
 	return events, nil
 }
+
+// KubeNodeGetYaml 获取 Node 的 YAML 配置
+func (s *Services) KubeNodeGetYaml(ctx context.Context, cli *K8sClients, name string) (string, error) {
+	return node.GetYaml(ctx, cli.Kube, name)
+}
+
+// KubeNodeApplyYaml 应用 Node YAML 配置
+func (s *Services) KubeNodeApplyYaml(ctx context.Context, cli *K8sClients, name, yamlContent string) (*corev1.Node, error) {
+	return node.ApplyYaml(ctx, cli.Kube, name, yamlContent)
+}

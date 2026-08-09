@@ -7,23 +7,24 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"k8soperation/global"
-	"k8soperation/internal/app/models"
+	dm "k8soperation/internal/domain/image"
+	"k8soperation/internal/infra/persistence"
+	"k8soperation/pkg/logger"
 )
 
-// ImageService 镜像服务
+// ImageService 镜像浏览服务
 type ImageService struct {
-	registryModel *models.ImageRegistryModel
-	policyModel   *models.ImageCleanupPolicyModel
-	logModel      *models.ImageCleanupLogModel
+	imgSvc *dm.ImageService
+	logger *logger.Logger
 }
 
-func NewImageService() *ImageService {
-	return &ImageService{
-		registryModel: models.NewImageRegistryModel(),
-		policyModel:   models.NewImageCleanupPolicyModel(),
-		logModel:      models.NewImageCleanupLogModel(),
-	}
+func (s *Services) imageSvc() *dm.ImageService {
+	return dm.NewImageService(s.db, persistence.NewImageRepository(s.db))
+}
+
+// ImageSvc 返回镜像浏览服务（Controller 使用）
+func (s *Services) ImageSvc() *ImageService {
+	return &ImageService{imgSvc: s.imageSvc(), logger: s.logger}
 }
 
 // ========================================
@@ -32,7 +33,7 @@ func NewImageService() *ImageService {
 
 // ListRepositories 列出仓库中的镜像项目
 func (s *ImageService) ListRepositories(registryID int64) ([]Repository, error) {
-	registry, err := s.registryModel.GetByID(registryID)
+	registry, err := s.imgSvc.RegistryGetByID(registryID)
 	if err != nil {
 		return nil, fmt.Errorf("仓库不存在")
 	}
@@ -50,7 +51,7 @@ func (s *ImageService) ListRepositories(registryID int64) ([]Repository, error) 
 
 // ListTags 列出镜像的所有标签
 func (s *ImageService) ListTags(registryID int64, repository string) ([]ImageTag, error) {
-	registry, err := s.registryModel.GetByID(registryID)
+	registry, err := s.imgSvc.RegistryGetByID(registryID)
 	if err != nil {
 		return nil, fmt.Errorf("仓库不存在")
 	}
@@ -68,7 +69,7 @@ func (s *ImageService) ListTags(registryID int64, repository string) ([]ImageTag
 
 // GetImageDetail 获取镜像详情
 func (s *ImageService) GetImageDetail(registryID int64, repository, tag string) (*ImageManifest, error) {
-	registry, err := s.registryModel.GetByID(registryID)
+	registry, err := s.imgSvc.RegistryGetByID(registryID)
 	if err != nil {
 		return nil, fmt.Errorf("仓库不存在")
 	}
@@ -86,7 +87,7 @@ func (s *ImageService) GetImageDetail(registryID int64, repository, tag string) 
 
 // DeleteTag 删除镜像标签
 func (s *ImageService) DeleteTag(registryID int64, repository, tag string) error {
-	registry, err := s.registryModel.GetByID(registryID)
+	registry, err := s.imgSvc.RegistryGetByID(registryID)
 	if err != nil {
 		return fmt.Errorf("仓库不存在")
 	}
@@ -141,16 +142,15 @@ type CleanupPolicyResponse struct {
 
 // ListCleanupPolicies 列出清理策略
 func (s *ImageService) ListCleanupPolicies(registryID int64, keyword string, page, pageSize int) ([]CleanupPolicyResponse, int64, error) {
-	policies, total, err := s.policyModel.List(registryID, keyword, page, pageSize)
+	policies, total, err := s.imgSvc.PolicyList(registryID, keyword, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// 获取所有仓库信息用于关联名称
 	registryMap := make(map[int64]string)
 	for _, p := range policies {
 		if _, ok := registryMap[p.RegistryID]; !ok {
-			if registry, err := s.registryModel.GetByID(p.RegistryID); err == nil {
+			if registry, err := s.imgSvc.RegistryGetByID(p.RegistryID); err == nil {
 				registryMap[p.RegistryID] = registry.Name
 			}
 		}
@@ -182,13 +182,12 @@ func (s *ImageService) ListCleanupPolicies(registryID int64, keyword string, pag
 
 // CreateCleanupPolicy 创建清理策略
 func (s *ImageService) CreateCleanupPolicy(req *CleanupPolicyRequest, userID int64) (*CleanupPolicyResponse, error) {
-	// 验证仓库是否存在
-	registry, err := s.registryModel.GetByID(req.RegistryID)
+	registry, err := s.imgSvc.RegistryGetByID(req.RegistryID)
 	if err != nil {
 		return nil, fmt.Errorf("仓库不存在")
 	}
 
-	policy := &models.ImageCleanupPolicy{
+	policy := &dm.ImageCleanupPolicy{
 		RegistryID:        req.RegistryID,
 		Name:              req.Name,
 		Enabled:           req.Enabled,
@@ -201,7 +200,6 @@ func (s *ImageService) CreateCleanupPolicy(req *CleanupPolicyRequest, userID int
 		CreatedBy:         userID,
 	}
 
-	// 设置默认值
 	if policy.RepositoryPattern == "" {
 		policy.RepositoryPattern = "*"
 	}
@@ -218,7 +216,7 @@ func (s *ImageService) CreateCleanupPolicy(req *CleanupPolicyRequest, userID int
 		policy.CronExpression = "0 2 * * *"
 	}
 
-	if err := s.policyModel.Create(policy); err != nil {
+	if err := s.imgSvc.PolicyCreate(policy); err != nil {
 		return nil, err
 	}
 
@@ -240,7 +238,7 @@ func (s *ImageService) CreateCleanupPolicy(req *CleanupPolicyRequest, userID int
 
 // UpdateCleanupPolicy 更新清理策略
 func (s *ImageService) UpdateCleanupPolicy(req *CleanupPolicyRequest) (*CleanupPolicyResponse, error) {
-	existing, err := s.policyModel.GetByID(req.ID)
+	existing, err := s.imgSvc.PolicyGetByID(req.ID)
 	if err != nil {
 		return nil, fmt.Errorf("策略不存在")
 	}
@@ -254,12 +252,12 @@ func (s *ImageService) UpdateCleanupPolicy(req *CleanupPolicyRequest) (*CleanupP
 	existing.CronExpression = req.CronExpression
 	existing.Description = req.Description
 
-	if err := s.policyModel.Update(existing); err != nil {
+	if err := s.imgSvc.PolicyUpdate(existing); err != nil {
 		return nil, err
 	}
 
 	registryName := ""
-	if registry, err := s.registryModel.GetByID(existing.RegistryID); err == nil {
+	if registry, err := s.imgSvc.RegistryGetByID(existing.RegistryID); err == nil {
 		registryName = registry.Name
 	}
 
@@ -284,61 +282,50 @@ func (s *ImageService) UpdateCleanupPolicy(req *CleanupPolicyRequest) (*CleanupP
 
 // DeleteCleanupPolicy 删除清理策略
 func (s *ImageService) DeleteCleanupPolicy(id int64) error {
-	_, err := s.policyModel.GetByID(id)
-	if err != nil {
-		return fmt.Errorf("策略不存在")
-	}
-	return s.policyModel.Delete(id)
+	return s.imgSvc.PolicyDeleteWithValidation(id)
 }
 
 // ToggleCleanupPolicy 启用/禁用清理策略
 func (s *ImageService) ToggleCleanupPolicy(id int64, enabled bool) error {
-	policy, err := s.policyModel.GetByID(id)
-	if err != nil {
-		return fmt.Errorf("策略不存在")
-	}
-	policy.Enabled = enabled
-	return s.policyModel.Update(policy)
+	return s.imgSvc.PolicyToggle(id, enabled)
 }
 
 // RunCleanupPolicy 手动执行清理策略
-func (s *ImageService) RunCleanupPolicy(id int64) (*models.ImageCleanupLog, error) {
-	policy, err := s.policyModel.GetByID(id)
+func (s *ImageService) RunCleanupPolicy(id int64) (*dm.ImageCleanupLog, error) {
+	policy, err := s.imgSvc.PolicyGetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("策略不存在")
 	}
 
-	registry, err := s.registryModel.GetByID(policy.RegistryID)
+	registry, err := s.imgSvc.RegistryGetByID(policy.RegistryID)
 	if err != nil {
 		return nil, fmt.Errorf("仓库不存在")
 	}
 
-	// 创建执行日志
-	log := &models.ImageCleanupLog{
+	log := &dm.ImageCleanupLog{
 		PolicyID:   policy.ID,
 		RegistryID: registry.ID,
 		StartTime:  time.Now().Unix(),
 		Status:     "running",
 	}
-	if err := s.logModel.Create(log); err != nil {
+	if err := s.imgSvc.LogCreate(log); err != nil {
 		return nil, err
 	}
 
-	// 异步执行清理
 	go s.executeCleanup(policy, registry, log)
 
 	return log, nil
 }
 
 // executeCleanup 执行清理任务
-func (s *ImageService) executeCleanup(policy *models.ImageCleanupPolicy, registry *models.ImageRegistry, log *models.ImageCleanupLog) {
+func (s *ImageService) executeCleanup(policy *dm.ImageCleanupPolicy, registry *dm.ImageRegistry, log *dm.ImageCleanupLog) {
 	defer func() {
 		if r := recover(); r != nil {
-			global.Logger.Error("清理任务 panic", zap.Any("error", r))
+			s.logger.Error("清理任务 panic", zap.Any("error", r))
 			log.Status = "failed"
 			log.ErrorMessage = fmt.Sprintf("panic: %v", r)
 			log.EndTime = time.Now().Unix()
-			s.logModel.Update(log)
+			s.imgSvc.LogUpdate(log)
 		}
 	}()
 
@@ -347,19 +334,18 @@ func (s *ImageService) executeCleanup(policy *models.ImageCleanupPolicy, registr
 		log.Status = "failed"
 		log.ErrorMessage = fmt.Sprintf("创建客户端失败: %v", err)
 		log.EndTime = time.Now().Unix()
-		s.logModel.Update(log)
+		s.imgSvc.LogUpdate(log)
 		return
 	}
 
 	ctx := context.Background()
 
-	// 获取仓库列表
 	repos, err := client.ListRepositories(ctx)
 	if err != nil {
 		log.Status = "failed"
 		log.ErrorMessage = fmt.Sprintf("获取仓库列表失败: %v", err)
 		log.EndTime = time.Now().Unix()
-		s.logModel.Update(log)
+		s.imgSvc.LogUpdate(log)
 		return
 	}
 
@@ -370,36 +356,31 @@ func (s *ImageService) executeCleanup(policy *models.ImageCleanupPolicy, registr
 	cutoffTime := time.Now().AddDate(0, 0, -policy.KeepDays).Unix()
 
 	for _, repo := range repos {
-		// 匹配仓库模式
 		if !matchPattern(policy.RepositoryPattern, repo.FullName) {
 			continue
 		}
 
 		tags, err := client.ListTags(ctx, repo.FullName)
 		if err != nil {
-			global.Logger.Warn("获取标签失败", zap.String("repo", repo.FullName), zap.Error(err))
+			s.logger.Warn("获取标签失败", zap.String("repo", repo.FullName), zap.Error(err))
 			continue
 		}
 
 		scannedCount += len(tags)
 
-		// 过滤要保留的标签
 		var tagsToDelete []ImageTag
 		keepCount := 0
 
 		for _, tag := range tags {
-			// 匹配标签模式
 			if !matchPattern(policy.TagPattern, tag.Name) {
 				continue
 			}
 
-			// 保留最近 N 个
 			if keepCount < policy.KeepLastCount {
 				keepCount++
 				continue
 			}
 
-			// 保留 N 天内的
 			if tag.PushedAt > 0 && tag.PushedAt > cutoffTime {
 				continue
 			}
@@ -407,10 +388,9 @@ func (s *ImageService) executeCleanup(policy *models.ImageCleanupPolicy, registr
 			tagsToDelete = append(tagsToDelete, tag)
 		}
 
-		// 删除过期标签
 		for _, tag := range tagsToDelete {
 			if err := client.DeleteTag(ctx, repo.FullName, tag.Name); err != nil {
-				global.Logger.Warn("删除标签失败",
+				s.logger.Warn("删除标签失败",
 					zap.String("repo", repo.FullName),
 					zap.String("tag", tag.Name),
 					zap.Error(err))
@@ -418,31 +398,29 @@ func (s *ImageService) executeCleanup(policy *models.ImageCleanupPolicy, registr
 			}
 			deletedCount++
 			freedSize += tag.Size
-			global.Logger.Info("已删除镜像",
+			s.logger.Info("已删除镜像",
 				zap.String("repo", repo.FullName),
 				zap.String("tag", tag.Name))
 		}
 	}
 
-	// 更新日志
 	log.Status = "success"
 	log.ScannedCount = scannedCount
 	log.DeletedCount = deletedCount
 	log.FreedSize = freedSize
 	log.EndTime = time.Now().Unix()
-	s.logModel.Update(log)
+	s.imgSvc.LogUpdate(log)
 
-	// 更新策略执行结果
 	result := fmt.Sprintf("扫描 %d 个标签，删除 %d 个", scannedCount, deletedCount)
-	s.policyModel.UpdateRunResult(policy.ID, result, int64(deletedCount))
+	s.imgSvc.PolicyUpdateRunResult(policy.ID, result, int64(deletedCount))
 }
 
 // GetCleanupLogs 获取清理日志
-func (s *ImageService) GetCleanupLogs(policyID int64, limit int) ([]models.ImageCleanupLog, error) {
+func (s *ImageService) GetCleanupLogs(policyID int64, limit int) ([]dm.ImageCleanupLog, error) {
 	if policyID > 0 {
-		return s.logModel.ListByPolicy(policyID, limit)
+		return s.imgSvc.LogListByPolicy(policyID, limit)
 	}
-	return s.logModel.ListRecent(limit)
+	return s.imgSvc.LogListRecent(limit)
 }
 
 // matchPattern 简单的通配符匹配

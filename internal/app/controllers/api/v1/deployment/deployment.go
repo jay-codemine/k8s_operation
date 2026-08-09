@@ -498,7 +498,8 @@ func (c *KubeDeploymentController) Yaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := deployment.GetYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubeDeploymentGetYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 Deployment YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorK8sDeploymentListFail.WithDetails(err.Error()))
@@ -531,7 +532,8 @@ func (c *KubeDeploymentController) ApplyYaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := deployment.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubeDeploymentApplyYaml(ctx.Request.Context(), cli, param.Namespace, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 Deployment YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorK8sDeploymentListFail.WithDetails(err.Error()))

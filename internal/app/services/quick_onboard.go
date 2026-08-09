@@ -343,7 +343,7 @@ func (s *Services) createServiceForOnboard(ctx context.Context, cli *K8sClients,
 // ==================== Pipeline + Deploy ====================
 
 func (s *Services) createPipelineForOnboard(ctx context.Context, req *requests.QuickOnboardRequest, userID int64) (int64, error) {
-	existing, _ := s.dao.PipelineGetByName(ctx, req.AppName)
+	existing, _ := s.cicdSvc().PipelineGetByName(ctx, req.AppName)
 	if existing != nil {
 		return existing.ID, nil
 	}
@@ -360,7 +360,7 @@ func (s *Services) createPipelineForOnboard(ctx context.Context, req *requests.Q
 	if global.JenkinsSetting != nil && global.JenkinsSetting.URL != "" {
 		pipeline.JenkinsURL = global.JenkinsSetting.URL
 	}
-	if err := s.dao.PipelineCreate(ctx, pipeline); err != nil { return 0, err }
+	if err := s.cicdSvc().PipelineCreate(ctx, pipeline); err != nil { return 0, err }
 	return pipeline.ID, nil
 }
 

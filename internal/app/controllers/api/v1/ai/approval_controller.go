@@ -110,12 +110,12 @@ func (c *AIApprovalController) List(ctx *gin.Context) {
 			CanApprove:         admin && item.RequestUserID != userID && item.Status == models.AIApprovalPending,
 		}
 		// 查询申请人名称
-		if u := models.NewUser().GetUserByID(strconv.FormatUint(uint64(item.RequestUserID), 10)); u.ID > 0 {
+		if u, err := svc.UserGetByID(int64(item.RequestUserID)); err == nil {
 			rich.RequestUserName = u.Username
 		}
 		// 查询审批人名称
 		if item.ApproverUserID > 0 {
-			if u := models.NewUser().GetUserByID(strconv.FormatUint(uint64(item.ApproverUserID), 10)); u.ID > 0 {
+			if u, err := svc.UserGetByID(int64(item.ApproverUserID)); err == nil {
 				rich.ApproverUserName = u.Username
 			}
 		}

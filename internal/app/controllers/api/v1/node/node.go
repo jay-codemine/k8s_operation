@@ -496,7 +496,8 @@ func (c *KubeNodeController) Yaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := nodepkg.GetYaml(ctx.Request.Context(), cli.Kube, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubeNodeGetYaml(ctx.Request.Context(), cli, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 Node YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
@@ -528,7 +529,8 @@ func (c *KubeNodeController) ApplyYaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := nodepkg.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubeNodeApplyYaml(ctx.Request.Context(), cli, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 Node YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))

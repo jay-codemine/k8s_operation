@@ -4,10 +4,10 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"k8soperation/global"
+
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 )
 
@@ -39,10 +39,9 @@ func (c *ImageRegistryController) List(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	list, total, err := svc.List(&req)
 	if err != nil {
-		global.Logger.Error("获取镜像仓库列表失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorGetImageRegistryListFail)
 		return
 	}
@@ -61,10 +60,9 @@ func (c *ImageRegistryController) List(ctx *gin.Context) {
 func (c *ImageRegistryController) ListAll(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	list, err := svc.ListAll()
 	if err != nil {
-		global.Logger.Error("获取镜像仓库列表失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorGetImageRegistryListFail)
 		return
 	}
@@ -91,10 +89,9 @@ func (c *ImageRegistryController) Detail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	registry, err := svc.GetByID(id)
 	if err != nil {
-		global.Logger.Error("获取镜像仓库详情失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorImageRegistryNotFound)
 		return
 	}
@@ -127,10 +124,9 @@ func (c *ImageRegistryController) Create(ctx *gin.Context) {
 		userID = uid.(int64)
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	registry, err := svc.Create(&req, userID)
 	if err != nil {
-		global.Logger.Error("创建镜像仓库失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorCreateImageRegistryFail.WithDetails(err.Error()))
 		return
 	}
@@ -157,10 +153,9 @@ func (c *ImageRegistryController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	registry, err := svc.Update(&req)
 	if err != nil {
-		global.Logger.Error("更新镜像仓库失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorUpdateImageRegistryFail.WithDetails(err.Error()))
 		return
 	}
@@ -187,9 +182,8 @@ func (c *ImageRegistryController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	if err := svc.Delete(id); err != nil {
-		global.Logger.Error("删除镜像仓库失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorDeleteImageRegistryFail.WithDetails(err.Error()))
 		return
 	}
@@ -216,9 +210,8 @@ func (c *ImageRegistryController) CheckConnection(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	if err := svc.CheckConnection(id); err != nil {
-		global.Logger.Error("检测仓库连接失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorCheckImageRegistryFail)
 		return
 	}
@@ -239,10 +232,9 @@ func (c *ImageRegistryController) CheckConnection(ctx *gin.Context) {
 func (c *ImageRegistryController) Stats(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	stats, err := svc.GetStats()
 	if err != nil {
-		global.Logger.Error("获取仓库统计失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorGetImageRegistryStatsFail)
 		return
 	}
@@ -269,9 +261,8 @@ func (c *ImageRegistryController) SetDefault(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageRegistryService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageRegistrySvc()
 	if err := svc.SetDefault(id); err != nil {
-		global.Logger.Error("设置默认仓库失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorSetDefaultRegistryFail.WithDetails(err.Error()))
 		return
 	}

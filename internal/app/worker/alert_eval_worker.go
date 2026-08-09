@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"k8soperation/global"
-	"k8soperation/internal/app/models"
+	dm "k8soperation/internal/domain/monitor"
 	"k8soperation/internal/app/services"
+	"k8soperation/pkg/logger"
 	prom "k8soperation/pkg/prometheus"
 )
 
@@ -21,23 +23,30 @@ import (
 // 定期从数据库加载启用的告警规则，查询 Prometheus 执行 PromQL，
 // 根据评估结果产生告警事件（firing）或恢复事件（resolved），并触发通知。
 type AlertEvalWorker struct {
-	interval time.Duration
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
+	interval      time.Duration
+	stopCh        chan struct{}
+	wg            sync.WaitGroup
+	db            *gorm.DB
+	routeResolver dm.RoutePolicyResolver
+	logger        *logger.Logger
 }
 
 // NewAlertEvalWorker 创建告警评估 Worker
-// interval: 全局评估循环间隔（各规则有独立 eval_interval，Worker 按最小粒度 30s 轮询）
-func NewAlertEvalWorker() *AlertEvalWorker {
+// db: 数据库连接（Worker 自有，用于读写告警规则/事件/数据源）
+// routeResolver: 路由策略解析（Monitor 域提供）
+func NewAlertEvalWorker(db *gorm.DB, routeResolver dm.RoutePolicyResolver, logger *logger.Logger) *AlertEvalWorker {
 	return &AlertEvalWorker{
-		interval: 30 * time.Second,
-		stopCh:   make(chan struct{}),
+		interval:      30 * time.Second,
+		stopCh:        make(chan struct{}),
+		db:            db,
+		routeResolver: routeResolver,
+		logger:        logger,
 	}
 }
 
 // Start 启动
 func (w *AlertEvalWorker) Start() {
-	global.Logger.Info("[AlertEvalWorker] 启动告警规则评估引擎", zap.Duration("interval", w.interval))
+	w.logger.Info("[AlertEvalWorker] 启动告警规则评估引擎", zap.Duration("interval", w.interval))
 	w.wg.Add(1)
 	go w.loop()
 }
@@ -46,7 +55,7 @@ func (w *AlertEvalWorker) Start() {
 func (w *AlertEvalWorker) Stop() {
 	close(w.stopCh)
 	w.wg.Wait()
-	global.Logger.Info("[AlertEvalWorker] 已停止")
+	w.logger.Info("[AlertEvalWorker] 已停止")
 }
 
 func (w *AlertEvalWorker) loop() {
@@ -75,16 +84,16 @@ func (w *AlertEvalWorker) loop() {
 // evalOnce 执行一次全量评估
 func (w *AlertEvalWorker) evalOnce() {
 	ctx := context.Background()
-	if global.DB == nil {
+	if w.db == nil {
 		return
 	}
 
 	// 1. 加载启用的告警规则
-	var rules []models.MonitorAlertRule
-	if err := global.DB.WithContext(ctx).
+	var rules []dm.AlertRule
+	if err := w.db.WithContext(ctx).
 		Where("enabled = 1 AND is_del = 0").
 		Find(&rules).Error; err != nil {
-		global.Logger.Error("[AlertEvalWorker] 加载告警规则失败", zap.Error(err))
+		w.logger.Error("[AlertEvalWorker] 加载告警规则失败", zap.Error(err))
 		return
 	}
 	if len(rules) == 0 {
@@ -108,7 +117,7 @@ func (w *AlertEvalWorker) evalOnce() {
 }
 
 // evalRule 评估单条规则
-func (w *AlertEvalWorker) evalRule(ctx context.Context, rule *models.MonitorAlertRule, now int64) {
+func (w *AlertEvalWorker) evalRule(ctx context.Context, rule *dm.AlertRule, now int64) {
 	// 获取 Prometheus 客户端
 	client, dsID := w.resolvePromClient(ctx, rule.DatasourceID)
 	if client == nil {
@@ -119,7 +128,7 @@ func (w *AlertEvalWorker) evalRule(ctx context.Context, rule *models.MonitorAler
 	// 执行 PromQL 查询
 	result, err := client.QueryInstant(ctx, rule.Expr)
 	if err != nil {
-		global.Logger.Warn("[AlertEvalWorker] PromQL 查询失败",
+		w.logger.Warn("[AlertEvalWorker] PromQL 查询失败",
 			zap.String("rule", rule.Name), zap.Error(err))
 		w.updateRuleEval(ctx, rule.ID, now, "error", 0)
 		return
@@ -146,7 +155,7 @@ func (w *AlertEvalWorker) evalRule(ctx context.Context, rule *models.MonitorAler
 		if rule.PendingSince == 0 {
 			// 首次满足 → 进入 pending 状态
 			w.updateRuleEval(ctx, rule.ID, now, "pending", now)
-			global.Logger.Info("[AlertEvalWorker] 规则进入 pending",
+			w.logger.Info("[AlertEvalWorker] 规则进入 pending",
 				zap.String("rule", rule.Name), zap.String("value", triggerValue))
 		} else if now-rule.PendingSince >= int64(durationSec) {
 			// 持续时间已达 duration → 触发 firing
@@ -171,10 +180,10 @@ func (w *AlertEvalWorker) evalRule(ctx context.Context, rule *models.MonitorAler
 }
 
 // fireAlert 产生告警事件
-func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAlertRule, dsID int64, value string, labels map[string]string, now int64) {
+func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *dm.AlertRule, dsID int64, value string, labels map[string]string, now int64) {
 	// 检查是否已有相同规则的 firing 事件（避免重复）
 	var existingCount int64
-	global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
+	w.db.WithContext(ctx).Model(&dm.AlertEvent{}).
 		Where("rule_id = ? AND status = 'firing'", rule.ID).
 		Count(&existingCount)
 	if existingCount > 0 {
@@ -204,7 +213,7 @@ func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAle
 	// 渲染描述模板
 	description := renderPromTemplate(rule.Description, mergedLabels, value)
 
-	event := &models.MonitorAlertEvent{
+	event := &dm.AlertEvent{
 		RuleID:       rule.ID,
 		DatasourceID: dsID,
 		RuleName:     rule.Name,
@@ -218,13 +227,13 @@ func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAle
 		FiredAt:      now,
 	}
 
-	if err := global.DB.WithContext(ctx).Create(event).Error; err != nil {
-		global.Logger.Error("[AlertEvalWorker] 创建告警事件失败",
+	if err := w.db.WithContext(ctx).Create(event).Error; err != nil {
+		w.logger.Error("[AlertEvalWorker] 创建告警事件失败",
 			zap.String("rule", rule.Name), zap.Error(err))
 		return
 	}
 
-	global.Logger.Info("[AlertEvalWorker] 告警触发",
+	w.logger.Info("[AlertEvalWorker] 告警触发",
 		zap.String("rule", rule.Name),
 		zap.String("severity", rule.Severity),
 		zap.String("value", value),
@@ -235,27 +244,27 @@ func (w *AlertEvalWorker) fireAlert(ctx context.Context, rule *models.MonitorAle
 }
 
 // resolveAlert 恢复告警事件
-func (w *AlertEvalWorker) resolveAlert(ctx context.Context, rule *models.MonitorAlertRule, now int64) {
+func (w *AlertEvalWorker) resolveAlert(ctx context.Context, rule *dm.AlertRule, now int64) {
 	// 将该规则所有 firing 事件标记为 resolved
-	result := global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
+	result := w.db.WithContext(ctx).Model(&dm.AlertEvent{}).
 		Where("rule_id = ? AND status = 'firing'", rule.ID).
 		Updates(map[string]interface{}{
 			"status":      "resolved",
 			"resolved_at": now,
 		})
 	if result.Error != nil {
-		global.Logger.Error("[AlertEvalWorker] 恢复告警事件失败",
+		w.logger.Error("[AlertEvalWorker] 恢复告警事件失败",
 			zap.String("rule", rule.Name), zap.Error(result.Error))
 		return
 	}
 	if result.RowsAffected > 0 {
-		global.Logger.Info("[AlertEvalWorker] 告警恢复",
+		w.logger.Info("[AlertEvalWorker] 告警恢复",
 			zap.String("rule", rule.Name),
 			zap.Int64("resolved_count", result.RowsAffected))
 
 		// 查找刚恢复的事件用于发送恢复通知
-		var events []models.MonitorAlertEvent
-		global.DB.WithContext(ctx).
+		var events []dm.AlertEvent
+		w.db.WithContext(ctx).
 			Where("rule_id = ? AND status = 'resolved' AND resolved_at = ?", rule.ID, now).
 			Limit(5).Find(&events)
 		for i := range events {
@@ -265,13 +274,12 @@ func (w *AlertEvalWorker) resolveAlert(ctx context.Context, rule *models.Monitor
 }
 
 // sendNotification 发送告警通知
-func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.MonitorAlertRule, event *models.MonitorAlertEvent, status string) {
+func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *dm.AlertRule, event *dm.AlertEvent, status string) {
 	notifyChannels := rule.NotifyChannels
 
 	// 路由策略兜底：如果规则没有直接绑定渠道，尝试通过路由策略自动匹配
 	if notifyChannels == "" {
-		svc := services.NewMonitorCRUDService(global.DB)
-		notifyChannels = svc.ResolveRoutePolicyChannels(ctx, rule)
+		notifyChannels = w.routeResolver.ResolveRoutePolicyChannels(ctx, rule)
 	}
 
 	if notifyChannels == "" {
@@ -280,7 +288,7 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 
 	// 解析通知渠道 ID 列表
 	channelIDs := strings.Split(notifyChannels, ",")
-	var channels []models.MonitorNotifyChannel
+	var channels []dm.NotifyChannel
 
 	for _, idStr := range channelIDs {
 		idStr = strings.TrimSpace(idStr)
@@ -291,8 +299,8 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 		if err != nil {
 			continue
 		}
-		var ch models.MonitorNotifyChannel
-		if err := global.DB.WithContext(ctx).
+		var ch dm.NotifyChannel
+		if err := w.db.WithContext(ctx).
 			Where("id = ? AND enabled = 1 AND is_del = 0", chID).
 			First(&ch).Error; err == nil {
 			// 恢复通知：需检查渠道是否启用发送恢复通知
@@ -308,7 +316,7 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 	}
 
 	// 构建通知数据
-	alert := &services.AlertNotification{
+	alert := &dm.AlertNotification{
 		RuleName:    rule.Name,
 		Severity:    rule.Severity,
 		Status:      status,
@@ -324,7 +332,7 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 	for i := range channels {
 		ch := &channels[i]
 		if err := services.SendNotification(ch, alert); err != nil {
-			global.Logger.Warn("[AlertEvalWorker] 通知发送失败",
+			w.logger.Warn("[AlertEvalWorker] 通知发送失败",
 				zap.String("channel", ch.Name), zap.Error(err))
 			notifyResults = append(notifyResults, fmt.Sprintf("%s:失败", ch.Name))
 		} else {
@@ -337,14 +345,14 @@ func (w *AlertEvalWorker) sendNotification(ctx context.Context, rule *models.Mon
 	if len(notifyStr) > 200 {
 		notifyStr = notifyStr[:197] + "..."
 	}
-	global.DB.WithContext(ctx).Model(&models.MonitorAlertEvent{}).
+	w.db.WithContext(ctx).Model(&dm.AlertEvent{}).
 		Where("id = ?", event.ID).
 		Update("notify_result", notifyStr)
 }
 
 // updateRuleEval 更新规则评估状态
 func (w *AlertEvalWorker) updateRuleEval(ctx context.Context, ruleID int64, evalAt int64, result string, pendingSince int64) {
-	global.DB.WithContext(ctx).Model(&models.MonitorAlertRule{}).
+	w.db.WithContext(ctx).Model(&dm.AlertRule{}).
 		Where("id = ?", ruleID).
 		Updates(map[string]interface{}{
 			"last_eval_at":     evalAt,
@@ -355,15 +363,15 @@ func (w *AlertEvalWorker) updateRuleEval(ctx context.Context, ruleID int64, eval
 
 // resolvePromClient 获取 Prometheus 客户端
 func (w *AlertEvalWorker) resolvePromClient(ctx context.Context, datasourceID int64) (*prom.Client, int64) {
-	if global.DB == nil {
+	if w.db == nil {
 		return nil, 0
 	}
 
-	var ds models.MonitorDatasource
+	var ds dm.Datasource
 
 	// 1. 优先用规则绑定的数据源
 	if datasourceID > 0 {
-		if err := global.DB.WithContext(ctx).
+		if err := w.db.WithContext(ctx).
 			Where("id = ? AND enabled = 1 AND is_del = 0", datasourceID).
 			First(&ds).Error; err == nil && ds.URL != "" {
 			return prom.NewClient(ds.URL, 30*time.Second), ds.ID
@@ -371,7 +379,7 @@ func (w *AlertEvalWorker) resolvePromClient(ctx context.Context, datasourceID in
 	}
 
 	// 2. 回退到默认数据源
-	if err := global.DB.WithContext(ctx).
+	if err := w.db.WithContext(ctx).
 		Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").
 		First(&ds).Error; err == nil && ds.URL != "" {
@@ -379,7 +387,7 @@ func (w *AlertEvalWorker) resolvePromClient(ctx context.Context, datasourceID in
 	}
 
 	// 3. 回退到任一启用的数据源
-	if err := global.DB.WithContext(ctx).
+	if err := w.db.WithContext(ctx).
 		Where("type IN (?,?,?) AND enabled = 1 AND is_del = 0",
 			"prometheus", "victoriametrics", "thanos").
 		Order("id DESC").First(&ds).Error; err == nil && ds.URL != "" {

@@ -82,9 +82,9 @@ func AuthJWT() gin.HandlerFunc {
 		metrics.AuthTokenValidationTotal.WithLabelValues("success").Inc()
 
 		// 3) 按用户ID查库，确保用户存在/可用
-		// 用带 error 的版本：数据库不可用时必须返回 500，若沿用吞掉 error 的
-		// GetUserByID，DB 连接超时会被伪装成 401 把用户踢到登录页，真因无从排查
-		u, err := models.NewUser().GetUserByIDE(claims.UserID)
+		// 注意：此处使用 global.DB 而非租户隔离 DB。认证阶段尚未确定租户上下文，
+		// 用户查询是跨租户操作，super admin 等特殊用户可能不归属于任一特定租户。
+		u, err := NewServicesFromContext(ctx).UserGetByStringID(claims.UserID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				// 用户已被删除，登录态确实无效
@@ -129,7 +129,7 @@ func AuthJWT() gin.HandlerFunc {
 		// 是否超级管理员（写入上下文，供权限相关控制器复用）
 		// 必须传租户隔离 DB：IsSuperAdmin 依赖 Statement.Context 中的 tenant_id，
 		// 直接传 global.DB 会因取不到 tenant_id 而恒返回 false
-		isSuperAdmin := models.IsSuperAdmin(GetTenantDB(ctx), int64(u.ID))
+		isSuperAdmin := NewServicesFromContext(ctx).IsSuperAdmin(int64(u.ID))
 		ctx.Set("is_super_admin", isSuperAdmin)
 
 		// 5) 记录用户活跃时间（异步，用于"在线用户"统计，不阻塞请求）
@@ -164,7 +164,7 @@ func RequireCICDPermission(permissionName string) gin.HandlerFunc {
 		}
 
 		// 检查细粒度权限
-		if !models.HasUserPermission(GetTenantDB(ctx), userID, permissionName) {
+		if !NewServicesFromContext(ctx).HasUserPermission(userID, permissionName) {
 			rsp := response.NewResponse(ctx)
 			rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
 			ctx.Abort()
@@ -184,7 +184,7 @@ func CheckCICDPermission(ctx *gin.Context, permissionName string) bool {
 		rsp.ToErrorResponse(errorcode.UnauthorizedTokenError)
 		return false
 	}
-	if !models.HasUserPermission(GetTenantDB(ctx), userID, permissionName) {
+	if !NewServicesFromContext(ctx).HasUserPermission(userID, permissionName) {
 		rsp := response.NewResponse(ctx)
 		rsp.ToErrorResponse(errorcode.ErrorRBACAccessDenied)
 		return false

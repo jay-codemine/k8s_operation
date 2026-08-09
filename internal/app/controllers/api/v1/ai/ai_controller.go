@@ -53,7 +53,7 @@ func getUserID(ctx *gin.Context) uint32 {
 // @Accept json
 // @Produce json
 // @Param body body services.AIChatRequest true "聊天请求"
-// @Success 200 {object} services.AIChatResponse
+// @Success 200 {object} k8soperation_internal_app_services.AIChatResponse
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/ai/chat [post]

@@ -11,6 +11,7 @@ import (
 
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	dmai "k8soperation/internal/domain/ai"
 	"k8soperation/pkg/openai"
 )
 
@@ -28,6 +29,10 @@ func aiLog() *zap.Logger {
 // =========================================================================
 // AI 助手 Service —— Function Calling 对话 + 自动执行 + 高危审批
 // =========================================================================
+
+func (s *Services) aiSvc() *dmai.AIService {
+	return dmai.NewAIService(s.db)
+}
 
 // AI 客户端单例（懒加载）—— 仅作为无指定 provider/model 时的默认回退
 var aiClient *openai.Client
@@ -251,7 +256,7 @@ func (s *Services) AIConversationCreate(ctx context.Context, userID uint32, titl
 		Title:  title,
 		Status: 1,
 	}
-	if err := s.dao.AIConversationCreate(conv); err != nil {
+	if err := s.aiSvc().ConversationCreate(ctx, conv); err != nil {
 		return nil, err
 	}
 	return conv, nil
@@ -259,21 +264,21 @@ func (s *Services) AIConversationCreate(ctx context.Context, userID uint32, titl
 
 // AIConversationList 获取用户会话列表
 func (s *Services) AIConversationList(ctx context.Context, userID uint32, page, pageSize int) ([]*models.AIConversation, int64, error) {
-	return s.dao.AIConversationList(userID, page, pageSize)
+	return s.aiSvc().ConversationList(ctx, userID, page, pageSize)
 }
 
 // AIConversationDelete 归档（软删除）会话
 func (s *Services) AIConversationDelete(ctx context.Context, convID, userID uint32) error {
-	return s.dao.AIConversationDelete(convID, userID)
+	return s.aiSvc().ConversationDelete(ctx, convID, userID)
 }
 
 // AIMessageHistory 获取会话历史消息
 func (s *Services) AIMessageHistory(ctx context.Context, convID, userID uint32) ([]*models.AIMessage, error) {
 	// 先验证会话归属
-	if _, err := s.dao.AIConversationGet(convID, userID); err != nil {
+	if _, err := s.aiSvc().ConversationGetByID(ctx, convID, userID); err != nil {
 		return nil, fmt.Errorf("会话不存在或无权访问")
 	}
-	return s.dao.AIMessageListByConversation(convID)
+	return s.aiSvc().MessageListByConversation(ctx, convID)
 }
 
 // =========================================================================
@@ -348,12 +353,12 @@ func (s *Services) AIChat(ctx context.Context, req *AIChatRequest, factory *Clus
 		Role:           "user",
 		Content:        req.Message,
 	}
-	if err := s.dao.AIMessageCreate(userMsg); err != nil {
+	if err := s.aiSvc().MessageCreate(ctx, userMsg); err != nil {
 		global.Logger.Error("保存用户消息失败", zap.Error(err))
 	}
 
 	// 3. 构建历史上下文（含本次 user 消息，因为已先 save 再读 DB）
-	messages, err := s.buildHistoryMessages(convID)
+	messages, err := s.buildHistoryMessages(ctx, convID)
 	if err != nil {
 		global.Logger.Warn("获取历史消息失败", zap.Error(err))
 		messages = []openai.Message{{Role: "user", Content: req.Message}}
@@ -536,7 +541,7 @@ func (s *Services) AIChat(ctx context.Context, req *AIChatRequest, factory *Clus
 		Content:        resp.Reply,
 		IntentJSON:     string(toolsJSON),
 	}
-	if err := s.dao.AIMessageCreate(assistantMsg); err != nil {
+	if err := s.aiSvc().MessageCreate(ctx, assistantMsg); err != nil {
 		global.Logger.Error("保存AI回复消息失败", zap.Error(err))
 	}
 
@@ -546,7 +551,7 @@ func (s *Services) AIChat(ctx context.Context, req *AIChatRequest, factory *Clus
 		if len([]rune(title)) > 30 {
 			title = string([]rune(title)[:30]) + "..."
 		}
-		_ = s.dao.AIConversationUpdateTitle(convID, title)
+		_ = s.aiSvc().ConversationUpdateTitle(ctx, convID, title)
 	}
 
 	totalLatency := time.Since(start)
@@ -607,10 +612,10 @@ func (s *Services) AIChatStream(ctx context.Context, req *AIChatRequest, callbac
 		Role:           "user",
 		Content:        req.Message,
 	}
-	_ = s.dao.AIMessageCreate(userMsg)
+	_ = s.aiSvc().MessageCreate(ctx, userMsg)
 
 	// 构建历史上下文
-	messages, err := s.buildHistoryMessages(convID)
+	messages, err := s.buildHistoryMessages(ctx, convID)
 	if err != nil {
 		messages = []openai.Message{{Role: "user", Content: req.Message}}
 	}
@@ -636,7 +641,7 @@ func (s *Services) AIChatStream(ctx context.Context, req *AIChatRequest, callbac
 		Role:           "assistant",
 		Content:        fullReply,
 	}
-	_ = s.dao.AIMessageCreate(assistantMsg)
+	_ = s.aiSvc().MessageCreate(ctx, assistantMsg)
 
 	// 自动更新标题
 	if req.ConversationID == 0 {
@@ -644,7 +649,7 @@ func (s *Services) AIChatStream(ctx context.Context, req *AIChatRequest, callbac
 		if len([]rune(title)) > 30 {
 			title = string([]rune(title)[:30]) + "..."
 		}
-		_ = s.dao.AIConversationUpdateTitle(convID, title)
+		_ = s.aiSvc().ConversationUpdateTitle(ctx, convID, title)
 	}
 
 	return &AIChatResponse{
@@ -659,21 +664,21 @@ func (s *Services) AIChatStream(ctx context.Context, req *AIChatRequest, callbac
 
 // AIApprovalList 获取审批列表（管理员用）
 func (s *Services) AIApprovalList(ctx context.Context, status uint8, page, pageSize int) ([]*models.AIApprovalRequest, int64, error) {
-	return s.dao.AIApprovalListAll(status, page, pageSize)
+	return s.aiSvc().ApprovalListAll(ctx, status, page, pageSize)
 }
 
 // AIApprovalMyList 获取我的审批申请
 func (s *Services) AIApprovalMyList(ctx context.Context, userID uint32, page, pageSize int) ([]*models.AIApprovalRequest, int64, error) {
-	return s.dao.AIApprovalListByUser(userID, page, pageSize)
+	return s.aiSvc().ApprovalListByUser(ctx, userID, page, pageSize)
 }
 
 // AIApprovalDetail 获取审批详情
 func (s *Services) AIApprovalDetail(ctx context.Context, approvalID uint32) (*models.AIApprovalRequest, []*models.AIApprovalLog, error) {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return nil, nil, err
 	}
-	logs, err := s.dao.AIApprovalLogList(approvalID)
+	logs, err := s.aiSvc().ApprovalLogListByApproval(ctx, approvalID)
 	if err != nil {
 		return req, nil, err
 	}
@@ -682,7 +687,7 @@ func (s *Services) AIApprovalDetail(ctx context.Context, approvalID uint32) (*mo
 
 // AIApprovalApprove 通过审批（通过后自动执行工具调用）
 func (s *Services) AIApprovalApprove(ctx context.Context, approvalID, approverID uint32, comment string, factory *ClusterClientFactory, adminOverride bool) error {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return fmt.Errorf("审批请求不存在")
 	}
@@ -702,16 +707,16 @@ func (s *Services) AIApprovalApprove(ctx context.Context, approvalID, approverID
 	}
 	// 检查是否过期（管理页面 adminOverride 可跳过过期限制）
 	if !adminOverride && req.ExpireAt > 0 && uint32(time.Now().Unix()) > req.ExpireAt {
-		_ = s.dao.AIApprovalUpdateStatus(approvalID, models.AIApprovalExpired, 0, "已过期")
+		_ = s.aiSvc().ApprovalUpdateStatus(ctx, approvalID, models.AIApprovalExpired, 0, "已过期")
 		return fmt.Errorf("审批已过期")
 	}
 
-	if err := s.dao.AIApprovalUpdateStatus(approvalID, models.AIApprovalApproved, approverID, comment); err != nil {
+	if err := s.aiSvc().ApprovalUpdateStatus(ctx, approvalID, models.AIApprovalApproved, approverID, comment); err != nil {
 		return err
 	}
 
 	// 记录审批日志
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approvalID,
 		UserID:     approverID,
 		Action:     "approve",
@@ -740,10 +745,10 @@ func (s *Services) executeApprovedTool(ctx context.Context, approval *models.AIA
 	}
 
 	// 更新执行结果
-	_ = s.dao.AIApprovalUpdateExecuteResult(approval.ID, result)
+	_ = s.aiSvc().ApprovalUpdateExecuteResult(ctx, approval.ID, result)
 
 	// 记录执行日志
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approval.ID,
 		UserID:     0, // 系统自动执行
 		Action:     "execute",
@@ -757,7 +762,7 @@ func (s *Services) executeApprovedTool(ctx context.Context, approval *models.AIA
 
 // AIApprovalReject 拒绝审批
 func (s *Services) AIApprovalReject(ctx context.Context, approvalID, approverID uint32, comment string, adminOverride bool) error {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return fmt.Errorf("审批请求不存在")
 	}
@@ -776,11 +781,11 @@ func (s *Services) AIApprovalReject(ctx context.Context, approvalID, approverID 
 		return fmt.Errorf("不能拒绝自己提交的操作请求，请使用取消功能")
 	}
 
-	if err := s.dao.AIApprovalUpdateStatus(approvalID, models.AIApprovalRejected, approverID, comment); err != nil {
+	if err := s.aiSvc().ApprovalUpdateStatus(ctx, approvalID, models.AIApprovalRejected, approverID, comment); err != nil {
 		return err
 	}
 
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approvalID,
 		UserID:     approverID,
 		Action:     "reject",
@@ -792,7 +797,7 @@ func (s *Services) AIApprovalReject(ctx context.Context, approvalID, approverID 
 
 // AIApprovalCancel 取消审批（申请人自己取消）
 func (s *Services) AIApprovalCancel(ctx context.Context, approvalID, userID uint32) error {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return fmt.Errorf("审批请求不存在")
 	}
@@ -803,11 +808,11 @@ func (s *Services) AIApprovalCancel(ctx context.Context, approvalID, userID uint
 		return fmt.Errorf("审批已处理")
 	}
 
-	if err := s.dao.AIApprovalUpdateStatus(approvalID, models.AIApprovalCanceled, 0, "申请人取消"); err != nil {
+	if err := s.aiSvc().ApprovalUpdateStatus(ctx, approvalID, models.AIApprovalCanceled, 0, "申请人取消"); err != nil {
 		return err
 	}
 
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approvalID,
 		UserID:     userID,
 		Action:     "cancel",
@@ -819,18 +824,18 @@ func (s *Services) AIApprovalCancel(ctx context.Context, approvalID, userID uint
 
 // AIApprovalPendingCount 获取待审批数量（全局，管理员用）
 func (s *Services) AIApprovalPendingCount(ctx context.Context) (int64, error) {
-	_, total, err := s.dao.AIApprovalListPending(1, 1)
+	_, total, err := s.aiSvc().ApprovalListPending(ctx, 1, 1)
 	return total, err
 }
 
 // AIApprovalMyPendingCount 获取我的待审批数量（普通用户用）
 func (s *Services) AIApprovalMyPendingCount(ctx context.Context, userID uint32) (int64, error) {
-	return s.dao.AIApprovalMyPendingCount(userID)
+	return s.aiSvc().ApprovalMyPendingCount(ctx, userID)
 }
 
 // AIApprovalDelete 删除审批记录（管理员专用）
 func (s *Services) AIApprovalDelete(ctx context.Context, approvalID uint32, userID uint32, isAdmin bool) error {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return fmt.Errorf("审批请求不存在")
 	}
@@ -844,19 +849,19 @@ func (s *Services) AIApprovalDelete(ctx context.Context, approvalID uint32, user
 		}
 	}
 
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approvalID,
 		UserID:     userID,
 		Action:     "delete",
 		Comment:    "手动删除审批记录",
 	})
 
-	return s.dao.AIApprovalDelete(approvalID)
+	return s.aiSvc().ApprovalDelete(ctx, approvalID)
 }
 
 // AIApprovalUpdate 更新审批备注（仅待审批状态可编辑）
 func (s *Services) AIApprovalUpdate(ctx context.Context, approvalID uint32, userID uint32, comment string, isAdmin bool) error {
-	req, err := s.dao.AIApprovalGetByID(approvalID)
+	req, err := s.aiSvc().ApprovalGetByID(ctx, approvalID)
 	if err != nil {
 		return fmt.Errorf("审批请求不存在")
 	}
@@ -870,11 +875,11 @@ func (s *Services) AIApprovalUpdate(ctx context.Context, approvalID uint32, user
 	updates := map[string]interface{}{
 		"approve_comment": comment,
 	}
-	if err := s.dao.AIApprovalUpdate(approvalID, updates); err != nil {
+	if err := s.aiSvc().ApprovalUpdate(ctx, approvalID, updates); err != nil {
 		return err
 	}
 
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: approvalID,
 		UserID:     userID,
 		Action:     "update",
@@ -885,18 +890,17 @@ func (s *Services) AIApprovalUpdate(ctx context.Context, approvalID uint32, user
 
 // AIApprovalStats 获取审批统计数据
 func (s *Services) AIApprovalStats(ctx context.Context) (map[string]int64, error) {
-	return s.dao.AIApprovalStats()
+	return s.aiSvc().ApprovalStats(ctx)
 }
 
 // IsApprovalAdmin 检查用户是否有审批权限
 // 只有 super_admin / platform_admin / cluster_admin 角色才能审批
 func (s *Services) IsApprovalAdmin(userID int64) bool {
-	// 超级管理员直接通过
-	if s.dao.IsSuperAdmin(userID) {
+	rbacSvc := s.rbacSvc()
+	if rbacSvc.IsSuperAdmin(userID) {
 		return true
 	}
-	// 检查是否有 platform_admin 或 cluster_admin 角色
-	roles, err := s.dao.UserRoleList(userID)
+	roles, err := rbacSvc.UserRoleList(userID)
 	if err != nil {
 		return false
 	}
@@ -918,8 +922,8 @@ func (s *Services) IsApprovalAdmin(userID int64) bool {
 //  1. 跳过 tool 角色消息（中间态 Function Calling 结果，对应 assistant.tool_calls 已丢失，API 会 400）
 //  2. 跳过 assistant 空 content 消息（仅含 tool_calls 的中间态，直接发送会污染上下文）
 //  3. 滑动窗口截取最近 N 轮（默认 20 轮，可通过 AISetting.MaxHistoryRound 配置）
-func (s *Services) buildHistoryMessages(convID uint32) ([]openai.Message, error) {
-	history, err := s.dao.AIMessageListByConversation(convID)
+func (s *Services) buildHistoryMessages(ctx context.Context, convID uint32) ([]openai.Message, error) {
+	history, err := s.aiSvc().MessageListByConversation(ctx, convID)
 	if err != nil {
 		return nil, err
 	}
@@ -1002,12 +1006,12 @@ func (s *Services) createToolApproval(ctx context.Context, convID, userID uint32
 		Status:         models.AIApprovalPending,
 		ExpireAt:       uint32(time.Now().Add(time.Duration(expireMinutes) * time.Minute).Unix()),
 	}
-	if err := s.dao.AIApprovalCreate(req); err != nil {
+	if err := s.aiSvc().ApprovalCreate(ctx, req); err != nil {
 		return nil, err
 	}
 
 	// 记录审批创建日志
-	_ = s.dao.AIApprovalLogCreate(&models.AIApprovalLog{
+	_ = s.aiSvc().ApprovalLogCreate(ctx, &models.AIApprovalLog{
 		ApprovalID: req.ID,
 		UserID:     userID,
 		Action:     "create",

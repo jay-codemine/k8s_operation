@@ -23,7 +23,7 @@ func NewLDAPController() *LDAPController {
 // @Tags LDAP管理
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} services.LDAPConfigResponse
+// @Success 200 {object} k8soperation_internal_app_services.LDAPConfigResponse
 // @Router /api/v1/ldap/config [get]
 func (c *LDAPController) GetConfig(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
@@ -67,7 +67,7 @@ func (c *LDAPController) TestConnection(ctx *gin.Context) {
 // @Tags LDAP管理
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} services.LDAPSyncResult
+// @Success 200 {object} k8soperation_internal_app_services.LDAPSyncResult
 // @Router /api/v1/ldap/sync [post]
 func (c *LDAPController) SyncUsers(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)

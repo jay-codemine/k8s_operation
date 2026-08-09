@@ -5,8 +5,8 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
 )
@@ -29,7 +29,7 @@ func (u *AuthController) ForgotPassword(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 调用业务层
 	if err := svc.UserForgotPassword(param); err != nil {

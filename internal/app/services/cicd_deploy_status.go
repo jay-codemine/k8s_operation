@@ -73,7 +73,7 @@ type workloadRollout struct {
 
 // GetDeployStatus 查询部署阶段的真实状态与 Pod 列表，并修正卡住的阶段
 func (s *Services) GetDeployStatus(ctx context.Context, stageID int64) (*DeployStatusResult, error) {
-	stage, err := s.dao.StageGetByID(ctx, stageID)
+	stage, err := s.cicdSvc().StageGetByID(ctx, stageID)
 	if err != nil {
 		return nil, errors.New("阶段不存在")
 	}
@@ -81,11 +81,11 @@ func (s *Services) GetDeployStatus(ctx context.Context, stageID int64) (*DeployS
 		return nil, errors.New("该阶段不是部署阶段")
 	}
 
-	run, err := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+	run, err := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 	if err != nil {
 		return nil, errors.New("运行记录不存在")
 	}
-	pipeline, _ := s.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, run.PipelineID)
 
 	// 解析部署目标：优先阶段记录，回退流水线最新配置
 	clusterID := stage.DeployClusterID
@@ -341,19 +341,19 @@ func (s *Services) reconcileStuckDeployStage(ctx context.Context, stage *models.
 	if realStatus == models.StageStatusFailed {
 		updates["error_message"] = msg
 	}
-	_ = s.dao.StageUpdate(ctx, stage.ID, updates)
+	_ = s.cicdSvc().StageUpdate(ctx, stage.ID, updates)
 
 	runStatus := models.PipelineRunStatusSuccess
 	if realStatus == models.StageStatusFailed {
 		runStatus = models.PipelineRunStatusFailed
 	}
-	_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, runStatus)
-	_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, runStatus)
+	_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, runStatus)
+	_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, runStatus)
 
 	if realStatus == models.StageStatusSuccess {
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(now), "success", "")
+		_ = s.cicdSvc().PipelineUpdateDeployInfo(ctx, run.PipelineID, stage.DeployImage, "", uint64(now), "success", "")
 	} else {
-		_ = s.dao.PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, msg)
+		_ = s.cicdSvc().PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, msg)
 	}
 
 	global.Logger.Info("[流水线] 部署阶段状态已修正",

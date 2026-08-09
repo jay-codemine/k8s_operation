@@ -12,18 +12,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
 	kevent "k8soperation/pkg/k8s/event"
+	"k8soperation/pkg/logger"
 	"k8soperation/pkg/utils"
 )
 
-// K8sRBACService K8s RBAC 服务
-type K8sRBACService struct{}
+// K8sRBACService K8s RBAC 服务（操作 K8s API，无 DB 依赖）
+type K8sRBACService struct {
+	logger *logger.Logger
+}
 
-func NewK8sRBACService() *K8sRBACService {
-	return &K8sRBACService{}
+func NewK8sRBACService(logger *logger.Logger) *K8sRBACService {
+	return &K8sRBACService{logger: logger}
 }
 
 // ==================== ServiceAccount ====================
@@ -54,7 +56,7 @@ func (s *K8sRBACService) ListServiceAccounts(ctx context.Context, cli *kubernete
 		list, err = cli.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
 	}
 	if err != nil {
-		global.Logger.Error("获取 ServiceAccount 列表失败", zap.Error(err))
+		s.logger.Error("获取 ServiceAccount 列表失败", zap.Error(err))
 		return nil, err
 	}
 
@@ -82,7 +84,7 @@ func (s *K8sRBACService) ListServiceAccounts(ctx context.Context, cli *kubernete
 func (s *K8sRBACService) GetServiceAccount(ctx context.Context, cli *kubernetes.Clientset, namespace, name string) (*ServiceAccountItem, error) {
 	sa, err := cli.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		global.Logger.Error("获取 ServiceAccount 详情失败", zap.Error(err))
+		s.logger.Error("获取 ServiceAccount 详情失败", zap.Error(err))
 		return nil, err
 	}
 
@@ -114,7 +116,7 @@ func (s *K8sRBACService) CreateServiceAccount(ctx context.Context, cli *kubernet
 
 	created, err := cli.CoreV1().ServiceAccounts(namespace).Create(ctx, sa, metav1.CreateOptions{})
 	if err != nil {
-		global.Logger.Error("创建 ServiceAccount 失败", zap.Error(err))
+		s.logger.Error("创建 ServiceAccount 失败", zap.Error(err))
 		return nil, err
 	}
 
@@ -125,7 +127,7 @@ func (s *K8sRBACService) CreateServiceAccount(ctx context.Context, cli *kubernet
 func (s *K8sRBACService) DeleteServiceAccount(ctx context.Context, cli *kubernetes.Clientset, namespace, name string) error {
 	err := cli.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		global.Logger.Error("删除 ServiceAccount 失败", zap.Error(err))
+		s.logger.Error("删除 ServiceAccount 失败", zap.Error(err))
 		return err
 	}
 	return nil
@@ -135,7 +137,7 @@ func (s *K8sRBACService) DeleteServiceAccount(ctx context.Context, cli *kubernet
 func (s *K8sRBACService) UpdateServiceAccount(ctx context.Context, cli *kubernetes.Clientset, namespace, name string, labels map[string]string, annotations map[string]string, autoMount *bool) error {
 	sa, err := cli.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		global.Logger.Error("获取 ServiceAccount 失败", zap.Error(err))
+		s.logger.Error("获取 ServiceAccount 失败", zap.Error(err))
 		return err
 	}
 
@@ -151,7 +153,7 @@ func (s *K8sRBACService) UpdateServiceAccount(ctx context.Context, cli *kubernet
 
 	_, err = cli.CoreV1().ServiceAccounts(namespace).Update(ctx, sa, metav1.UpdateOptions{})
 	if err != nil {
-		global.Logger.Error("更新 ServiceAccount 失败", zap.Error(err))
+		s.logger.Error("更新 ServiceAccount 失败", zap.Error(err))
 		return err
 	}
 	return nil
@@ -161,7 +163,7 @@ func (s *K8sRBACService) UpdateServiceAccount(ctx context.Context, cli *kubernet
 func (s *K8sRBACService) GetServiceAccountYaml(ctx context.Context, cli *kubernetes.Clientset, namespace, name string) (string, error) {
 	sa, err := cli.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		global.Logger.Error("获取 ServiceAccount 失败", zap.Error(err))
+		s.logger.Error("获取 ServiceAccount 失败", zap.Error(err))
 		return "", err
 	}
 
@@ -170,7 +172,7 @@ func (s *K8sRBACService) GetServiceAccountYaml(ctx context.Context, cli *kuberne
 
 	yamlBytes, err := yaml.Marshal(sa)
 	if err != nil {
-		global.Logger.Error("序列化 ServiceAccount YAML 失败", zap.Error(err))
+		s.logger.Error("序列化 ServiceAccount YAML 失败", zap.Error(err))
 		return "", fmt.Errorf("failed to marshal ServiceAccount to YAML: %w", err)
 	}
 	return string(yamlBytes), nil
@@ -195,7 +197,7 @@ func (s *K8sRBACService) ApplyServiceAccountYaml(ctx context.Context, cli *kuber
 
 	_, err := cli.CoreV1().ServiceAccounts(saObj.Namespace).Update(ctx, saObj, metav1.UpdateOptions{})
 	if err != nil {
-		global.Logger.Error("应用 ServiceAccount YAML 失败", zap.Error(err))
+		s.logger.Error("应用 ServiceAccount YAML 失败", zap.Error(err))
 		return fmt.Errorf("failed to apply ServiceAccount YAML: %w", err)
 	}
 	return nil
@@ -212,7 +214,7 @@ func (s *K8sRBACService) GetServiceAccountEvents(ctx context.Context, cli *kuber
 	}
 	items, _, err := kevent.ListEvents(ctx, cli, req)
 	if err != nil {
-		global.Logger.Error("获取 ServiceAccount 事件失败", zap.Error(err))
+		s.logger.Error("获取 ServiceAccount 事件失败", zap.Error(err))
 		return nil, err
 	}
 	return items, nil
@@ -262,11 +264,11 @@ func (s *K8sRBACService) ListRoles(ctx context.Context, cli *kubernetes.Clientse
 
 	// 检查错误
 	if crErr != nil {
-		global.Logger.Error("获取 ClusterRole 列表失败", zap.Error(crErr))
+		s.logger.Error("获取 ClusterRole 列表失败", zap.Error(crErr))
 		return nil, crErr
 	}
 	if rErr != nil {
-		global.Logger.Error("获取 Role 列表失败", zap.Error(rErr))
+		s.logger.Error("获取 Role 列表失败", zap.Error(rErr))
 		return nil, rErr
 	}
 
@@ -372,11 +374,11 @@ func (s *K8sRBACService) ListRoleBindings(ctx context.Context, cli *kubernetes.C
 
 	// 检查错误
 	if crbErr != nil {
-		global.Logger.Error("获取 ClusterRoleBinding 列表失败", zap.Error(crbErr))
+		s.logger.Error("获取 ClusterRoleBinding 列表失败", zap.Error(crbErr))
 		return nil, crbErr
 	}
 	if rbErr != nil {
-		global.Logger.Error("获取 RoleBinding 列表失败", zap.Error(rbErr))
+		s.logger.Error("获取 RoleBinding 列表失败", zap.Error(rbErr))
 		return nil, rbErr
 	}
 
@@ -498,7 +500,7 @@ func (s *K8sRBACService) CheckSubjectAccess(ctx context.Context, cli *kubernetes
 	// 执行权限检查
 	review, err := cli.AuthorizationV1().SubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
 	if err != nil {
-		global.Logger.Error("权限检查失败", zap.Error(err))
+		s.logger.Error("权限检查失败", zap.Error(err))
 		return nil, err
 	}
 

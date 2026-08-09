@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
+	"k8soperation/internal/app/services"
 )
 
 // ========== 审计中间件 ==========
@@ -197,8 +199,8 @@ func writeAuditLog(userIDVal, usernameVal interface{}, clientIP, userAgent, path
 		CreatedAt:     time.Now().Unix(),
 	}
 
-	// 写入数据库
-	if err := auditLog.Create(global.DB); err != nil {
+	// 写入数据库（审计日志为跨租户后台写入，使用 Services 层）
+	if err := services.NewBackgroundServices().AuditLogRecord(context.Background(), auditLog); err != nil {
 		global.Logger.Error("写入审计日志失败", zap.Error(err))
 	}
 }

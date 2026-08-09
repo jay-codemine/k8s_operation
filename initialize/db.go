@@ -6,7 +6,6 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm/logger"
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/pkg/database"
@@ -185,10 +184,8 @@ func autoMigrateTables() error {
 // initDefaultData 初始化默认数据
 func initDefaultData() error {
 	ctx := context.Background()
-	d := dao.NewDao(global.DB)
-
 	// 初始化平台设置默认值
-	if err := d.PlatformSettingsInitDefaults(ctx); err != nil {
+	if _, err := services.NewBackgroundServices().PlatformSettingsReset(ctx); err != nil {
 		return fmt.Errorf("init platform settings failed: %w", err)
 	}
 
@@ -199,7 +196,7 @@ func initDefaultData() error {
 	seedDefaultRoles()
 
 	// 初始化默认管理员账号（首次启动自动创建）
-	initDefaultAdminUser(ctx, d)
+	initDefaultAdminUser(ctx)
 
 	// ⚠️ 管理员角色自修复（防止admin自锁后无法恢复）
 	repairAdminRole()
@@ -208,7 +205,7 @@ func initDefaultData() error {
 	repairTenantRBAC()
 
 	// 初始化应用商城种子数据
-	svc := services.NewServices()
+	svc := services.NewBackgroundServices()
 	if err := svc.AppStoreSeed(ctx); err != nil {
 		return fmt.Errorf("init appstore seed data failed: %w", err)
 	}
@@ -684,42 +681,42 @@ func seedCICDPermissions() {
 }
 
 // initDefaultAdminUser 首次启动自动创建默认管理员 admin/123456
-func initDefaultAdminUser(ctx context.Context, d *dao.Dao) {
-	if _, err := d.UserGetByName("admin"); err == nil {
+func initDefaultAdminUser(ctx context.Context) {
+	svc := services.NewBackgroundServices()
+	if _, err := svc.UserGetByName("admin"); err == nil {
 		return
 	}
-	user, err := d.UserCreate("admin", "123456", 0) // 0 = 默认租户
+	usr, err := svc.UserCreateSimple("admin", "123456", 0)
 	if err != nil {
 		log.Printf("[InitData] create admin failed: %v", err)
 		return
 	}
 
 	// 分配超级管理员角色
-	var roleID uint32
-	if err := global.DB.Raw("SELECT id FROM sys_role WHERE role_type = 'super_admin' AND is_del = 0 LIMIT 1").Scan(&roleID).Error; err != nil || roleID == 0 {
+	role, err := svc.RoleGetByName("super_admin")
+	if err != nil || role == nil || role.ID == 0 {
 		log.Printf("[InitData] super_admin role not found, admin has no role")
 		return
 	}
-	now := uint32(time.Now().Unix())
-	if err := global.DB.Exec("INSERT INTO sys_user_role (user_id, role_id, created_at, modified_at) VALUES (?, ?, ?, ?)",
-		user.ID, roleID, now, now).Error; err != nil {
+	if err := svc.UserRoleAssignSimple(int64(usr.ID), int64(role.ID)); err != nil {
 		log.Printf("[InitData] assign super_admin to admin failed: %v", err)
 		return
 	}
-	log.Printf("[InitData] Admin (ID=%d) assigned super_admin role", user.ID)
+	log.Printf("[InitData] Admin (ID=%d) assigned super_admin role", usr.ID)
 }
 
 // repairTenantRBAC 为存量的不可用租户补齐默认角色。
 // 早期的租户创建接口只往 tenant 表插一行，这些租户在 sys_role 里没有任何记录，
 // 其用户登录后 IsSuperAdmin/HasUserPermission 全部返回 false，租户等于废的。
 func repairTenantRBAC() {
-	ids, err := dao.TenantsMissingSuperAdmin(global.DB)
+	svc := services.NewBackgroundServices()
+	ids, err := svc.TenantListMissingSuperAdmin()
 	if err != nil {
 		log.Printf("[InitData] 租户 RBAC 检查失败: %v", err)
 		return
 	}
 	for _, id := range ids {
-		if err := dao.TenantSeedRBAC(global.DB, id); err != nil {
+		if err := svc.TenantSeedRBAC(id); err != nil {
 			log.Printf("[InitData] 租户 %d 默认角色补齐失败: %v", id, err)
 			continue
 		}

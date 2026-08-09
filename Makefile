@@ -97,6 +97,14 @@ run: build
 	@echo ">> Running $(BIN_FILE)"
 	APP_CONFIG="$(VOL_CONFIGS)/config.yaml" GIN_MODE=$(GIN_MODE) "$(BIN_FILE)"
 
+# 每次全新编译运行（强制 -a 重编所有包，适合验证 DDD 改动）
+run-new:
+	@echo ">> Force rebuild & run $(BIN_FILE)"
+	@mkdir -p $(BIN_DIR)
+	$(GO) build -a -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_FILE) $(PKG)
+	@echo ">> Running $(BIN_FILE)"
+	APP_CONFIG="configs/config.yaml" GIN_MODE=$(GIN_MODE) "$(BIN_FILE)"
+
 # 快速启动（跳过 swagger 重新生成，适合日常开发）
 run-quick:
 	@echo ">> Building $(BIN_FILE) ($(GOOS)) [skip swag]"
@@ -131,7 +139,7 @@ swag:
 		echo ">> swag not found, installing..."; \
 		$(GO) install github.com/swaggo/swag/cmd/swag@latest; \
 	}
-	$(SWAG) init -g $(SWAG_MAIN) -o $(SWAG_OUT) -d ./ --parseInternal
+	$(SWAG) init -g $(SWAG_MAIN) -o $(SWAG_OUT) -d ./ --parseInternal --parseDependency --parseDepth 3
 
 swag-clean:
 	@echo ">> Cleaning Swagger artifacts"

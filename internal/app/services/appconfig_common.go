@@ -6,7 +6,6 @@ import (
 
 	"k8soperation/global"
 
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/requests"
 	"k8soperation/pkg/k8s/crd"
 
@@ -28,7 +27,7 @@ func getRestConfig(ctx context.Context, clusterID uint32) (*rest.Config, error) 
 }
 
 // 根据 clusterID 构建 AppConfig DAO（services 内部使用）
-func (s *Services) buildAppConfigDAO(ctx context.Context, clusterID uint32) (*dao.KubeAppConfig, error) {
+func (s *Services) buildAppConfigDAO(ctx context.Context, clusterID uint32) (*crd.KubeAppConfig, error) {
 	cfg, err := getRestConfig(ctx, clusterID) // 这个 getRestConfig 就放在 services 包里
 	if err != nil {
 		return nil, err
@@ -39,5 +38,5 @@ func (s *Services) buildAppConfigDAO(ctx context.Context, clusterID uint32) (*da
 		return nil, fmt.Errorf("NewAppConfigClient failed: %w", err)
 	}
 
-	return dao.NewKubeAppConfig(cli), nil
+	return crd.NewKubeAppConfig(cli), nil
 }

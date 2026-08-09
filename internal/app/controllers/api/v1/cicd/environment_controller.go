@@ -199,7 +199,7 @@ func (c *ApprovalController) List(ctx *gin.Context) {
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 权限判断：有 cicd:approval:action 权限的是审批人，可看全部；否则只能看自己提交的
-	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
+	canViewAll := svc.HasUserPermission(userID, "cicd:approval:action")
 
 	var list []*models.ApprovalListItem
 	var total int64
@@ -446,7 +446,7 @@ func (c *ApprovalController) Stats(ctx *gin.Context) {
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	// 权限判断：有审批操作权限的看全局统计，否则只看自己的
-	canViewAll := models.HasUserPermission(global.DB, userID, "cicd:approval:action")
+	canViewAll := svc.HasUserPermission(userID, "cicd:approval:action")
 
 	var stats map[string]int64
 	var err error

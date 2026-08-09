@@ -443,7 +443,8 @@ func (c *KubeDaemonSetController) Yaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	yamlStr, err := dspkg.GetYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name)
+	svc := middlewares.NewServicesFromContext(ctx)
+	yamlStr, err := svc.KubeDaemonSetGetYaml(ctx.Request.Context(), cli, param.Namespace, param.Name)
 	if err != nil {
 		global.Logger.Error("获取 DaemonSet YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorDaemonSetQueryFail.WithDetails(err.Error()))
@@ -476,7 +477,8 @@ func (c *KubeDaemonSetController) ApplyYaml(ctx *gin.Context) {
 	}
 	cli := middlewares.MustGetK8sClients(ctx)
 
-	_, err := dspkg.ApplyYaml(ctx.Request.Context(), cli.Kube, param.Namespace, param.Name, param.Yaml)
+	svc := middlewares.NewServicesFromContext(ctx)
+	_, err := svc.KubeDaemonSetApplyYaml(ctx.Request.Context(), cli, param.Namespace, param.Name, param.Yaml)
 	if err != nil {
 		global.Logger.Error("应用 DaemonSet YAML 失败", zap.Error(err))
 		r.ToErrorResponse(errorcode.ErrorDaemonSetQueryFail.WithDetails(err.Error()))

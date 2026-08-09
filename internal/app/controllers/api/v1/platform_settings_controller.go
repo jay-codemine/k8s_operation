@@ -23,7 +23,7 @@ func NewPlatformSettingsController() *PlatformSettingsController {
 // @Description 获取所有平台配置项
 // @Tags 平台管理
 // @Produce json
-// @Success 200 {object} models.PlatformSettingsResponse
+// @Success 200 {object} k8soperation_internal_domain_settings.PlatformSettingsResponse
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/platform/settings [get]
 func (c *PlatformSettingsController) Get(ctx *gin.Context) {
@@ -76,7 +76,7 @@ func (c *PlatformSettingsController) Update(ctx *gin.Context) {
 // @Description 将所有设置恢复为默认值
 // @Tags 平台管理
 // @Produce json
-// @Success 200 {object} models.PlatformSettingsResponse
+// @Success 200 {object} k8soperation_internal_domain_settings.PlatformSettingsResponse
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/platform/settings/reset [post]
 func (c *PlatformSettingsController) Reset(ctx *gin.Context) {

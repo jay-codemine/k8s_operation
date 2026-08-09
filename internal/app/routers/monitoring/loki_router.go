@@ -6,19 +6,18 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"k8soperation/global"
-	"k8soperation/internal/app/services"
+	"k8soperation/middlewares"
 )
 
 // LokiRouter Loki 日志路由
 type LokiRouter struct {
-	svc *services.LokiService
+	lokiURL string
 }
 
 // NewLokiRouter 创建 Loki 路由
 func NewLokiRouter(lokiURL string) *LokiRouter {
 	return &LokiRouter{
-		svc: services.NewLokiService(global.DB, lokiURL),
+		lokiURL: lokiURL,
 	}
 }
 
@@ -38,7 +37,7 @@ func (r *LokiRouter) Inject(g *gin.RouterGroup) {
 // HealthCheck Loki 健康检查
 func (r *LokiRouter) HealthCheck(c *gin.Context) {
 	ctx := c.Request.Context()
-	result := r.svc.HealthCheck(ctx)
+	result := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).HealthCheck(ctx)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": result})
 }
 
@@ -66,7 +65,7 @@ func (r *LokiRouter) QueryLogs(c *gin.Context) {
 	start := end.Add(-dur)
 
 	ctx := c.Request.Context()
-	result, err := r.svc.QueryLogs(ctx, query, start, end, limit, direction)
+	result, err := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).QueryLogs(ctx, query, start, end, limit, direction)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -86,7 +85,7 @@ func (r *LokiRouter) GetLabels(c *gin.Context) {
 	start := end.Add(-dur)
 
 	ctx := c.Request.Context()
-	labels, err := r.svc.GetLabels(ctx, start, end)
+	labels, err := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).GetLabels(ctx, start, end)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -107,7 +106,7 @@ func (r *LokiRouter) GetLabelValues(c *gin.Context) {
 	start := end.Add(-dur)
 
 	ctx := c.Request.Context()
-	values, err := r.svc.GetLabelValues(ctx, name, start, end)
+	values, err := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).GetLabelValues(ctx, name, start, end)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -128,7 +127,7 @@ func (r *LokiRouter) GetStreams(c *gin.Context) {
 	start := end.Add(-dur)
 
 	ctx := c.Request.Context()
-	streams, err := r.svc.GetStreams(ctx, matcher, start, end)
+	streams, err := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).GetStreams(ctx, matcher, start, end)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -150,7 +149,7 @@ func (r *LokiRouter) GetLogVolume(c *gin.Context) {
 	step := dur / 60
 
 	ctx := c.Request.Context()
-	volume, err := r.svc.GetLogVolume(ctx, query, start, end, step)
+	volume, err := middlewares.NewServicesFromContext(c).LokiSvc(r.lokiURL).GetLogVolume(ctx, query, start, end, step)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return

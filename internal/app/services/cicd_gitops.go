@@ -128,11 +128,11 @@ func (s *Services) gitOpsPipelineRun(ctx context.Context, pipeline *models.CicdP
 		"argo_app_name": gitOpsConfig.ArgoCDAppName,
 		"sync_status":   models.SyncStatusUnknown,
 	}
-	_ = s.dao.PipelineRunUpdate(ctx, run.ID, updates)
+	_ = s.cicdSvc().PipelineRunUpdate(ctx, run.ID, updates)
 
 	// 更新 pipeline 的 build URL
 	buildURL := fmt.Sprintf("%s/workflows/%s/%s", global.GitOpsSetting.ArgoWorkflowsURL, wf.Metadata.Namespace, wf.Metadata.Name)
-	_ = s.dao.PipelineUpdateRunInfo(ctx, pipeline.ID, models.PipelineRunStatusRunning, 1, buildURL)
+	_ = s.cicdSvc().PipelineUpdateRunInfo(ctx, pipeline.ID, models.PipelineRunStatusRunning, 1, buildURL)
 
 	return nil
 }
@@ -148,7 +148,7 @@ func (s *Services) gitOpsPipelineStop(ctx context.Context, pipeline *models.Cicd
 	// 获取最新的 run（如果未传入）
 	if run == nil {
 		var err error
-		run, err = s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+		run, err = s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 		if err != nil {
 			return fmt.Errorf("获取运行记录失败: %w", err)
 		}
@@ -174,8 +174,8 @@ func (s *Services) gitOpsPipelineStop(ctx context.Context, pipeline *models.Cicd
 		return fmt.Errorf("终止 Argo Workflow 失败: %w", err)
 	}
 
-	_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusAborted)
-	_ = s.dao.PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
+	_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusAborted)
+	_ = s.cicdSvc().PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
 
 	global.Logger.Infof("[GitOps] Workflow 已终止: %s", run.WorkflowName)
 	return nil
@@ -191,7 +191,7 @@ func (s *Services) gitOpsPipelineLogs(ctx context.Context, pipeline *models.Cicd
 
 	if run == nil {
 		var err error
-		run, err = s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+		run, err = s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 		if err != nil {
 			return "", fmt.Errorf("获取运行记录失败: %w", err)
 		}
@@ -225,7 +225,7 @@ func (s *Services) gitOpsPipelineStages(ctx context.Context, pipeline *models.Ci
 
 	if run == nil {
 		var err error
-		run, err = s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+		run, err = s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 		if err != nil {
 			return nil, fmt.Errorf("获取运行记录失败: %w", err)
 		}
@@ -311,7 +311,7 @@ func (s *Services) gitOpsTriggerSync(ctx context.Context, pipeline *models.CicdP
 
 	// 更新 deploy 信息
 	now := uint64(time.Now().Unix())
-	_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, imageDigest, now, "syncing", "")
+	_ = s.cicdSvc().PipelineUpdateDeployInfo(ctx, pipeline.ID, image, imageDigest, now, "syncing", "")
 
 	global.Logger.Infof("[GitOps] ArgoCD 同步已触发: app=%s, image=%s",
 		gitOpsConfig.ArgoCDAppName, image)
@@ -325,9 +325,9 @@ func (s *Services) GitOpsSyncCallback(ctx context.Context, req *requests.GitOpsS
 	var run *models.CicdPipelineRun
 	var err error
 	if req.RunID > 0 {
-		run, err = s.dao.PipelineRunGetByID(ctx, req.RunID)
+		run, err = s.cicdSvc().PipelineRunGetByID(ctx, req.RunID)
 	} else if req.PipelineID > 0 {
-		run, err = s.dao.PipelineRunGetLatest(ctx, req.PipelineID)
+		run, err = s.cicdSvc().PipelineRunGetLatest(ctx, req.PipelineID)
 	} else {
 		return errors.New("缺少 pipeline_id 或 run_id 参数")
 	}
@@ -340,14 +340,14 @@ func (s *Services) GitOpsSyncCallback(ctx context.Context, req *requests.GitOpsS
 		"sync_status":   req.SyncStatus,
 		"sync_revision": req.SyncRevision,
 	}
-	_ = s.dao.PipelineRunUpdate(ctx, run.ID, updates)
+	_ = s.cicdSvc().PipelineRunUpdate(ctx, run.ID, updates)
 
 	// 根据同步状态更新 pipeline 和 run 状态
 	switch req.SyncStatus {
 	case models.SyncStatusSynced:
 		if req.HealthStatus == "Healthy" {
-			_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
-			_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
+			_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusSuccess)
+			_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusSuccess)
 			global.Logger.Infof("[GitOps] 同步完成: run=%d, app=%s, revision=%s",
 				run.ID, req.AppName, req.SyncRevision)
 		}
@@ -381,7 +381,7 @@ func (s *Services) GitOpsTriggerSyncByPipeline(ctx context.Context, pipelineID i
 		return errors.New("GitOps 模式未配置 ArgoCD，请在 config.yaml 中设置 GitOps.ArgoCDURL")
 	}
 
-	pipeline, err := s.dao.PipelineGetByID(ctx, pipelineID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, pipelineID)
 	if err != nil {
 		return fmt.Errorf("查询流水线失败: %w", err)
 	}

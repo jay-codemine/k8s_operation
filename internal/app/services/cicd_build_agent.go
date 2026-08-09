@@ -71,7 +71,7 @@ func (s *Services) BuildAgentUpload(ctx context.Context, file multipart.File, he
 	}
 
 	// 4. 写入数据库
-	if err := s.dao.BuildAgentCreate(ctx, agent); err != nil {
+	if err := s.cicdSvc().BuildAgentCreate(ctx, agent); err != nil {
 		// 如果是重名，尝试更新
 		if strings.Contains(err.Error(), "Duplicate") || strings.Contains(err.Error(), "UNIQUE") {
 			return s.buildAgentUpdateFile(ctx, agent, storePath, written, fmt.Sprintf("%x", hasher.Sum(nil)))
@@ -91,7 +91,7 @@ func (s *Services) BuildAgentUpload(ctx context.Context, file multipart.File, he
 
 // buildAgentUpdateFile 更新已有探针的文件（版本升级场景）
 func (s *Services) buildAgentUpdateFile(ctx context.Context, agent *models.CicdBuildAgent, filePath string, fileSize int64, sha256Hash string) (*models.CicdBuildAgent, error) {
-	existing, err := s.dao.BuildAgentGetByName(ctx, agent.Name)
+	existing, err := s.cicdSvc().BuildAgentGetByName(ctx, agent.Name)
 	if err != nil {
 		return nil, fmt.Errorf("查询已有探针失败: %w", err)
 	}
@@ -124,7 +124,7 @@ func (s *Services) buildAgentUpdateFile(ctx context.Context, agent *models.CicdB
 		updates["icon"] = agent.Icon
 	}
 
-	if err := s.dao.BuildAgentUpdate(ctx, existing.ID, updates); err != nil {
+	if err := s.cicdSvc().BuildAgentUpdate(ctx, existing.ID, updates); err != nil {
 		return nil, fmt.Errorf("更新探针失败: %w", err)
 	}
 
@@ -135,7 +135,7 @@ func (s *Services) buildAgentUpdateFile(ctx context.Context, agent *models.CicdB
 		zap.String("new_version", agent.Version),
 	)
 
-	return s.dao.BuildAgentGetByID(ctx, existing.ID)
+	return s.cicdSvc().BuildAgentGetByID(ctx, existing.ID)
 }
 
 // BuildAgentList 探针列表
@@ -146,17 +146,17 @@ func (s *Services) BuildAgentList(ctx context.Context, category, scope, status, 
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 20
 	}
-	return s.dao.BuildAgentList(ctx, category, scope, status, keyword, page, pageSize)
+	return s.cicdSvc().BuildAgentList(ctx, category, scope, status, keyword, page, pageSize)
 }
 
 // BuildAgentDetail 探针详情
 func (s *Services) BuildAgentDetail(ctx context.Context, id int64) (*models.CicdBuildAgent, error) {
-	return s.dao.BuildAgentGetByID(ctx, id)
+	return s.cicdSvc().BuildAgentGetByID(ctx, id)
 }
 
 // BuildAgentDownload 下载探针文件（返回文件路径）
 func (s *Services) BuildAgentDownload(ctx context.Context, id int64) (*models.CicdBuildAgent, error) {
-	agent, err := s.dao.BuildAgentGetByID(ctx, id)
+	agent, err := s.cicdSvc().BuildAgentGetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("探针不存在: %w", err)
 	}
@@ -166,13 +166,13 @@ func (s *Services) BuildAgentDownload(ctx context.Context, id int64) (*models.Ci
 	if _, err := os.Stat(agent.FilePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("探针文件已丢失: %s", agent.FilePath)
 	}
-	_ = s.dao.BuildAgentIncrDownload(ctx, id)
+	_ = s.cicdSvc().BuildAgentIncrDownload(ctx, id)
 	return agent, nil
 }
 
 // BuildAgentDownloadByName 按名称下载探针（流水线构建使用）
 func (s *Services) BuildAgentDownloadByName(ctx context.Context, name string) (*models.CicdBuildAgent, error) {
-	agent, err := s.dao.BuildAgentGetByName(ctx, name)
+	agent, err := s.cicdSvc().BuildAgentGetByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("探针不存在: %s", name)
 	}
@@ -185,27 +185,27 @@ func (s *Services) BuildAgentDownloadByName(ctx context.Context, name string) (*
 	if _, err := os.Stat(agent.FilePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("探针文件已丢失: %s", agent.FilePath)
 	}
-	_ = s.dao.BuildAgentIncrDownload(ctx, agent.ID)
+	_ = s.cicdSvc().BuildAgentIncrDownload(ctx, agent.ID)
 	return agent, nil
 }
 
 // BuildAgentListByScope 获取指定语言的已启用探针
 func (s *Services) BuildAgentListByScope(ctx context.Context, scope string) ([]*models.CicdBuildAgent, error) {
-	return s.dao.BuildAgentListByScope(ctx, scope)
+	return s.cicdSvc().BuildAgentListByScope(ctx, scope)
 }
 
 // BuildAgentUpdate 更新探针信息
 func (s *Services) BuildAgentUpdate(ctx context.Context, id int64, updates map[string]interface{}) error {
-	_, err := s.dao.BuildAgentGetByID(ctx, id)
+	_, err := s.cicdSvc().BuildAgentGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("探针不存在: %w", err)
 	}
-	return s.dao.BuildAgentUpdate(ctx, id, updates)
+	return s.cicdSvc().BuildAgentUpdate(ctx, id, updates)
 }
 
 // BuildAgentToggleStatus 切换探针启用/停用状态
 func (s *Services) BuildAgentToggleStatus(ctx context.Context, id int64) (*models.CicdBuildAgent, error) {
-	agent, err := s.dao.BuildAgentGetByID(ctx, id)
+	agent, err := s.cicdSvc().BuildAgentGetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("探针不存在: %w", err)
 	}
@@ -213,19 +213,19 @@ func (s *Services) BuildAgentToggleStatus(ctx context.Context, id int64) (*model
 	if agent.Status == models.AgentStatusActive {
 		newStatus = models.AgentStatusInactive
 	}
-	if err := s.dao.BuildAgentUpdate(ctx, id, map[string]interface{}{"status": newStatus}); err != nil {
+	if err := s.cicdSvc().BuildAgentUpdate(ctx, id, map[string]interface{}{"status": newStatus}); err != nil {
 		return nil, fmt.Errorf("切换状态失败: %w", err)
 	}
-	return s.dao.BuildAgentGetByID(ctx, id)
+	return s.cicdSvc().BuildAgentGetByID(ctx, id)
 }
 
 // BuildAgentDelete 删除探针
 func (s *Services) BuildAgentDelete(ctx context.Context, id int64) error {
-	agent, err := s.dao.BuildAgentGetByID(ctx, id)
+	agent, err := s.cicdSvc().BuildAgentGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("探针不存在: %w", err)
 	}
-	if err := s.dao.BuildAgentDelete(ctx, id); err != nil {
+	if err := s.cicdSvc().BuildAgentDelete(ctx, id); err != nil {
 		return fmt.Errorf("删除探针记录失败: %w", err)
 	}
 	// 清理文件
@@ -239,7 +239,7 @@ func (s *Services) BuildAgentDelete(ctx context.Context, id int64) error {
 
 // BuildAgentSeedOTEL 初始化 OTEL Java Agent 种子数据（如果不存在）
 func (s *Services) BuildAgentSeedOTEL(ctx context.Context) error {
-	_, err := s.dao.BuildAgentGetByName(ctx, "opentelemetry-javaagent")
+	_, err := s.cicdSvc().BuildAgentGetByName(ctx, "opentelemetry-javaagent")
 	if err == nil {
 		return nil // 已存在，跳过
 	}
@@ -263,7 +263,7 @@ func (s *Services) BuildAgentSeedOTEL(ctx context.Context) error {
 		ModifiedAt:     uint64(time.Now().Unix()),
 	}
 
-	if err := s.dao.BuildAgentCreate(ctx, seed); err != nil {
+	if err := s.cicdSvc().BuildAgentCreate(ctx, seed); err != nil {
 		global.Logger.Warn("[探针管理] 种子数据初始化失败（可能已存在）", zap.Error(err))
 	} else {
 		global.Logger.Info("[探针管理] 已初始化 OTEL Java Agent 种子数据（需手动上传 JAR 文件）")

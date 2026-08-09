@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8soperation/global"
-	"k8soperation/internal/app/models"
 	"strings"
 	"time"
 
@@ -16,26 +14,34 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"k8soperation/global"
+	"k8soperation/internal/app/models"
+	"k8soperation/internal/domain/appstore"
 )
 
 // ============================================================
 // 应用商城 Service
 // ============================================================
 
+func (s *Services) appStoreSvc() *appstore.AppStoreService {
+	return appstore.NewAppStoreService(s.db)
+}
+
 // AppStoreList 获取应用列表（分页 + 筛选）
 func (s *Services) AppStoreList(ctx context.Context, req *models.AppStoreListRequest) ([]*models.AppStoreApp, int64, error) {
-	return s.dao.AppStoreList(ctx, req)
+	return s.appStoreSvc().AppList(ctx, req)
 }
 
 // AppStoreDetail 获取应用详情
 func (s *Services) AppStoreDetail(ctx context.Context, id uint32) (*models.AppStoreApp, error) {
-	return s.dao.AppStoreGetByID(ctx, id)
+	return s.appStoreSvc().AppGetByID(ctx, id)
 }
 
 // AppStoreCreate 创建应用
 func (s *Services) AppStoreCreate(ctx context.Context, req *models.AppStoreCreateRequest) (*models.AppStoreApp, error) {
 	// 检查名称唯一性
-	existing, _ := s.dao.AppStoreGetByName(ctx, req.Name)
+	existing, _ := s.appStoreSvc().AppGetByName(ctx, req.Name)
 	if existing != nil {
 		return nil, fmt.Errorf("应用名称 '%s' 已存在", req.Name)
 	}
@@ -70,7 +76,7 @@ func (s *Services) AppStoreCreate(ctx context.Context, req *models.AppStoreCreat
 	app.CreatedAt = now
 	app.ModifiedAt = now
 
-	if err := s.dao.AppStoreCreate(ctx, app); err != nil {
+	if err := s.appStoreSvc().AppCreate(ctx, app); err != nil {
 		global.Logger.Error("创建应用失败", zap.Error(err))
 		return nil, err
 	}
@@ -80,7 +86,7 @@ func (s *Services) AppStoreCreate(ctx context.Context, req *models.AppStoreCreat
 
 // AppStoreUpdate 更新应用
 func (s *Services) AppStoreUpdate(ctx context.Context, req *models.AppStoreUpdateRequest) error {
-	existing, err := s.dao.AppStoreGetByID(ctx, req.ID)
+	existing, err := s.appStoreSvc().AppGetByID(ctx, req.ID)
 	if err != nil {
 		return fmt.Errorf("应用不存在: %w", err)
 	}
@@ -120,21 +126,21 @@ func (s *Services) AppStoreUpdate(ctx context.Context, req *models.AppStoreUpdat
 	existing.ValuesYAML = req.ValuesYAML
 	existing.ModifiedAt = uint32(time.Now().Unix())
 
-	return s.dao.AppStoreUpdate(ctx, existing)
+	return s.appStoreSvc().AppUpdate(ctx, existing)
 }
 
 // AppStoreDelete 删除应用
 func (s *Services) AppStoreDelete(ctx context.Context, id uint32) error {
-	_, err := s.dao.AppStoreGetByID(ctx, id)
+	_, err := s.appStoreSvc().AppGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("应用不存在: %w", err)
 	}
-	return s.dao.AppStoreDelete(ctx, id)
+	return s.appStoreSvc().AppDelete(ctx, id)
 }
 
 // AppStoreCategories 获取分类列表
 func (s *Services) AppStoreCategories(ctx context.Context) ([]models.AppStoreCategoryCount, error) {
-	return s.dao.AppStoreCategories(ctx)
+	return s.appStoreSvc().AppCategories(ctx)
 }
 
 // ============================================================
@@ -145,19 +151,19 @@ func (s *Services) AppStoreCategories(ctx context.Context) ([]models.AppStoreCat
 // 流程：校验应用 → 校验集群 → 查重 → 创建NS → 写安装记录 → 异步安装
 func (s *Services) AppStoreInstall(ctx context.Context, factory *ClusterClientFactory, req *models.AppStoreInstallRequest, operator string) (*models.AppStoreInstall, error) {
 	// 1. 校验应用存在
-	app, err := s.dao.AppStoreGetByID(ctx, req.AppID)
+	app, err := s.appStoreSvc().AppGetByID(ctx, req.AppID)
 	if err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
 	}
 
 	// 2. 校验集群存在并获取集群信息
-	cluster, err := s.dao.KubeClusterGetByID(ctx, req.ClusterID)
+	cluster, err := s.clusterSvc().GetByID(ctx, uint32(req.ClusterID))
 	if err != nil {
 		return nil, fmt.Errorf("集群不存在: %w", err)
 	}
 
 	// 3. 检查是否已安装（防重复安装）
-	existing, _ := s.dao.AppStoreInstallFindActive(ctx, req.AppID, req.ClusterID, req.Namespace)
+	existing, _ := s.appStoreSvc().InstallFindActive(ctx, req.AppID, req.ClusterID, req.Namespace)
 	if existing != nil {
 		return nil, fmt.Errorf("应用 %s 已在集群 %s 的 %s 命名空间安装(状态: %d)",
 			app.Name, cluster.ClusterName, req.Namespace, existing.Status)
@@ -197,7 +203,7 @@ func (s *Services) AppStoreInstall(ctx context.Context, factory *ClusterClientFa
 	install.CreatedAt = now
 	install.ModifiedAt = now
 
-	if err := s.dao.AppStoreInstallCreate(ctx, install); err != nil {
+	if err := s.appStoreSvc().InstallCreate(ctx, install); err != nil {
 		return nil, fmt.Errorf("创建安装记录失败: %w", err)
 	}
 
@@ -228,7 +234,7 @@ func (s *Services) doInstall(install *models.AppStoreInstall, cli *K8sClients, a
 	cmName := fmt.Sprintf("appstore-%s", relName)
 	components := resolveAppComponents(app.Name)
 	// 优先从数据库加载组件定义（动态配置），无则用硬编码 fallback
-	dbComps, dbErr := s.dao.AppStoreComponentListByAppID(ctx, app.ID)
+	dbComps, dbErr := s.appStoreSvc().ComponentListByAppID(ctx, app.ID)
 	if dbErr == nil && len(dbComps) > 0 {
 		components = dbComponentsToSpecs(dbComps)
 		global.Logger.Info("使用数据库组件定义",
@@ -435,7 +441,7 @@ func (s *Services) doInstall(install *models.AppStoreInstall, cli *K8sClients, a
 			app.DisplayName, app.Version, createdCount, totalComponents)
 	}
 
-	_ = s.dao.AppStoreInstallUpdate(ctx, install.ID, map[string]interface{}{
+	_ = s.appStoreSvc().InstallUpdate(ctx, install.ID, map[string]interface{}{
 		"status":      status,
 		"message":     msg,
 		"modified_at": uint32(time.Now().Unix()),
@@ -452,7 +458,7 @@ func (s *Services) failInstall(ctx context.Context, installID uint32, now uint32
 	global.Logger.Error("安装应用失败",
 		zap.String("reason", reason), zap.String("app", appName),
 		zap.String("namespace", ns), zap.Error(err))
-	_ = s.dao.AppStoreInstallUpdate(ctx, installID, map[string]interface{}{
+	_ = s.appStoreSvc().InstallUpdate(ctx, installID, map[string]interface{}{
 		"status":      models.InstallStatusFailed,
 		"message":     fmt.Sprintf("%s: %s", reason, err.Error()),
 		"modified_at": now,
@@ -679,7 +685,7 @@ func (s *Services) waitForDeploymentReady(ctx context.Context, cli *K8sClients, 
 
 // AppStoreInstallStatus 实时查询安装的 K8s 资源状态（Pod/Deployment/Service）
 func (s *Services) AppStoreInstallStatus(ctx context.Context, factory *ClusterClientFactory, installID uint32) (*models.AppInstallStatusResponse, error) {
-	install, err := s.dao.AppStoreInstallGetByID(ctx, installID)
+	install, err := s.appStoreSvc().InstallGetByID(ctx, installID)
 	if err != nil {
 		return nil, fmt.Errorf("安装记录不存在: %w", err)
 	}
@@ -1030,7 +1036,7 @@ func (s *Services) AppStoreInstallStatus(ctx context.Context, factory *ClusterCl
 
 // getAppNameFromInstall 获取应用的 name 字段
 func (s *Services) getAppNameFromInstall(ctx context.Context, appID uint32) string {
-	app, err := s.dao.AppStoreGetByID(ctx, appID)
+	app, err := s.appStoreSvc().AppGetByID(ctx, appID)
 	if err != nil {
 		return ""
 	}
@@ -1093,7 +1099,7 @@ func (s *Services) createInstallMarkerConfigMap(ctx context.Context, cli *K8sCli
 
 // AppStoreUninstall 卸载应用（删除所有组件的 Deployment + Service + ConfigMap）
 func (s *Services) AppStoreUninstall(ctx context.Context, factory *ClusterClientFactory, installID uint32) error {
-	install, err := s.dao.AppStoreInstallGetByID(ctx, installID)
+	install, err := s.appStoreSvc().InstallGetByID(ctx, installID)
 	if err != nil {
 		return fmt.Errorf("安装记录不存在: %w", err)
 	}
@@ -1104,7 +1110,7 @@ func (s *Services) AppStoreUninstall(ctx context.Context, factory *ClusterClient
 
 	// 更新状态为卸载中
 	now := uint32(time.Now().Unix())
-	_ = s.dao.AppStoreInstallUpdate(ctx, installID, map[string]interface{}{
+	_ = s.appStoreSvc().InstallUpdate(ctx, installID, map[string]interface{}{
 		"status":      models.InstallStatusUninstalling,
 		"message":     "卸载中...",
 		"modified_at": now,
@@ -1156,7 +1162,7 @@ func (s *Services) AppStoreUninstall(ctx context.Context, factory *ClusterClient
 	}
 
 	// 更新为已卸载
-	_ = s.dao.AppStoreInstallUpdate(ctx, installID, map[string]interface{}{
+	_ = s.appStoreSvc().InstallUpdate(ctx, installID, map[string]interface{}{
 		"status":      models.InstallStatusUninstalled,
 		"message":     "已卸载, 所有组件资源已清理",
 		"modified_at": uint32(time.Now().Unix()),
@@ -1167,17 +1173,17 @@ func (s *Services) AppStoreUninstall(ctx context.Context, factory *ClusterClient
 
 // AppStoreInstallList 获取安装记录列表
 func (s *Services) AppStoreInstallList(ctx context.Context, req *models.AppStoreInstallListRequest) ([]*models.AppStoreInstall, int64, error) {
-	return s.dao.AppStoreInstallList(ctx, req)
+	return s.appStoreSvc().InstallList(ctx, req)
 }
 
 // AppStoreInstallDetail 获取安装记录详情
 func (s *Services) AppStoreInstallDetail(ctx context.Context, id uint32) (*models.AppStoreInstall, error) {
-	return s.dao.AppStoreInstallGetByID(ctx, id)
+	return s.appStoreSvc().InstallGetByID(ctx, id)
 }
 
 // AppStoreInstallUpdate 编辑安装（更新 Deployment 副本数、镜像、资源限制等）
 func (s *Services) AppStoreInstallUpdate(ctx context.Context, factory *ClusterClientFactory, installID uint32, req *models.AppStoreInstallUpdateRequest) error {
-	install, err := s.dao.AppStoreInstallGetByID(ctx, installID)
+	install, err := s.appStoreSvc().InstallGetByID(ctx, installID)
 	if err != nil {
 		return fmt.Errorf("安装记录不存在: %w", err)
 	}
@@ -1265,7 +1271,7 @@ func (s *Services) AppStoreInstallUpdate(ctx context.Context, factory *ClusterCl
 func (s *Services) AppStoreSeed(ctx context.Context) error {
 	// 检查是否已有数据
 	req := &models.AppStoreListRequest{Page: 1, PageSize: 1}
-	_, total, err := s.dao.AppStoreList(ctx, req)
+	_, total, err := s.appStoreSvc().AppList(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -1411,13 +1417,13 @@ func (s *Services) seedAppComponents(ctx context.Context) error {
 
 	for appName, comps := range registry {
 		// 查找应用
-		app, err := s.dao.AppStoreGetByName(ctx, appName)
+		app, err := s.appStoreSvc().AppGetByName(ctx, appName)
 		if err != nil {
 			continue // 应用不存在，跳过
 		}
 
 		// 检查该应用是否已有组件
-		count, _ := s.dao.AppStoreComponentCountByAppID(ctx, app.ID)
+		count, _ := s.appStoreSvc().ComponentCountByAppID(ctx, app.ID)
 		if count > 0 {
 			continue // 已有组件数据，跳过
 		}
@@ -1444,7 +1450,7 @@ func (s *Services) seedAppComponents(ctx context.Context) error {
 			dbComp.CreatedAt = now
 			dbComp.ModifiedAt = now
 
-			if err := s.dao.AppStoreComponentCreate(ctx, dbComp); err != nil {
+			if err := s.appStoreSvc().ComponentCreate(ctx, dbComp); err != nil {
 				global.Logger.Warn("组件种子写入失败",
 					zap.String("app", appName), zap.String("comp", comp.Name), zap.Error(err))
 			}
@@ -1480,13 +1486,13 @@ func resolveAllBuiltinComponents() map[string][]AppComponentSpec {
 
 // AppStoreComponentList 获取应用的组件列表
 func (s *Services) AppStoreComponentList(ctx context.Context, appID uint32) ([]*models.AppStoreComponent, error) {
-	return s.dao.AppStoreComponentListByAppID(ctx, appID)
+	return s.appStoreSvc().ComponentListByAppID(ctx, appID)
 }
 
 // AppStoreComponentCreate 创建组件
 func (s *Services) AppStoreComponentCreate(ctx context.Context, req *models.AppStoreComponentRequest) (*models.AppStoreComponent, error) {
 	// 校验应用存在
-	_, err := s.dao.AppStoreGetByID(ctx, req.AppID)
+	_, err := s.appStoreSvc().AppGetByID(ctx, req.AppID)
 	if err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
 	}
@@ -1523,7 +1529,7 @@ func (s *Services) AppStoreComponentCreate(ctx context.Context, req *models.AppS
 	comp.CreatedAt = now
 	comp.ModifiedAt = now
 
-	if err := s.dao.AppStoreComponentCreate(ctx, comp); err != nil {
+	if err := s.appStoreSvc().ComponentCreate(ctx, comp); err != nil {
 		return nil, err
 	}
 	return comp, nil
@@ -1531,7 +1537,7 @@ func (s *Services) AppStoreComponentCreate(ctx context.Context, req *models.AppS
 
 // AppStoreComponentUpdate 更新组件
 func (s *Services) AppStoreComponentUpdate(ctx context.Context, req *models.AppStoreComponentRequest) error {
-	existing, err := s.dao.AppStoreComponentGetByID(ctx, req.ID)
+	existing, err := s.appStoreSvc().ComponentGetByID(ctx, req.ID)
 	if err != nil {
 		return fmt.Errorf("组件不存在: %w", err)
 	}
@@ -1562,16 +1568,16 @@ func (s *Services) AppStoreComponentUpdate(ctx context.Context, req *models.AppS
 	existing.SortOrder = req.SortOrder
 	existing.ModifiedAt = uint32(time.Now().Unix())
 
-	return s.dao.AppStoreComponentUpdate(ctx, existing)
+	return s.appStoreSvc().ComponentUpdate(ctx, existing)
 }
 
 // AppStoreComponentDelete 删除组件
 func (s *Services) AppStoreComponentDelete(ctx context.Context, id uint32) error {
-	_, err := s.dao.AppStoreComponentGetByID(ctx, id)
+	_, err := s.appStoreSvc().ComponentGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("组件不存在: %w", err)
 	}
-	return s.dao.AppStoreComponentDelete(ctx, id)
+	return s.appStoreSvc().ComponentDelete(ctx, id)
 }
 
 // AppStoreComponentBatchDelete 批量删除组件
@@ -1579,13 +1585,13 @@ func (s *Services) AppStoreComponentBatchDelete(ctx context.Context, ids []uint3
 	if len(ids) == 0 {
 		return fmt.Errorf("请选择要删除的组件")
 	}
-	return s.dao.AppStoreComponentBatchDelete(ctx, ids)
+	return s.appStoreSvc().ComponentBatchDelete(ctx, ids)
 }
 
 // AppStoreComponentSort 批量更新组件排序
 func (s *Services) AppStoreComponentSort(ctx context.Context, req *models.AppStoreComponentSortRequest) error {
 	for _, item := range req.Items {
-		if err := s.dao.AppStoreComponentUpdateSort(ctx, item.ID, item.SortOrder); err != nil {
+		if err := s.appStoreSvc().ComponentUpdateSort(ctx, item.ID, item.SortOrder); err != nil {
 			return fmt.Errorf("更新排序失败(id=%d): %w", item.ID, err)
 		}
 	}

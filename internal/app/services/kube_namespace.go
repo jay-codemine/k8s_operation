@@ -79,3 +79,13 @@ func (s *Services) KubeNamespacePatchLabels(ctx context.Context, cli *K8sClients
 	global.Logger.Infof("patch Namespace labels success: name=%s", param.Name)
 	return nil
 }
+
+// KubeNamespaceGetYaml 获取 Namespace 的 YAML 配置
+func (s *Services) KubeNamespaceGetYaml(ctx context.Context, cli *K8sClients, name string) (string, error) {
+	return namespace.GetYaml(ctx, cli.Kube, name)
+}
+
+// KubeNamespaceApplyYaml 应用 Namespace YAML 配置
+func (s *Services) KubeNamespaceApplyYaml(ctx context.Context, cli *K8sClients, name, yamlContent string) (*corev1.Namespace, error) {
+	return namespace.ApplyYaml(ctx, cli.Kube, name, yamlContent)
+}

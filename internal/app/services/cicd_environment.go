@@ -16,18 +16,18 @@ import (
 
 // EnvironmentList 获取环境列表
 func (s *Services) EnvironmentList(ctx context.Context, param *requests.EnvironmentListRequest) ([]*models.EnvironmentListItem, int64, error) {
-	return s.dao.EnvironmentList(ctx, param.Page, param.PageSize, param.Keyword)
+	return s.cicdSvc().EnvironmentList(ctx, param.Page, param.PageSize, param.Keyword)
 }
 
 // EnvironmentDetail 获取环境详情
 func (s *Services) EnvironmentDetail(ctx context.Context, id int64) (*models.CicdEnvironment, error) {
-	return s.dao.EnvironmentGetByID(ctx, id)
+	return s.cicdSvc().EnvironmentGetByID(ctx, id)
 }
 
 // EnvironmentCreate 创建环境
 func (s *Services) EnvironmentCreate(ctx context.Context, param *requests.EnvironmentCreateRequest, userID int64) (int64, error) {
 	// 检查环境名称是否已存在
-	existing, err := s.dao.EnvironmentGetByName(ctx, param.Name)
+	existing, err := s.cicdSvc().EnvironmentGetByName(ctx, param.Name)
 	if err == nil && existing != nil && existing.ID > 0 {
 		return 0, errors.New("环境名称已存在")
 	}
@@ -76,19 +76,19 @@ func (s *Services) EnvironmentCreate(ctx context.Context, param *requests.Enviro
 		}
 	}
 
-	return s.dao.EnvironmentCreate(ctx, env)
+	return s.cicdSvc().EnvironmentCreate(ctx, env)
 }
 
 // EnvironmentUpdate 更新环境
 func (s *Services) EnvironmentUpdate(ctx context.Context, param *requests.EnvironmentUpdateRequest) error {
-	env, err := s.dao.EnvironmentGetByID(ctx, param.ID)
+	env, err := s.cicdSvc().EnvironmentGetByID(ctx, param.ID)
 	if err != nil {
 		return errors.New("环境不存在")
 	}
 
 	// 检查名称是否与其他环境冲突
 	if param.Name != "" && param.Name != env.Name {
-		existing, err := s.dao.EnvironmentGetByName(ctx, param.Name)
+		existing, err := s.cicdSvc().EnvironmentGetByName(ctx, param.Name)
 		if err == nil && existing != nil && existing.ID > 0 && existing.ID != param.ID {
 			return errors.New("环境名称已存在")
 		}
@@ -130,45 +130,45 @@ func (s *Services) EnvironmentUpdate(ctx context.Context, param *requests.Enviro
 
 	env.ModifiedAt = uint64(time.Now().Unix())
 
-	return s.dao.EnvironmentUpdate(ctx, env)
+	return s.cicdSvc().EnvironmentUpdate(ctx, env)
 }
 
 // EnvironmentDelete 删除环境
 func (s *Services) EnvironmentDelete(ctx context.Context, id int64) error {
-	return s.dao.EnvironmentDelete(ctx, id)
+	return s.cicdSvc().EnvironmentDelete(ctx, id)
 }
 
 // ==================== 审批流程 Service ====================
 
 // ApprovalList 获取审批列表
 func (s *Services) ApprovalList(ctx context.Context, param *requests.ApprovalListRequest) ([]*models.ApprovalListItem, int64, error) {
-	return s.dao.ApprovalList(ctx, param.Page, param.PageSize, param.Status, param.PipelineID)
+	return s.cicdSvc().ApprovalList(ctx, param.Page, param.PageSize, param.Status, param.PipelineID)
 }
 
 // ApprovalListByUser 获取指定用户提交的审批列表
 func (s *Services) ApprovalListByUser(ctx context.Context, userID int64, param *requests.ApprovalListRequest) ([]*models.ApprovalListItem, int64, error) {
-	return s.dao.ApprovalListByUser(ctx, userID, param.Page, param.PageSize, param.Status, param.PipelineID)
+	return s.cicdSvc().ApprovalListByUser(ctx, userID, param.Page, param.PageSize, param.Status, param.PipelineID)
 }
 
 // ApprovalStats 获取审批统计
 func (s *Services) ApprovalStats(ctx context.Context) (map[string]int64, error) {
-	return s.dao.ApprovalStats(ctx)
+	return s.cicdSvc().ApprovalStats(ctx)
 }
 
 // ApprovalStatsByUser 获取指定用户的审批统计
 func (s *Services) ApprovalStatsByUser(ctx context.Context, userID int64) (map[string]int64, error) {
-	return s.dao.ApprovalStatsByUser(ctx, userID)
+	return s.cicdSvc().ApprovalStatsByUser(ctx, userID)
 }
 
 // ApprovalDetail 获取审批详情
 func (s *Services) ApprovalDetail(ctx context.Context, id int64) (*models.CicdApproval, error) {
-	return s.dao.ApprovalGetByID(ctx, id)
+	return s.cicdSvc().ApprovalGetByID(ctx, id)
 }
 
 // ApprovalCreate 创建审批申请
 func (s *Services) ApprovalCreate(ctx context.Context, param *requests.ApprovalCreateRequest, userID int64) (int64, error) {
 	// 检查是否已有待审批记录
-	existing, err := s.dao.ApprovalGetPendingByPipeline(ctx, param.PipelineID)
+	existing, err := s.cicdSvc().ApprovalGetPendingByPipeline(ctx, param.PipelineID)
 	if err == nil && existing != nil && existing.ID > 0 {
 		return 0, errors.New("该流水线已有待审批的部署申请")
 	}
@@ -188,12 +188,12 @@ func (s *Services) ApprovalCreate(ctx context.Context, param *requests.ApprovalC
 		ModifiedAt:    uint64(now),
 	}
 
-	return s.dao.ApprovalCreate(ctx, approval)
+	return s.cicdSvc().ApprovalCreate(ctx, approval)
 }
 
 // ApprovalAction 审批操作
 func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalActionRequest, userID int64) error {
-	approval, err := s.dao.ApprovalGetByID(ctx, param.ID)
+	approval, err := s.cicdSvc().ApprovalGetByID(ctx, param.ID)
 	if err != nil {
 		return errors.New("审批记录不存在")
 	}
@@ -210,7 +210,7 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 	// 检查是否过期
 	if approval.ExpireTime > 0 && uint64(time.Now().Unix()) > approval.ExpireTime {
 		// 更新状态为已过期
-		_ = s.dao.ApprovalUpdateStatus(ctx, param.ID, models.ApprovalStatusExpired, 0, "")
+		_ = s.cicdSvc().ApprovalUpdateStatus(ctx, param.ID, models.ApprovalStatusExpired, 0, "")
 		return errors.New("该审批申请已过期")
 	}
 
@@ -221,7 +221,7 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 		status = models.ApprovalStatusRejected
 	}
 
-	err = s.dao.ApprovalUpdateStatus(ctx, param.ID, status, userID, param.Reason)
+	err = s.cicdSvc().ApprovalUpdateStatus(ctx, param.ID, status, userID, param.Reason)
 	if err != nil {
 		return err
 	}
@@ -235,10 +235,10 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 				nextID, nextErr := s.CreateNextLevelApproval(ctx, approval)
 				if nextErr == nil && nextID > 0 {
 					// 发送下一级审批飞书通知
-					nextApproval, _ := s.dao.ApprovalGetByID(ctx, nextID)
+					nextApproval, _ := s.cicdSvc().ApprovalGetByID(ctx, nextID)
 					if nextApproval != nil {
-						pipeline, _ := s.dao.PipelineGetByID(ctx, nextApproval.PipelineID)
-						run, _ := s.dao.PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
+						pipeline, _ := s.cicdSvc().PipelineGetByID(ctx, nextApproval.PipelineID)
+						run, _ := s.cicdSvc().PipelineRunGetByID(ctx, nextApproval.PipelineRunID)
 						if pipeline != nil && run != nil {
 							s.NotifyFeishuApproval(ctx, pipeline, run, nextApproval)
 						}
@@ -248,17 +248,17 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 			}
 
 			// 最后一级通过：更新阶段审批状态，并自动触发部署
-			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, userID, "approved", param.Reason)
+			_ = s.cicdSvc().StageUpdateApproval(ctx, approval.StageID, userID, "approved", param.Reason)
 
 			// 获取阶段信息以启动部署阶段
-			stage, stageErr := s.dao.StageGetByID(ctx, approval.StageID)
+			stage, stageErr := s.cicdSvc().StageGetByID(ctx, approval.StageID)
 			if stageErr == nil && stage != nil {
 				// 检查是否有部署阶段需要启动
-				deployStage, dErr := s.dao.StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
+				deployStage, dErr := s.cicdSvc().StageGetByRunIDAndType(ctx, stage.RunID, models.StageTypeDeploy)
 				if dErr == nil && deployStage != nil {
-					run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+					run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 					if run != nil && run.ImageURL != "" {
-						_ = s.dao.StageUpdate(ctx, deployStage.ID, map[string]interface{}{
+						_ = s.cicdSvc().StageUpdate(ctx, deployStage.ID, map[string]interface{}{
 							"status":       models.StageStatusPending,
 							"deploy_image": run.ImageURL,
 						})
@@ -285,23 +285,23 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 			}
 		} else {
 			// 拒绝：更新阶段审批状态，标记后续阶段为跳过，更新流水线状态为失败
-			_ = s.dao.StageUpdateApproval(ctx, approval.StageID, userID, "rejected", param.Reason)
+			_ = s.cicdSvc().StageUpdateApproval(ctx, approval.StageID, userID, "rejected", param.Reason)
 
-			stage, stageErr := s.dao.StageGetByID(ctx, approval.StageID)
+			stage, stageErr := s.cicdSvc().StageGetByID(ctx, approval.StageID)
 			if stageErr == nil && stage != nil {
 				// 将后续阶段标记为跳过
-				stages, _ := s.dao.StageListByRunID(ctx, stage.RunID)
+				stages, _ := s.cicdSvc().StageListByRunID(ctx, stage.RunID)
 				for _, stg := range stages {
 					if stg.StageOrder > stage.StageOrder && stg.Status == models.StageStatusPending {
-						_ = s.dao.StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
+						_ = s.cicdSvc().StageUpdateStatus(ctx, stg.ID, models.StageStatusSkipped)
 					}
 				}
 
 				// 更新流水线运行状态为失败
-				_ = s.dao.PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
-				run, _ := s.dao.PipelineRunGetByID(ctx, stage.RunID)
+				_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, stage.RunID, models.PipelineRunStatusFailed)
+				run, _ := s.cicdSvc().PipelineRunGetByID(ctx, stage.RunID)
 				if run != nil {
-					_ = s.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
+					_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 				}
 			}
 		}
@@ -329,7 +329,7 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 			}
 
 			// 最后一级审批通过：将发布单任务入队执行部署
-			tasks, tErr := s.dao.CicdTasksByReleaseID(ctx, approval.ReleaseID)
+			tasks, tErr := s.cicdSvc().CicdTasksByReleaseID(ctx, approval.ReleaseID)
 			if tErr != nil || len(tasks) == 0 {
 				global.Logger.Error("[审批] 获取发布单任务失败",
 					zap.Int64("release_id", approval.ReleaseID),
@@ -356,7 +356,7 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 			if param.Reason != "" {
 				reason = "审批拒绝: " + param.Reason
 			}
-			_, _ = s.dao.CicdReleaseUpdateStatusCAS(
+			_, _ = s.cicdSvc().CicdReleaseUpdateStatusCAS(
 				ctx,
 				approval.ReleaseID,
 				[]string{models.CicdReleaseStatusAwaitingApproval, models.CicdReleaseStatusPending},
@@ -376,7 +376,7 @@ func (s *Services) ApprovalAction(ctx context.Context, param *requests.ApprovalA
 // ApprovalPendingList 获取待审批列表
 func (s *Services) ApprovalPendingList(ctx context.Context, userID int64) ([]*models.ApprovalListItem, int64, error) {
 	// TODO: 可以根据用户权限过滤
-	return s.dao.ApprovalList(ctx, 1, 100, models.ApprovalStatusPending, 0)
+	return s.cicdSvc().ApprovalList(ctx, 1, 100, models.ApprovalStatusPending, 0)
 }
 
 // ApprovalBatchAction 批量审批操作
@@ -402,7 +402,7 @@ func (s *Services) ApprovalBatchAction(ctx context.Context, ids []int64, action 
 
 // ApprovalUpdate 更新审批记录
 func (s *Services) ApprovalUpdate(ctx context.Context, param *requests.ApprovalUpdateRequest) error {
-	approval, err := s.dao.ApprovalGetByID(ctx, param.ID)
+	approval, err := s.cicdSvc().ApprovalGetByID(ctx, param.ID)
 	if err != nil {
 		return errors.New("审批记录不存在")
 	}
@@ -430,12 +430,12 @@ func (s *Services) ApprovalUpdate(ctx context.Context, param *requests.ApprovalU
 		return errors.New("无有效的更新字段")
 	}
 
-	return s.dao.ApprovalUpdate(ctx, param.ID, updates)
+	return s.cicdSvc().ApprovalUpdate(ctx, param.ID, updates)
 }
 
 // ApprovalDelete 删除审批记录
 func (s *Services) ApprovalDelete(ctx context.Context, id int64) error {
-	approval, err := s.dao.ApprovalGetByID(ctx, id)
+	approval, err := s.cicdSvc().ApprovalGetByID(ctx, id)
 	if err != nil {
 		return errors.New("审批记录不存在")
 	}
@@ -445,7 +445,7 @@ func (s *Services) ApprovalDelete(ctx context.Context, id int64) error {
 		return errors.New("已通过的审批不允许删除")
 	}
 
-	return s.dao.ApprovalDelete(ctx, id)
+	return s.cicdSvc().ApprovalDelete(ctx, id)
 }
 
 // CheckAndCreateApproval 检查是否需要审批，如果需要则创建审批记录
@@ -455,7 +455,7 @@ func (s *Services) CheckAndCreateApproval(ctx context.Context, pipeline *models.
 	needApproval := pipeline.RequireApproval
 
 	// 查询环境配置，获取审批策略
-	env, _ := s.dao.EnvironmentGetByName(ctx, pipeline.DeployEnv)
+	env, _ := s.cicdSvc().EnvironmentGetByName(ctx, pipeline.DeployEnv)
 
 	// 如果 pipeline 未开启审批，但环境配置要求审批，则强制开启
 	if !needApproval && env != nil && env.RequireApproval {
@@ -493,7 +493,7 @@ func (s *Services) CheckAndCreateApproval(ctx context.Context, pipeline *models.
 		ModifiedAt:    uint64(now),
 	}
 
-	id, err := s.dao.ApprovalCreate(ctx, approval)
+	id, err := s.cicdSvc().ApprovalCreate(ctx, approval)
 	if err != nil {
 		return true, 0, err
 	}
@@ -509,7 +509,7 @@ func (s *Services) CreateNextLevelApproval(ctx context.Context, prevApproval *mo
 	}
 
 	// 查询环境配置获取下一级信息
-	env, _ := s.dao.EnvironmentGetByName(ctx, prevApproval.EnvName)
+	env, _ := s.cicdSvc().EnvironmentGetByName(ctx, prevApproval.EnvName)
 	levelLabel := "审批"
 	if env != nil && len(env.ApprovalLevels) >= nextLevel {
 		levelLabel = env.ApprovalLevels[nextLevel-1].Label
@@ -535,5 +535,5 @@ func (s *Services) CreateNextLevelApproval(ctx context.Context, prevApproval *mo
 		ModifiedAt:    uint64(now),
 	}
 
-	return s.dao.ApprovalCreate(ctx, approval)
+	return s.cicdSvc().ApprovalCreate(ctx, approval)
 }

@@ -211,3 +211,13 @@ func (s *Services) KubeDaemonSetCreateFromYaml(ctx context.Context, cli *K8sClie
 
 	return createdDs, createdResources, nil
 }
+
+// KubeDaemonSetGetYaml 获取 DaemonSet 的 YAML 配置
+func (s *Services) KubeDaemonSetGetYaml(ctx context.Context, cli *K8sClients, namespace, name string) (string, error) {
+	return daemonset.GetYaml(ctx, cli.Kube, namespace, name)
+}
+
+// KubeDaemonSetApplyYaml 应用 DaemonSet YAML 配置
+func (s *Services) KubeDaemonSetApplyYaml(ctx context.Context, cli *K8sClients, namespace, name, yamlContent string) (*appv1.DaemonSet, error) {
+	return daemonset.ApplyYaml(ctx, cli.Kube, namespace, name, yamlContent)
+}

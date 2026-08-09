@@ -5,8 +5,8 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/valid"
 )
@@ -33,7 +33,7 @@ func (a *AuthController) Register(ctx *gin.Context) {
 	}
 
 	// 2) 调用业务层
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 	if err := svc.AuthRegister(param); err != nil {
 		global.Logger.Error("注册失败", zap.Error(err))
 

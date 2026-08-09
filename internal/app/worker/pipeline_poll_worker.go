@@ -10,7 +10,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/pkg/jenkins"
@@ -19,7 +18,6 @@ import (
 // PipelinePollWorker 流水线状态轮询 Worker
 // 轮询 Jenkins 获取未终态且回调未收到的构建状态
 type PipelinePollWorker struct {
-	dao *dao.Dao
 	svc *services.Services // 用于发送钉钉通知
 
 	pollInterval time.Duration // 轮询间隔
@@ -49,7 +47,6 @@ func NewPipelinePollWorker() *PipelinePollWorker {
 	}
 
 	return &PipelinePollWorker{
-		dao:          dao.NewDao(global.DB),
 		svc:          services.NewBackgroundServices(),
 		pollInterval: pollInterval,
 		maxBuildTime: maxBuildTime,
@@ -115,7 +112,7 @@ func (w *PipelinePollWorker) pollOnce(ctx context.Context) {
 	w.fixOrphanedPipelines(ctx)
 
 	// 2. 获取需要轮询的记录
-	runs, err := w.dao.PipelineRunListPendingForPoll(ctx, w.maxBuildTime, w.batchSize)
+	runs, err := w.svc.CicdSvc().PipelineRunListPendingForPoll(ctx, w.maxBuildTime, w.batchSize)
 	if err != nil {
 		global.Logger.Error("[轮询Worker] 获取待轮询记录失败", zap.Error(err))
 		return
@@ -177,8 +174,8 @@ func (w *PipelinePollWorker) pollSingleRun(ctx context.Context, run *models.Cicd
 				zap.Int64("pipeline_id", run.PipelineID),
 			)
 			run.ErrorMessage = "Jenkins 构建触发失败（未获取到构建号）"
-			_ = w.dao.PipelineRunUpdateCallback(ctx, run.ID, models.PipelineRunStatusFailed, "", "", run.ErrorMessage, 0)
-			_ = w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
+			_ = w.svc.CicdSvc().PipelineRunUpdateCallback(ctx, run.ID, models.PipelineRunStatusFailed, "", "", run.ErrorMessage, 0)
+			_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed)
 			// 发送钉钉构建失败通知
 			w.notifyBuildFailed(ctx, run)
 		}
@@ -186,7 +183,7 @@ func (w *PipelinePollWorker) pollSingleRun(ctx context.Context, run *models.Cicd
 	}
 
 	// 获取流水线信息
-	pipeline, err := w.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, err := w.svc.CicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	if err != nil {
 		global.Logger.Warn("[轮询Worker] 获取流水线失败",
 			zap.Int64("run_id", run.ID),
@@ -242,7 +239,7 @@ func (w *PipelinePollWorker) pollSingleRun(ctx context.Context, run *models.Cicd
 	)
 
 	// 更新运行记录（标记回调已收到，因为是轮询到的）
-	if err := w.dao.PipelineRunUpdateCallback(ctx, run.ID, runStatus, "", "", "", duration); err != nil {
+	if err := w.svc.CicdSvc().PipelineRunUpdateCallback(ctx, run.ID, runStatus, "", "", "", duration); err != nil {
 		global.Logger.Error("[轮询Worker] 更新运行记录失败",
 			zap.Int64("run_id", run.ID),
 			zap.Error(err),
@@ -251,7 +248,7 @@ func (w *PipelinePollWorker) pollSingleRun(ctx context.Context, run *models.Cicd
 	}
 
 	// 更新流水线状态
-	if err := w.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus); err != nil {
+	if err := w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus); err != nil {
 		global.Logger.Warn("[轮询Worker] 更新流水线状态失败",
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.Error(err),
@@ -271,7 +268,7 @@ func (w *PipelinePollWorker) pollSingleRun(ctx context.Context, run *models.Cicd
 // markTimeoutRecords 标记超时的记录，同时同步更新 pipeline 表状态
 func (w *PipelinePollWorker) markTimeoutRecords(ctx context.Context) {
 	// 先查出即将被标记超时的运行记录（用于同步更新 pipeline 表）
-	timedOutRuns, err := w.dao.PipelineRunListTimedOut(ctx, w.maxBuildTime)
+	timedOutRuns, err := w.svc.CicdSvc().PipelineRunListTimedOut(ctx, w.maxBuildTime)
 	if err != nil {
 		global.Logger.Error("[轮询Worker] 查询超时记录失败", zap.Error(err))
 		return
@@ -285,7 +282,7 @@ func (w *PipelinePollWorker) markTimeoutRecords(ctx context.Context) {
 		zap.Int("count", len(timedOutRuns)),
 	)
 
-	affected, err := w.dao.PipelineRunMarkTimeout(ctx, w.maxBuildTime)
+	affected, err := w.svc.CicdSvc().PipelineRunMarkTimeout(ctx, w.maxBuildTime)
 	if err != nil {
 		global.Logger.Error("[轮询Worker] 标记超时记录失败", zap.Error(err))
 		return
@@ -302,7 +299,7 @@ func (w *PipelinePollWorker) markTimeoutRecords(ctx context.Context) {
 				zap.Int64("pipeline_id", run.PipelineID),
 				zap.Int("build_number", run.BuildNumber),
 			)
-			if err := w.dao.PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed); err != nil {
+			if err := w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, run.PipelineID, models.PipelineRunStatusFailed); err != nil {
 				global.Logger.Warn("[轮询Worker] 同步更新流水线状态失败",
 					zap.Int64("pipeline_id", run.PipelineID),
 					zap.Int64("run_id", run.ID),
@@ -322,7 +319,7 @@ func (w *PipelinePollWorker) markTimeoutRecords(ctx context.Context) {
 // fixOrphanedPipelines 修复孤儿 pipeline：pipeline.status="running" 但没有活跃 run 记录
 // 场景：旧代码标记了 run 为 failed 但未同步更新 pipeline 表，导致 pipeline 永久卡在 running
 func (w *PipelinePollWorker) fixOrphanedPipelines(ctx context.Context) {
-	orphaned, err := w.dao.PipelineListStuckRunning(ctx)
+	orphaned, err := w.svc.CicdSvc().PipelineListStuckRunning(ctx)
 	if err != nil {
 		global.Logger.Error("[轮询Worker] 查询孤儿 pipeline 失败", zap.Error(err))
 		return
@@ -330,10 +327,10 @@ func (w *PipelinePollWorker) fixOrphanedPipelines(ctx context.Context) {
 
 	for _, p := range orphaned {
 		// 查找最新的 run 记录来确定实际状态
-		latestRun, err := w.dao.PipelineRunGetLatest(ctx, p.ID)
+		latestRun, err := w.svc.CicdSvc().PipelineRunGetLatest(ctx, p.ID)
 		if err != nil {
 			// 没有 run 记录，直接重置为 idle
-			_ = w.dao.PipelineUpdateRunComplete(ctx, p.ID, models.PipelineRunStatusFailed)
+			_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, p.ID, models.PipelineRunStatusFailed)
 			global.Logger.Info("[轮询Worker] 修复孤儿 pipeline（无 run 记录）",
 				zap.Int64("pipeline_id", p.ID),
 				zap.String("pipeline_name", p.Name),
@@ -345,7 +342,7 @@ func (w *PipelinePollWorker) fixOrphanedPipelines(ctx context.Context) {
 		if latestRun.Status == models.PipelineRunStatusSuccess ||
 			latestRun.Status == models.PipelineRunStatusFailed ||
 			latestRun.Status == models.PipelineRunStatusAborted {
-			_ = w.dao.PipelineUpdateRunComplete(ctx, p.ID, latestRun.Status)
+			_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, p.ID, latestRun.Status)
 			global.Logger.Info("[轮询Worker] 修复孤儿 pipeline（run 已终态）",
 				zap.Int64("pipeline_id", p.ID),
 				zap.String("pipeline_name", p.Name),
@@ -357,8 +354,8 @@ func (w *PipelinePollWorker) fixOrphanedPipelines(ctx context.Context) {
 		// run 还在 pending/running，但已经超时太久（超过 maxBuildTime），强制标记失败
 		createdAt := time.Unix(int64(latestRun.CreatedAt), 0)
 		if time.Since(createdAt) > time.Duration(w.maxBuildTime)*time.Minute {
-			_ = w.dao.PipelineRunUpdateCallback(ctx, latestRun.ID, models.PipelineRunStatusFailed, "", "", "构建超时（孤儿修复）", 0)
-			_ = w.dao.PipelineUpdateRunComplete(ctx, p.ID, models.PipelineRunStatusFailed)
+			_ = w.svc.CicdSvc().PipelineRunUpdateCallback(ctx, latestRun.ID, models.PipelineRunStatusFailed, "", "", "构建超时（孤儿修复）", 0)
+			_ = w.svc.CicdSvc().PipelineUpdateRunComplete(ctx, p.ID, models.PipelineRunStatusFailed)
 			global.Logger.Info("[轮询Worker] 修复孤儿 pipeline（run 超时）",
 				zap.Int64("pipeline_id", p.ID),
 				zap.String("pipeline_name", p.Name),
@@ -370,7 +367,7 @@ func (w *PipelinePollWorker) fixOrphanedPipelines(ctx context.Context) {
 
 // notifyBuildFailed 发送钉钉构建失败通知（同步调用，确保通知可靠送达）
 func (w *PipelinePollWorker) notifyBuildFailed(ctx context.Context, run *models.CicdPipelineRun) {
-	pipeline, err := w.dao.PipelineGetByID(ctx, run.PipelineID)
+	pipeline, err := w.svc.CicdSvc().PipelineGetByID(ctx, run.PipelineID)
 	if err != nil {
 		global.Logger.Warn("[轮询Worker] 发送通知前获取流水线失败",
 			zap.Int64("run_id", run.ID),

@@ -34,7 +34,7 @@ func NewAuditLogController() *AuditLogController {
 // @Param start_time query int false "开始时间(unix)"
 // @Param end_time query int false "结束时间(unix)"
 // @Param keyword query string false "关键词搜索"
-// @Success 200 {object} models.AuditLogListResponse
+// @Success 200 {object} k8soperation_internal_domain_audit.AuditLogListResponse
 // @Router /api/v1/platform/audit/logs [get]
 func (ctrl *AuditLogController) List(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
@@ -63,7 +63,7 @@ func (ctrl *AuditLogController) List(ctx *gin.Context) {
 // @Tags 审计日志
 // @Produce json
 // @Param id path int true "日志ID"
-// @Success 200 {object} models.AuditLog
+// @Success 200 {object} k8soperation_internal_domain_audit.AuditLog
 // @Router /api/v1/platform/audit/logs/{id} [get]
 func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
@@ -91,7 +91,7 @@ func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 // @Description 返回今日/本周操作量、成功率、用户排行、模块排行等
 // @Tags 审计日志
 // @Produce json
-// @Success 200 {object} models.AuditStatistics
+// @Success 200 {object} k8soperation_internal_domain_audit.AuditStatistics
 // @Router /api/v1/platform/audit/statistics [get]
 func (ctrl *AuditLogController) Statistics(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
@@ -112,7 +112,7 @@ func (ctrl *AuditLogController) Statistics(ctx *gin.Context) {
 // @Description 返回当前保留天数和是否永久保留
 // @Tags 审计日志
 // @Produce json
-// @Success 200 {object} models.AuditRetentionPolicy
+// @Success 200 {object} k8soperation_internal_domain_audit.AuditRetentionPolicy
 // @Router /api/v1/platform/audit/retention [get]
 func (ctrl *AuditLogController) GetRetention(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)

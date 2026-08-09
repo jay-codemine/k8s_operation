@@ -7,15 +7,14 @@ import (
 	"go.uber.org/zap"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/models"
+	"k8soperation/internal/domain/user"
 	ldapclient "k8soperation/pkg/ldap"
 	"k8soperation/pkg/setting"
 )
 
 // LDAPLogin LDAP 登录认证
 // 返回: 用户对象, 是否是LDAP认证, error
-func (s *Services) LDAPLogin(username, password string) (*models.User, bool, error) {
-	// 检查 LDAP 是否启用
+func (s *Services) LDAPLogin(username, password string) (*user.User, bool, error) {
 	if !ldapclient.IsEnabled() {
 		return nil, false, fmt.Errorf("LDAP 未启用")
 	}
@@ -29,7 +28,6 @@ func (s *Services) LDAPLogin(username, password string) (*models.User, bool, err
 			zap.String("username", username),
 			zap.Error(err))
 
-		// 如果启用了本地回退，返回特定错误让调用方尝试本地认证
 		if global.LDAPSetting.LocalFallback {
 			return nil, false, fmt.Errorf("LDAP_AUTH_FAILED")
 		}
@@ -37,28 +35,28 @@ func (s *Services) LDAPLogin(username, password string) (*models.User, bool, err
 	}
 
 	// 2. 本地用户同步（JIT Provisioning）
-	user, err := s.syncLDAPUser(ldapUser)
+	u, err := s.syncLDAPUser(ldapUser)
 	if err != nil {
 		return nil, true, fmt.Errorf("同步 LDAP 用户失败: %w", err)
 	}
 
 	// 3. 同步 LDAP 组到平台角色
 	if global.LDAPSetting.SyncOnLogin && len(ldapUser.Groups) > 0 {
-		if err := s.syncLDAPRoles(user, ldapUser.Groups); err != nil {
+		if err := s.syncLDAPRoles(u, ldapUser.Groups); err != nil {
 			global.Logger.Warn("同步 LDAP 角色失败",
 				zap.String("username", username),
 				zap.Error(err))
-			// 角色同步失败不阻断登录
 		}
 	}
 
-	return user, true, nil
+	return u, true, nil
 }
 
 // syncLDAPUser 同步 LDAP 用户到本地数据库（首次创建/后续更新）
-func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*models.User, error) {
-	// 查找本地是否已存在
-	existing, err := s.dao.UserGetByName(ldapUser.Username)
+func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*user.User, error) {
+	userSvc := s.userSvc()
+
+	existing, err := userSvc.GetByName(ldapUser.Username)
 	if err == nil && existing != nil {
 		// 用户已存在，更新邮箱/手机等信息
 		nowTime := uint32(time.Now().Unix())
@@ -71,10 +69,9 @@ func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*models.User, er
 		if ldapUser.Phone != "" {
 			values["phone"] = ldapUser.Phone
 		}
-		// 确保用户状态为激活
 		values["status"] = int8(1)
 
-		_ = existing.Update(s.dao.DB(), values)
+		_ = userSvc.UpdateFields(existing.ID, values)
 		return existing, nil
 	}
 
@@ -85,12 +82,12 @@ func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*models.User, er
 
 	// 创建本地用户（密码使用随机值，因为走 LDAP 认证不需要本地密码）
 	randomPass := fmt.Sprintf("LDAP_%d_%s", time.Now().UnixNano(), ldapUser.Username)
-	user, err := s.dao.UserCreateFull(
+	u, err := userSvc.CreateFull(
 		ldapUser.Username,
 		randomPass,
 		ldapUser.Email,
 		ldapUser.Phone,
-		"user", // role 字段用默认值，实际权限通过 RBAC 控制
+		"user",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("创建本地用户失败: %w", err)
@@ -98,37 +95,35 @@ func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*models.User, er
 
 	global.Logger.Info("LDAP 用户首次登录，已自动创建平台账号",
 		zap.String("username", ldapUser.Username),
-		zap.Uint32("user_id", user.ID))
+		zap.Uint32("user_id", u.ID))
 
-	return user, nil
+	return u, nil
 }
 
 // syncLDAPRoles 根据 LDAP 组同步平台角色
-func (s *Services) syncLDAPRoles(user *models.User, groups []string) error {
+func (s *Services) syncLDAPRoles(u *user.User, groups []string) error {
 	client := ldapclient.NewClient()
+	rbacSvc := s.rbacSvc()
 
-	// 获取最高优先级的角色映射
 	mapping := client.GetRoleMappingForGroups(groups)
 	if mapping == nil {
 		global.Logger.Debug("未找到匹配的 LDAP 组映射",
-			zap.String("username", user.Username),
+			zap.String("username", u.Username),
 			zap.Strings("groups", groups))
 		return nil
 	}
 
-	// 查找平台角色
-	role, err := s.dao.RoleGetByName(mapping.PlatformRole)
+	role, err := rbacSvc.RoleGetByName(mapping.PlatformRole)
 	if err != nil {
 		return fmt.Errorf("角色 %s 不存在: %w", mapping.PlatformRole, err)
 	}
 
-	// 分配角色（替换现有角色）
-	if err := s.dao.UserRoleAssign(int64(user.ID), []int64{role.ID}, 0); err != nil {
+	if err := rbacSvc.UserRoleAssign(int64(u.ID), []int64{role.ID}, 0); err != nil {
 		return fmt.Errorf("分配角色失败: %w", err)
 	}
 
 	global.Logger.Info("LDAP 角色同步完成",
-		zap.String("username", user.Username),
+		zap.String("username", u.Username),
 		zap.Strings("ldap_groups", groups),
 		zap.String("mapped_role", mapping.PlatformRole))
 
@@ -161,16 +156,15 @@ func (s *Services) LDAPSyncAllUsers() (*LDAPSyncResult, error) {
 	}
 
 	for _, ldapUser := range ldapUsers {
-		user, err := s.syncLDAPUser(ldapUser)
+		u, err := s.syncLDAPUser(ldapUser)
 		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", ldapUser.Username, err.Error()))
 			continue
 		}
 
-		// 同步组
 		if len(ldapUser.Groups) > 0 {
-			_ = s.syncLDAPRoles(user, ldapUser.Groups)
+			_ = s.syncLDAPRoles(u, ldapUser.Groups)
 		}
 
 		result.Synced++
@@ -187,22 +181,22 @@ func (s *Services) LDAPGetConfig() *LDAPConfigResponse {
 	}
 
 	return &LDAPConfigResponse{
-		Enabled:       cfg.Enabled,
-		Host:          cfg.Host,
-		Port:          cfg.Port,
-		UseTLS:        cfg.UseTLS,
-		BindDN:        cfg.BindDN,
-		BaseDN:        cfg.BaseDN,
-		UserFilter:    cfg.UserFilter,
-		GroupBaseDN:   cfg.GroupBaseDN,
-		GroupFilter:   cfg.GroupFilter,
-		GroupAttr:     cfg.GroupAttr,
-		AttrUsername:  cfg.AttrUsername,
-		AttrEmail:     cfg.AttrEmail,
-		AttrPhone:     cfg.AttrPhone,
-		SyncOnLogin:   cfg.SyncOnLogin,
-		AutoCreate:    cfg.AutoCreate,
-		LocalFallback: cfg.LocalFallback,
+		Enabled:         cfg.Enabled,
+		Host:            cfg.Host,
+		Port:            cfg.Port,
+		UseTLS:          cfg.UseTLS,
+		BindDN:          cfg.BindDN,
+		BaseDN:          cfg.BaseDN,
+		UserFilter:      cfg.UserFilter,
+		GroupBaseDN:     cfg.GroupBaseDN,
+		GroupFilter:     cfg.GroupFilter,
+		GroupAttr:       cfg.GroupAttr,
+		AttrUsername:    cfg.AttrUsername,
+		AttrEmail:       cfg.AttrEmail,
+		AttrPhone:       cfg.AttrPhone,
+		SyncOnLogin:     cfg.SyncOnLogin,
+		AutoCreate:      cfg.AutoCreate,
+		LocalFallback:   cfg.LocalFallback,
 		GroupRoleMapping: cfg.GroupRoleMapping,
 	}
 }
@@ -219,21 +213,21 @@ type LDAPSyncResult struct {
 
 // LDAPConfigResponse LDAP 配置响应（脱敏）
 type LDAPConfigResponse struct {
-	Enabled       bool                          `json:"enabled"`
-	Host          string                        `json:"host"`
-	Port          int                           `json:"port"`
-	UseTLS        bool                          `json:"use_tls"`
-	BindDN        string                        `json:"bind_dn"`
-	BaseDN        string                        `json:"base_dn"`
-	UserFilter    string                        `json:"user_filter"`
-	GroupBaseDN   string                        `json:"group_base_dn"`
-	GroupFilter   string                        `json:"group_filter"`
-	GroupAttr     string                        `json:"group_attr"`
-	AttrUsername  string                        `json:"attr_username"`
-	AttrEmail     string                        `json:"attr_email"`
-	AttrPhone     string                        `json:"attr_phone"`
-	SyncOnLogin   bool                          `json:"sync_on_login"`
-	AutoCreate    bool                          `json:"auto_create"`
-	LocalFallback bool                          `json:"local_fallback"`
-	GroupRoleMapping []setting.LDAPGroupRoleMapping `json:"group_role_mapping"`
+	Enabled          bool                            `json:"enabled"`
+	Host             string                          `json:"host"`
+	Port             int                             `json:"port"`
+	UseTLS           bool                            `json:"use_tls"`
+	BindDN           string                          `json:"bind_dn"`
+	BaseDN           string                          `json:"base_dn"`
+	UserFilter       string                          `json:"user_filter"`
+	GroupBaseDN      string                          `json:"group_base_dn"`
+	GroupFilter      string                          `json:"group_filter"`
+	GroupAttr        string                          `json:"group_attr"`
+	AttrUsername     string                          `json:"attr_username"`
+	AttrEmail        string                          `json:"attr_email"`
+	AttrPhone        string                          `json:"attr_phone"`
+	SyncOnLogin      bool                            `json:"sync_on_login"`
+	AutoCreate       bool                            `json:"auto_create"`
+	LocalFallback    bool                            `json:"local_fallback"`
+	GroupRoleMapping []setting.LDAPGroupRoleMapping   `json:"group_role_mapping"`
 }

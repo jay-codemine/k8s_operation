@@ -947,9 +947,8 @@ func (s *Services) getEnvDisplayNameWithCluster(env string, clusterID int64) str
 	}
 
 	if clusterID > 0 {
-		var cluster models.K8sCluster
-		if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
-			clusterName := cluster.ClusterName
+		clusterName := s.getClusterName(clusterID)
+		if clusterName != "default" {
 			if strings.Contains(clusterName, "生产") || strings.Contains(clusterName, "prod") {
 				return "🚀 生产环境"
 			}
@@ -983,9 +982,8 @@ func (s *Services) getEnvDisplayLabel(env string, clusterID int64) string {
 
 	// 从集群名推断
 	if clusterID > 0 {
-		var cluster models.K8sCluster
-		if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
-			name := cluster.ClusterName
+		name := s.getClusterName(clusterID)
+		if name != "default" {
 			if strings.Contains(name, "生产") || strings.Contains(name, "prod") {
 				return "生产环境"
 			}
@@ -1009,8 +1007,8 @@ func (s *Services) getClusterName(clusterID int64) string {
 	if clusterID <= 0 {
 		return "default"
 	}
-	var cluster models.K8sCluster
-	if err := s.dao.DB().Where("id = ?", clusterID).First(&cluster).Error; err == nil {
+	cluster, err := s.clusterSvc().GetByID(context.Background(), uint32(clusterID))
+	if err == nil {
 		return cluster.ClusterName
 	}
 	return "default"
@@ -1021,7 +1019,7 @@ func (s *Services) getUsernameByID(userID int64) string {
 	if userID <= 0 {
 		return "system"
 	}
-	user, err := s.dao.UserGetByID(userID)
+	user, err := s.userSvc().GetByID(userID)
 	if err != nil || user == nil {
 		return fmt.Sprintf("user-%d", userID)
 	}

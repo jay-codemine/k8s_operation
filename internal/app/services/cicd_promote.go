@@ -16,18 +16,18 @@ import (
 
 // PipelineTargetList 获取某条流水线的全部环境部署目标
 func (s *Services) PipelineTargetList(ctx context.Context, pipelineID int64) ([]*models.CicdPipelineTargetView, error) {
-	return s.dao.PipelineTargetListByPipeline(ctx, pipelineID)
+	return s.cicdSvc().PipelineTargetListByPipeline(ctx, pipelineID)
 }
 
 // PipelineTargetSave 全量保存某条流水线的环境部署目标（存在则更新，缺失则新增，多余则软删除）
 func (s *Services) PipelineTargetSave(ctx context.Context, req *requests.PipelineTargetSaveRequest, userID int64) error {
 	// 校验流水线存在
-	if _, err := s.dao.PipelineGetByID(ctx, req.PipelineID); err != nil {
+	if _, err := s.cicdSvc().PipelineGetByID(ctx, req.PipelineID); err != nil {
 		return fmt.Errorf("关联流水线不存在(id=%d): %w", req.PipelineID, err)
 	}
 
 	// 现有目标：用于计算需要软删除的环境
-	existing, err := s.dao.PipelineTargetListByPipeline(ctx, req.PipelineID)
+	existing, err := s.cicdSvc().PipelineTargetListByPipeline(ctx, req.PipelineID)
 	if err != nil {
 		return fmt.Errorf("查询现有环境目标失败: %w", err)
 	}
@@ -74,7 +74,7 @@ func (s *Services) PipelineTargetSave(ctx context.Context, req *requests.Pipelin
 			SortOrder:       item.SortOrder,
 			CreatedUserID:   userID,
 		}
-		if err := s.dao.PipelineTargetUpsert(ctx, t); err != nil {
+		if err := s.cicdSvc().PipelineTargetUpsert(ctx, t); err != nil {
 			return fmt.Errorf("保存环境[%s]目标失败: %w", env, err)
 		}
 	}
@@ -82,7 +82,7 @@ func (s *Services) PipelineTargetSave(ctx context.Context, req *requests.Pipelin
 	// 软删除已不在提交列表中的环境目标
 	for _, old := range existing {
 		if _, ok := submitted[old.Env]; !ok {
-			_ = s.dao.PipelineTargetDelete(ctx, old.ID)
+			_ = s.cicdSvc().PipelineTargetDelete(ctx, old.ID)
 		}
 	}
 
@@ -91,7 +91,7 @@ func (s *Services) PipelineTargetSave(ctx context.Context, req *requests.Pipelin
 
 // PipelineTargetDelete 删除单个环境目标
 func (s *Services) PipelineTargetDelete(ctx context.Context, id int64) error {
-	return s.dao.PipelineTargetDelete(ctx, id)
+	return s.cicdSvc().PipelineTargetDelete(ctx, id)
 }
 
 // ==================== 镜像晋级 ====================
@@ -103,7 +103,7 @@ func (s *Services) PipelineTargetDelete(ctx context.Context, id int64) error {
 // 因此晋级本身不重新构建镜像，实现 build once, promote everywhere。
 func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePromoteRequest, userID int64) (int64, error) {
 	// 1. 校验流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, req.PipelineID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.PipelineID)
 	if err != nil {
 		return 0, fmt.Errorf("关联流水线不存在(id=%d): %w", req.PipelineID, err)
 	}
@@ -116,7 +116,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 	var namespace, workloadKind, workloadName, container string
 	var sourceEnv string
 
-	target, tErr := s.dao.PipelineTargetGetByPipelineAndEnv(ctx, req.PipelineID, targetEnv)
+	target, tErr := s.cicdSvc().PipelineTargetGetByPipelineAndEnv(ctx, req.PipelineID, targetEnv)
 	if tErr == nil && target != nil {
 		// 优先：该流水线为此环境单独配置的部署目标（按需覆盖）
 		clusterID = target.ClusterID
@@ -132,7 +132,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		workloadKind = pipeline.TargetWorkloadKind
 		workloadName = pipeline.TargetWorkloadName
 		container = pipeline.TargetContainer
-	} else if env, eErr := s.dao.EnvironmentGetByName(ctx, targetEnv); eErr == nil && env != nil && env.ClusterID > 0 {
+	} else if env, eErr := s.cicdSvc().EnvironmentGetByName(ctx, targetEnv); eErr == nil && env != nil && env.ClusterID > 0 {
 		// 回退：继承全局环境(cicd_environment)默认集群/命名空间 + 流水线默认工作负载，
 		// 这样无需为每条流水线单独配置环境目标即可晋级（build once, promote everywhere）
 		clusterID = env.ClusterID
@@ -171,7 +171,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		// 使用显式传入的镜像
 	case req.SourceReleaseID > 0:
 		// 从已有发布单晋级（跨环境晋级：dev -> staging -> prod）
-		srcRel, rErr := s.dao.CicdReleaseGetByID(ctx, req.SourceReleaseID)
+		srcRel, rErr := s.cicdSvc().CicdReleaseGetByID(ctx, req.SourceReleaseID)
 		if rErr != nil {
 			return 0, fmt.Errorf("来源发布单不存在(id=%d): %w", req.SourceReleaseID, rErr)
 		}
@@ -188,7 +188,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		}
 	case req.SourceRunID > 0:
 		// 从流水线运行记录（构建产物）晋级
-		run, runErr := s.dao.PipelineRunGetByID(ctx, req.SourceRunID)
+		run, runErr := s.cicdSvc().PipelineRunGetByID(ctx, req.SourceRunID)
 		if runErr != nil {
 			return 0, fmt.Errorf("来源运行记录不存在(id=%d): %w", req.SourceRunID, runErr)
 		}
@@ -201,7 +201,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 		}
 	default:
 		// 未显式指定来源：回退到「最新一次已构建产物」，对应前端「留空使用最新一次构建」
-		run, runErr := s.dao.PipelineRunGetLatestBuilt(ctx, req.PipelineID)
+		run, runErr := s.cicdSvc().PipelineRunGetLatestBuilt(ctx, req.PipelineID)
 		if runErr != nil {
 			return 0, fmt.Errorf("流水线暂无可晋级的构建产物，请先成功执行一次构建后再晋级")
 		}
@@ -218,7 +218,7 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 	// 补全晋级来源环境：来源是构建产物(run) 且未显式指定上游环境时，
 	// 反查该镜像当前所处环境作为 source_env，保证晋级链 dev→test→staging→prod 不断裂
 	if sourceEnv == "" && sourceRunID > 0 {
-		if srcRel, sErr := s.dao.CicdReleaseLatestBySourceRunID(ctx, req.PipelineID, sourceRunID); sErr == nil && srcRel != nil {
+		if srcRel, sErr := s.cicdSvc().CicdReleaseLatestBySourceRunID(ctx, req.PipelineID, sourceRunID); sErr == nil && srcRel != nil {
 			sourceEnv = srcRel.Env
 		}
 	}
@@ -267,19 +267,19 @@ func (s *Services) PipelinePromote(ctx context.Context, req *requests.PipelinePr
 // 环境的增删改统一在「环境管理」中维护，无需每条流水线重复配置。
 func (s *Services) PipelinePromotionChain(ctx context.Context, pipelineID int64) ([]*models.PromotionEnvNode, error) {
 	// 校验流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, pipelineID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, pipelineID)
 	if err != nil {
 		return nil, fmt.Errorf("关联流水线不存在(id=%d): %w", pipelineID, err)
 	}
 
 	// 全局环境作为基线
-	envs, _, envErr := s.dao.EnvironmentList(ctx, 1, 1000, "")
+	envs, _, envErr := s.cicdSvc().EnvironmentList(ctx, 1, 1000, "")
 	if envErr != nil {
 		return nil, envErr
 	}
 
 	// 该流水线单独配置的环境目标（覆盖全局默认）
-	targets, err := s.dao.PipelineTargetListByPipeline(ctx, pipelineID)
+	targets, err := s.cicdSvc().PipelineTargetListByPipeline(ctx, pipelineID)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func (s *Services) PipelinePromotionChain(ctx context.Context, pipelineID int64)
 
 // attachLatestRelease 为晋级链节点附加该环境的最新一条发布单信息
 func (s *Services) attachLatestRelease(ctx context.Context, pipelineID int64, node *models.PromotionEnvNode) error {
-	rel, relErr := s.dao.CicdReleaseLatestByPipelineEnv(ctx, pipelineID, node.Env)
+	rel, relErr := s.cicdSvc().CicdReleaseLatestByPipelineEnv(ctx, pipelineID, node.Env)
 	if relErr == nil && rel != nil {
 		node.CurrentReleaseID = rel.ID
 		node.CurrentImageRepo = rel.ImageRepo

@@ -79,7 +79,7 @@ func (s *Services) ArtifactUpload(ctx context.Context, file multipart.File, head
 	}
 
 	// 4. 写入数据库
-	if err := s.dao.ArtifactCreate(ctx, artifact); err != nil {
+	if err := s.cicdSvc().ArtifactCreate(ctx, artifact); err != nil {
 		os.Remove(storePath)
 		return nil, fmt.Errorf("保存制品记录失败: %w", err)
 	}
@@ -101,7 +101,7 @@ func (s *Services) ArtifactCreateRecord(ctx context.Context, artifact *models.Ci
 	if artifact.ArtifactType == "" {
 		artifact.ArtifactType = models.ArtifactTypeImage
 	}
-	if err := s.dao.ArtifactCreate(ctx, artifact); err != nil {
+	if err := s.cicdSvc().ArtifactCreate(ctx, artifact); err != nil {
 		return nil, fmt.Errorf("创建制品记录失败: %w", err)
 	}
 	return artifact, nil
@@ -115,17 +115,17 @@ func (s *Services) ArtifactList(ctx context.Context, pipelineID int64, artifactT
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 20
 	}
-	return s.dao.ArtifactList(ctx, pipelineID, artifactType, languageType, status, page, pageSize)
+	return s.cicdSvc().ArtifactList(ctx, pipelineID, artifactType, languageType, status, page, pageSize)
 }
 
 // ArtifactDetail 制品详情
 func (s *Services) ArtifactDetail(ctx context.Context, id int64) (*models.CicdArtifact, error) {
-	return s.dao.ArtifactGetByID(ctx, id)
+	return s.cicdSvc().ArtifactGetByID(ctx, id)
 }
 
 // ArtifactDownload 制品下载（返回文件路径）
 func (s *Services) ArtifactDownload(ctx context.Context, id int64) (*models.CicdArtifact, error) {
-	artifact, err := s.dao.ArtifactGetByID(ctx, id)
+	artifact, err := s.cicdSvc().ArtifactGetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("制品不存在: %w", err)
 	}
@@ -136,18 +136,18 @@ func (s *Services) ArtifactDownload(ctx context.Context, id int64) (*models.Cicd
 		return nil, fmt.Errorf("制品文件已丢失: %s", artifact.FilePath)
 	}
 	// 增加下载计数
-	_ = s.dao.ArtifactIncrDownload(ctx, id)
+	_ = s.cicdSvc().ArtifactIncrDownload(ctx, id)
 	return artifact, nil
 }
 
 // ArtifactDelete 删除制品
 func (s *Services) ArtifactDelete(ctx context.Context, id int64) error {
-	artifact, err := s.dao.ArtifactGetByID(ctx, id)
+	artifact, err := s.cicdSvc().ArtifactGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("制品不存在: %w", err)
 	}
 	// 软删除数据库记录
-	if err := s.dao.ArtifactDelete(ctx, id); err != nil {
+	if err := s.cicdSvc().ArtifactDelete(ctx, id); err != nil {
 		return fmt.Errorf("删除制品记录失败: %w", err)
 	}
 	// 删除文件（如果存在）
@@ -165,11 +165,11 @@ func (s *Services) ArtifactDelete(ctx context.Context, id int64) error {
 // ArtifactUpdate 更新制品信息
 func (s *Services) ArtifactUpdate(ctx context.Context, id int64, updates map[string]interface{}) error {
 	// 校验制品是否存在
-	_, err := s.dao.ArtifactGetByID(ctx, id)
+	_, err := s.cicdSvc().ArtifactGetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("制品不存在: %w", err)
 	}
-	if err := s.dao.ArtifactUpdate(ctx, id, updates); err != nil {
+	if err := s.cicdSvc().ArtifactUpdate(ctx, id, updates); err != nil {
 		return fmt.Errorf("更新制品失败: %w", err)
 	}
 	global.Logger.Info("[制品库] 更新成功",
@@ -184,12 +184,12 @@ func (s *Services) ArtifactBatchDelete(ctx context.Context, ids []int64) (int64,
 		return 0, fmt.Errorf("删除ID列表不能为空")
 	}
 	// 先查询文件路径，用于清理文件
-	artifacts, err := s.dao.ArtifactGetByIDs(ctx, ids)
+	artifacts, err := s.cicdSvc().ArtifactGetByIDs(ctx, ids)
 	if err != nil {
 		return 0, fmt.Errorf("查询制品列表失败: %w", err)
 	}
 	// 执行软删除
-	affected, err := s.dao.ArtifactBatchDelete(ctx, ids)
+	affected, err := s.cicdSvc().ArtifactBatchDelete(ctx, ids)
 	if err != nil {
 		return 0, fmt.Errorf("批量删除制品记录失败: %w", err)
 	}
@@ -213,7 +213,7 @@ func (s *Services) ArtifactBatchDelete(ctx context.Context, ids []int64) (int64,
 
 // ArtifactAttachFile 为已有制品记录补传/替换文件
 func (s *Services) ArtifactAttachFile(ctx context.Context, id int64, file multipart.File, header *multipart.FileHeader) (*models.CicdArtifact, error) {
-	artifact, err := s.dao.ArtifactGetByID(ctx, id)
+	artifact, err := s.cicdSvc().ArtifactGetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("制品不存在: %w", err)
 	}
@@ -269,23 +269,23 @@ func (s *Services) ArtifactAttachFile(ctx context.Context, id int64, file multip
 	if artifact.Name == "" {
 		updates["name"] = header.Filename
 	}
-	if err := s.dao.ArtifactUpdate(ctx, id, updates); err != nil {
+	if err := s.cicdSvc().ArtifactUpdate(ctx, id, updates); err != nil {
 		os.Remove(storePath)
 		return nil, fmt.Errorf("更新制品记录失败: %w", err)
 	}
 
 	// 返回更新后的记录
-	return s.dao.ArtifactGetByID(ctx, id)
+	return s.cicdSvc().ArtifactGetByID(ctx, id)
 }
 
 // ArtifactStats 制品统计
 func (s *Services) ArtifactStats(ctx context.Context, pipelineID int64) ([]map[string]interface{}, error) {
-	return s.dao.ArtifactStats(ctx, pipelineID)
+	return s.cicdSvc().ArtifactStats(ctx, pipelineID)
 }
 
 // ArtifactListByRunID 获取某次运行的制品列表
 func (s *Services) ArtifactListByRunID(ctx context.Context, runID int64) ([]*models.CicdArtifact, error) {
-	return s.dao.ArtifactListByRunID(ctx, runID)
+	return s.cicdSvc().ArtifactListByRunID(ctx, runID)
 }
 
 // inferArtifactType 根据文件名和语言类型推导制品类型

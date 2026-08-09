@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"k8soperation/global"
 	"k8soperation/initialize"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/app/worker"
@@ -105,7 +104,7 @@ func InitAll() error {
 	auditCleanupWorker.Start()
 
 	// 启动告警规则评估 Worker（定期查询 Prometheus 评估规则，产生告警事件）
-	alertEvalWorker = worker.NewAlertEvalWorker()
+	alertEvalWorker = worker.NewAlertEvalWorker(global.DB, services.NewBackgroundServices().MonitorCRUDSvc(), global.Logger)
 	alertEvalWorker.Start()
 
 	// AIOps: 自动建表（如果不存在）
@@ -118,6 +117,9 @@ func InitAll() error {
 		aiopsInspectionWorker = worker.NewAIOpsInspectionWorker()
 		aiopsInspectionWorker.Start()
 	}
+
+	// 注册领域事件处理器
+	registerEventHandlers()
 
 	return nil
 }
@@ -199,10 +201,10 @@ func SyncApprovalData() {
 	}
 
 	ctx := context.Background()
-	d := dao.NewDao(global.DB)
+	cicdSvc := services.NewBackgroundServices().CicdSvc()
 
 	// 查询所有审批类型的阶段记录
-	stages, err := d.StageListApprovalAll(ctx)
+	stages, err := cicdSvc.StageListApprovalAll(ctx)
 	if err != nil {
 		global.Logger.Warn("审批数据补全: 查询审批阶段失败", zap.Error(err))
 		return
@@ -216,7 +218,7 @@ func SyncApprovalData() {
 	var synced int
 	for _, stage := range stages {
 		// 检查是否已有对应的 cicd_approval 记录
-		exists, err := d.ApprovalExistsByStageID(ctx, stage.ID)
+		exists, err := cicdSvc.ApprovalExistsByStageID(ctx, stage.ID)
 		if err != nil {
 			continue
 		}
@@ -247,7 +249,7 @@ func SyncApprovalData() {
 		// 获取运行记录信息
 		var imageURL string
 		var triggerUserID int64
-		run, runErr := d.PipelineRunGetByID(ctx, stage.RunID)
+		run, runErr := cicdSvc.PipelineRunGetByID(ctx, stage.RunID)
 		if runErr == nil && run != nil {
 			imageURL = run.ImageURL
 			triggerUserID = run.TriggerUserID
@@ -274,7 +276,7 @@ func SyncApprovalData() {
 			}
 		}
 
-		_, createErr := d.ApprovalCreate(ctx, approval)
+		_, createErr := cicdSvc.ApprovalCreate(ctx, approval)
 		if createErr != nil {
 			global.Logger.Warn("审批数据补全: 创建审批记录失败",
 				zap.Int64("stage_id", stage.ID),

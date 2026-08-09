@@ -10,6 +10,7 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
+	dmcicd "k8soperation/internal/domain/cicd"
 	k8sdeploy "k8soperation/pkg/k8s/deployment"
 	prom "k8soperation/pkg/prometheus"
 )
@@ -71,7 +72,7 @@ func (s *Services) CanaryPromote(ctx context.Context, kube kubernetes.Interface,
 	containerName := req.ContainerName
 	if containerName == "" {
 		if req.PipelineID > 0 {
-			pipeline, err := s.dao.PipelineGetByID(ctx, req.PipelineID)
+			pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.PipelineID)
 			if err == nil && pipeline != nil {
 				containerName = pipeline.TargetContainer
 			}
@@ -167,15 +168,8 @@ func (s *Services) CanaryAnalyze(ctx context.Context, kube kubernetes.Interface,
 
 // getDefaultPromClient 获取默认 Prometheus 客户端
 func (s *Services) getDefaultPromClient() *prom.Client {
-	if s.dao.DB() == nil {
-		return nil
-	}
-	var ds models.MonitorDatasource
-	if err := s.dao.DB().Where("type IN (?,?,?) AND is_default = 1 AND enabled = 1 AND is_del = 0",
-		"prometheus", "victoriametrics", "thanos").First(&ds).Error; err != nil {
-		return nil
-	}
-	if ds.URL == "" {
+	ds, err := s.MonitorCRUDSvc().GetDefaultDatasource(context.Background(), []string{"prometheus", "victoriametrics", "thanos"})
+	if err != nil || ds.URL == "" {
 		return nil
 	}
 	return prom.NewClient(ds.URL, 30*time.Second)
@@ -183,34 +177,35 @@ func (s *Services) getDefaultPromClient() *prom.Client {
 
 // updateCanaryStage 更新金丝雀阶段状态
 func (s *Services) updateCanaryStage(ctx context.Context, runID int64, status, message string) {
-	if runID <= 0 || s.dao.DB() == nil {
+	if runID <= 0 {
 		return
 	}
 
 	now := uint64(time.Now().Unix())
 	logs := fmt.Sprintf("[%s] %s\n%s", time.Now().Format("2006-01-02 15:04:05"), message, status)
+	updates := map[string]interface{}{
+		"status":      status,
+		"logs":        logs,
+		"finished_at": now,
+	}
 
-	result := s.dao.DB().Model(&models.CicdPipelineStage{}).
-		Where("run_id = ? AND stage_type = ?", runID, "canary_deploy").
-		Updates(map[string]interface{}{
-			"status":      status,
-			"logs":        logs,
-			"finished_at": now,
-		})
+	existing, err := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, "canary_deploy")
+	if err == nil {
+		_ = s.cicdSvc().StageUpdate(ctx, existing.ID, updates)
+		return
+	}
 
-	if result.RowsAffected == 0 {
-		stage := &models.CicdPipelineStage{
-			RunID:      runID,
-			StageType:  "canary_deploy",
-			StageName:  "金丝雀部署",
-			Status:     status,
-			Logs:       logs,
-			StartedAt:  now,
-			FinishedAt: now,
-		}
-		if err := s.dao.DB().Create(stage).Error; err != nil {
-			global.Logger.Warn("[Canary] 创建金丝雀 stage 失败", zap.Error(err))
-		}
+	stage := &dmcicd.CicdPipelineStage{
+		RunID:      runID,
+		StageType:  "canary_deploy",
+		StageName:  "金丝雀部署",
+		Status:     status,
+		Logs:       logs,
+		StartedAt:  now,
+		FinishedAt: now,
+	}
+	if err := s.cicdSvc().StageCreate(ctx, stage); err != nil {
+		global.Logger.Warn("[Canary] 创建金丝雀 stage 失败", zap.Error(err))
 	}
 }
 

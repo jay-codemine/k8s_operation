@@ -4,10 +4,10 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"k8soperation/global"
+
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 )
 
@@ -36,10 +36,9 @@ func (c *ImageBrowseController) ListRepositories(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	repos, err := svc.ListRepositories(registryID)
 	if err != nil {
-		global.Logger.Error("获取镜像项目列表失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorListImagesFail.WithDetails(err.Error()))
 		return
 	}
@@ -72,10 +71,9 @@ func (c *ImageBrowseController) ListTags(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	tags, err := svc.ListTags(registryID, repository)
 	if err != nil {
-		global.Logger.Error("获取镜像标签失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorGetImageTagsFail.WithDetails(err.Error()))
 		return
 	}
@@ -110,10 +108,9 @@ func (c *ImageBrowseController) GetImageDetail(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	detail, err := svc.GetImageDetail(registryID, repository, tag)
 	if err != nil {
-		global.Logger.Error("获取镜像详情失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorGetImageTagsFail.WithDetails(err.Error()))
 		return
 	}
@@ -148,9 +145,8 @@ func (c *ImageBrowseController) DeleteTag(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	if err := svc.DeleteTag(registryID, repository, tag); err != nil {
-		global.Logger.Error("删除镜像标签失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ErrorDeleteImageRegistryFail.WithDetails(err.Error()))
 		return
 	}
@@ -196,10 +192,9 @@ func (c *CleanupPolicyController) List(ctx *gin.Context) {
 		pageSize = 10
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	list, total, err := svc.ListCleanupPolicies(registryID, keyword, page, pageSize)
 	if err != nil {
-		global.Logger.Error("获取清理策略列表失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -231,10 +226,9 @@ func (c *CleanupPolicyController) Create(ctx *gin.Context) {
 		userID = uid.(int64)
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	policy, err := svc.CreateCleanupPolicy(&req, userID)
 	if err != nil {
-		global.Logger.Error("创建清理策略失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -261,10 +255,9 @@ func (c *CleanupPolicyController) Update(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	policy, err := svc.UpdateCleanupPolicy(&req)
 	if err != nil {
-		global.Logger.Error("更新清理策略失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -290,9 +283,8 @@ func (c *CleanupPolicyController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	if err := svc.DeleteCleanupPolicy(id); err != nil {
-		global.Logger.Error("删除清理策略失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -321,9 +313,8 @@ func (c *CleanupPolicyController) Toggle(ctx *gin.Context) {
 
 	enabled := ctx.Query("enabled") == "true"
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	if err := svc.ToggleCleanupPolicy(id, enabled); err != nil {
-		global.Logger.Error("切换策略状态失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -349,10 +340,9 @@ func (c *CleanupPolicyController) Run(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	log, err := svc.RunCleanupPolicy(id)
 	if err != nil {
-		global.Logger.Error("执行清理策略失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -379,10 +369,9 @@ func (c *CleanupPolicyController) Logs(ctx *gin.Context) {
 		limit = 20
 	}
 
-	svc := services.NewImageService()
+	svc := middlewares.NewServicesFromContext(ctx).ImageSvc()
 	logs, err := svc.GetCleanupLogs(policyID, limit)
 	if err != nil {
-		global.Logger.Error("获取清理日志失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}

@@ -7,21 +7,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"k8soperation/global"
 	"k8soperation/internal/app/models"
-	"k8soperation/internal/app/services"
+	dm "k8soperation/internal/domain/monitor"
+	"k8soperation/middlewares"
 )
 
 // MonitorCRUDRouter 监控 CRUD 路由
-type MonitorCRUDRouter struct {
-	svc *services.MonitorCRUDService
-}
+type MonitorCRUDRouter struct{}
 
 // NewMonitorCRUDRouter 创建监控 CRUD 路由
 func NewMonitorCRUDRouter() *MonitorCRUDRouter {
-	return &MonitorCRUDRouter{
-		svc: services.NewMonitorCRUDService(global.DB),
-	}
+	return &MonitorCRUDRouter{}
 }
 
 // Inject 注入路由
@@ -134,12 +130,12 @@ func (r *MonitorCRUDRouter) Inject(router *gin.RouterGroup) {
 // ==================== 数据源 ====================
 
 func (r *MonitorCRUDRouter) ListDatasources(c *gin.Context) {
-	var req services.DatasourceListReq
+	var req dm.DatasourceListReq
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.ListDatasources(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListDatasources(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -149,7 +145,7 @@ func (r *MonitorCRUDRouter) ListDatasources(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetDatasource(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	ds, err := r.svc.GetDatasource(c.Request.Context(), id)
+	ds, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetDatasource(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "数据源不存在"})
 		return
@@ -163,7 +159,7 @@ func (r *MonitorCRUDRouter) CreateDatasource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateDatasource(c.Request.Context(), &ds); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateDatasource(c.Request.Context(), &ds); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -178,7 +174,7 @@ func (r *MonitorCRUDRouter) UpdateDatasource(c *gin.Context) {
 		return
 	}
 	ds.ID = id
-	if err := r.svc.UpdateDatasource(c.Request.Context(), &ds); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateDatasource(c.Request.Context(), &ds); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -187,7 +183,7 @@ func (r *MonitorCRUDRouter) UpdateDatasource(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteDatasource(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteDatasource(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteDatasource(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -200,30 +196,30 @@ func (r *MonitorCRUDRouter) TestDatasourceConnection(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	ok, msg := r.svc.TestDatasourceConnection(c.Request.Context(), &ds)
+	ok, msg := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().TestDatasourceConnection(c.Request.Context(), &ds)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"connected": ok, "message": msg}})
 }
 
 func (r *MonitorCRUDRouter) TestDatasourceByID(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	ds, err := r.svc.GetDatasource(c.Request.Context(), id)
+	ds, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetDatasource(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "数据源不存在"})
 		return
 	}
-	ok, msg := r.svc.TestDatasourceConnection(c.Request.Context(), ds)
+	ok, msg := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().TestDatasourceConnection(c.Request.Context(), ds)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"connected": ok, "message": msg}})
 }
 
 // ==================== 告警规则 ====================
 
 func (r *MonitorCRUDRouter) ListAlertRules(c *gin.Context) {
-	var req services.AlertRuleListReq
+	var req dm.AlertRuleListReq
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListAlertRules(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListAlertRules(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -232,7 +228,7 @@ func (r *MonitorCRUDRouter) ListAlertRules(c *gin.Context) {
 }
 
 func (r *MonitorCRUDRouter) GetAlertRuleGroups(c *gin.Context) {
-	groups, err := r.svc.GetAlertRuleGroups(c.Request.Context())
+	groups, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetAlertRuleGroups(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -242,7 +238,7 @@ func (r *MonitorCRUDRouter) GetAlertRuleGroups(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetAlertRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	rule, err := r.svc.GetAlertRule(c.Request.Context(), id)
+	rule, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetAlertRule(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "规则不存在"})
 		return
@@ -256,7 +252,7 @@ func (r *MonitorCRUDRouter) CreateAlertRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	if err := r.svc.CreateAlertRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().CreateAlertRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -271,7 +267,7 @@ func (r *MonitorCRUDRouter) UpdateAlertRule(c *gin.Context) {
 		return
 	}
 	rule.ID = id
-	if err := r.svc.UpdateAlertRule(c.Request.Context(), &rule); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().UpdateAlertRule(c.Request.Context(), &rule); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -280,7 +276,7 @@ func (r *MonitorCRUDRouter) UpdateAlertRule(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) DeleteAlertRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.DeleteAlertRule(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().DeleteAlertRule(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -296,7 +292,7 @@ func (r *MonitorCRUDRouter) ToggleAlertRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	if err := r.svc.ToggleAlertRule(c.Request.Context(), id, body.Enabled); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ToggleAlertRule(c.Request.Context(), id, body.Enabled); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -304,12 +300,12 @@ func (r *MonitorCRUDRouter) ToggleAlertRule(c *gin.Context) {
 }
 
 func (r *MonitorCRUDRouter) BatchDeleteAlertRules(c *gin.Context) {
-	var req services.BatchDeleteReq
+	var req dm.BatchDeleteReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchDeleteAlertRules(c.Request.Context(), req.IDs)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchDeleteAlertRules(c.Request.Context(), req.IDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -318,12 +314,12 @@ func (r *MonitorCRUDRouter) BatchDeleteAlertRules(c *gin.Context) {
 }
 
 func (r *MonitorCRUDRouter) BatchUpdateAlertRules(c *gin.Context) {
-	var req services.BatchUpdateReq
+	var req dm.BatchUpdateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.BatchUpdateAlertRules(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().BatchUpdateAlertRules(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -334,12 +330,12 @@ func (r *MonitorCRUDRouter) BatchUpdateAlertRules(c *gin.Context) {
 // ==================== 告警事件 ====================
 
 func (r *MonitorCRUDRouter) ListAlertEvents(c *gin.Context) {
-	var req services.AlertEventListReq
+	var req dm.AlertEventListReq
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
-	result, err := r.svc.ListAlertEvents(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ListAlertEvents(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -348,7 +344,7 @@ func (r *MonitorCRUDRouter) ListAlertEvents(c *gin.Context) {
 }
 
 func (r *MonitorCRUDRouter) GetAlertStats(c *gin.Context) {
-	stats, err := r.svc.GetAlertStats(c.Request.Context())
+	stats, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetAlertStats(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -358,7 +354,7 @@ func (r *MonitorCRUDRouter) GetAlertStats(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) GetAlertEvent(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	event, err := r.svc.GetAlertEvent(c.Request.Context(), id)
+	event, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().GetAlertEvent(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 1, "msg": "事件不存在"})
 		return
@@ -375,7 +371,7 @@ func (r *MonitorCRUDRouter) AckAlertEvent(c *gin.Context) {
 		return
 	}
 	userID := userIDVal.(int64)
-	if err := r.svc.AckAlertEvent(c.Request.Context(), id, userID); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().AckAlertEvent(c.Request.Context(), id, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -384,7 +380,7 @@ func (r *MonitorCRUDRouter) AckAlertEvent(c *gin.Context) {
 
 func (r *MonitorCRUDRouter) ResolveAlertEvent(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err := r.svc.ResolveAlertEvent(c.Request.Context(), id); err != nil {
+	if err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ResolveAlertEvent(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -394,12 +390,12 @@ func (r *MonitorCRUDRouter) ResolveAlertEvent(c *gin.Context) {
 // ==================== YAML 批量导入/导出 ====================
 
 func (r *MonitorCRUDRouter) ImportAlertRulesYAML(c *gin.Context) {
-	var req services.AlertRuleImportReq
+	var req dm.AlertRuleImportReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误: " + err.Error()})
 		return
 	}
-	result, err := r.svc.ImportAlertRulesFromYAML(c.Request.Context(), req)
+	result, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ImportAlertRulesFromYAML(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -421,7 +417,7 @@ func (r *MonitorCRUDRouter) ExportAlertRulesYAML(c *gin.Context) {
 		}
 	}
 
-	yamlContent, err := r.svc.ExportAlertRulesToYAML(c.Request.Context(), group, ids)
+	yamlContent, err := middlewares.NewServicesFromContext(c).MonitorCRUDSvc().ExportAlertRulesToYAML(c.Request.Context(), group, ids)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": err.Error()})
 		return

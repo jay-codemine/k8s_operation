@@ -18,13 +18,26 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"k8soperation/global"
-	"k8soperation/internal/app/dao"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
+	dmcicd "k8soperation/internal/domain/cicd"
+	"k8soperation/internal/infra/persistence"
 	"k8soperation/pkg/cache"
 	"k8soperation/pkg/jenkins"
 	"k8soperation/pkg/k8s/deployment"
 )
+
+func (s *Services) cicdSvc() *dmcicd.CicdService {
+	// cicd 域 JOIN 查询多，显式传 tenant_id，不使用 ScopedDB 的自动 WHERE
+	svc := dmcicd.NewCicdService(global.DB, persistence.NewCicdRepository(global.DB), s.eventBus)
+	svc.SetTenantID(s.tenantID)
+	return svc
+}
+
+// CicdSvc 返回租户隔离的 CICD 领域服务（Worker/Bootstrap 使用）
+func (s *Services) CicdSvc() *dmcicd.CicdService {
+	return s.cicdSvc()
+}
 
 // ==================== 流水线 CRUD ====================
 
@@ -35,7 +48,7 @@ func (s *Services) PipelineCheckName(ctx context.Context, name string, excludeID
 	if name == "" {
 		return false, "", errors.New("应用名称不能为空")
 	}
-	p, err := s.dao.PipelineGetByName(ctx, name)
+	p, err := s.cicdSvc().PipelineGetByName(ctx, name)
 	if err == nil {
 		// 找到同名记录
 		if excludeID > 0 && p.ID == excludeID {
@@ -53,7 +66,7 @@ func (s *Services) PipelineCheckName(ctx context.Context, name string, excludeID
 // PipelineCreate 创建流水线
 func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCreateRequest, userID int64) (int64, []string, error) {
 	// 检查名称是否已存在
-	_, err := s.dao.PipelineGetByName(ctx, req.Name)
+	_, err := s.cicdSvc().PipelineGetByName(ctx, req.Name)
 	if err == nil {
 		return 0, nil, errors.New("应用名称已存在，请更换一个名称")
 	}
@@ -69,7 +82,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	if gitBranchForCheck == "" {
 		gitBranchForCheck = global.DefaultBranch()
 	}
-	conflictPipelines, _ := s.dao.PipelineGetByGitRepoBranch(ctx, req.GitRepo, gitBranchForCheck, 0)
+	conflictPipelines, _ := s.cicdSvc().PipelineGetByGitRepoBranch(ctx, req.GitRepo, gitBranchForCheck, 0)
 	if len(conflictPipelines) > 0 {
 		names := make([]string, 0, len(conflictPipelines))
 		for _, cp := range conflictPipelines {
@@ -91,7 +104,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 			ns = "default"
 		}
 		if wlName != "" {
-			conflictDeploys, _ := s.dao.PipelineGetByWorkload(ctx, req.TargetClusterID, ns, wlName, 0)
+			conflictDeploys, _ := s.cicdSvc().PipelineGetByWorkload(ctx, req.TargetClusterID, ns, wlName, 0)
 			if len(conflictDeploys) > 0 {
 				dnames := make([]string, 0, len(conflictDeploys))
 				for _, cd := range conflictDeploys {
@@ -172,7 +185,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	targetClusterID := req.TargetClusterID
 	requireApproval := req.RequireApproval
 	if req.EnvironmentID > 0 {
-		env, eerr := s.dao.EnvironmentGetByID(ctx, req.EnvironmentID)
+		env, eerr := s.cicdSvc().EnvironmentGetByID(ctx, req.EnvironmentID)
 		if eerr != nil || env == nil {
 			return 0, nil, errors.New("绑定的环境不存在")
 		}
@@ -222,7 +235,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 		CreatedUserID:      userID,
 	}
 
-	if err := s.dao.PipelineCreate(ctx, pipeline); err != nil {
+	if err := s.cicdSvc().PipelineCreate(ctx, pipeline); err != nil {
 		return 0, nil, fmt.Errorf("创建流水线失败: %w", err)
 	}
 
@@ -231,7 +244,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 
 // PipelineDetail 获取流水线详情
 func (s *Services) PipelineDetail(ctx context.Context, id int64) (*models.CicdPipeline, error) {
-	pipeline, err := s.dao.PipelineGetByID(ctx, id)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("流水线不存在")
@@ -243,7 +256,7 @@ func (s *Services) PipelineDetail(ctx context.Context, id int64) (*models.CicdPi
 
 // PipelineList 获取流水线列表
 func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListRequest) ([]*models.PipelineListItem, int64, error) {
-	list, total, err := s.dao.PipelineList(ctx, dao.PipelineListFilter{
+	list, total, err := s.cicdSvc().PipelineList(ctx, dmcicd.PipelineListFilter{
 		Keyword:   req.Keyword,
 		Status:    req.Status,
 		Language:  req.Language,
@@ -264,7 +277,7 @@ func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListR
 	userNameCache := make(map[int64]string) // 局部缓存，避免同一发布人重复查库
 	for _, p := range list {
 		item := p.ToPipelineListItem()
-		if run, rerr := s.dao.PipelineRunGetLatestBuilt(ctx, p.ID); rerr == nil && run != nil {
+		if run, rerr := s.cicdSvc().PipelineRunGetLatestBuilt(ctx, p.ID); rerr == nil && run != nil {
 			item.LastRunImage = run.ImageURL
 			item.LastRunTag = extractImageTag(run.ImageURL)
 			item.LastCommit = run.GitCommit
@@ -288,7 +301,7 @@ func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListR
 // PipelineUpdate 更新流水线
 func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpdateRequest) error {
 	// 检查流水线是否存在
-	pipeline, err := s.dao.PipelineGetByID(ctx, req.ID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("流水线不存在")
@@ -298,7 +311,7 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 
 	// 如果修改了名称，检查新名称是否已存在
 	if req.Name != "" && req.Name != pipeline.Name {
-		_, err := s.dao.PipelineGetByName(ctx, req.Name)
+		_, err := s.cicdSvc().PipelineGetByName(ctx, req.Name)
 		if err == nil {
 			return errors.New("流水线名称已存在")
 		}
@@ -394,7 +407,7 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	if req.EnvironmentID != nil {
 		updates["environment_id"] = *req.EnvironmentID
 		if *req.EnvironmentID > 0 {
-			env, eerr := s.dao.EnvironmentGetByID(ctx, *req.EnvironmentID)
+			env, eerr := s.cicdSvc().EnvironmentGetByID(ctx, *req.EnvironmentID)
 			if eerr != nil || env == nil {
 				return errors.New("绑定的环境不存在")
 			}
@@ -441,13 +454,13 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 		}
 	}
 
-	return s.dao.PipelineUpdate(ctx, req.ID, updates)
+	return s.cicdSvc().PipelineUpdate(ctx, req.ID, updates)
 }
 
 // PipelineDelete 删除流水线
 func (s *Services) PipelineDelete(ctx context.Context, id int64) error {
 	// 检查是否存在
-	pipeline, err := s.dao.PipelineGetByID(ctx, id)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("流水线不存在")
@@ -460,7 +473,7 @@ func (s *Services) PipelineDelete(ctx context.Context, id int64) error {
 		return errors.New("流水线正在运行中，无法删除")
 	}
 
-	return s.dao.PipelineDelete(ctx, id)
+	return s.cicdSvc().PipelineDelete(ctx, id)
 }
 
 // ==================== 批量创建流水线 ====================
@@ -513,7 +526,7 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 		}
 
 		// 检查名称是否已存在
-		_, err := s.dao.PipelineGetByName(ctx, item.Name)
+		_, err := s.cicdSvc().PipelineGetByName(ctx, item.Name)
 		if err == nil {
 			// 已存在
 			if req.SkipExisting {
@@ -584,7 +597,7 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 			CreatedUserID:      userID,
 		}
 
-		if err := s.dao.PipelineCreate(ctx, pipeline); err != nil {
+		if err := s.cicdSvc().PipelineCreate(ctx, pipeline); err != nil {
 			itemResult.Error = fmt.Sprintf("创建失败: %v", err)
 			result.FailCount++
 		} else {
@@ -603,7 +616,7 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 // PipelineRun 运行流水线（触发 Jenkins 构建）
 func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunRequest, userID int64) (*models.CicdPipelineRun, error) {
 	// 获取流水线配置
-	pipeline, err := s.dao.PipelineGetByID(ctx, req.ID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("流水线不存在")
@@ -632,9 +645,9 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 				}
 			}
 			// 更新旧的运行记录为已中止
-			latestRun, _ := s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+			latestRun, _ := s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 			if latestRun != nil && latestRun.Status == models.PipelineRunStatusRunning {
-				_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
+				_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
 			}
 		} else {
 			return nil, errors.New("流水线正在运行中，请等待完成或使用强制运行")
@@ -672,7 +685,7 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 		if req.DeployEnv != nil && *req.DeployEnv != "" {
 			cfg["deploy_env"] = *req.DeployEnv
 		}
-		if err := s.dao.PipelineUpdate(ctx, pipeline.ID, map[string]interface{}{"deploy_config": cfg}); err != nil {
+		if err := s.cicdSvc().PipelineUpdate(ctx, pipeline.ID, map[string]interface{}{"deploy_config": cfg}); err != nil {
 			global.Logger.Warn("[流水线] 更新发布策略配置失败（不影响本次构建）",
 				zap.Int64("pipeline_id", pipeline.ID),
 				zap.Error(err),
@@ -690,7 +703,7 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 		TriggerUserID: userID,
 		GitBranch:     branch,
 	}
-	if err := s.dao.PipelineRunCreate(ctx, run); err != nil {
+	if err := s.cicdSvc().PipelineRunCreate(ctx, run); err != nil {
 		return nil, fmt.Errorf("创建运行记录失败: %w", err)
 	}
 
@@ -703,15 +716,15 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 	}
 
 	// 更新流水线状态为运行中
-	if err := s.dao.PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusRunning); err != nil {
+	if err := s.cicdSvc().PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusRunning); err != nil {
 		return nil, fmt.Errorf("更新流水线状态失败: %w", err)
 	}
 
 		// ====== GitOps 模式分发 ======
 		if pipeline.DeployMode == models.DeployModeGitOps {
 			if err := s.gitOpsPipelineRun(ctx, pipeline, run, req); err != nil {
-				_ = s.dao.PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
-				_ = s.dao.PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
+				_ = s.cicdSvc().PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
+				_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
 				return nil, err
 			}
 			return run, nil
@@ -770,8 +783,8 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 			zap.String("jenkins_url", pipeline.JenkinsURL),
 		)
 		// 更新运行记录为失败，并记录错误信息
-		_ = s.dao.PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
-		_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
+		_ = s.cicdSvc().PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
+		_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
 		return
 	}
 
@@ -811,8 +824,8 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 			zap.Error(err),
 		)
 		// 更新运行记录为失败，并记录错误信息
-		_ = s.dao.PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
-		_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
+		_ = s.cicdSvc().PipelineRunUpdateError(ctx, run.ID, models.PipelineRunStatusFailed, errMsg)
+		_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
 		return
 	}
 
@@ -824,8 +837,8 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 	)
 
 	// 更新运行记录
-	_ = s.dao.PipelineRunUpdateBuildNumber(ctx, run.ID, result.BuildNumber)
-	_ = s.dao.PipelineUpdateRunInfo(ctx, pipeline.ID, models.PipelineRunStatusRunning, result.BuildNumber, result.BuildURL)
+	_ = s.cicdSvc().PipelineRunUpdateBuildNumber(ctx, run.ID, result.BuildNumber)
+	_ = s.cicdSvc().PipelineUpdateRunInfo(ctx, pipeline.ID, models.PipelineRunStatusRunning, result.BuildNumber, result.BuildURL)
 
 	// 立即发送「发布开始」通知（用户点击发布按钮时即时触发）
 	s.NotifyBuildStarted(ctx, pipeline, run, result.BuildNumber)
@@ -834,7 +847,7 @@ func (s *Services) triggerJenkinsBuild(ctx context.Context, pipeline *models.Cic
 // PipelineStop 停止流水线
 func (s *Services) PipelineStop(ctx context.Context, req *requests.PipelineStopRequest) error {
 	// 获取流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, req.ID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("流水线不存在")
@@ -857,11 +870,11 @@ func (s *Services) PipelineStop(ctx context.Context, req *requests.PipelineStopR
 		global.Logger.Info("[流水线] 停止流水线：无构建号，直接更新平台状态",
 			zap.Int64("pipeline_id", pipeline.ID),
 		)
-		_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusAborted)
+		_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusAborted)
 		// 更新最新的运行记录
-		latestRun, err := s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+		latestRun, err := s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 		if err == nil && latestRun != nil && (latestRun.Status == models.PipelineRunStatusPending || latestRun.Status == models.PipelineRunStatusRunning) {
-			_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
+			_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, latestRun.ID, models.PipelineRunStatusAborted)
 		}
 		return nil
 	}
@@ -902,13 +915,13 @@ func (s *Services) PipelineStop(ctx context.Context, req *requests.PipelineStopR
 	}
 
 	// 更新流水线状态
-	_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, finalStatus)
+	_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, finalStatus)
 
 	// 更新运行记录
-	latestRun, err := s.dao.PipelineRunGetLatest(ctx, pipeline.ID)
+	latestRun, err := s.cicdSvc().PipelineRunGetLatest(ctx, pipeline.ID)
 	if err == nil && latestRun != nil {
 		if latestRun.BuildNumber == buildNumber || latestRun.Status == models.PipelineRunStatusPending || latestRun.Status == models.PipelineRunStatusRunning {
-			_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, finalStatus)
+			_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, latestRun.ID, finalStatus)
 		}
 	}
 
@@ -918,7 +931,7 @@ func (s *Services) PipelineStop(ctx context.Context, req *requests.PipelineStopR
 // PipelineLogs 获取流水线日志
 func (s *Services) PipelineLogs(ctx context.Context, req *requests.PipelineLogsRequest) (string, error) {
 	// 获取流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, req.ID)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", errors.New("流水线不存在")
@@ -968,7 +981,7 @@ func (s *Services) PipelineStatus(ctx context.Context, id int64) (*models.CicdPi
 // PipelineStatusWithRun 获取流水线实时状态（包含最新运行记录）
 func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models.CicdPipeline, *jenkins.BuildInfo, *models.CicdPipelineRun, error) {
 	// 获取流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, id)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, nil, errors.New("流水线不存在")
@@ -977,14 +990,14 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 	}
 
 	// 获取运行记录：优先正在运行的（DAO 已过滤 build_number=0 的幽灵记录）
-	latestRun, _ := s.dao.PipelineRunGetRunning(ctx, id)
+	latestRun, _ := s.cicdSvc().PipelineRunGetRunning(ctx, id)
 	if latestRun == nil {
 		// 没有正在运行的，获取最新的已构建记录
-		latestRun, _ = s.dao.PipelineRunGetLatestBuilt(ctx, id)
+		latestRun, _ = s.cicdSvc().PipelineRunGetLatestBuilt(ctx, id)
 	}
 	if latestRun == nil {
 		// 如果没有已构建的运行记录，回退到任意最新运行记录
-		latestRun, _ = s.dao.PipelineRunGetLatest(ctx, id)
+		latestRun, _ = s.cicdSvc().PipelineRunGetLatest(ctx, id)
 	}
 
 	// 如果有构建号，获取 Jenkins 构建状态
@@ -1009,13 +1022,13 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 		if buildInfo != nil && !buildInfo.Building {
 			runStatus := jenkins.BuildStatusToRunStatus(buildInfo.Building, buildInfo.Result)
 			if runStatus != pipeline.LastRunStatus {
-				_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus)
+				_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus)
 				pipeline.LastRunStatus = runStatus
 				pipeline.Status = models.PipelineStatusIdle
 
 				// 同步更新运行记录状态
 				if latestRun != nil && latestRun.BuildNumber == pipeline.LastBuildNumber && latestRun.Status == models.PipelineRunStatusRunning {
-					_ = s.dao.PipelineRunUpdateStatus(ctx, latestRun.ID, runStatus)
+					_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, latestRun.ID, runStatus)
 					latestRun.Status = runStatus
 
 					// 重要：同步更新各阶段状态（包括将审批阶段设为 waiting）
@@ -1033,7 +1046,7 @@ func (s *Services) PipelineStatusWithRun(ctx context.Context, id int64) (*models
 // 状态同步完全依赖回调 + PollWorker，不再在列表查询时实时调用 Jenkins API
 // 避免高并发下每次列表请求都打 Jenkins，影响性能
 func (s *Services) PipelineHistory(ctx context.Context, req *requests.PipelineHistoryRequest) ([]*models.CicdPipelineRun, int64, error) {
-	list, total, err := s.dao.PipelineRunList(ctx, req.ID, req.Page, req.PageSize)
+	list, total, err := s.cicdSvc().PipelineRunList(ctx, req.ID, req.Page, req.PageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1043,7 +1056,7 @@ func (s *Services) PipelineHistory(ctx context.Context, req *requests.PipelineHi
 
 // BuildRecordList 获取全量构建记录（跨流水线），返回包含流水线名称的富化数据
 func (s *Services) BuildRecordList(ctx context.Context, page, pageSize int, status, keyword string, pipelineID int64) ([]interface{}, int64, error) {
-	list, total, err := s.dao.PipelineRunListAll(ctx, page, pageSize, status, keyword, pipelineID)
+	list, total, err := s.cicdSvc().PipelineRunListAll(ctx, page, pageSize, status, keyword, pipelineID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1056,7 +1069,7 @@ func (s *Services) BuildRecordList(ctx context.Context, page, pageSize int, stat
 		}
 	}
 	for pid := range pipelineNames {
-		if p, err := s.dao.PipelineGetByID(ctx, pid); err == nil {
+		if p, err := s.cicdSvc().PipelineGetByID(ctx, pid); err == nil {
 			pipelineNames[pid] = p.Name
 		}
 	}
@@ -1095,12 +1108,12 @@ func (s *Services) BuildStats(ctx context.Context, days int) (map[string]interfa
 		days = 90
 	}
 
-	stats, err := s.dao.PipelineRunBuildStats(ctx)
+	stats, err := s.cicdSvc().PipelineRunBuildStats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询构建统计失败: %w", err)
 	}
 
-	trend, err := s.dao.PipelineRunBuildTrend(ctx, days)
+	trend, err := s.cicdSvc().PipelineRunBuildTrend(ctx, days)
 	if err != nil {
 		return nil, fmt.Errorf("查询构建趋势失败: %w", err)
 	}
@@ -1147,7 +1160,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 
 	// 优先使用 pipeline_id 查找（更快）
 	if req.PipelineID > 0 {
-		pipeline, err = s.dao.PipelineGetByID(ctx, req.PipelineID)
+		pipeline, err = s.cicdSvc().PipelineGetByID(ctx, req.PipelineID)
 		if err != nil {
 			global.Logger.Warn("[回调] 通过 pipeline_id 查找失败，尝试通过 job_name",
 				zap.Int64("pipeline_id", req.PipelineID),
@@ -1158,7 +1171,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 
 	// 回退到通过 job_name 查找
 	if pipeline == nil {
-		pipeline, err = s.dao.PipelineGetByJenkinsJob(ctx, req.JobName)
+		pipeline, err = s.cicdSvc().PipelineGetByJenkinsJob(ctx, req.JobName)
 		if err != nil {
 			return nil, fmt.Errorf("未找到关联的流水线: job=%s, err=%w", req.JobName, err)
 		}
@@ -1167,7 +1180,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	// 查找运行记录：优先使用 run_id 精确匹配（避免 build_number 重用导致找到旧记录）
 	var run *models.CicdPipelineRun
 	if req.RunID > 0 {
-		run, err = s.dao.PipelineRunGetByID(ctx, req.RunID)
+		run, err = s.cicdSvc().PipelineRunGetByID(ctx, req.RunID)
 		if err != nil {
 			global.Logger.Warn("[回调] 通过 run_id 查找失败，回退到 build_number",
 				zap.Int64("run_id", req.RunID),
@@ -1177,7 +1190,7 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 		}
 	}
 	if run == nil {
-		run, err = s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
+		run, err = s.cicdSvc().PipelineRunGetByBuildNumber(ctx, pipeline.ID, req.BuildNumber)
 		if err != nil {
 			return nil, fmt.Errorf("未找到对应的运行记录: pipeline=%d, build=%d, err=%w",
 				pipeline.ID, req.BuildNumber, err)
@@ -1205,12 +1218,12 @@ func (s *Services) PipelineCallback(ctx context.Context, req *requests.PipelineC
 	if runStatus != models.PipelineRunStatusSuccess {
 		errMsg = req.Message
 	}
-	if err := s.dao.PipelineRunUpdateCallback(ctx, run.ID, runStatus, image, req.ImageDigest, errMsg, req.Duration); err != nil {
+	if err := s.cicdSvc().PipelineRunUpdateCallback(ctx, run.ID, runStatus, image, req.ImageDigest, errMsg, req.Duration); err != nil {
 		return nil, fmt.Errorf("更新运行记录失败: %w", err)
 	}
 
 	// 更新流水线状态
-	if err := s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus); err != nil {
+	if err := s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, runStatus); err != nil {
 		global.Logger.Warn("[回调] 更新流水线状态失败",
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.Error(err),
@@ -1351,7 +1364,7 @@ type PipelineStepInfo struct {
 // PipelineStages 获取流水线阶段数据（动态从 Jenkins 获取）
 func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int) ([]PipelineStageInfo, error) {
 	// 获取流水线
-	pipeline, err := s.dao.PipelineGetByID(ctx, id)
+	pipeline, err := s.cicdSvc().PipelineGetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("流水线不存在")
@@ -1362,7 +1375,7 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 	// 确定构建号：优先使用正在运行的构建
 	if buildNumber == 0 {
 		// 查找正在运行的构建记录
-		runningRun, _ := s.dao.PipelineRunGetRunning(ctx, id)
+		runningRun, _ := s.cicdSvc().PipelineRunGetRunning(ctx, id)
 		if runningRun != nil && runningRun.BuildNumber > 0 {
 			buildNumber = runningRun.BuildNumber
 			global.Logger.Debug("[流水线] 使用正在运行的构建号",
@@ -1489,10 +1502,10 @@ func (s *Services) appendPlatformStages(ctx context.Context, stages []PipelineSt
 	// 尝试从 DB 获取真实的审批/部署阶段数据
 	var dbApprovalStage, dbDeployStage *models.CicdPipelineStage
 	if buildNumber > 0 {
-		run, _ := s.dao.PipelineRunGetByBuildNumber(ctx, pipeline.ID, buildNumber)
+		run, _ := s.cicdSvc().PipelineRunGetByBuildNumber(ctx, pipeline.ID, buildNumber)
 		if run != nil {
-			dbApprovalStage, _ = s.dao.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeApproval)
-			dbDeployStage, _ = s.dao.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeDeploy)
+			dbApprovalStage, _ = s.cicdSvc().StageGetByRunIDAndType(ctx, run.ID, models.StageTypeApproval)
+			dbDeployStage, _ = s.cicdSvc().StageGetByRunIDAndType(ctx, run.ID, models.StageTypeDeploy)
 		}
 	}
 
@@ -1688,7 +1701,7 @@ func hmacEqual(a, b string) bool {
 // syncPipelineRunToRelease 构建完成后自动创建发布单，让发布管理页面能看到最新的构建记录
 func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *models.CicdPipeline, run *models.CicdPipelineRun, runStatus, image, imageDigest string) {
 	// 防重：检查是否已经存在对应的发布单（以 build_id 关联）
-	existing, _ := s.dao.CicdReleaseGetByBuildID(ctx, run.ID)
+	existing, _ := s.cicdSvc().CicdReleaseGetByBuildID(ctx, run.ID)
 	if existing != nil {
 		global.Logger.Debug("[同步发布] 已存在对应的发布单，跳过",
 			zap.Int64("run_id", run.ID),
@@ -1754,7 +1767,7 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 		release.ImageDigest = &imageDigest
 	}
 
-	if err := s.dao.CicdReleaseCreate(ctx, release); err != nil {
+	if err := s.cicdSvc().CicdReleaseCreate(ctx, release); err != nil {
 		global.Logger.Warn("[同步发布] 创建发布单失败",
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.Int64("run_id", run.ID),
@@ -1788,7 +1801,7 @@ func (s *Services) syncPipelineRunToRelease(ctx context.Context, pipeline *model
 			CreatedAt:   now,
 			ModifiedAt:  now,
 		}
-		if err := s.dao.CicdTasksCreate(ctx, []*models.CicdReleaseTask{task}); err != nil {
+		if err := s.cicdSvc().CicdTasksCreate(ctx, []*models.CicdReleaseTask{task}); err != nil {
 			global.Logger.Warn("[同步发布] 创建部署任务失败",
 				zap.Int64("release_id", release.ID),
 				zap.Error(err),
@@ -1937,7 +1950,7 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 	// 获取流水线运行记录（用于通知中的分支、Commit、发布人等信息）
 	var run *models.CicdPipelineRun
 	if runID > 0 {
-		run, _ = s.dao.PipelineRunGetByID(ctx, runID)
+		run, _ = s.cicdSvc().PipelineRunGetByID(ctx, runID)
 	}
 
 	// 获取集群名称和用户名
@@ -1953,10 +1966,10 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 	// 获取 deploy stage 并设为 running
 	var deployStageID int64
 	if runID > 0 {
-		deployStage, stgErr := s.dao.StageGetByRunIDAndType(ctx, runID, models.StageTypeDeploy)
+		deployStage, stgErr := s.cicdSvc().StageGetByRunIDAndType(ctx, runID, models.StageTypeDeploy)
 		if stgErr == nil && deployStage != nil {
 			deployStageID = deployStage.ID
-			_ = s.dao.StageUpdate(ctx, deployStageID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, deployStageID, map[string]interface{}{
 				"status":     models.StageStatusRunning,
 				"started_at": startTime.Unix(),
 			})
@@ -2014,10 +2027,10 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			zap.Int64("pipeline_id", pipeline.ID),
 			zap.Error(err),
 		)
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "failed", "")
+		_ = s.cicdSvc().PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "failed", "")
 		// 更新 deploy stage 为失败
 		if deployStageID > 0 {
-			_ = s.dao.StageUpdate(ctx, deployStageID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, deployStageID, map[string]interface{}{
 				"status":        models.StageStatusFailed,
 				"finished_at":   now,
 				"duration_sec":  duration,
@@ -2029,8 +2042,8 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 		// 说明：last_run_status 此前只被 Jenkins 构建结果写为 success，若不在此处回写，
 		// 部署失败后流水线仍显示「发布中」，与阶段的「部署失败」不一致。
 		if runID > 0 {
-			_ = s.dao.PipelineRunUpdateError(ctx, runID, models.PipelineRunStatusFailed, err.Error())
-			_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
+			_ = s.cicdSvc().PipelineRunUpdateError(ctx, runID, models.PipelineRunStatusFailed, err.Error())
+			_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusFailed)
 		}
 		// Rollout 失败后发送通知
 		notifyInfo.Success = false
@@ -2042,10 +2055,10 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 			zap.String("image", image),
 		)
 		version := s.getCurrentWorkloadRevision(ctx, kubeClient, workloadKind, pipeline.TargetNamespace, pipeline.TargetWorkloadName)
-		_ = s.dao.PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "success", version)
+		_ = s.cicdSvc().PipelineUpdateDeployInfo(ctx, pipeline.ID, image, "", now, "success", version)
 		// 更新 deploy stage 为成功
 		if deployStageID > 0 {
-			_ = s.dao.StageUpdate(ctx, deployStageID, map[string]interface{}{
+			_ = s.cicdSvc().StageUpdate(ctx, deployStageID, map[string]interface{}{
 				"status":       models.StageStatusSuccess,
 				"finished_at":  now,
 				"duration_sec": duration,
@@ -2055,8 +2068,8 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 		}
 		// 更新流水线运行记录为成功
 		if runID > 0 {
-			_ = s.dao.PipelineRunUpdateStatus(ctx, runID, models.PipelineRunStatusSuccess)
-			_ = s.dao.PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusSuccess)
+			_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, runID, models.PipelineRunStatusSuccess)
+			_ = s.cicdSvc().PipelineUpdateRunComplete(ctx, pipeline.ID, models.PipelineRunStatusSuccess)
 		}
 		// Rollout 完成后发送通知
 		notifyInfo.Success = true
@@ -2570,33 +2583,34 @@ func getTemplateFile(languageType string) string {
 
 // GetSonarReport 获取流水线的 SonarQube 代码质量报告
 func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID int64) (map[string]interface{}, error) {
-	db := s.dao.DB().WithContext(ctx)
+	cicd := s.cicdSvc()
 
 	// 获取流水线信息
-	var pipeline models.CicdPipeline
-	if err := db.Where("id = ? AND is_del = 0", pipelineID).First(&pipeline).Error; err != nil {
+	pipeline, err := cicd.PipelineGetByID(ctx, pipelineID)
+	if err != nil {
 		return nil, fmt.Errorf("流水线不存在")
 	}
 
 	// 获取运行记录
-	var run models.CicdPipelineRun
+	var run *models.CicdPipelineRun
 	if runID > 0 {
-		if err := db.Where("id = ? AND pipeline_id = ?", runID, pipelineID).First(&run).Error; err != nil {
+		run, err = cicd.PipelineRunGetByID(ctx, runID)
+		if err != nil {
 			return nil, fmt.Errorf("运行记录不存在")
 		}
 	} else {
-		// 获取最新一次运行记录
-		if err := db.Where("pipeline_id = ?", pipelineID).Order("id DESC").First(&run).Error; err != nil {
+		run, err = cicd.PipelineRunGetLatest(ctx, pipelineID)
+		if err != nil {
 			return nil, fmt.Errorf("暂无运行记录")
 		}
 	}
 
 	// 获取 sonar 和 quality_gate 阶段
-	var sonarStage models.CicdPipelineStage
-	hasSonar := db.Where("run_id = ? AND stage_type = ?", run.ID, models.StageTypeSonar).First(&sonarStage).Error == nil
+	sonarStage, errSonar := cicd.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeSonar)
+	hasSonar := errSonar == nil
 
-	var qgStage models.CicdPipelineStage
-	hasQG := db.Where("run_id = ? AND stage_type = ?", run.ID, models.StageTypeQualityGate).First(&qgStage).Error == nil
+	qgStage, errQG := cicd.StageGetByRunIDAndType(ctx, run.ID, models.StageTypeQualityGate)
+	hasQG := errQG == nil
 
 	// 构建报告
 	report := map[string]interface{}{
@@ -2688,18 +2702,21 @@ func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID i
 
 // SaveSonarReport 保存 SonarQube 扫描结果
 func (s *Services) SaveSonarReport(ctx context.Context, pipelineID int64, runID int64, info *models.StageSonarInfo) error {
-	db := s.dao.DB().WithContext(ctx)
+	cicd := s.cicdSvc()
 
 	info.ScanTime = uint64(time.Now().Unix())
 
-	// 将 SonarQube 数据存储到运行记录的 stages_result JSON 中
-	var run models.CicdPipelineRun
+	// 获取运行记录
+	var run *models.CicdPipelineRun
+	var err error
 	if runID > 0 {
-		if err := db.Where("id = ? AND pipeline_id = ?", runID, pipelineID).First(&run).Error; err != nil {
+		run, err = cicd.PipelineRunGetByID(ctx, runID)
+		if err != nil {
 			return fmt.Errorf("运行记录不存在")
 		}
 	} else {
-		if err := db.Where("pipeline_id = ?", pipelineID).Order("id DESC").First(&run).Error; err != nil {
+		run, err = cicd.PipelineRunGetLatest(ctx, pipelineID)
+		if err != nil {
 			return fmt.Errorf("暂无运行记录")
 		}
 	}
@@ -2711,8 +2728,9 @@ func (s *Services) SaveSonarReport(ctx context.Context, pipelineID int64, runID 
 	}
 	stagesResult["sonar_report"] = info
 
-	if err := db.Model(&models.CicdPipelineRun{}).Where("id = ?", run.ID).
-		Update("stages_result", stagesResult).Error; err != nil {
+	if err := cicd.PipelineRunUpdate(ctx, run.ID, map[string]interface{}{
+		"stages_result": stagesResult,
+	}); err != nil {
 		return fmt.Errorf("保存 SonarQube 报告失败: %v", err)
 	}
 

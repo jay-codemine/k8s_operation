@@ -247,7 +247,7 @@ func (c *ResourceController) RuleUpdate(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param body body requests.ResourceValidateRequest true "校验参数"
-// @Success 200 {object} models.ResourceValidationResult
+// @Success 200 {object} k8soperation_internal_app_models.ResourceValidationResult
 // @Router /api/v1/k8s/cicd/resource/validate [post]
 func (c *ResourceController) Validate(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)

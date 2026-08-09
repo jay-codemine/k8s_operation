@@ -202,3 +202,13 @@ func (s *Services) KubeStatefulSetCreateFromYaml(ctx context.Context, cli *K8sCl
 
 	return createdSts, createdResources, nil
 }
+
+// KubeStatefulSetGetYaml 获取 StatefulSet 的 YAML 配置
+func (s *Services) KubeStatefulSetGetYaml(ctx context.Context, cli *K8sClients, namespace, name string) (string, error) {
+	return statefulset.GetYaml(ctx, cli.Kube, namespace, name)
+}
+
+// KubeStatefulSetApplyYaml 应用 StatefulSet YAML 配置
+func (s *Services) KubeStatefulSetApplyYaml(ctx context.Context, cli *K8sClients, namespace, name, yamlContent string) (*appv1.StatefulSet, error) {
+	return statefulset.ApplyYaml(ctx, cli.Kube, namespace, name, yamlContent)
+}

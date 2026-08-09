@@ -13,49 +13,49 @@ import (
 
 // ResourceTemplateList 获取资源模板列表
 func (s *Services) ResourceTemplateList(ctx context.Context, env, serviceType string) ([]models.CicdResourceTemplate, error) {
-	return s.dao.ResourceTemplateList(ctx, env, serviceType)
+	return s.cicdSvc().ResourceTemplateList(ctx, env, serviceType)
 }
 
 // ResourceTemplateGetByID 根据ID获取模板
 func (s *Services) ResourceTemplateGetByID(ctx context.Context, id uint64) (*models.CicdResourceTemplate, error) {
-	return s.dao.ResourceTemplateGetByID(ctx, id)
+	return s.cicdSvc().ResourceTemplateGetByID(ctx, id)
 }
 
 // ResourceTemplateGetDefault 获取默认模板
 func (s *Services) ResourceTemplateGetDefault(ctx context.Context, env, serviceType string) (*models.CicdResourceTemplate, error) {
-	return s.dao.ResourceTemplateGetDefault(ctx, env, serviceType)
+	return s.cicdSvc().ResourceTemplateGetDefault(ctx, env, serviceType)
 }
 
 // ResourceTemplateCreate 创建模板
 func (s *Services) ResourceTemplateCreate(ctx context.Context, tpl *models.CicdResourceTemplate) error {
-	return s.dao.ResourceTemplateCreate(ctx, tpl)
+	return s.cicdSvc().ResourceTemplateCreate(ctx, tpl)
 }
 
 // ResourceTemplateUpdate 更新模板
 func (s *Services) ResourceTemplateUpdate(ctx context.Context, tpl *models.CicdResourceTemplate) error {
-	return s.dao.ResourceTemplateUpdate(ctx, tpl)
+	return s.cicdSvc().ResourceTemplateUpdate(ctx, tpl)
 }
 
 // ResourceTemplateDelete 删除模板
 func (s *Services) ResourceTemplateDelete(ctx context.Context, id uint64) error {
-	return s.dao.ResourceTemplateDelete(ctx, id)
+	return s.cicdSvc().ResourceTemplateDelete(ctx, id)
 }
 
 // ==================== 环境资源规则服务 ====================
 
 // EnvResourceRuleList 获取环境规则列表
 func (s *Services) EnvResourceRuleList(ctx context.Context, env string) ([]models.CicdEnvResourceRule, error) {
-	return s.dao.EnvResourceRuleList(ctx, env)
+	return s.cicdSvc().EnvResourceRuleList(ctx, env)
 }
 
 // EnvResourceRuleGet 获取环境规则
 func (s *Services) EnvResourceRuleGet(ctx context.Context, env, serviceType string) (*models.CicdEnvResourceRule, error) {
-	return s.dao.EnvResourceRuleGet(ctx, env, serviceType)
+	return s.cicdSvc().EnvResourceRuleGet(ctx, env, serviceType)
 }
 
 // EnvResourceRuleUpdate 更新规则
 func (s *Services) EnvResourceRuleUpdate(ctx context.Context, rule *models.CicdEnvResourceRule) error {
-	return s.dao.EnvResourceRuleUpdate(ctx, rule)
+	return s.cicdSvc().EnvResourceRuleUpdate(ctx, rule)
 }
 
 // ==================== 资源校验服务（核心） ====================
@@ -68,7 +68,7 @@ func (s *Services) ValidateResourceConfig(ctx context.Context, env, serviceType 
 	}
 
 	// 1. 获取环境规则
-	rule, err := s.dao.EnvResourceRuleGet(ctx, env, serviceType)
+	rule, err := s.cicdSvc().EnvResourceRuleGet(ctx, env, serviceType)
 	if err != nil {
 		result.Warnings = append(result.Warnings, "未找到环境规则，使用默认校验")
 		rule = &models.CicdEnvResourceRule{
@@ -255,44 +255,44 @@ func (s *Services) generateSuggestion(env, serviceType string, config models.Res
 
 // DeployApprovalCreate 创建审批
 func (s *Services) DeployApprovalCreate(ctx context.Context, approval *models.CicdDeployApproval) error {
-	return s.dao.DeployApprovalCreate(ctx, approval)
+	return s.cicdSvc().DeployApprovalCreate(ctx, approval)
 }
 
 // DeployApprovalGetByID 获取审批详情
 func (s *Services) DeployApprovalGetByID(ctx context.Context, id uint64) (*models.CicdDeployApproval, error) {
-	return s.dao.DeployApprovalGetByID(ctx, id)
+	return s.cicdSvc().DeployApprovalGetByID(ctx, id)
 }
 
 // DeployApprovalList 获取审批列表
 func (s *Services) DeployApprovalList(ctx context.Context, status string, page, pageSize int) ([]models.CicdDeployApproval, int64, error) {
-	return s.dao.DeployApprovalList(ctx, status, page, pageSize)
+	return s.cicdSvc().DeployApprovalList(ctx, status, page, pageSize)
 }
 
 // DeployApprovalApprove 通过审批
 func (s *Services) DeployApprovalApprove(ctx context.Context, id uint64, approverID uint64, approverName, comment string) error {
-	return s.dao.DeployApprovalApprove(ctx, id, approverID, approverName, comment)
+	return s.cicdSvc().DeployApprovalApprove(ctx, id, approverID, approverName, comment)
 }
 
 // DeployApprovalReject 拒绝审批
 func (s *Services) DeployApprovalReject(ctx context.Context, id uint64, approverID uint64, approverName, comment string) error {
-	return s.dao.DeployApprovalReject(ctx, id, approverID, approverName, comment)
+	return s.cicdSvc().DeployApprovalReject(ctx, id, approverID, approverName, comment)
 }
 
 // DeployApprovalCancel 取消审批
 func (s *Services) DeployApprovalCancel(ctx context.Context, id uint64, applicantID uint64) error {
-	return s.dao.DeployApprovalCancel(ctx, id, applicantID)
+	return s.cicdSvc().DeployApprovalCancel(ctx, id, applicantID)
 }
 
 // ==================== 变更日志服务 ====================
 
 // ResourceChangeLogCreate 创建变更日志
 func (s *Services) ResourceChangeLogCreate(ctx context.Context, log *models.CicdResourceChangeLog) error {
-	return s.dao.ResourceChangeLogCreate(ctx, log)
+	return s.cicdSvc().ResourceChangeLogCreate(ctx, log)
 }
 
 // ResourceChangeLogList 获取变更日志列表
 func (s *Services) ResourceChangeLogList(ctx context.Context, pipelineID uint64, env string, page, pageSize int) ([]models.CicdResourceChangeLog, int64, error) {
-	return s.dao.ResourceChangeLogList(ctx, pipelineID, env, page, pageSize)
+	return s.cicdSvc().ResourceChangeLogList(ctx, pipelineID, env, page, pageSize)
 }
 
 // ==================== 工具函数 ====================

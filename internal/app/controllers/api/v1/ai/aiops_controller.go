@@ -4,24 +4,19 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
-	"k8soperation/global"
 	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 )
 
 // AIOpsController AIOps 智能运维控制器
-type AIOpsController struct {
-	svc *services.AIOpsService
-}
+type AIOpsController struct{}
 
 // NewAIOpsController 创建 AIOps 控制器
 func NewAIOpsController() *AIOpsController {
-	return &AIOpsController{
-		svc: services.NewAIOpsService(global.DB),
-	}
+	return &AIOpsController{}
 }
 
 // AnalyzeAlert AI 分析告警事件
@@ -43,9 +38,8 @@ func (c *AIOpsController) AnalyzeAlert(ctx *gin.Context) {
 	// 获取当前用户（从 session 或 token）
 	userID := int64(getUserID(ctx))
 
-	result, err := c.svc.AnalyzeAlert(ctx.Request.Context(), &req, userID)
+	result, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().AnalyzeAlert(ctx.Request.Context(), &req, userID)
 	if err != nil {
-		global.Logger.Error("[AIOps] 告警分析失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -71,9 +65,8 @@ func (c *AIOpsController) DiagnoseLogs(ctx *gin.Context) {
 
 	userID := int64(getUserID(ctx))
 
-	result, err := c.svc.DiagnoseLogs(ctx.Request.Context(), &req, userID)
+	result, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().DiagnoseLogs(ctx.Request.Context(), &req, userID)
 	if err != nil {
-		global.Logger.Error("[AIOps] 日志诊断失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -88,9 +81,8 @@ func (c *AIOpsController) RunInspection(ctx *gin.Context) {
 
 	userID := int64(getUserID(ctx))
 
-	report, err := c.svc.RunInspection(ctx.Request.Context(), userID)
+	report, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().RunInspection(ctx.Request.Context(), userID)
 	if err != nil {
-		global.Logger.Error("[AIOps] 触发巡检失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -106,7 +98,7 @@ func (c *AIOpsController) GetInspectionReports(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
-	reports, total, err := c.svc.GetInspectionReports(ctx.Request.Context(), page, pageSize)
+	reports, total, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().GetInspectionReports(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -130,7 +122,7 @@ func (c *AIOpsController) GetInspectionDetail(ctx *gin.Context) {
 		return
 	}
 
-	report, err := c.svc.GetInspectionReport(ctx.Request.Context(), id)
+	report, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().GetInspectionReport(ctx.Request.Context(), id)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -148,7 +140,7 @@ func (c *AIOpsController) GetAnalysisRecords(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
-	records, total, err := c.svc.GetAnalysisRecords(ctx.Request.Context(), recordType, page, pageSize)
+	records, total, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().GetAnalysisRecords(ctx.Request.Context(), recordType, page, pageSize)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -166,7 +158,7 @@ func (c *AIOpsController) GetAnalysisRecords(ctx *gin.Context) {
 func (c *AIOpsController) GetDashboard(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	stats, err := c.svc.GetDashboardStats(ctx.Request.Context())
+	stats, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().GetDashboardStats(ctx.Request.Context())
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -186,7 +178,7 @@ func (c *AIOpsController) ExportReport(ctx *gin.Context) {
 		return
 	}
 
-	markdown, err := c.svc.ExportReportMarkdown(ctx.Request.Context(), id)
+	markdown, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().ExportReportMarkdown(ctx.Request.Context(), id)
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
@@ -226,12 +218,11 @@ func (c *AIOpsController) NotifyReport(ctx *gin.Context) {
 		return
 	}
 
-	results, err := c.svc.NotifyReport(ctx.Request.Context(), &services.NotifyReportRequest{
+	results, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().NotifyReport(ctx.Request.Context(), &services.NotifyReportRequest{
 		ReportID:   id,
 		ChannelIDs: req.ChannelIDs,
 	})
 	if err != nil {
-		global.Logger.Error("[AIOps] 发送巡检通知失败", zap.Error(err))
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return
 	}
@@ -244,7 +235,7 @@ func (c *AIOpsController) NotifyReport(ctx *gin.Context) {
 func (c *AIOpsController) GetNotifyChannels(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
 
-	channels, err := c.svc.GetNotifyChannels(ctx.Request.Context())
+	channels, err := middlewares.NewServicesFromContext(ctx).AIOpsSvc().GetNotifyChannels(ctx.Request.Context())
 	if err != nil {
 		resp.ToErrorResponse(errorcode.ServerError.WithDetails(err.Error()))
 		return

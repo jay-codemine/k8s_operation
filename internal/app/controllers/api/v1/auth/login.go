@@ -10,8 +10,8 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/internal/app/requests"
-	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
+	"k8soperation/middlewares"
 	"k8soperation/pkg/app/response"
 	"k8soperation/pkg/jwt"
 	ldapclient "k8soperation/pkg/ldap"
@@ -38,7 +38,7 @@ func (u *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	svc := services.NewServices()
+	svc := middlewares.NewServicesFromContext(ctx)
 
 	var user *models.User
 	var err error

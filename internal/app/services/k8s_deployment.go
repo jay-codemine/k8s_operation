@@ -293,3 +293,13 @@ func (s *Services) KubeDeploymentCreateFromYaml(ctx context.Context, cli *K8sCli
 
 	return createdDp, createdResources, nil
 }
+
+// KubeDeploymentGetYaml 获取 Deployment 的 YAML 配置
+func (s *Services) KubeDeploymentGetYaml(ctx context.Context, cli *K8sClients, namespace, name string) (string, error) {
+	return deployment.GetYaml(ctx, cli.Kube, namespace, name)
+}
+
+// KubeDeploymentApplyYaml 应用 Deployment YAML 配置
+func (s *Services) KubeDeploymentApplyYaml(ctx context.Context, cli *K8sClients, namespace, name, yamlContent string) (*appv1.Deployment, error) {
+	return deployment.ApplyYaml(ctx, cli.Kube, namespace, name, yamlContent)
+}

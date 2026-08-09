@@ -11,7 +11,7 @@ import (
 
 func NewHTTPServer() *http.Server {
 	// 1) 创建 Services（包含 DB/DAO/配置等）
-	svc := services.NewServices()
+	svc := services.NewBackgroundServices()
 
 	// 2) 创建多集群 Client 工厂（TTL/TTLJitter 走配置）
 	factory := services.NewClusterClientFactory(svc)
