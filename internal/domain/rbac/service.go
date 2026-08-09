@@ -384,8 +384,17 @@ func (s *RbacService) GetUserWithRBACInfo(userID int64) (*UserWithRBACInfo, erro
 		}
 	}
 
-	var userRow struct{ Username string }
-	s.db.Table("user").Select("username").Where("id = ?", userID).Scan(&userRow)
+	username := ""
+	if s.userLookup != nil {
+		if name, err := s.userLookup.FindUsername(context.Background(), userID); err == nil {
+			username = name
+		}
+	}
+	if username == "" {
+		var userRow struct{ Username string }
+		s.db.WithContext(context.Background()).Table("user").Select("username").Where("id = ?", userID).Scan(&userRow)
+		username = userRow.Username
+	}
 
 	scopes := &UserScopes{Platform: AccessLevelNone, Cluster: AccessLevelNone, CICD: AccessLevelNone}
 	if isSuperAdmin {
@@ -409,7 +418,7 @@ func (s *RbacService) GetUserWithRBACInfo(userID int64) (*UserWithRBACInfo, erro
 	permissionNames := s.getUserPermissionNames(userID, isSuperAdmin)
 
 	return &UserWithRBACInfo{
-		UserID: userID, Username: userRow.Username, IsSuperAdmin: isSuperAdmin,
+		UserID: userID, Username: username, IsSuperAdmin: isSuperAdmin,
 		Roles: roles, ClusterPermissions: clusterPerms,
 		Scopes: scopes, PermissionNames: permissionNames,
 	}, nil
