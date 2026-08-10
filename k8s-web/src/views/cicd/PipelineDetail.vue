@@ -1409,7 +1409,11 @@
             <div class="env-vars-list">
               <div v-for="env in pipeline.env_vars" :key="env.name" class="env-var-item">
                 <span class="env-name">{{ env.name }}</span>
-                <span class="env-value">{{ env.value }}</span>
+                <span class="env-value">
+                  <span v-if="isBoolTrue(env.value)" class="bool-badge on">开启</span>
+                  <span v-else-if="isBoolFalse(env.value)" class="bool-badge off">关闭</span>
+                  <template v-else>{{ env.value }}</template>
+                </span>
               </div>
             </div>
           </div>
@@ -3224,6 +3228,9 @@ export default {
       return `${Math.floor(seconds / 3600)}时${Math.floor((seconds % 3600) / 60)}分`
     }
 
+    const isBoolTrue = (val) => val === true || val === 'true'
+    const isBoolFalse = (val) => val === false || val === 'false'
+
     // 计算阶段耗时（实时计算）
     const calculateStageDuration = (stage) => {
       if (!stage) return '-'
@@ -3448,6 +3455,8 @@ export default {
       formatDate,
       formatFullDate,
       formatDuration,
+      isBoolTrue,
+      isBoolFalse,
       calculateStageDuration,
       getStageStartTime,
       getStageEndTime,
@@ -5418,6 +5427,25 @@ export default {
 .env-value {
   color: #64748b;
   font-family: monospace;
+}
+
+.bool-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.bool-badge.on {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.bool-badge.off {
+  background: #e2e8f0;
+  color: #4a5568;
 }
 
 .config-json {

@@ -223,5 +223,18 @@ func (r *rbacRepoImpl) IsSuperAdmin(ctx context.Context, userID int64) bool {
 }
 
 func (r *rbacRepoImpl) HasUserPermission(ctx context.Context, userID int64, permissionName string) bool {
-	return rbac.HasUserPermission(r.db, userID, permissionName)
+	if r.IsSuperAdmin(ctx, userID) {
+		return true
+	}
+	tid := r.tenantID
+	if tid == 0 {
+		return false
+	}
+	var count int64
+	r.db.Table("sys_role_permission").
+		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role_permission.role_id").
+		Joins("JOIN sys_permission ON sys_permission.id = sys_role_permission.permission_id").
+		Where("sys_user_role.user_id = ? AND sys_permission.name = ? AND sys_user_role.tenant_id = ? AND sys_role_permission.tenant_id = ?", userID, permissionName, tid, tid).
+		Count(&count)
+	return count > 0
 }

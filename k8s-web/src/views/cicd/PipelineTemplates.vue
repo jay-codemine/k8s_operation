@@ -348,7 +348,11 @@
               <tbody>
                 <tr v-for="(envVar, index) in selectedTemplate.defaultEnvVars" :key="index">
                   <td>{{ envVar.name }}</td>
-                  <td>{{ envVar.value }}</td>
+                  <td>
+                    <span v-if="isBoolTrue(envVar.value)" class="bool-badge on">开启</span>
+                    <span v-else-if="isBoolFalse(envVar.value)" class="bool-badge off">关闭</span>
+                    <template v-else>{{ envVar.value }}</template>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -511,6 +515,9 @@ const formatDate = (dateString) => {
     minute: '2-digit'
   })
 }
+
+const isBoolTrue = (val) => val === true || val === 'true'
+const isBoolFalse = (val) => val === false || val === 'false'
 
 // 类型文本映射
 const typeText = (type) => {
@@ -1225,6 +1232,24 @@ onMounted(() => {
 .env-vars-table th {
   background-color: #f8f9fa;
   font-weight: 600;
+}
+
+.bool-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bool-badge.on {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.bool-badge.off {
+  background: #e2e8f0;
+  color: #4a5568;
 }
 
 .deployment-config-detail {

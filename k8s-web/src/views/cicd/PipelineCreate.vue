@@ -1084,6 +1084,18 @@
                 </div>
 
                 <div v-show="showEnvVars" class="env-vars-container">
+                  <!-- 系统预设变量（只读展示，布尔值以标签形式呈现） -->
+                  <div v-if="promotedEnvVars.length" class="promoted-env-section">
+                    <div v-for="(envVar, index) in promotedEnvVars" :key="'promoted-'+index" class="env-var-row promoted">
+                      <span class="env-name-readonly">{{ envVar.name }}</span>
+                      <span class="env-separator">=</span>
+                      <span v-if="envVar.value === 'true'" class="bool-badge on">开启</span>
+                      <span v-else-if="envVar.value === 'false'" class="bool-badge off">关闭</span>
+                      <span v-else class="env-value-readonly">{{ envVar.value }}</span>
+                    </div>
+                  </div>
+
+                  <!-- 用户自定义环境变量 -->
                   <div v-for="(envVar, index) in pipelineData.env_vars" :key="index" class="env-var-row">
                     <input
                       type="text"
@@ -1093,11 +1105,18 @@
                     />
                     <span class="env-separator">=</span>
                     <input
+                      v-if="envVar.value !== 'true' && envVar.value !== 'false'"
                       type="text"
                       v-model="envVar.value"
                       class="form-input env-value"
                       placeholder="变量值"
                     />
+                    <div v-else class="bool-toggle-inline">
+                      <span :class="['bool-badge-sm', envVar.value === 'true' ? 'on' : 'off']">
+                        {{ envVar.value === 'true' ? '开启' : '关闭' }}
+                      </span>
+                      <button type="button" class="bool-switch-btn" @click="envVar.value = envVar.value === 'true' ? 'false' : 'true'">切换</button>
+                    </div>
                     <button type="button" class="btn-icon-sm danger" @click="removeEnvVar(index)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -2039,6 +2058,30 @@ export default {
     const selectedTemplateId = ref('')
     const showEnvVars = ref(true)
     const showResources = ref(false)
+
+    // 汇总所有系统预设变量（布尔开关、镜像配置等），统一展示在环境变量区块
+    const promotedEnvVars = computed(() => {
+      const vars = []
+      const d = pipelineData.value
+      // Dockerfile 策略
+      const dfMode = dockerfileMode.value || 'platform'
+      vars.push({ name: 'ENABLE_TRACING', value: d.enable_tracing ? 'true' : 'false' })
+      vars.push({ name: 'SKIP_TESTS', value: d.skip_tests ? 'true' : 'false' })
+      vars.push({ name: 'USE_PROJECT_DOCKERFILE', value: dfMode === 'project' ? 'true' : 'false' })
+      if (dfMode === 'project') {
+        vars.push({ name: 'DOCKERFILE_PATH', value: customDockerfilePath.value || 'Dockerfile' })
+      } else {
+        vars.push({ name: 'DOCKERFILE_PATH', value: '__PLATFORM_GENERATE__' })
+      }
+      if (d.image_repo) vars.push({ name: 'IMAGE_REPO', value: d.image_repo })
+      if (d.image_tag) vars.push({ name: 'IMAGE_TAG', value: d.image_tag })
+      if (d.git_credential_id) vars.push({ name: 'GIT_CREDENTIAL_ID', value: d.git_credential_id })
+      if (d.enable_sonar) vars.push({ name: 'ENABLE_SONAR', value: 'true' })
+      if (d.enable_artifact_upload) vars.push({ name: 'ENABLE_ARTIFACT_UPLOAD', value: 'true' })
+      else vars.push({ name: 'ENABLE_ARTIFACT_UPLOAD', value: 'false' })
+      if (d.enable_build_cache !== undefined) vars.push({ name: 'ENABLE_BUILD_CACHE', value: d.enable_build_cache ? 'true' : 'false' })
+      return vars
+    })
     const quickMode = ref(false) // 已废弃，保留变量避免引用报错
     const showJenkinsAdvanced = ref(false) // Jenkins高级配置默认折叠
     const showDescription = ref(false) // 描述字段默认折叠
@@ -3670,6 +3713,7 @@ export default {
       submitting,
       sonarConfig,
       showEnvVars,
+      promotedEnvVars,
       showResources,
       deployStrategies,
       // Git 分支相关
@@ -4536,6 +4580,86 @@ export default {
 
 .env-value {
   flex: 1;
+}
+
+/* -------------------- 系统预设变量只读展示 -------------------- */
+.promoted-env-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f0f7ff;
+  border: 1px solid #bee3f8;
+  border-radius: 8px;
+}
+
+.env-var-row.promoted {
+  margin-bottom: 6px;
+  padding: 4px 0;
+}
+
+.env-var-row.promoted:last-child {
+  margin-bottom: 0;
+}
+
+.env-name-readonly {
+  width: 220px;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #2b6cb0;
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.env-value-readonly {
+  flex: 1;
+  color: #4a5568;
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  word-break: break-all;
+}
+
+/* -------------------- 布尔值状态标签 -------------------- */
+.bool-badge, .bool-badge-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.bool-badge.on, .bool-badge-sm.on {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.bool-badge.off, .bool-badge-sm.off {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.bool-toggle-inline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bool-switch-btn {
+  padding: 2px 10px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bool-switch-btn:hover {
+  border-color: #4299e1;
+  color: #4299e1;
+  background: #ebf8ff;
 }
 
 .btn-icon-sm {
