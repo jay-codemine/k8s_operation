@@ -85,7 +85,7 @@ func (r *cicdRepo) PipelineQuery(ctx context.Context, f cicd.PipelineListFilter)
 }
 
 func (r *cicdRepo) PipelineUpdate(ctx context.Context, id int64, updates map[string]interface{}) error {
-	updates["updated_at"] = time.Now().Unix()
+	updates["modified_at"] = time.Now().Unix()
 	return r.db.WithContext(ctx).Model(&cicd.CicdPipeline{}).Where("id = ?", id).Updates(updates).Error
 }
 

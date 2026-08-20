@@ -31,7 +31,7 @@ func (r *monitorRepo) DatasourceUpdate(ctx context.Context, ds *monitor.Datasour
 		"name": ds.Name, "url": ds.URL, "type": ds.Type, "description": ds.Description,
 		"access_mode": ds.AccessMode, "auth_type": ds.AuthType, "is_default": ds.IsDefault,
 		"enabled": ds.Enabled, "timeout": ds.Timeout, "scrape_interval": ds.ScrapeInterval,
-		"updated_at": time.Now(),
+		"modified_at": time.Now(),
 	}).Error
 }
 func (r *monitorRepo) DatasourceDelete(ctx context.Context, id int64) error {
