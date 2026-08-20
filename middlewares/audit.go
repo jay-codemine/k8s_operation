@@ -85,11 +85,19 @@ func Audit(cfg *AuditConfig) gin.HandlerFunc {
 		// ⭐ 关键：在当前 goroutine 内提取所有需要的数据（gin.Context 不可跨 goroutine 访问）
 		userID, _ := c.Get("user_id")
 		username, _ := c.Get("current_user_name")
+		tenantIDVal, _ := c.Get("tenant_id")
 		clientIP := c.ClientIP()
 		userAgent := c.Request.UserAgent()
 		path := c.Request.URL.Path
 		method := c.Request.Method
 		responseCode := c.Writer.Status()
+		var responseMessage string
+		for _, e := range c.Errors {
+			if responseMessage != "" {
+				responseMessage += "; "
+			}
+			responseMessage += e.Error()
+		}
 		clusterIDHeader := c.GetHeader("X-Cluster-ID")
 		clusterIDQuery := c.Query("cluster_id")
 		namespace := c.Query("namespace")
@@ -99,8 +107,8 @@ func Audit(cfg *AuditConfig) gin.HandlerFunc {
 		duration := time.Since(start)
 
 		// 异步写入数据库（不阻塞响应）
-		go writeAuditLog(userID, username, clientIP, userAgent, path, method,
-			responseCode, clusterIDHeader, clusterIDQuery, namespace,
+		go writeAuditLog(userID, username, tenantIDVal, clientIP, userAgent, path, method,
+			responseCode, responseMessage, clusterIDHeader, clusterIDQuery, namespace,
 			requestBody, duration)
 	}
 }
@@ -130,8 +138,8 @@ func shouldSkipAudit(c *gin.Context, cfg *AuditConfig) bool {
 }
 
 // writeAuditLog 异步写入审计日志（参数均为值类型，不依赖 gin.Context）
-func writeAuditLog(userIDVal, usernameVal interface{}, clientIP, userAgent, path, method string,
-	responseCode int, clusterIDHeader, clusterIDQuery, namespace, requestBody string, duration time.Duration) {
+func writeAuditLog(userIDVal, usernameVal, tenantIDVal interface{}, clientIP, userAgent, path, method string,
+	responseCode int, responseMessage, clusterIDHeader, clusterIDQuery, namespace, requestBody string, duration time.Duration) {
 	defer func() {
 		if r := recover(); r != nil {
 			global.Logger.Error("审计日志记录 panic", zap.Any("recover", r))
@@ -151,6 +159,10 @@ func writeAuditLog(userIDVal, usernameVal interface{}, clientIP, userAgent, path
 	if name, ok := usernameVal.(string); ok {
 		uname = name
 	}
+	tid := uint32(0)
+	if v, ok := tenantIDVal.(uint32); ok {
+		tid = v
+	}
 
 	// 解析操作信息
 	module, action, targetType, actionDisplay := parseRouteInfo(path, method)
@@ -168,6 +180,13 @@ func writeAuditLog(userIDVal, usernameVal interface{}, clientIP, userAgent, path
 		}
 	}
 
+	var clusterName string
+	if clusterID != nil {
+		if cl, lookupErr := services.NewBackgroundServices().GetCluster(context.Background(), uint32(*clusterID)); lookupErr == nil {
+			clusterName = cl.ClusterName
+		}
+	}
+
 	// 响应状态
 	status := models.AuditStatusSuccess
 	var errMsg string
@@ -178,25 +197,28 @@ func writeAuditLog(userIDVal, usernameVal interface{}, clientIP, userAgent, path
 
 	// 构建审计日志
 	auditLog := &models.AuditLog{
-		UserID:        uid,
-		Username:      uname,
-		UserIP:        clientIP,
-		UserAgent:     truncateString(userAgent, 500),
-		Action:        action,
-		ActionDisplay: actionDisplay,
-		Module:        module,
-		TargetType:    targetType,
-		TargetName:    extractTargetName(path),
-		RequestURI:    truncateString(path, 500),
-		RequestMethod: method,
-		RequestBody:   requestBody,
-		ResponseCode:  responseCode,
-		Status:        status,
-		ErrorMessage:  errMsg,
-		ClusterID:     clusterID,
-		Namespace:     namespace,
-		DurationMs:    int(duration.Milliseconds()),
-		CreatedAt:     time.Now().Unix(),
+		TenantID:        tid,
+		UserID:          uid,
+		Username:        uname,
+		UserIP:          clientIP,
+		UserAgent:       truncateString(userAgent, 500),
+		Action:          action,
+		ActionDisplay:   actionDisplay,
+		Module:          module,
+		TargetType:      targetType,
+		TargetName:      extractTargetName(path),
+		RequestURI:      truncateString(path, 500),
+		RequestMethod:   method,
+		RequestBody:     requestBody,
+		ResponseCode:    responseCode,
+		ResponseMessage: responseMessage,
+		Status:          status,
+		ErrorMessage:    errMsg,
+		ClusterID:       clusterID,
+		ClusterName:     clusterName,
+		Namespace:       namespace,
+		DurationMs:      int(duration.Milliseconds()),
+		CreatedAt:       time.Now().Unix(),
 	}
 
 	// 写入数据库（审计日志为跨租户后台写入，使用 Services 层）

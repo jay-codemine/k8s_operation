@@ -64,7 +64,7 @@ func (s *Services) UserBatchImport(param *requests.UserBatchImportRequest) *requ
 			Username: u.Username, Password: u.Password, Email: u.Email, Phone: u.Phone, Role: u.Role,
 		}
 	}
-	result := s.userSvc().BatchImport(items, param.DefaultPassword, param.DefaultRole, param.SkipExisting)
+	result := s.userSvc().BatchImport(items, param.DefaultPassword, param.DefaultRole, param.SkipExisting, s.tenantID)
 
 	// Convert back to requests types
 	details := make([]requests.UserBatchImportDetail, len(result.Details))

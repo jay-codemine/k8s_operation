@@ -24,6 +24,7 @@ func (r *auditLogRepo) Save(ctx context.Context, log *audit.AuditLog) error {
 	if log.CreatedAt == 0 {
 		log.CreatedAt = time.Now().Unix()
 	}
+	normalizeAuditJSONFields(log)
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
@@ -36,8 +37,21 @@ func (r *auditLogRepo) BatchSave(ctx context.Context, logs []*audit.AuditLog) er
 		if l.CreatedAt == 0 {
 			l.CreatedAt = now
 		}
+		normalizeAuditJSONFields(l)
 	}
 	return r.db.WithContext(ctx).CreateInBatches(logs, 100).Error
+}
+
+// normalizeAuditJSONFields 把空字符串的 JSON 字段规范为 "{}"。
+// Detail/Extra 列是 MySQL JSON 类型，空字符串 "" 不是合法 JSON，写入会报
+// Error 3140 (Invalid JSON text)，这里统一兜底为空对象。
+func normalizeAuditJSONFields(log *audit.AuditLog) {
+	if log.Detail == "" {
+		log.Detail = "{}"
+	}
+	if log.Extra == "" {
+		log.Extra = "{}"
+	}
 }
 
 func (r *auditLogRepo) FindByID(ctx context.Context, id int64) (*audit.AuditLog, error) {
@@ -75,6 +89,10 @@ func (r *auditLogRepo) Query(ctx context.Context, query *audit.AuditLogQuery) (*
 	if query.ClusterID > 0 {
 		db = db.Where("cluster_id = ?", query.ClusterID)
 	}
+		if query.TenantID > 0 {
+			db = db.Where("tenant_id = ?", query.TenantID)
+		}
+
 	if query.StartTime > 0 {
 		db = db.Where("created_at >= ?", query.StartTime)
 	}
@@ -139,35 +157,37 @@ func (r *auditLogRepo) QueryStatistics(ctx context.Context) (*audit.AuditStatist
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
 	weekStart := todayStart - 7*86400
 
-	db := r.db.WithContext(ctx).Model(&audit.AuditLog{})
+	base := func() *gorm.DB {
+		return r.db.WithContext(ctx).Model(&audit.AuditLog{})
+	}
 
-	db.Where("created_at >= ?", todayStart).Count(&stats.TotalToday)
-	db.Where("created_at >= ?", weekStart).Count(&stats.TotalWeek)
-	db.Count(&stats.TotalAll)
+	base().Where("created_at >= ?", todayStart).Count(&stats.TotalToday)
+	base().Where("created_at >= ?", weekStart).Count(&stats.TotalWeek)
+	base().Count(&stats.TotalAll)
 
 	if stats.TotalAll > 0 {
 		var successCount int64
-		db.Where("status = ?", "success").Count(&successCount)
+		base().Where("status = ?", "success").Count(&successCount)
 		stats.SuccessRate = float64(successCount) / float64(stats.TotalAll) * 100
 	}
 
-	db.Select("username, COUNT(*) as count").
+	base().Select("username, COUNT(*) as count").
 		Where("created_at >= ?", weekStart).
 		Group("username").Order("count DESC").Limit(5).
 		Scan(&stats.TopUsers)
 
-	db.Select("module, COUNT(*) as count").
+	base().Select("module, COUNT(*) as count").
 		Where("created_at >= ?", weekStart).
 		Group("module").Order("count DESC").Limit(5).
 		Scan(&stats.TopModules)
 
-	db.Select("action, COUNT(*) as count").
+	base().Select("action, COUNT(*) as count").
 		Where("created_at >= ?", todayStart).
 		Group("action").Order("count DESC").
 		Scan(&stats.ActionSummary)
 
 	var hourlyCounts []audit.HourlyCount
-	db.Select("HOUR(FROM_UNIXTIME(created_at)) as hour, COUNT(*) as count").
+	base().Select("HOUR(FROM_UNIXTIME(created_at)) as hour, COUNT(*) as count").
 		Where("created_at >= ?", todayStart).
 		Group("hour").Order("hour ASC").
 		Scan(&hourlyCounts)
@@ -195,6 +215,10 @@ func (r *auditLogRepo) Export(ctx context.Context, query *audit.AuditLogQuery) (
 	if query.Status != "" {
 		db = db.Where("status = ?", query.Status)
 	}
+		if query.TenantID > 0 {
+			db = db.Where("tenant_id = ?", query.TenantID)
+		}
+
 	if query.StartTime > 0 {
 		db = db.Where("created_at >= ?", query.StartTime)
 	}

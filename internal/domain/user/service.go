@@ -50,19 +50,22 @@ func (s *UserService) Create(name, password string, tenantID uint32) (*User, err
 }
 
 // CreateFull 创建用户（含邮箱、手机、角色）
-func (s *UserService) CreateFull(name, password, email, phone, role string) (*User, error) {
+func (s *UserService) CreateFull(name, password, email, phone, role string, tenantID uint32) (*User, error) {
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 	nowTime := uint32(time.Now().Unix())
+	if tenantID == 0 {
+		tenantID = 1
+	}
 	user := &User{
 		Username: name,
 		Password: hashedPassword,
 		Email:    email,
 		Phone:    phone,
 		Role:     role,
-		Base:     &db.Base{CreatedAt: nowTime, ModifiedAt: nowTime},
+		Base:     &db.Base{TenantID: tenantID, CreatedAt: nowTime, ModifiedAt: nowTime},
 	}
 	if err := s.repo.Save(context.Background(), user); err != nil {
 		return nil, err
@@ -166,7 +169,7 @@ type batchImportItem struct {
 }
 
 // BatchImport 批量导入用户
-func (s *UserService) BatchImport(items []BatchImportItem, defaultPassword, defaultRole string, skipExisting bool) *BatchImportResult {
+func (s *UserService) BatchImport(items []BatchImportItem, defaultPassword, defaultRole string, skipExisting bool, tenantID uint32) *BatchImportResult {
 	result := &BatchImportResult{Total: len(items), Details: make([]BatchImportDetail, 0, len(items))}
 
 	for _, item := range items {
@@ -206,7 +209,7 @@ func (s *UserService) BatchImport(items []BatchImportItem, defaultPassword, defa
 		if role == "" {
 			role = "developer"
 		}
-		user, err := s.CreateFull(item.Username, password, item.Email, item.Phone, role)
+		user, err := s.CreateFull(item.Username, password, item.Email, item.Phone, role, tenantID)
 		if err != nil {
 			detail.Status = "failed"
 			detail.Message = fmt.Sprintf("创建失败: %s", err.Error())

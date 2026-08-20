@@ -88,6 +88,7 @@ func (s *Services) syncLDAPUser(ldapUser *ldapclient.UserInfo) (*user.User, erro
 		ldapUser.Email,
 		ldapUser.Phone,
 		"user",
+		s.tenantID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("创建本地用户失败: %w", err)

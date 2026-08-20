@@ -8,9 +8,18 @@ import (
 	"k8soperation/global"
 	"k8soperation/internal/app/models"
 	"k8soperation/middlewares"
+	"k8soperation/internal/app/services"
 	"k8soperation/internal/errorcode"
 	"k8soperation/pkg/app/response"
 )
+
+// auditLogServices 超管返回跨租户服务（global.DB 无 tenant 过滤），否则返回租户 Scoped 服务
+func auditLogServices(ctx *gin.Context) *services.Services {
+	if ctx.GetBool("is_super_admin") {
+		return services.NewBackgroundServices()
+	}
+	return middlewares.NewServicesFromContext(ctx)
+}
 
 // AuditLogController 审计日志控制器
 type AuditLogController struct{}
@@ -38,7 +47,7 @@ func NewAuditLogController() *AuditLogController {
 // @Router /api/v1/platform/audit/logs [get]
 func (ctrl *AuditLogController) List(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := middlewares.NewServicesFromContext(ctx)
+	svc := auditLogServices(ctx)
 
 	var query models.AuditLogQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {
@@ -67,7 +76,7 @@ func (ctrl *AuditLogController) List(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/logs/{id} [get]
 func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := middlewares.NewServicesFromContext(ctx)
+	svc := auditLogServices(ctx)
 
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -95,7 +104,7 @@ func (ctrl *AuditLogController) Detail(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/statistics [get]
 func (ctrl *AuditLogController) Statistics(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := middlewares.NewServicesFromContext(ctx)
+	svc := auditLogServices(ctx)
 
 	stats, err := svc.AuditLogGetStatistics(ctx.Request.Context())
 	if err != nil {
@@ -139,6 +148,12 @@ func (ctrl *AuditLogController) GetRetention(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/retention [put]
 func (ctrl *AuditLogController) UpdateRetention(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
+
+	if !requirePlatformWrite(ctx) {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
+		return
+	}
+
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	var req models.AuditRetentionUpdateReq
@@ -166,6 +181,12 @@ func (ctrl *AuditLogController) UpdateRetention(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/cleanup [post]
 func (ctrl *AuditLogController) Cleanup(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
+
+	if !requirePlatformWrite(ctx) {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
+		return
+	}
+
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	affected, err := svc.AuditLogCleanup(ctx.Request.Context())
@@ -196,7 +217,7 @@ func (ctrl *AuditLogController) Cleanup(ctx *gin.Context) {
 // @Router /api/v1/platform/audit/export [get]
 func (ctrl *AuditLogController) Export(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
-	svc := middlewares.NewServicesFromContext(ctx)
+	svc := auditLogServices(ctx)
 
 	var query models.AuditLogQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {

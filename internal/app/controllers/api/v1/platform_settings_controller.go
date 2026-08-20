@@ -53,6 +53,11 @@ func (c *PlatformSettingsController) Get(ctx *gin.Context) {
 // @Router /api/v1/platform/settings [put]
 func (c *PlatformSettingsController) Update(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
+	if !requirePlatformWrite(ctx) {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
+		return
+	}
+
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	var req models.PlatformSettingsResponse
@@ -81,6 +86,11 @@ func (c *PlatformSettingsController) Update(ctx *gin.Context) {
 // @Router /api/v1/platform/settings/reset [post]
 func (c *PlatformSettingsController) Reset(ctx *gin.Context) {
 	resp := response.NewResponse(ctx)
+	if !requirePlatformWrite(ctx) {
+		resp.ToErrorResponse(errorcode.ErrorRBACAccessDenied.WithDetails("需要平台管理员权限"))
+		return
+	}
+
 	svc := middlewares.NewServicesFromContext(ctx)
 
 	settings, err := svc.PlatformSettingsReset(ctx.Request.Context())

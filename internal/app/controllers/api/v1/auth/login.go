@@ -108,6 +108,12 @@ func (u *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
+	// 设置 gin 上下文供审计中间件读取登录用户信息
+	// user_id 必须与 middlewares/auth.go 保持一致为 int64，否则审计中间件断言 int64 落空
+	ctx.Set("user_id", int64(user.ID))
+	ctx.Set("current_user_name", user.Username)
+	ctx.Set("tenant_id", user.TenantID)
+
 	// ====== 构造响应 ======
 	respUser := gin.H{
 		"id":          user.ID,

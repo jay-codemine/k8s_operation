@@ -5,6 +5,7 @@ package audit
 // AuditLog 平台操作审计日志
 type AuditLog struct {
 	ID              int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID        uint32 `gorm:"column:tenant_id;not null;default:1;index:idx_tenant_id" json:"tenant_id"`
 	UserID          int64  `gorm:"not null;index:idx_audit_user" json:"user_id"`
 	Username        string `gorm:"size:191;not null" json:"username"`
 	UserIP          string `gorm:"size:50" json:"user_ip"`
@@ -58,6 +59,7 @@ type AuditLogQuery struct {
 	TargetType string `form:"target_type" json:"target_type"`
 	Status     string `form:"status" json:"status"`
 	ClusterID  int64  `form:"cluster_id" json:"cluster_id"`
+	TenantID   uint32 `form:"tenant_id" json:"tenant_id"`
 	Keyword    string `form:"keyword" json:"keyword"`
 	StartTime  int64  `form:"start_time" json:"start_time"`
 	EndTime    int64  `form:"end_time" json:"end_time"`
