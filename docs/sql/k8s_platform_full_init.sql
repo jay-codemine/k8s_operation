@@ -1910,15 +1910,12 @@ WHERE u.username = 'admin' AND r.role_type = 'super_admin';
 -- 多租户扩展（2026-08-03 更新）
 -- 所有业务表增加 tenant_id 列，默认归属租户 ID=1
 --
--- 本段已包含 scripts/migrations 下全部多租户迁移的内容，MySQL 8.x 上可直接
--- 一键导入，无需再手动执行迁移脚本：
---   - 20260803_add_tenant_id_missing_tables.sql（57 张表补 tenant_id + 索引）
---   - 20260803_rbac_role_tenant_unique.sql（角色名改为按租户唯一）
--- scripts/migrations 下的脚本保留给存量库单独补齐用。
+-- 本段给所有业务表补 tenant_id 列 + idx_tenant_id 索引，MySQL 8.x 可直接一键导入。
 --
--- 早先这里用的是 `ADD COLUMN IF NOT EXISTS`，那是 MariaDB 专有语法，在 MySQL
--- 8.x 上报 ERROR 1064 导致整段失效（带 --force 时还会被当成警告跳过，表现为
--- 「脚本跑完了但一个 tenant_id 列都没建出来」）。现改为存储过程 + 动态 DDL。
+-- 历史坑：早先用 `ADD COLUMN IF NOT EXISTS`（MariaDB 专有语法，MySQL 8.x 报 ERROR
+-- 1064 静默失效）；后改成存储过程 + DELIMITER，但 Navicat/DataGrip 等 GUI 工具
+-- 不支持 DELIMITER，同样整段失效。现改为纯 ALTER TABLE，兼容所有导入工具。
+-- （全新初始化场景表刚建，必无 tenant_id 列，无需幂等判断。）
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS `tenant` (
@@ -1939,119 +1936,67 @@ CREATE TABLE IF NOT EXISTS `tenant` (
 INSERT IGNORE INTO `tenant` (`id`, `name`, `code`, `status`, `tenant_id`, `created_at`)
 VALUES (1, '默认租户', 'default', 1, 1, UNIX_TIMESTAMP());
 
--- 业务表批量加 tenant_id 列（MySQL 8.x 幂等实现）
---
--- 这里不能用 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`：那是 MariaDB 专有语法，
--- MySQL 8.x 会报 ERROR 1064，几十条 ALTER 会整段失败；若导入时带了 --force
--- 还会被当成警告跳过，表现为「脚本跑完了但一个 tenant_id 列都没建出来」。
--- 改用 information_schema 判定 + PREPARE 动态 DDL，重复导入安全。
-DROP PROCEDURE IF EXISTS `__add_tenant_id`;
+-- 业务表批量加 tenant_id 列（纯 ALTER TABLE，兼容 Navicat/DataGrip 等 GUI 工具）
+-- 全新初始化场景：表刚创建，必无 tenant_id 列，无需幂等判断。
 
-DELIMITER $$
-CREATE PROCEDURE `__add_tenant_id`(IN tbl VARCHAR(64))
-BEGIN
-  -- 表不存在则跳过：不同版本部署的表集合不完全一致
-  IF (SELECT COUNT(*) FROM information_schema.TABLES
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl) > 0 THEN
+ALTER TABLE `user` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_user_role` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_user_cluster` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `kube_cluster` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_pipeline` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_pipeline_run` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_pipeline_stage` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_pipeline_target` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_pipeline_template` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_release` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_release_stage` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_release_task` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_artifact` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_build` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_build_agent` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_environment` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_approval` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_resource_template` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_env_resource_rule` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_deploy_approval` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_resource_change_log` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `cicd_language_profile` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_datasource` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_alert_rule` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_alert_event` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_notify_channel` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_silence_rule` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_inhibit_rule` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_aggregate_rule` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_notify_template` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `monitor_notify_route_policy` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `image_registry` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `image_cleanup_policy` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `image_cleanup_log` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `audit_log` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `platform_settings` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `ai_conversations` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `ai_messages` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `ai_approval_requests` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `ai_approval_logs` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `aiops_analysis_record` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `aiops_inspection_report` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_apps` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_components` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `app_store_installs` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_role` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_permission` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `sys_role_permission` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_env_audit_log` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_env_binding` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_grant` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_group` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_group_user` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_project` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_project_member` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
+ALTER TABLE `iam_role_template` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '归属租户ID(tenant.id)', ADD INDEX `idx_tenant_id` (`tenant_id`);
 
-    -- 1) 补列
-    IF (SELECT COUNT(*) FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl
-          AND COLUMN_NAME = 'tenant_id') = 0 THEN
-      SET @ddl = CONCAT('ALTER TABLE `', tbl,
-        '` ADD COLUMN `tenant_id` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT ''归属租户ID(tenant.id)''');
-      PREPARE s FROM @ddl; EXECUTE s; DEALLOCATE PREPARE s;
-    END IF;
 
-    -- 2) 补索引
-    IF (SELECT COUNT(*) FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl
-          AND INDEX_NAME = 'idx_tenant_id') = 0 THEN
-      SET @idx = CONCAT('ALTER TABLE `', tbl, '` ADD INDEX `idx_tenant_id` (`tenant_id`)');
-      PREPARE s2 FROM @idx; EXECUTE s2; DEALLOCATE PREPARE s2;
-    END IF;
-
-  END IF;
-END$$
-DELIMITER ;
-
--- 用户与权限
-CALL `__add_tenant_id`('user');
-CALL `__add_tenant_id`('sys_user_role');
-CALL `__add_tenant_id`('sys_user_cluster');
-CALL `__add_tenant_id`('kube_cluster');
-
--- CICD
-CALL `__add_tenant_id`('cicd_pipeline');
-CALL `__add_tenant_id`('cicd_pipeline_run');
-CALL `__add_tenant_id`('cicd_pipeline_stage');
-CALL `__add_tenant_id`('cicd_pipeline_target');
-CALL `__add_tenant_id`('cicd_pipeline_template');
-CALL `__add_tenant_id`('cicd_release');
-CALL `__add_tenant_id`('cicd_release_stage');
-CALL `__add_tenant_id`('cicd_release_task');
-CALL `__add_tenant_id`('cicd_artifact');
-CALL `__add_tenant_id`('cicd_build');
-CALL `__add_tenant_id`('cicd_build_agent');
-CALL `__add_tenant_id`('cicd_environment');
-CALL `__add_tenant_id`('cicd_approval');
-CALL `__add_tenant_id`('cicd_resource_template');
-CALL `__add_tenant_id`('cicd_env_resource_rule');
-CALL `__add_tenant_id`('cicd_deploy_approval');
-CALL `__add_tenant_id`('cicd_resource_change_log');
-CALL `__add_tenant_id`('cicd_language_profile');
-
--- 监控与告警
-CALL `__add_tenant_id`('monitor_datasource');
-CALL `__add_tenant_id`('monitor_alert_rule');
-CALL `__add_tenant_id`('monitor_alert_event');
-CALL `__add_tenant_id`('monitor_notify_channel');
-CALL `__add_tenant_id`('monitor_silence_rule');
-CALL `__add_tenant_id`('monitor_inhibit_rule');
-CALL `__add_tenant_id`('monitor_aggregate_rule');
-CALL `__add_tenant_id`('monitor_notify_template');
-CALL `__add_tenant_id`('monitor_notify_route_policy');
-
--- 镜像仓库
-CALL `__add_tenant_id`('image_registry');
-CALL `__add_tenant_id`('image_cleanup_policy');
-CALL `__add_tenant_id`('image_cleanup_log');
-
--- 平台与审计
-CALL `__add_tenant_id`('audit_log');
-CALL `__add_tenant_id`('platform_settings');
-
--- AI / AIOps
-CALL `__add_tenant_id`('ai_conversations');
-CALL `__add_tenant_id`('ai_messages');
-CALL `__add_tenant_id`('ai_approval_requests');
-CALL `__add_tenant_id`('ai_approval_logs');
-CALL `__add_tenant_id`('aiops_analysis_record');
-CALL `__add_tenant_id`('aiops_inspection_report');
-
--- 应用商店
-CALL `__add_tenant_id`('app_store_apps');
-CALL `__add_tenant_id`('app_store_components');
-CALL `__add_tenant_id`('app_store_installs');
-
--- RBAC 表：models.SysRole/SysUserRole/SysPermission/SysRolePermission 都没有定义
--- TenantID 字段，列只能由本段建出；而 models.IsSuperAdmin/HasUserPermission 的
--- SQL 又强制过滤 sys_role.tenant_id 与 sys_user_role.tenant_id，缺列会直接报错
-CALL `__add_tenant_id`('sys_role');
-CALL `__add_tenant_id`('sys_permission');
-CALL `__add_tenant_id`('sys_role_permission');
-
--- IAM 项目/环境
-CALL `__add_tenant_id`('iam_env_audit_log');
-CALL `__add_tenant_id`('iam_env_binding');
-CALL `__add_tenant_id`('iam_grant');
-CALL `__add_tenant_id`('iam_group');
-CALL `__add_tenant_id`('iam_group_user');
-CALL `__add_tenant_id`('iam_project');
-CALL `__add_tenant_id`('iam_project_member');
-CALL `__add_tenant_id`('iam_role_template');
-
-DROP PROCEDURE IF EXISTS `__add_tenant_id`;
 
 -- ============================================================
 -- 角色名按租户唯一
