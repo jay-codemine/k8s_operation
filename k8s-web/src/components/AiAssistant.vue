@@ -435,7 +435,7 @@ import permissionStore from '@/stores/permission'
 
 const isOpen = ref(false)
 const activeTab = ref('chat')
-const loading = ref(true)
+const loading = ref(false)
 const inputText = ref('')
 const inputRef = ref(null)
 const chatBody = ref(null)

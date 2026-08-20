@@ -74,12 +74,8 @@ func (w *AIOpsInspectionWorker) runOnce() {
 
 	global.Logger.Info("[AIOps-InspectionWorker] 开始定时巡检")
 
-	// 检查 AI 是否可用
-	if global.AISetting == nil || !global.AISetting.Enabled {
-		global.Logger.Debug("[AIOps-InspectionWorker] AI 未启用，跳过智能巡检")
-		return
-	}
-
+	// AI 未启用时仍执行基础巡检（数据采集 + 健康评分 + 落报告），仅 AI 分析字段留空；
+	// executeInspection 内部已对 AI 不可用做降级处理（getAIOpsClient 返回 error 时跳过分析），不会报错
 	_, err := w.svc.AIOpsSvc().RunInspection(ctx, 0) // triggerBy=0 表示系统定时
 	if err != nil {
 		global.Logger.Warn("[AIOps-InspectionWorker] 巡检执行失败", zap.Error(err))

@@ -745,7 +745,11 @@ func (s *AIOpsService) updateReport(ctx context.Context, reportID int64, updates
 	if s.db == nil {
 		return
 	}
-	if err := s.db.WithContext(ctx).Model(&models.AIOpsInspectionReport{}).Where("id = ?", reportID).Updates(updates).Error; err != nil {
+	// 用全新干净的 DB 会话执行：s.db 是租户 Scoped DB，其 Statement 会被 GetFullHealth
+	// 的并发 goroutine 污染（共享 s.db 时 Table/WHERE 条件残留，产生 is_del 等错误条件），
+	// 这里用 NewDB 会话绕过污染。巡检报告是全局资源，不需要租户过滤。
+	if err := global.DB.Session(&gorm.Session{NewDB: true}).WithContext(ctx).
+		Model(&models.AIOpsInspectionReport{}).Where("id = ?", reportID).Updates(updates).Error; err != nil {
 		global.Logger.Error("[AIOps] 更新巡检报告失败", zap.Int64("report_id", reportID), zap.Error(err))
 	}
 }
