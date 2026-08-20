@@ -145,6 +145,8 @@ CREATE TABLE `aiops_analysis_record` (
   `error` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `user_id` bigint DEFAULT NULL,
   `created_at` bigint DEFAULT NULL,
+  `is_del` tinyint unsigned NOT NULL DEFAULT '0',
+  `deleted_at` bigint unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_aiops_analysis_record_type` (`type`),
   KEY `idx_aiops_analysis_record_ref_id` (`ref_id`),
@@ -176,6 +178,8 @@ CREATE TABLE `aiops_inspection_report` (
   `triggered_by` bigint DEFAULT NULL,
   `created_at` bigint DEFAULT NULL,
   `completed_at` bigint DEFAULT NULL,
+  `is_del` tinyint unsigned NOT NULL DEFAULT '0',
+  `deleted_at` bigint unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_aiops_inspection_report_type` (`type`)
 ) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
