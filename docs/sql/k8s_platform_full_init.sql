@@ -1904,6 +1904,43 @@ SELECT u.id, r.id, UNIX_TIMESTAMP()
 FROM `user` u, `sys_role` r
 WHERE u.username = 'admin' AND r.role_type = 'super_admin';
 
+-- ============================================================
+-- CICD 细粒度权限种子数据（23 条）
+-- 用子查询按 role_type 关联角色，避免硬编码 role_id（角色 id 会因 AUTO_INCREMENT 变化）
+-- ============================================================
+INSERT IGNORE INTO `sys_permission` (`name`, `display_name`, `description`, `resource_type`, `action`, `tag`, `path`, `sort_order`, `scope`, `created_at`, `modified_at`) VALUES
+('cicd:pipeline:view','查看流水线','查看流水线列表和详情','pipeline','view','流水线管理','/cicd/pipeline/view',100,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:pipeline:create','创建流水线','创建新的流水线配置','pipeline','create','流水线管理','/cicd/pipeline/create',101,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:pipeline:edit','编辑流水线','修改流水线配置参数','pipeline','update','流水线管理','/cicd/pipeline/edit',102,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:pipeline:delete','删除流水线','删除流水线配置','pipeline','delete','流水线管理','/cicd/pipeline/delete',103,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:pipeline:run','运行流水线','触发/运行流水线构建','pipeline','exec','流水线管理','/cicd/pipeline/run',104,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:build:view','查看构建记录','查看构建历史和日志','build','view','构建与部署','/cicd/build/view',110,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:build:trigger','触发构建','手动触发代码构建','build','exec','构建与部署','/cicd/build/trigger',111,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:build:cancel','取消构建','取消正在进行的构建','build','exec','构建与部署','/cicd/build/cancel',112,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:deploy:dev','部署开发环境','部署到开发环境','deploy','exec','构建与部署','/cicd/deploy/dev',113,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:deploy:test','部署测试环境','部署到测试环境','deploy','exec','构建与部署','/cicd/deploy/test',114,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:deploy:prod','部署生产环境','部署到生产环境','deploy','exec','构建与部署','/cicd/deploy/prod',115,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:deploy:rollback','回滚部署','回滚到上一版本','deploy','exec','构建与部署','/cicd/deploy/rollback',116,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:artifact:view','查看制品','查看制品库和镜像列表','artifact','view','制品与镜像','/cicd/artifact/view',120,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:artifact:upload','上传制品','上传制品到制品库','artifact','create','制品与镜像','/cicd/artifact/upload',121,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:artifact:delete','删除制品','从制品库删除制品','artifact','delete','制品与镜像','/cicd/artifact/delete',122,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:image:manage','镜像管理','管理镜像仓库（推送/删除/清理）','image','manage','制品与镜像','/cicd/image/manage',123,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:approval:view','查看审批','查看审批记录和详情','approval','view','审批与管理','/cicd/approval/view',130,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:approval:action','执行审批','通过或拒绝审批申请','approval','exec','审批与管理','/cicd/approval/action',131,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:approval:manage','管理审批策略','配置审批流程和审批人','approval','manage','审批与管理','/cicd/approval/manage',132,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:environment:manage','环境管理','创建/编辑/删除环境配置','environment','manage','审批与管理','/cicd/environment/manage',133,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:template:manage','模板管理','管理流水线模板','template','manage','审批与管理','/cicd/template/manage',134,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:resource:manage','资源模板管理','管理资源模板和环境规则','resource','manage','平台运维','/cicd/resource/manage',140,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP()),
+('cicd:agent:manage','构建探针管理','上传/更新/删除构建探针','agent','manage','平台运维','/cicd/agent/manage',141,'cicd',UNIX_TIMESTAMP(),UNIX_TIMESTAMP());
+
+-- 角色权限分配：super_admin 与 devops 拥有全部 CICD 权限（幂等，用 NOT EXISTS 防重复）
+INSERT INTO `sys_role_permission` (`role_id`, `permission_id`, `created_at`)
+SELECT r.id, p.id, UNIX_TIMESTAMP()
+FROM `sys_role` r CROSS JOIN `sys_permission` p
+WHERE r.role_type IN ('super_admin', 'devops') AND p.scope = 'cicd'
+  AND NOT EXISTS (SELECT 1 FROM `sys_role_permission` rp WHERE rp.role_id = r.id AND rp.permission_id = p.id);
+
+
 -- Dump completed on 2026-07-14 16:38:24
 
 -- ============================================================
