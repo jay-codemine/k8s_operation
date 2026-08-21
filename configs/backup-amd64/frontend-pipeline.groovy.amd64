@@ -373,7 +373,7 @@ fi
 """
 
                             writeFile file: dockerfile, text: """\
-FROM nginx:1.25-alpine
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginx:1.27-alpine
 RUN apk --no-cache add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 COPY ${outputDir}/ /usr/share/nginx/html/
 COPY nginx-app.conf /etc/nginx/conf.d/default.conf
