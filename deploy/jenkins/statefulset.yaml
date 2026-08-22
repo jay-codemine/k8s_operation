@@ -45,7 +45,7 @@ spec:
             runAsNonRoot: false
       containers:
         - name: jenkins
-          image: jenkins/jenkins:2.555.3-lts
+          image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/jenkins:2.555.3-lts-jdk21
           imagePullPolicy: Always
           ports:
             - name: http
