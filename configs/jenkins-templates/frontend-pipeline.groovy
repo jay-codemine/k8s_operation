@@ -669,5 +669,7 @@ def callbackPlatform(String status, String message) {
 }
 
 def hmacSha256(String secret, String data) {
-    def result = ''; withEnv(["SIGN_SECRET=${secret}", "SIGN_DATA=${data}"]) { result = sh(script: 'set +x && printf "%s" "$SIGN_DATA" | openssl dgst -sha256 -hmac "$SIGN_SECRET" | awk \'{print $2}\'', returnStdout: true).trim() }; return result
+    def mac = javax.crypto.Mac.getInstance("HmacSHA256")
+    mac.init(new javax.crypto.spec.SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256"))
+    return mac.doFinal(data.getBytes("UTF-8")).collect { String.format("%02x", it) }.join()
 }
