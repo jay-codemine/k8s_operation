@@ -62,7 +62,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
   - name: newman
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/postman/newman:alpine
+    image: postman/newman:alpine
     imagePullPolicy: IfNotPresent
     command: ['sleep', '99d']
     resources:
