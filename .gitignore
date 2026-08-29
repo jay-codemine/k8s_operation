@@ -38,3 +38,9 @@ storage/agents/
 # DDD code review guide (local only)
 CODEVIEW.md
 .claude/skills/codeview.md
+
+# frontend is a separate repo (k8soperation_web)
+k8s-web/
+
+# IDE
+.idea/
