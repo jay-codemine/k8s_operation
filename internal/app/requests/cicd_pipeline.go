@@ -10,39 +10,47 @@ import (
 // ==================== 创建流水线 ====================
 
 type PipelineCreateRequest struct {
-	Name         string           `json:"name" valid:"name"`
-	Description  string           `json:"description" valid:"description"`
-	GitRepo      string           `json:"git_repo" valid:"git_repo"`
-	GitBranch    string           `json:"git_branch" valid:"git_branch"`
-	JenkinsURL   string           `json:"jenkins_url" valid:"jenkins_url"`
-	JenkinsJob   string           `json:"jenkins_job" valid:"jenkins_job"`
-	LanguageType string           `json:"language_type" valid:"language_type"` // go/java/frontend/python/custom
-	EnvVars      []models.EnvVar  `json:"env_vars"`
-	DeployConfig map[string]any   `json:"deploy_config"`
+	Name         string          `json:"name" valid:"name"`
+	Description  string          `json:"description" valid:"description"`
+	GitRepo      string          `json:"git_repo" valid:"git_repo"`
+	GitBranch    string          `json:"git_branch" valid:"git_branch"`
+	JenkinsURL   string          `json:"jenkins_url" valid:"jenkins_url"`
+	JenkinsJob   string          `json:"jenkins_job" valid:"jenkins_job"`
+	LanguageType string          `json:"language_type" valid:"language_type"` // go/java/frontend/python/custom
+	EnvVars      []models.EnvVar `json:"env_vars"`
+	DeployConfig map[string]any  `json:"deploy_config"`
 
 	// GitOps 部署模式配置
-	DeployMode   string              `json:"deploy_mode"`   // jenkins | gitops（默认 jenkins）
+	DeployMode   string               `json:"deploy_mode"`   // jenkins | gitops（默认 jenkins）
 	GitOpsConfig *models.GitOpsConfig `json:"gitops_config"` // GitOps 配置（DeployMode=gitops 时必填）
-	
+
 	// 部署配置
-	AutoDeploy         bool   `json:"auto_deploy"`          // 是否自动部署
-	EnvironmentID      int64  `json:"environment_id"`       // 关联环境ID（>0 时命名空间/集群/审批以环境为准）
-	TargetClusterID    int64  `json:"target_cluster_id"`    // 目标集群ID
-	TargetNamespace    string `json:"target_namespace"`     // 目标命名空间
-	TargetWorkloadKind string `json:"target_workload_kind"` // 工作负载类型
-	TargetWorkloadName string `json:"target_workload_name"` // 工作负载名称
-	TargetContainer    string `json:"target_container"`     // 容器名称
-	DeployEnv          string `json:"deploy_env"`           // 部署环境
-	RequireApproval    bool   `json:"require_approval"`     // 是否需要审批
-	EnableSonar        bool   `json:"enable_sonar"`         // 是否启用 SonarQube
-	EnableArtifactUpload bool `json:"enable_artifact_upload"` // 是否启用制品上传
+	AutoDeploy           bool   `json:"auto_deploy"`            // 是否自动部署
+	EnvironmentID        int64  `json:"environment_id"`         // 关联环境ID（>0 时命名空间/集群/审批以环境为准）
+	TargetClusterID      int64  `json:"target_cluster_id"`      // 目标集群ID
+	TargetNamespace      string `json:"target_namespace"`       // 目标命名空间
+	TargetWorkloadKind   string `json:"target_workload_kind"`   // 工作负载类型
+	TargetWorkloadName   string `json:"target_workload_name"`   // 工作负载名称
+	TargetContainer      string `json:"target_container"`       // 容器名称
+	DeployEnv            string `json:"deploy_env"`             // 部署环境
+	RequireApproval      bool   `json:"require_approval"`       // 是否需要审批
+	EnableSonar          bool   `json:"enable_sonar"`           // 是否启用 SonarQube
+	EnableArtifactUpload bool   `json:"enable_artifact_upload"` // 是否启用制品上传
 	// 是否启用镜像构建缓存（Kaniko --cache）。用指针以区分"未传"与"显式关闭"，未传时默认开启
-	EnableBuildCache     *bool `json:"enable_build_cache"`
+	EnableBuildCache *bool `json:"enable_build_cache"`
+
+	// 灰度发布（金丝雀）配置
+	EnableCanary        bool   `json:"enable_canary"`         // 是否启用灰度发布
+	CanaryReplicas      int32  `json:"canary_replicas"`       // 金丝雀副本数
+	CanaryTrafficRatio  int32  `json:"canary_traffic_ratio"`  // 金丝雀流量比例(%)
+	CanaryDurationSec   int32  `json:"canary_duration_sec"`   // 观察时长(秒)
+	CanaryAutoPromote   bool   `json:"canary_auto_promote"`   // 是否自动晋升
+	CanaryAnalysisRules string `json:"canary_analysis_rules"` // 分析规则(JSON)
 
 	// 发布联动告警静默
-	EnableDeploySilence  bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则
-	SilenceBufferMinutes int    `json:"silence_buffer_minutes"`  // 静默缓冲时间(分钟)
-	SilenceSeverities    string `json:"silence_severities"`      // 静默的告警级别
+	EnableDeploySilence  bool   `json:"enable_deploy_silence"`  // 部署时自动创建静默规则
+	SilenceBufferMinutes int    `json:"silence_buffer_minutes"` // 静默缓冲时间(分钟)
+	SilenceSeverities    string `json:"silence_severities"`     // 静默的告警级别
 }
 
 func NewPipelineCreateRequest() *PipelineCreateRequest {
@@ -53,8 +61,8 @@ func NewPipelineCreateRequest() *PipelineCreateRequest {
 
 func ValidPipelineCreateRequest(data interface{}, ctx *gin.Context) map[string][]string {
 	rules := govalidator.MapData{
-		"name":          []string{"required", "between:1,100"},
-		"git_repo":      []string{"required", "url"},
+		"name":     []string{"required", "between:1,100"},
+		"git_repo": []string{"required", "url"},
 		// jenkins_job 不再强制必填，模板化时可由 language_type 自动推导
 		"language_type": []string{"in:go,java,frontend,python,custom"},
 		"deploy_mode":   []string{"in:jenkins,gitops"},
@@ -73,8 +81,8 @@ func ValidPipelineCreateRequest(data interface{}, ctx *gin.Context) map[string][
 // PipelineBatchCreateRequest 批量创建流水线请求
 // 支持一次性导入多个项目的流水线配置
 type PipelineBatchCreateRequest struct {
-	Pipelines    []PipelineBatchItem `json:"pipelines" valid:"pipelines"`       // 流水线列表
-	SkipExisting bool                `json:"skip_existing"`                     // 跳过已存在的（按名称判重），否则报错
+	Pipelines    []PipelineBatchItem `json:"pipelines" valid:"pipelines"` // 流水线列表
+	SkipExisting bool                `json:"skip_existing"`               // 跳过已存在的（按名称判重），否则报错
 }
 
 // PipelineBatchItem 批量创建的单个流水线配置
@@ -87,17 +95,17 @@ type PipelineBatchItem struct {
 	EnvVars      []models.EnvVar `json:"env_vars"`      // 可选：环境变量
 
 	// 自动部署配置（可选）
-	AutoDeploy         bool   `json:"auto_deploy"`
-	TargetClusterID    int64  `json:"target_cluster_id"`
-	TargetNamespace    string `json:"target_namespace"`
-	TargetWorkloadKind string `json:"target_workload_kind"`
-	TargetWorkloadName string `json:"target_workload_name"`
-	TargetContainer    string `json:"target_container"`
-	DeployEnv          string `json:"deploy_env"`
-	RequireApproval    bool   `json:"require_approval"`
-	EnableSonar        bool   `json:"enable_sonar"`
-	EnableArtifactUpload bool `json:"enable_artifact_upload"`
-	EnableBuildCache     *bool `json:"enable_build_cache"` // 镜像构建缓存，未传时默认开启
+	AutoDeploy           bool   `json:"auto_deploy"`
+	TargetClusterID      int64  `json:"target_cluster_id"`
+	TargetNamespace      string `json:"target_namespace"`
+	TargetWorkloadKind   string `json:"target_workload_kind"`
+	TargetWorkloadName   string `json:"target_workload_name"`
+	TargetContainer      string `json:"target_container"`
+	DeployEnv            string `json:"deploy_env"`
+	RequireApproval      bool   `json:"require_approval"`
+	EnableSonar          bool   `json:"enable_sonar"`
+	EnableArtifactUpload bool   `json:"enable_artifact_upload"`
+	EnableBuildCache     *bool  `json:"enable_build_cache"` // 镜像构建缓存，未传时默认开启
 
 	// 发布联动告警静默
 	EnableDeploySilence  bool   `json:"enable_deploy_silence"`
@@ -118,36 +126,44 @@ func ValidPipelineBatchCreateRequest(data interface{}, ctx *gin.Context) map[str
 // ==================== 更新流水线 ====================
 
 type PipelineUpdateRequest struct {
-	ID          int64            `json:"id" valid:"id"`
-	Name        string           `json:"name" valid:"name"`
-	Description string           `json:"description" valid:"description"`
-	GitRepo     string           `json:"git_repo" valid:"git_repo"`
-	GitBranch   string           `json:"git_branch" valid:"git_branch"`
-	JenkinsURL   string           `json:"jenkins_url" valid:"jenkins_url"`
-	JenkinsJob   string           `json:"jenkins_job" valid:"jenkins_job"`
-	LanguageType *string          `json:"language_type" valid:"language_type"` // go/java/frontend/python/custom
-	Status       string           `json:"status" valid:"status"`
-	EnvVars     []models.EnvVar  `json:"env_vars"`
+	ID           int64           `json:"id" valid:"id"`
+	Name         string          `json:"name" valid:"name"`
+	Description  string          `json:"description" valid:"description"`
+	GitRepo      string          `json:"git_repo" valid:"git_repo"`
+	GitBranch    string          `json:"git_branch" valid:"git_branch"`
+	JenkinsURL   string          `json:"jenkins_url" valid:"jenkins_url"`
+	JenkinsJob   string          `json:"jenkins_job" valid:"jenkins_job"`
+	LanguageType *string         `json:"language_type" valid:"language_type"` // go/java/frontend/python/custom
+	Status       string          `json:"status" valid:"status"`
+	EnvVars      []models.EnvVar `json:"env_vars"`
 	DeployConfig map[string]any  `json:"deploy_config"`
-	
+
 	// 部署配置
-	AutoDeploy         *bool   `json:"auto_deploy"`          // 是否自动部署
-	EnvironmentID      *int64  `json:"environment_id"`       // 关联环境ID（>0 时命名空间/集群/审批以环境为准，=0 解除绑定）
-	TargetClusterID    *int64  `json:"target_cluster_id"`    // 目标集群ID
-	TargetNamespace    *string `json:"target_namespace"`     // 目标命名空间
-	TargetWorkloadKind *string `json:"target_workload_kind"` // 工作负载类型
-	TargetWorkloadName *string `json:"target_workload_name"` // 工作负载名称
-	TargetContainer    *string `json:"target_container"`     // 容器名称
-	DeployEnv          *string `json:"deploy_env"`           // 部署环境
-	RequireApproval    *bool   `json:"require_approval"`     // 是否需要审批
-	EnableSonar        *bool   `json:"enable_sonar"`         // 是否启用 SonarQube
-	EnableArtifactUpload *bool `json:"enable_artifact_upload"` // 是否启用制品上传
-	EnableBuildCache     *bool `json:"enable_build_cache"`     // 是否启用镜像构建缓存（Kaniko --cache）
+	AutoDeploy           *bool   `json:"auto_deploy"`            // 是否自动部署
+	EnvironmentID        *int64  `json:"environment_id"`         // 关联环境ID（>0 时命名空间/集群/审批以环境为准，=0 解除绑定）
+	TargetClusterID      *int64  `json:"target_cluster_id"`      // 目标集群ID
+	TargetNamespace      *string `json:"target_namespace"`       // 目标命名空间
+	TargetWorkloadKind   *string `json:"target_workload_kind"`   // 工作负载类型
+	TargetWorkloadName   *string `json:"target_workload_name"`   // 工作负载名称
+	TargetContainer      *string `json:"target_container"`       // 容器名称
+	DeployEnv            *string `json:"deploy_env"`             // 部署环境
+	RequireApproval      *bool   `json:"require_approval"`       // 是否需要审批
+	EnableSonar          *bool   `json:"enable_sonar"`           // 是否启用 SonarQube
+	EnableArtifactUpload *bool   `json:"enable_artifact_upload"` // 是否启用制品上传
+	EnableBuildCache     *bool   `json:"enable_build_cache"`     // 是否启用镜像构建缓存（Kaniko --cache）
+
+	// 灰度发布（金丝雀）配置
+	EnableCanary        *bool   `json:"enable_canary"`         // 是否启用灰度发布
+	CanaryReplicas      *int32  `json:"canary_replicas"`       // 金丝雀副本数
+	CanaryTrafficRatio  *int32  `json:"canary_traffic_ratio"`  // 金丝雀流量比例(%)
+	CanaryDurationSec   *int32  `json:"canary_duration_sec"`   // 观察时长(秒)
+	CanaryAutoPromote   *bool   `json:"canary_auto_promote"`   // 是否自动晋升
+	CanaryAnalysisRules *string `json:"canary_analysis_rules"` // 分析规则(JSON)
 
 	// 发布联动告警静默
-	EnableDeploySilence  *bool   `json:"enable_deploy_silence"`   // 部署时自动创建静默规则
-	SilenceBufferMinutes *int    `json:"silence_buffer_minutes"`  // 静默缓冲时间(分钟)
-	SilenceSeverities    *string `json:"silence_severities"`      // 静默的告警级别
+	EnableDeploySilence  *bool   `json:"enable_deploy_silence"`  // 部署时自动创建静默规则
+	SilenceBufferMinutes *int    `json:"silence_buffer_minutes"` // 静默缓冲时间(分钟)
+	SilenceSeverities    *string `json:"silence_severities"`     // 静默的告警级别
 }
 
 func NewPipelineUpdateRequest() *PipelineUpdateRequest {
@@ -200,12 +216,12 @@ type PipelineListRequest struct {
 	Keyword  string `form:"keyword" valid:"keyword"`
 	Status   string `form:"status" valid:"status"`
 	// 发布中心高级筛选（全部可选）
-	Language  string `form:"language"`   // 语言/应用类型：go/java/frontend/python/custom
-	DeployEnv string `form:"deploy_env"` // 部署环境：dev/test/staging/prod
-	EnvironmentID int64 `form:"environment_id"` // 关联环境ID（>0 精确过滤）
-	CreatorID int64  `form:"creator_id"` // 创建人用户ID
-	StartTime int64  `form:"start_time"` // 创建时间起（unix 秒）
-	EndTime   int64  `form:"end_time"`   // 创建时间止（unix 秒）
+	Language      string `form:"language"`       // 语言/应用类型：go/java/frontend/python/custom
+	DeployEnv     string `form:"deploy_env"`     // 部署环境：dev/test/staging/prod
+	EnvironmentID int64  `form:"environment_id"` // 关联环境ID（>0 精确过滤）
+	CreatorID     int64  `form:"creator_id"`     // 创建人用户ID
+	StartTime     int64  `form:"start_time"`     // 创建时间起（unix 秒）
+	EndTime       int64  `form:"end_time"`       // 创建时间止（unix 秒）
 }
 
 func NewPipelineListRequest() *PipelineListRequest {
@@ -222,11 +238,11 @@ func ValidPipelineListRequest(data interface{}, ctx *gin.Context) map[string][]s
 // ==================== 运行流水线请求 ====================
 
 type PipelineRunRequest struct {
-	ID        int64             `json:"id" valid:"id"`
-	Branch    string            `json:"branch"`     // 可选：覆盖默认分支
-	EnvVars   map[string]string `json:"env_vars"`   // 可选：覆盖环境变量
-	Force     bool              `json:"force"`      // 强制运行：自动清理旧的失败/运行中构建
-	
+	ID      int64             `json:"id" valid:"id"`
+	Branch  string            `json:"branch"`   // 可选：覆盖默认分支
+	EnvVars map[string]string `json:"env_vars"` // 可选：覆盖环境变量
+	Force   bool              `json:"force"`    // 强制运行：自动清理旧的失败/运行中构建
+
 	// 运行时部署配置（可覆盖流水线默认配置）
 	AutoDeploy         *bool   `json:"auto_deploy"`          // 是否自动部署
 	TargetClusterID    *int64  `json:"target_cluster_id"`    // 目标集群ID
@@ -355,7 +371,7 @@ type PipelineCallbackRequest struct {
 
 	// 平台关联字段
 	PipelineID int64  `json:"pipeline_id" valid:"pipeline_id"` // 流水线ID（用于快速匹配）
-	RunID      int64  `json:"run_id"`                           // 运行记录ID（精确匹配，避免 build_number 重复问题）
+	RunID      int64  `json:"run_id"`                          // 运行记录ID（精确匹配，避免 build_number 重复问题）
 	RequestID  string `json:"request_id" valid:"request_id"`   // 请求ID（用于日志追踪）
 
 	// 构建产物 - 支持 image 或 image_url

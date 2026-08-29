@@ -24,9 +24,6 @@ type KubeNamespaceCreateRequest struct {
 
 	// Labels（可选）
 	Labels      map[string]string `json:"labels" form:"labels" swaggertype:"object"`
-	QuotaCPU    string            `json:"quota_cpu" form:"quota_cpu" valid:"-"`
-	QuotaMemory string            `json:"quota_memory" form:"quota_memory" valid:"-"`
-	QuotaPods   string            `json:"quota_pods" form:"quota_pods" valid:"-"`
 	Annotations map[string]string `json:"annotations" form:"annotations" swaggertype:"object"`
 }
 

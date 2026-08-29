@@ -64,6 +64,14 @@ func (s *Services) PipelineCheckName(ctx context.Context, name string, excludeID
 }
 
 // PipelineCreate 创建流水线
+// canaryDefault 灰度配置默认值兜底：未显式设置（<=0）时使用默认值
+func canaryDefault(v, def int32) int32 {
+	if v <= 0 {
+		return def
+	}
+	return v
+}
+
 func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCreateRequest, userID int64) (int64, []string, error) {
 	// 检查名称是否已存在
 	_, err := s.cicdSvc().PipelineGetByName(ctx, req.Name)
@@ -128,7 +136,7 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	}
 	jenkinsJob := req.JenkinsJob
 	// GitOps 模式不需要 JenkinsJob，Jenkins 模式下自动推导
-	if req.DeployMode == models.DeployModeJenkins && jenkinsJob == ""  {
+	if req.DeployMode == models.DeployModeJenkins && jenkinsJob == "" {
 		// 从语言类型自动映射到通用构建 Job
 		if job, ok := models.DefaultJenkinsJobMap[languageType]; ok {
 			jenkinsJob = job
@@ -204,35 +212,42 @@ func (s *Services) PipelineCreate(ctx context.Context, req *requests.PipelineCre
 	pipeline := &models.CicdPipeline{
 		DeployMode:   req.DeployMode,
 		GitOpsConfig: gitOpsConfigJSON,
-		Name:               req.Name,
-		Description:        req.Description,
-		GitRepo:            req.GitRepo,
-		GitBranch:          gitBranch,
-		JenkinsURL:         req.JenkinsURL,
-		JenkinsJob:         jenkinsJob,
-		LanguageType:       languageType,
-		Status:             models.PipelineStatusIdle,
-		EnvVars:            models.EnvVars(req.EnvVars),
-		DeployConfig:       models.JSONMap(req.DeployConfig),
+		Name:         req.Name,
+		Description:  req.Description,
+		GitRepo:      req.GitRepo,
+		GitBranch:    gitBranch,
+		JenkinsURL:   req.JenkinsURL,
+		JenkinsJob:   jenkinsJob,
+		LanguageType: languageType,
+		Status:       models.PipelineStatusIdle,
+		EnvVars:      models.EnvVars(req.EnvVars),
+		DeployConfig: models.JSONMap(req.DeployConfig),
 		// 部署配置（含智能默认值/环境回填）
-		AutoDeploy:         req.AutoDeploy,
-		EnvironmentID:      req.EnvironmentID,
-		TargetClusterID:    targetClusterID,
-		TargetNamespace:    targetNamespace,
-		TargetWorkloadKind: workloadKind,
-		TargetWorkloadName: workloadName,
-		TargetContainer:    containerName,
-		DeployEnv:          deployEnv,
-		RequireApproval:    requireApproval,
-		EnableSonar:        req.EnableSonar,
+		AutoDeploy:           req.AutoDeploy,
+		EnvironmentID:        req.EnvironmentID,
+		TargetClusterID:      targetClusterID,
+		TargetNamespace:      targetNamespace,
+		TargetWorkloadKind:   workloadKind,
+		TargetWorkloadName:   workloadName,
+		TargetContainer:      containerName,
+		DeployEnv:            deployEnv,
+		RequireApproval:      requireApproval,
+		EnableSonar:          req.EnableSonar,
 		EnableArtifactUpload: req.EnableArtifactUpload,
 		// 构建缓存：未传（nil）视为开启，与前端默认值一致
-		EnableBuildCache:     req.EnableBuildCache == nil || *req.EnableBuildCache,
+		EnableBuildCache: req.EnableBuildCache == nil || *req.EnableBuildCache,
+		// 灰度发布（金丝雀）
+		EnableCanary:        req.EnableCanary,
+		CanaryReplicas:      canaryDefault(req.CanaryReplicas, 1),
+		CanaryTrafficRatio:  canaryDefault(req.CanaryTrafficRatio, 10),
+		CanaryDurationSec:   canaryDefault(req.CanaryDurationSec, 300),
+		CanaryAutoPromote:   req.CanaryAutoPromote,
+		CanaryAnalysisRules: req.CanaryAnalysisRules,
 		// 发布联动告警静默
 		EnableDeploySilence:  req.EnableDeploySilence,
 		SilenceBufferMinutes: req.SilenceBufferMinutes,
 		SilenceSeverities:    req.SilenceSeverities,
-		CreatedUserID:      userID,
+		CreatedUserID:        userID,
 	}
 
 	if err := s.cicdSvc().PipelineCreate(ctx, pipeline); err != nil {
@@ -257,16 +272,16 @@ func (s *Services) PipelineDetail(ctx context.Context, id int64) (*models.CicdPi
 // PipelineList 获取流水线列表
 func (s *Services) PipelineList(ctx context.Context, req *requests.PipelineListRequest) ([]*models.PipelineListItem, int64, error) {
 	list, total, err := s.cicdSvc().PipelineList(ctx, dmcicd.PipelineListFilter{
-		Keyword:   req.Keyword,
-		Status:    req.Status,
-		Language:  req.Language,
-		DeployEnv: req.DeployEnv,
+		Keyword:       req.Keyword,
+		Status:        req.Status,
+		Language:      req.Language,
+		DeployEnv:     req.DeployEnv,
 		EnvironmentID: req.EnvironmentID,
-		CreatorID: req.CreatorID,
-		StartTime: req.StartTime,
-		EndTime:   req.EndTime,
-		Page:      req.Page,
-		PageSize:  req.PageSize,
+		CreatorID:     req.CreatorID,
+		StartTime:     req.StartTime,
+		EndTime:       req.EndTime,
+		Page:          req.Page,
+		PageSize:      req.PageSize,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询流水线列表失败: %w", err)
@@ -383,6 +398,25 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	if req.EnableBuildCache != nil {
 		updates["enable_build_cache"] = *req.EnableBuildCache
 	}
+	// 灰度发布（金丝雀）
+	if req.EnableCanary != nil {
+		updates["enable_canary"] = *req.EnableCanary
+	}
+	if req.CanaryReplicas != nil {
+		updates["canary_replicas"] = *req.CanaryReplicas
+	}
+	if req.CanaryTrafficRatio != nil {
+		updates["canary_traffic_ratio"] = *req.CanaryTrafficRatio
+	}
+	if req.CanaryDurationSec != nil {
+		updates["canary_duration_sec"] = *req.CanaryDurationSec
+	}
+	if req.CanaryAutoPromote != nil {
+		updates["canary_auto_promote"] = *req.CanaryAutoPromote
+	}
+	if req.CanaryAnalysisRules != nil {
+		updates["canary_analysis_rules"] = *req.CanaryAnalysisRules
+	}
 	// 发布联动告警静默
 	if req.EnableDeploySilence != nil {
 		updates["enable_deploy_silence"] = *req.EnableDeploySilence
@@ -396,7 +430,7 @@ func (s *Services) PipelineUpdate(ctx context.Context, req *requests.PipelineUpd
 	if req.LanguageType != nil {
 		updates["language_type"] = *req.LanguageType
 		// 如果同时没有指定 jenkins_job，自动映射
-		if req.JenkinsJob == ""  {
+		if req.JenkinsJob == "" {
 			if job, ok := models.DefaultJenkinsJobMap[*req.LanguageType]; ok {
 				updates["jenkins_job"] = job
 			}
@@ -480,9 +514,9 @@ func (s *Services) PipelineDelete(ctx context.Context, id int64) error {
 
 // PipelineBatchCreateResult 批量创建结果
 type PipelineBatchCreateResult struct {
-	SuccessCount int                      `json:"success_count"`
-	FailCount    int                      `json:"fail_count"`
-	SkipCount    int                      `json:"skip_count"`
+	SuccessCount int                       `json:"success_count"`
+	FailCount    int                       `json:"fail_count"`
+	SkipCount    int                       `json:"skip_count"`
 	Results      []PipelineBatchItemResult `json:"results"`
 }
 
@@ -571,30 +605,30 @@ func (s *Services) PipelineBatchCreate(ctx context.Context, req *requests.Pipeli
 		}
 
 		pipeline := &models.CicdPipeline{
-			Name:               item.Name,
-			Description:        item.Description,
-			GitRepo:            item.GitRepo,
-			GitBranch:          gitBranch,
-			JenkinsJob:         jenkinsJob,
-			LanguageType:       languageType,
-			Status:             models.PipelineStatusIdle,
-			EnvVars:            models.EnvVars(item.EnvVars),
-			AutoDeploy:         item.AutoDeploy,
-			TargetClusterID:    item.TargetClusterID,
-			TargetNamespace:    item.TargetNamespace,
-			TargetWorkloadKind: item.TargetWorkloadKind,
-			TargetWorkloadName: item.TargetWorkloadName,
-			TargetContainer:    item.TargetContainer,
-			DeployEnv:          item.DeployEnv,
-			RequireApproval:    item.RequireApproval,
-			EnableSonar:        item.EnableSonar,
+			Name:                 item.Name,
+			Description:          item.Description,
+			GitRepo:              item.GitRepo,
+			GitBranch:            gitBranch,
+			JenkinsJob:           jenkinsJob,
+			LanguageType:         languageType,
+			Status:               models.PipelineStatusIdle,
+			EnvVars:              models.EnvVars(item.EnvVars),
+			AutoDeploy:           item.AutoDeploy,
+			TargetClusterID:      item.TargetClusterID,
+			TargetNamespace:      item.TargetNamespace,
+			TargetWorkloadKind:   item.TargetWorkloadKind,
+			TargetWorkloadName:   item.TargetWorkloadName,
+			TargetContainer:      item.TargetContainer,
+			DeployEnv:            item.DeployEnv,
+			RequireApproval:      item.RequireApproval,
+			EnableSonar:          item.EnableSonar,
 			EnableArtifactUpload: item.EnableArtifactUpload,
 			EnableBuildCache:     item.EnableBuildCache == nil || *item.EnableBuildCache,
 			// 发布联动告警静默
 			EnableDeploySilence:  item.EnableDeploySilence,
 			SilenceBufferMinutes: item.SilenceBufferMinutes,
 			SilenceSeverities:    item.SilenceSeverities,
-			CreatedUserID:      userID,
+			CreatedUserID:        userID,
 		}
 
 		if err := s.cicdSvc().PipelineCreate(ctx, pipeline); err != nil {
@@ -628,7 +662,7 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 	if pipeline.Status == models.PipelineStatusDisabled {
 		return nil, errors.New("流水线已禁用")
 	}
-	
+
 	// 处理正在运行的情况
 	if pipeline.Status == models.PipelineStatusRunning {
 		if req.Force {
@@ -653,7 +687,7 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 			return nil, errors.New("流水线正在运行中，请等待完成或使用强制运行")
 		}
 	}
-	
+
 	// 如果上次运行失败，自动重置状态（不需要 force 参数）
 	if pipeline.LastRunStatus == models.PipelineRunStatusFailed ||
 		pipeline.LastRunStatus == models.PipelineRunStatusAborted {
@@ -720,21 +754,21 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 		return nil, fmt.Errorf("更新流水线状态失败: %w", err)
 	}
 
-		// ====== GitOps 模式分发 ======
-		if pipeline.DeployMode == models.DeployModeGitOps {
-			if err := s.gitOpsPipelineRun(ctx, pipeline, run, req); err != nil {
-				_ = s.cicdSvc().PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
-				_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
-				return nil, err
-			}
-			return run, nil
+	// ====== GitOps 模式分发 ======
+	if pipeline.DeployMode == models.DeployModeGitOps {
+		if err := s.gitOpsPipelineRun(ctx, pipeline, run, req); err != nil {
+			_ = s.cicdSvc().PipelineUpdateStatus(ctx, pipeline.ID, models.PipelineStatusIdle)
+			_ = s.cicdSvc().PipelineRunUpdateStatus(ctx, run.ID, models.PipelineRunStatusFailed)
+			return nil, err
 		}
+		return run, nil
+	}
 
 	// 构建 Jenkins 参数
 	params := make(map[string]string)
 	params["GIT_BRANCH"] = branch
 	params["GIT_REPO"] = pipeline.GitRepo
-	
+
 	// 平台回调参数（用于 Jenkins 构建完成后回调）
 	params["PIPELINE_ID"] = fmt.Sprintf("%d", pipeline.ID)
 	params["RUN_ID"] = fmt.Sprintf("%d", run.ID)
@@ -748,7 +782,7 @@ func (s *Services) PipelineRun(ctx context.Context, req *requests.PipelineRunReq
 
 	// 模板化发布：根据语言类型自动注入语言特定参数
 	s.injectLanguageParams(pipeline, params)
-	
+
 	// 合并环境变量
 	for _, ev := range pipeline.EnvVars {
 		params[ev.Name] = ev.Value
@@ -1343,14 +1377,14 @@ func (s *Services) VerifyHMACSignatureSimple(signature, jobName string, buildNum
 
 // PipelineStageInfo 阶段信息（前端友好格式）
 type PipelineStageInfo struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`   // 阶段类型: checkout/dependencies/compile/test/lint/build/push/approval/deploy/custom
-	Status   string `json:"status"` // success, failed, running, pending, waiting
-	Duration string `json:"duration"`
-	Steps    []PipelineStepInfo `json:"steps"`
-	CanOperate   bool                       `json:"can_operate,omitempty"`
-	ApprovalInfo *models.StageApprovalInfo   `json:"approval_info,omitempty"`
+	ID           string                    `json:"id"`
+	Name         string                    `json:"name"`
+	Type         string                    `json:"type"`   // 阶段类型: checkout/dependencies/compile/test/lint/build/push/approval/deploy/custom
+	Status       string                    `json:"status"` // success, failed, running, pending, waiting
+	Duration     string                    `json:"duration"`
+	Steps        []PipelineStepInfo        `json:"steps"`
+	CanOperate   bool                      `json:"can_operate,omitempty"`
+	ApprovalInfo *models.StageApprovalInfo `json:"approval_info,omitempty"`
 }
 
 // PipelineStepInfo 步骤信息
@@ -1427,7 +1461,7 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 			Duration: s.formatDuration(stage.DurationMillis),
 			Steps:    make([]PipelineStepInfo, 0),
 		}
-		
+
 		// 转换节点为步骤
 		for _, node := range stage.StageFlowNodes {
 			stageInfo.Steps = append(stageInfo.Steps, PipelineStepInfo{
@@ -1437,7 +1471,7 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 				Duration: s.formatDuration(node.DurationMillis),
 			})
 		}
-		
+
 		stages = append(stages, stageInfo)
 	}
 
@@ -1453,7 +1487,7 @@ func (s *Services) PipelineStages(ctx context.Context, id int64, buildNumber int
 // inferStageTypeFromName 根据阶段名称推断阶段类型
 func (s *Services) inferStageTypeFromName(name string) string {
 	nameLower := strings.ToLower(name)
-	
+
 	// 按优先级匹配
 	switch {
 	// 清理工作空间阶段
@@ -1979,32 +2013,32 @@ func (s *Services) executeAutoDeployAsync(ctx context.Context, pipeline *models.
 	// 「发布开始」通知已在触发时发送（triggerJenkinsBuild），此处不再重复发送
 
 	// 使用统一的 Patch + Rollout 逻辑（与 release flow 完全一致）
-		timeout := 5 * time.Minute // 统一默认 5 分钟（WaitDeploymentRollout 内部也有兜底）
-		switch workloadKind {
-		case "Deployment":
-			if patchErr := PatchDeploymentImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
-				err = patchErr
-			} else {
-				logs.WriteString("[INFO] 镜像更新已提交，等待 Deployment Rollout 完成...\n")
-				rolloutResult, err = WaitDeploymentRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
-			}
-		case "StatefulSet":
-			if patchErr := PatchStatefulSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
-				err = patchErr
-			} else {
-				logs.WriteString("[INFO] 镜像更新已提交，等待 StatefulSet Rollout 完成...\n")
-				rolloutResult, err = WaitStatefulSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
-			}
-		case "DaemonSet":
-			if patchErr := PatchDaemonSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
-				err = patchErr
-			} else {
-				logs.WriteString("[INFO] 镜像更新已提交，等待 DaemonSet Rollout 完成...\n")
-				rolloutResult, err = WaitDaemonSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
-			}
-		default:
-			err = fmt.Errorf("不支持的工作负载类型: %s", workloadKind)
+	timeout := 5 * time.Minute // 统一默认 5 分钟（WaitDeploymentRollout 内部也有兜底）
+	switch workloadKind {
+	case "Deployment":
+		if patchErr := PatchDeploymentImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+			err = patchErr
+		} else {
+			logs.WriteString("[INFO] 镜像更新已提交，等待 Deployment Rollout 完成...\n")
+			rolloutResult, err = WaitDeploymentRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
 		}
+	case "StatefulSet":
+		if patchErr := PatchStatefulSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+			err = patchErr
+		} else {
+			logs.WriteString("[INFO] 镜像更新已提交，等待 StatefulSet Rollout 完成...\n")
+			rolloutResult, err = WaitStatefulSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
+		}
+	case "DaemonSet":
+		if patchErr := PatchDaemonSetImageFn(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, pipeline.TargetContainer, image); patchErr != nil {
+			err = patchErr
+		} else {
+			logs.WriteString("[INFO] 镜像更新已提交，等待 DaemonSet Rollout 完成...\n")
+			rolloutResult, err = WaitDaemonSetRollout(ctx, kubeClient, pipeline.TargetNamespace, pipeline.TargetWorkloadName, timeout, &logs)
+		}
+	default:
+		err = fmt.Errorf("不支持的工作负载类型: %s", workloadKind)
+	}
 
 	// 更新流水线部署状态
 	now := uint64(time.Now().Unix())
@@ -2094,6 +2128,7 @@ func (s *Services) executeCanaryDeployAsync(ctx context.Context, pipeline *model
 	}
 	go s.monitorCanaryAndDecide(kubeClient, pipeline, image, runID)
 }
+
 // Deployment: 返回最新 ReplicaSet 的 revision（如 "5"）
 // StatefulSet/DaemonSet: 返回最新 ControllerRevision 的 revision（如 "3"）
 func (s *Services) getCurrentWorkloadRevision(ctx context.Context, client kubernetes.Interface, workloadKind, namespace, workloadName string) string {
@@ -2328,8 +2363,8 @@ func (s *Services) injectLanguageParams(pipeline *models.CicdPipeline, params ma
 		setDefault(params, "GO_VERSION", "1.24")
 		setDefault(params, "SKIP_TESTS", "false")
 		// 通用扩展参数（支持私有依赖库、自定义构建）
-		setDefault(params, "EXTRA_REPOS", "")              // 额外依赖仓库（格式: url|path;url|path）
-		setDefault(params, "BINARY_NAME", "")              // 自定义二进制名（空=自动检测）
+		setDefault(params, "EXTRA_REPOS", "")                 // 额外依赖仓库（格式: url|path;url|path）
+		setDefault(params, "BINARY_NAME", "")                 // 自定义二进制名（空=自动检测）
 		setDefault(params, "USE_PROJECT_DOCKERFILE", "false") // 使用项目自带 Dockerfile
 	case models.LanguageTypeJava:
 		setDefault(params, "JAVA_VERSION", "17")
@@ -2416,14 +2451,14 @@ func setDefault(params map[string]string, key, value string) {
 
 // TemplateVerifyInfo 模板验证信息
 type TemplateVerifyInfo struct {
-	LanguageType    string            `json:"language_type"`
-	JenkinsJob      string            `json:"jenkins_job"`
-	TemplateFile    string            `json:"template_file"`
-	Stages          []string          `json:"stages"`
-	DefaultParams   map[string]string `json:"default_params"`
-	CallbackURL     string            `json:"callback_url"`
-	HMACEnabled     bool              `json:"hmac_enabled"`
-	Description     string            `json:"description"`
+	LanguageType  string            `json:"language_type"`
+	JenkinsJob    string            `json:"jenkins_job"`
+	TemplateFile  string            `json:"template_file"`
+	Stages        []string          `json:"stages"`
+	DefaultParams map[string]string `json:"default_params"`
+	CallbackURL   string            `json:"callback_url"`
+	HMACEnabled   bool              `json:"hmac_enabled"`
+	Description   string            `json:"description"`
 }
 
 // TemplateVerifyAll 验证所有模板配置是否完整
@@ -2435,8 +2470,8 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			TemplateFile: "configs/jenkins-templates/go-pipeline.groovy",
 			Stages:       []string{"checkout", "dependencies", "compile", "test", "lint", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
-				"GO_VERSION":  "1.24",
-				"SKIP_TESTS":  "false",
+				"GO_VERSION": "1.24",
+				"SKIP_TESTS": "false",
 			},
 			Description: "Go 项目通用构建模板，支持 go test / golangci-lint / SonarQube / 制品上传 / nerdctl build",
 		},
@@ -2446,9 +2481,9 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			TemplateFile: "configs/jenkins-templates/java-spring-pipeline.groovy",
 			Stages:       []string{"checkout", "dependencies", "compile", "test", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
-				"JAVA_VERSION":    "17",
-				"MAVEN_GOALS":     "clean package -DskipTests -B",
-				"MAVEN_THREADS":   "1C",
+				"JAVA_VERSION":  "17",
+				"MAVEN_GOALS":   "clean package -DskipTests -B",
+				"MAVEN_THREADS": "1C",
 			},
 			Description: "Java/Spring Boot 通用构建模板，支持 Maven + SonarQube + 质量门禁 + 制品上传",
 		},
@@ -2458,8 +2493,8 @@ func (s *Services) TemplateVerifyAll(ctx context.Context) ([]TemplateVerifyInfo,
 			TemplateFile: "configs/jenkins-templates/frontend-pipeline.groovy",
 			Stages:       []string{"checkout", "dependencies", "test", "compile", "sonar", "quality_gate", "build_binary", "upload_artifact", "build", "push"},
 			DefaultParams: map[string]string{
-				"NODE_VERSION":    "22",
-				"BUILD_COMMAND":   "npm run build",
+				"NODE_VERSION":     "22",
+				"BUILD_COMMAND":    "npm run build",
 				"BUILD_OUTPUT_DIR": "dist",
 			},
 			Description: "前端通用构建模板（Vue/React/Angular），支持 npm ci / SonarQube / 制品上传 / Nginx 镜像",
@@ -2536,13 +2571,13 @@ func (s *Services) TemplateSimulateRun(ctx context.Context, languageType, gitRep
 	}
 
 	return map[string]interface{}{
-		"language_type":     languageType,
-		"jenkins_job":       jenkinsJob,
-		"template_file":     fmt.Sprintf("configs/jenkins-templates/%s", getTemplateFile(languageType)),
-		"jenkins_params":    params,
+		"language_type":      languageType,
+		"jenkins_job":        jenkinsJob,
+		"template_file":      fmt.Sprintf("configs/jenkins-templates/%s", getTemplateFile(languageType)),
+		"jenkins_params":     params,
 		"jenkins_configured": jenkinsConfigured,
-		"job_exists":        jobExists,
-		"job_check_error":   jobCheckError,
+		"job_exists":         jobExists,
+		"job_check_error":    jobCheckError,
 		"flow": []string{
 			"1. 平台触发 Jenkins 构建，传入上述参数",
 			"2. Jenkins 执行通用模板: " + jenkinsJob,
@@ -2634,9 +2669,9 @@ func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID i
 
 	if hasQG {
 		report["quality_gate"] = map[string]interface{}{
-			"status":       qgStage.Status,
-			"started_at":   qgStage.StartedAt,
-			"finished_at":  qgStage.FinishedAt,
+			"status":      qgStage.Status,
+			"started_at":  qgStage.StartedAt,
+			"finished_at": qgStage.FinishedAt,
 		}
 	}
 
@@ -2681,19 +2716,19 @@ func (s *Services) GetSonarReport(ctx context.Context, pipelineID int64, runID i
 	// 如果没有代码扫描阶段，返回默认模拟数据（方便前端开发调试）
 	if !hasSonar {
 		report["sonar_report"] = map[string]interface{}{
-			"project_key":          pipeline.Name,
-			"quality_gate":         models.QualityGateNone,
-			"bugs":                 0,
-			"vulnerabilities":      0,
-			"code_smells":          0,
-			"coverage":             0.0,
-			"duplications":         0.0,
-			"lines_of_code":        0,
-			"security_hotspots":    0,
-			"reliability_rating":   "A",
-			"security_rating":      "A",
+			"project_key":            pipeline.Name,
+			"quality_gate":           models.QualityGateNone,
+			"bugs":                   0,
+			"vulnerabilities":        0,
+			"code_smells":            0,
+			"coverage":               0.0,
+			"duplications":           0.0,
+			"lines_of_code":          0,
+			"security_hotspots":      0,
+			"reliability_rating":     "A",
+			"security_rating":        "A",
 			"maintainability_rating": "A",
-			"message":              "暂无 SonarQube 扫描记录，请确保流水线已启用代码质量扫描",
+			"message":                "暂无 SonarQube 扫描记录，请确保流水线已启用代码质量扫描",
 		}
 	}
 

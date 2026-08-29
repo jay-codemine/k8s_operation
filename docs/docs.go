@@ -18371,6 +18371,9 @@ const docTemplate = `{
                 "target_type": {
                     "type": "string"
                 },
+                "tenant_id": {
+                    "type": "integer"
+                },
                 "user_agent": {
                     "type": "string"
                 },
@@ -20775,15 +20778,6 @@ const docTemplate = `{
                 "name": {
                     "description": "Namespace 名称（必填）",
                     "type": "string"
-                },
-                "quota_cpu": {
-                    "type": "string"
-                },
-                "quota_memory": {
-                    "type": "string"
-                },
-                "quota_pods": {
-                    "type": "string"
                 }
             }
         },
@@ -21810,6 +21804,26 @@ const docTemplate = `{
                     "description": "部署配置",
                     "type": "boolean"
                 },
+                "canary_analysis_rules": {
+                    "description": "分析规则(JSON)",
+                    "type": "string"
+                },
+                "canary_auto_promote": {
+                    "description": "是否自动晋升",
+                    "type": "boolean"
+                },
+                "canary_duration_sec": {
+                    "description": "观察时长(秒)",
+                    "type": "integer"
+                },
+                "canary_replicas": {
+                    "description": "金丝雀副本数",
+                    "type": "integer"
+                },
+                "canary_traffic_ratio": {
+                    "description": "金丝雀流量比例(%)",
+                    "type": "integer"
+                },
                 "deploy_config": {
                     "type": "object",
                     "additionalProperties": {}
@@ -21831,6 +21845,10 @@ const docTemplate = `{
                 },
                 "enable_build_cache": {
                     "description": "是否启用镜像构建缓存（Kaniko --cache）。用指针以区分\"未传\"与\"显式关闭\"，未传时默认开启",
+                    "type": "boolean"
+                },
+                "enable_canary": {
+                    "description": "灰度发布（金丝雀）配置",
                     "type": "boolean"
                 },
                 "enable_deploy_silence": {
@@ -22102,6 +22120,26 @@ const docTemplate = `{
                     "description": "部署配置",
                     "type": "boolean"
                 },
+                "canary_analysis_rules": {
+                    "description": "分析规则(JSON)",
+                    "type": "string"
+                },
+                "canary_auto_promote": {
+                    "description": "是否自动晋升",
+                    "type": "boolean"
+                },
+                "canary_duration_sec": {
+                    "description": "观察时长(秒)",
+                    "type": "integer"
+                },
+                "canary_replicas": {
+                    "description": "金丝雀副本数",
+                    "type": "integer"
+                },
+                "canary_traffic_ratio": {
+                    "description": "金丝雀流量比例(%)",
+                    "type": "integer"
+                },
                 "deploy_config": {
                     "type": "object",
                     "additionalProperties": {}
@@ -22119,6 +22157,10 @@ const docTemplate = `{
                 },
                 "enable_build_cache": {
                     "description": "是否启用镜像构建缓存（Kaniko --cache）",
+                    "type": "boolean"
+                },
+                "enable_canary": {
+                    "description": "灰度发布（金丝雀）配置",
                     "type": "boolean"
                 },
                 "enable_deploy_silence": {
@@ -23318,6 +23360,9 @@ const docTemplate = `{
                 },
                 "target_type": {
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
                 },
                 "user_agent": {
                     "type": "string"

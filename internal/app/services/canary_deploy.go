@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -138,32 +141,116 @@ func (s *Services) CanarySetTrafficSplit(ctx context.Context, kube kubernetes.In
 	return nil
 }
 
-// CanaryAnalyze 分析金丝雀指标（Prometheus）
+// canaryAnalysisRule 金丝雀指标分析规则（来自 pipeline.canary_analysis_rules JSON）
+type canaryAnalysisRule struct {
+	ErrorRate      float64 `json:"error_rate"`       // 错误率阈值（0-1），超过则回滚
+	P99LatencyMs   float64 `json:"p99_latency_ms"`   // P99 延迟阈值（ms），超过则回滚
+	ErrorRateQuery string  `json:"error_rate_query"` // 可选：自定义错误率 PromQL
+	LatencyQuery   string  `json:"latency_query"`    // 可选：自定义 P99 延迟 PromQL
+}
+
+// CanaryAnalyze 分析金丝雀指标，判断是否正常、可晋升或需回滚
 func (s *Services) CanaryAnalyze(ctx context.Context, kube kubernetes.Interface, pipeline *models.CicdPipeline, namespace string) *CanaryDeployResult {
-	if pipeline.CanaryAnalysisRules == "" {
-		return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "无分析规则，跳过指标分析"}
-	}
-
-	promClient := s.getDefaultPromClient()
-	if promClient == nil {
-		return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "Prometheus 不可用，跳过分析"}
-	}
-
 	info, err := k8sdeploy.GetCanaryStatus(ctx, kube, namespace, pipeline.TargetWorkloadName)
 	if err != nil {
 		return &CanaryDeployResult{Success: false, Phase: "error", Message: fmt.Sprintf("获取金丝雀状态失败: %v", err)}
 	}
 
+	// canary 已被晋升/回滚清理，无需再监控
+	if !info.CanaryExists {
+		return &CanaryDeployResult{Success: true, Phase: "promoted", Message: "金丝雀已清理（晋升或回滚完成）"}
+	}
+
+	// 金丝雀 Pod 未就绪，可能启动失败
 	if info.CanaryReadyReplicas == 0 && info.Phase == k8sdeploy.CanaryPhasePending {
 		return &CanaryDeployResult{Success: false, Phase: "failing", Message: "金丝雀 Pod 未就绪，可能启动失败"}
 	}
 
+	// 镜像已一致，说明已晋升
 	if info.CanaryImage == info.StableImage && info.CanaryImage != "" {
 		return &CanaryDeployResult{Success: true, Phase: "promoted", Message: "金丝雀已晋升，镜像一致"}
 	}
 
-	_ = promClient
-	return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "金丝雀运行正常"}
+	// 未配置分析规则：只做上述基础检查
+	if pipeline.CanaryAnalysisRules == "" {
+		return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "无分析规则，跳过指标分析"}
+	}
+
+	return s.analyzeCanaryMetrics(ctx, pipeline)
+}
+
+// analyzeCanaryMetrics 用 Prometheus 查询金丝雀错误率与 P99 延迟，判断是否超阈值
+func (s *Services) analyzeCanaryMetrics(ctx context.Context, pipeline *models.CicdPipeline) *CanaryDeployResult {
+	rule, err := parseCanaryAnalysisRule(pipeline.CanaryAnalysisRules)
+	if err != nil {
+		return &CanaryDeployResult{Success: false, Phase: "error", Message: fmt.Sprintf("解析分析规则失败: %v", err)}
+	}
+
+	promClient := s.getDefaultPromClient()
+	if promClient == nil {
+		return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "Prometheus 不可用，跳过指标分析"}
+	}
+
+	// 错误率检查
+	if rule.ErrorRate > 0 || rule.ErrorRateQuery != "" {
+		q := rule.ErrorRateQuery
+		if q == "" {
+			q = fmt.Sprintf(`sum(rate(http_requests_total{version=%q,status=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_total{version=%q}[5m])), 1)`,
+				k8sdeploy.VersionCanary, k8sdeploy.VersionCanary)
+		}
+		if val, found, qerr := queryScalar(ctx, promClient, q); qerr != nil {
+			global.Logger.Warn("[Canary] 错误率查询失败", zap.Error(qerr))
+		} else if found && val > rule.ErrorRate {
+			return &CanaryDeployResult{Success: false, Phase: "failing", Message: fmt.Sprintf("金丝雀错误率 %.4f 超过阈值 %.4f", val, rule.ErrorRate)}
+		}
+	}
+
+	// P99 延迟检查
+	if rule.P99LatencyMs > 0 || rule.LatencyQuery != "" {
+		q := rule.LatencyQuery
+		if q == "" {
+			q = fmt.Sprintf(`histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{version=%q}[5m])) by (le))`,
+				k8sdeploy.VersionCanary)
+		}
+		if val, found, qerr := queryScalar(ctx, promClient, q); qerr != nil {
+			global.Logger.Warn("[Canary] P99 延迟查询失败", zap.Error(qerr))
+		} else if found && val > rule.P99LatencyMs {
+			return &CanaryDeployResult{Success: false, Phase: "failing", Message: fmt.Sprintf("金丝雀 P99 延迟 %.0fms 超过阈值 %.0fms", val, rule.P99LatencyMs)}
+		}
+	}
+
+	return &CanaryDeployResult{Success: true, Phase: "monitoring", Message: "金丝雀指标正常"}
+}
+
+// parseCanaryAnalysisRule 解析 canary_analysis_rules JSON
+func parseCanaryAnalysisRule(raw string) (*canaryAnalysisRule, error) {
+	rule := &canaryAnalysisRule{}
+	if err := json.Unmarshal([]byte(raw), rule); err != nil {
+		return nil, err
+	}
+	return rule, nil
+}
+
+// queryScalar 执行 PromQL 即时查询并取第一个标量值。返回 (值, 是否有有效数据, 错误)。
+// 无数据、NaN、Inf 均视为「没有有效数据」，调用方据此跳过该指标的判断。
+func queryScalar(ctx context.Context, c *prom.Client, promql string) (float64, bool, error) {
+	res, err := c.QueryInstant(ctx, promql)
+	if err != nil {
+		return 0, false, err
+	}
+	vec, err := prom.ParseVectorResult(res.Data.Result)
+	if err != nil || len(vec) == 0 {
+		return 0, false, err
+	}
+	str, ok := vec[0].Value[1].(string)
+	if !ok {
+		return 0, false, nil
+	}
+	v, err := strconv.ParseFloat(str, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false, nil
+	}
+	return v, true, nil
 }
 
 // getDefaultPromClient 获取默认 Prometheus 客户端
@@ -249,7 +336,7 @@ func (s *Services) monitorCanaryAndDecide(kube kubernetes.Interface, pipeline *m
 					err := s.CanaryPromote(context.Background(), kube, &requests.CanaryPromoteRequest{
 						Namespace: namespace, AppName: appName,
 						ContainerName: pipeline.TargetContainer,
-						PipelineID: pipeline.ID, RunID: runID,
+						PipelineID:    pipeline.ID, RunID: runID,
 					})
 					if err != nil {
 						global.Logger.Error("[Canary] 自动晋升失败，回滚", zap.Error(err))
