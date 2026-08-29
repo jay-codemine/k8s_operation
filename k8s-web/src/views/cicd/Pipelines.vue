@@ -1150,6 +1150,10 @@ export default {
           const okCount = response.data?.success_count || 0
           const failCount = response.data?.fail_count || 0
           Message.success({ content: `成功发布 ${okCount} 条，失败 ${failCount} 条` })
+          // 仅发布单条且成功时，跳转到该流水线详情页执行阶段 Tab，实时查看构建进度
+          if (okCount === 1 && toRun.length === 1 && toRun[0]?.id) {
+            router.push(`/cicd/pipelines/${toRun[0].id}?tab=stages`)
+          }
         } else {
           throw new Error(response.msg || '批量发布失败')
         }
