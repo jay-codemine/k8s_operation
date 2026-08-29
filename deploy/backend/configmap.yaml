@@ -130,7 +130,7 @@ data:
       AutoEncryptLegacyData: true
 
     Monitoring:
-      Enabled: true                         # 监控集成（需集群内已部署 Prometheus）
+      Enabled: false                         # 监控集成（需集群内已部署 Prometheus）
       PrometheusURL: "http://192.168.124.10:30091/"  # 首次启动引导值，DB 有数据源后以 DB 为准
       QueryTimeout: 30
 

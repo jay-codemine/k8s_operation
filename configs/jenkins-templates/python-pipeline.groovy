@@ -63,20 +63,6 @@ spec:
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
-  - name: newman
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/postman/newman:alpine
-    imagePullPolicy: IfNotPresent
-    command: ['sleep', '99d']
-    resources:
-      requests:
-        cpu: '250m'
-        memory: '512Mi'
-      limits:
-        cpu: '1'
-        memory: '1Gi'
-    volumeMounts:
-    - name: workspace-volume
-      mountPath: /home/jenkins/agent
   - name: jnlp
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/jenkins/inbound-agent:latest-jdk21
     resources:
@@ -120,12 +106,6 @@ spec:
 
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '跳过测试')
 
-        // ===== 接口测试（Newman/Postman，测试人员可在 Postman 中维护用例） =====
-        booleanParam(name: 'ENABLE_API_TEST', defaultValue: false, description: '启用接口测试（Newman 跑 Postman 集合）')
-        string(name: 'API_TEST_COLLECTION', defaultValue: '', description: 'Postman 集合路径（仓库内相对路径）或 URL（如 test/postman/collection.json）')
-        string(name: 'API_TEST_ENVIRONMENT', defaultValue: '', description: 'Postman 环境文件路径或 URL（可选）')
-        string(name: 'API_TEST_BASE_URL', defaultValue: '', description: '被测服务 BaseURL（可选，注入为集合变量 baseUrl）')
-        string(name: 'API_TEST_TIMEOUT', defaultValue: '30000', description: '接口测试单请求超时(ms)')
 
         string(name: 'PYTHON_VERSION', defaultValue: '3.11', description: 'Python 版本')
         string(name: 'GIT_CREDENTIAL_ID', defaultValue: 'gitee-id', description: 'Git 凭证ID')
@@ -347,62 +327,6 @@ spec:
             post { success { script { stageCallback('test', 'success'); stageCallback('build_binary', 'success') } }; failure { script { stageCallback('test', 'failed'); stageCallback('build_binary', 'failed') } } }
         }
 
-        // ==================== 接口测试（Newman/Postman，可选） ====================
-        stage('API Test') {
-            when { expression { return params.ENABLE_API_TEST?.toBoolean() } }
-            steps {
-                echo "=== 接口测试（Newman 跑 Postman 集合） ==="
-                container('newman') {
-                    script {
-                        def collection = params.API_TEST_COLLECTION?.trim()
-                        if (!collection) {
-                            error("ENABLE_API_TEST=true 但 API_TEST_COLLECTION 为空，请提供 Postman 集合路径或 URL")
-                        }
-
-                        // 集合：URL 则下载，否则视为仓库内相对路径
-                        def collectionArg = collection
-                        if (collection.startsWith('http://') || collection.startsWith('https://')) {
-                            sh "wget -q -O api_collection.json '${collection}' || curl -s -o api_collection.json '${collection}'"
-                            collectionArg = 'api_collection.json'
-                        } else if (!fileExists(collection)) {
-                            error("Postman 集合文件不存在: ${collection}")
-                        }
-
-                        // 环境文件：URL 下载 / 本地路径
-                        def envArg = ''
-                        def environment = params.API_TEST_ENVIRONMENT?.trim()
-                        if (environment) {
-                            if (environment.startsWith('http://') || environment.startsWith('https://')) {
-                                sh "wget -q -O api_environment.json '${environment}' || curl -s -o api_environment.json '${environment}'"
-                                envArg = '-e api_environment.json'
-                            } else {
-                                envArg = "-e '${environment}'"
-                            }
-                        }
-
-                        // BaseURL 覆盖（注入为集合变量 baseUrl，集合中用 {{baseUrl}} 引用）
-                        def baseUrl = params.API_TEST_BASE_URL?.trim()
-                        def baseUrlArg = baseUrl ? "--env-var baseUrl='${baseUrl}'" : ''
-
-                        sh """
-                            set -e
-                            newman run '${collectionArg}' ${envArg} ${baseUrlArg} \
-                                --reporters cli,junit \
-                                --reporter-junit-export api-test-results.xml \
-                                --timeout-request ${params.API_TEST_TIMEOUT ?: 30000}
-                        """
-                    }
-                }
-
-                // 发布测试报告到 Jenkins（JUnit 可视化 + 归档）
-                junit testResults: 'api-test-results.xml', allowEmptyResults: true
-                archiveArtifacts artifacts: 'api-test-results.xml', allowEmptyArchive: true
-            }
-            post {
-                success { script { stageCallback('test', 'success') } }
-                failure { script { stageCallback('test', 'failed') } }
-            }
-        }
 
         stage('SonarQube Analysis') {
             when { expression { return params.ENABLE_SONAR } }
