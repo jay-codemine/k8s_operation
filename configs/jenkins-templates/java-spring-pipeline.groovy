@@ -950,7 +950,5 @@ def checkPlatformThresholds() {
 def ratingToLetter(Double rating) { if (rating <= 1.0) return 'A'; if (rating <= 2.0) return 'B'; if (rating <= 3.0) return 'C'; if (rating <= 4.0) return 'D'; return 'E' }
 
 def hmacSha256(String secret, String data) {
-    def mac = javax.crypto.Mac.getInstance("HmacSHA256")
-    mac.init(new javax.crypto.spec.SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256"))
-    return mac.doFinal(data.getBytes("UTF-8")).collect { String.format("%02x", it) }.join()
+    def result = ''; withEnv(["SIGN_SECRET=${secret}", "SIGN_DATA=${data}"]) { result = sh(script: 'set +x && printf "%s" "$SIGN_DATA" | openssl dgst -sha256 -hmac "$SIGN_SECRET" | awk \'{print $2}\', returnStdout: true).trim() }; return result
 }
