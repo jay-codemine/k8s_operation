@@ -431,7 +431,7 @@ spec:
                             // 生产级 Nginx 配置
                             writeFile file: 'nginx-app.conf', text: """\
 upstream backend {
-    server 127.0.0.1:8080;
+    server k8soperation.k8soperation.svc:8080;
 }
 
 server {
