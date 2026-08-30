@@ -30,7 +30,7 @@ spec:
         - name: aliyun-acr-secret
       containers:
         - name: devops-fe
-          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v1.12
+          image: registry.cn-hangzhou.aliyuncs.com/k8s-gos/devops-fe:v1.13
           imagePullPolicy: IfNotPresent
 
           # 以 root 运行：标准 nginx 镜像 master 进程需 root 才能绑定 80 端口、
