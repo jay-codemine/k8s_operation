@@ -1,0 +1,38 @@
+---
+# ============================================================
+# 重置集群（危险操作！会清空节点上的 kubeadm 配置）
+# 用法：ansible-playbook -i inventory/hosts.ini reset-cluster.yml
+# ============================================================
+
+- name: 重置所有节点
+  hosts: k8s_cluster
+  become: true
+  tasks:
+    - name: 执行 kubeadm reset
+      command: kubeadm reset --force --cri-socket={{ cri_socket }}
+      ignore_errors: true
+      changed_when: true
+
+    - name: 停止并禁用 kubelet
+      systemd:
+        name: kubelet
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: 清理残留目录
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/etcd
+        - /var/lib/kubelet
+        - /root/.kube
+      ignore_errors: true
+
+    - name: 清理 CNI 配置
+      file:
+        path: /etc/cni/net.d
+        state: absent
+      ignore_errors: true

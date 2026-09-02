@@ -1,0 +1,44 @@
+# ============================================================
+# Kubernetes 集群全局变量
+# 按需修改，尤其注意 control_plane_endpoint 和镜像仓库
+# ============================================================
+
+# ===== Kubernetes 版本 =====
+# 主版本（用于 APT/YUM 仓库，如 1.29）
+k8s_version: "1.29"
+# 精确版本（留空则安装该主版本最新；建议固定版本避免漂移）
+# 例如 "1.29.5-1.1" (Ubuntu) 或 "1.29.5" (Rocky)
+k8s_version_full: ""
+
+# ===== 容器运行时 =====
+container_runtime: containerd
+# containerd socket 路径（docker 用户请改为 /var/run/cri-dockerd.sock）
+cri_socket: "/run/containerd/containerd.sock"
+
+# ===== 网络规划 =====
+# Pod 网段（Calico 默认 192.168.0.0/16，Flannel 用 10.244.0.0/16）
+pod_network_cidr: "192.168.0.0/16"
+# Service 网段
+service_cidr: "10.96.0.0/12"
+# CNI 插件：calico / flannel
+cni_plugin: calico
+# Calico 版本
+calico_version: "v3.27.3"
+
+# ===== 控制面访问地址 =====
+# 单 master：填第一台 master 的 IP 或主机名
+# 多 master 高可用：填 VIP/负载均衡地址（如 192.168.1.100:6443 或 k8s-lb:6443）
+control_plane_endpoint: "k8s-master:6443"
+
+# ===== 镜像仓库（国内加速可选）=====
+# 留空使用官方 registry.k8s.io
+# 国内可填 registry.aliyuncs.com/google_containers
+image_repository: ""
+
+# ===== 控制面初始化参数 =====
+# 是否开启集群初始化时上传证书（多 master 高可用必须为 true）
+upload_certs: true
+
+# ===== kubelet 额外参数 =====
+# 例如 "--node-labels=node-role.kubernetes.io/worker=" 之类
+kubelet_extra_args: ""

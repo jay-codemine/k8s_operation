@@ -1,0 +1,42 @@
+---
+# ============================================================
+# 一键部署完整集群：从裸机初始化 + 加入所有节点
+# 用法：ansible-playbook -i inventory/hosts.ini site.yml
+# ============================================================
+
+# 1. 所有节点：前置准备 + 容器运行时 + kubeadm
+- name: 初始化所有节点（前置/运行时/kubeadm）
+  hosts: k8s_cluster
+  become: true
+  roles:
+    - common
+    - runtime
+    - kubernetes
+
+# 2. 第一台 master：kubeadm init
+- name: 初始化第一个控制平面
+  hosts: masters
+  become: true
+  roles:
+    - { role: master-init, when: inventory_hostname == groups['masters'][0] }
+
+# 3. 第一台 master：安装 CNI 网络插件
+- name: 安装网络插件
+  hosts: masters
+  become: true
+  roles:
+    - { role: network, when: inventory_hostname == groups['masters'][0] }
+
+# 4. worker 节点加入
+- name: 加入 worker 节点
+  hosts: workers
+  become: true
+  roles:
+    - join-worker
+
+# 5. 额外 master 节点加入（高可用，单 master 时自动跳过）
+- name: 加入额外控制平面
+  hosts: masters
+  become: true
+  roles:
+    - { role: join-master, when: inventory_hostname != groups['masters'][0] }

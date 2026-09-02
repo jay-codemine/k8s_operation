@@ -1,0 +1,74 @@
+---
+# ============================================================
+# 安装 kubeadm / kubelet / kubectl
+# 所有节点执行
+# ============================================================
+
+# ---------- Debian/Ubuntu ----------
+- name: 创建 apt keyrings 目录（Ubuntu）
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: 下载并转换 k8s GPG 密钥（Ubuntu）
+  shell: >
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/deb/Release.key
+    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  when: ansible_os_family == "Debian"
+
+- name: 添加 k8s APT 仓库（Ubuntu）
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/deb/ /"
+    filename: kubernetes
+    state: present
+  when: ansible_os_family == "Debian"
+
+# ---------- RedHat/Rocky ----------
+- name: 添加 k8s YUM 仓库（Rocky）
+  yum_repository:
+    name: kubernetes
+    description: Kubernetes
+    baseurl: "https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/rpm/"
+    gpgcheck: true
+    gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ k8s_version }}/rpm/repodata/repomd.xml.key"
+    repo_gpgcheck: true
+  when: ansible_os_family == "RedHat"
+
+# ---------- 通用安装 ----------
+- name: 安装 kubeadm / kubelet / kubectl
+  package:
+    name:
+      - kubeadm
+      - kubelet
+      - kubectl
+    state: present
+  register: k8s_install_result
+  # 注意：如果指定了精确版本，请取消注释下面两行并按 OS 调整
+  #   name:
+  #     - "kubeadm-{{ k8s_version_full }}"
+  #     - "kubelet-{{ k8s_version_full }}"
+  #     - "kubectl-{{ k8s_version_full }}"
+
+- name: 锁定 kubeadm/kubelet/kubectl 版本（防止误升级）
+  command: "{{ (ansible_os_family == 'Debian') | ternary('apt-mark hold kubeadm kubelet kubectl', 'dnf versionlock add kubeadm kubelet kubectl') }}"
+  changed_when: false
+  ignore_errors: true
+
+- name: 配置 kubelet 额外参数
+  copy:
+    dest: "{{ (ansible_os_family == 'Debian') | ternary('/etc/default/kubelet', '/etc/sysconfig/kubelet') }}"
+    content: |
+      KUBELET_EXTRA_ARGS="{{ kubelet_extra_args }}"
+    mode: '0644'
+  when: kubelet_extra_args != ""
+  notify: restart kubelet
+
+- name: 启用 kubelet（开机自启）
+  systemd:
+    name: kubelet
+    state: started
+    enabled: true

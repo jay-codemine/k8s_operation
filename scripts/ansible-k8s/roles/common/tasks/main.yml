@@ -1,0 +1,78 @@
+---
+# ============================================================
+# 公共前置准备：所有节点（master + worker）执行
+# 关闭 swap、配置内核参数、加载内核模块、同步时间
+# ============================================================
+
+- name: 关闭 swap（当前生效）
+  command: swapoff -a
+  changed_when: false
+  ignore_errors: true
+
+- name: 永久关闭 swap（Debian/Ubuntu）
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+  when: ansible_os_family == "Debian"
+
+- name: 永久关闭 swap（RedHat/Rocky）
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^.*\sswap\s+swap\s+.*$'
+    state: absent
+  when: ansible_os_family == "RedHat"
+
+- name: 加载内核模块
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: 持久化内核模块
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: 设置内核网络参数
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: true
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+
+- name: 关闭防火墙（RedHat）
+  systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+
+- name: 关闭 ufw（Ubuntu）
+  service:
+    name: ufw
+    state: stopped
+    enabled: false
+  when: ansible_os_family == "Debian"
+  ignore_errors: true
+
+- name: 关闭 SELinux（RedHat）
+  selinux:
+    state: disabled
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+
+- name: 开启 NTP 时间同步
+  command: timedatectl set-ntp true
+  changed_when: false
+  ignore_errors: true

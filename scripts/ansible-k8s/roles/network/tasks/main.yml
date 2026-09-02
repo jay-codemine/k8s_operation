@@ -1,0 +1,40 @@
+---
+# ============================================================
+# 安装 CNI 网络插件
+# 只在控制平面（第一个 master）执行
+# ============================================================
+
+- name: 下载 Calico manifest
+  get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml"
+    dest: /tmp/calico.yaml
+    mode: '0644'
+  when: cni_plugin == "calico"
+
+- name: 调整 Calico Pod 网段（若非默认 192.168.0.0/16）
+  replace:
+    path: /tmp/calico.yaml
+    regexp: 'value: "192\.168\.0\.0/16"'
+    replace: 'value: "{{ pod_network_cidr }}"'
+  when:
+    - cni_plugin == "calico"
+    - pod_network_cidr != "192.168.0.0/16"
+
+- name: 应用 Calico 网络插件
+  command: kubectl apply -f /tmp/calico.yaml
+  when: cni_plugin == "calico"
+  register: calico_apply
+  changed_when: "'created' in calico_apply.stdout or 'configured' in calico_apply.stdout"
+
+- name: 下载 Flannel manifest（备选）
+  get_url:
+    url: "https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"
+    dest: /tmp/flannel.yaml
+    mode: '0644'
+  when: cni_plugin == "flannel"
+
+- name: 应用 Flannel 网络插件（备选）
+  command: kubectl apply -f /tmp/flannel.yaml
+  when: cni_plugin == "flannel"
+  register: flannel_apply
+  changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"

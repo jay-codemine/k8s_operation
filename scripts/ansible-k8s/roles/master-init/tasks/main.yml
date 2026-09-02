@@ -1,0 +1,57 @@
+---
+# ============================================================
+# 初始化第一个控制平面节点（kubeadm init）
+# 只在第一台 master 上执行
+# ============================================================
+
+- name: 预拉取 k8s 镜像（可选，加速 join）
+  command: kubeadm config images pull{{ ' --image-repository=' + image_repository if image_repository else '' }}
+  when: image_repository != ""
+  changed_when: false
+  ignore_errors: true
+
+- name: 执行 kubeadm init
+  command: >
+    kubeadm init
+    --control-plane-endpoint={{ control_plane_endpoint }}
+    --pod-network-cidr={{ pod_network_cidr }}
+    --service-cidr={{ service_cidr }}
+    --cri-socket={{ cri_socket }}
+    {{ '--image-repository=' + image_repository if image_repository else '' }}
+    {{ '--upload-certs' if upload_certs else '' }}
+  register: kubeadm_init_result
+  changed_when: true
+
+- name: 创建 .kube 目录
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0755'
+
+- name: 复制 admin.conf 到 kubectl 配置
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: true
+    mode: '0600'
+
+- name: 生成 worker 加入命令
+  command: kubeadm token create --print-join-command
+  register: worker_join_command
+  changed_when: false
+
+- name: 生成 master 加入证书密钥（高可用）
+  command: kubeadm init phase upload-certs --upload-certs
+  register: cert_key_result
+  changed_when: false
+  when: upload_certs
+
+- name: 保存加入命令到本地（方便手动复用）
+  copy:
+    content: |
+      # Worker 加入命令：
+      {{ worker_join_command.stdout }}
+      # Master 加入命令（追加 --control-plane --certificate-key）：
+      {{ worker_join_command.stdout }} --control-plane --certificate-key {{ cert_key_result.stdout_lines[-1] if upload_certs else '' }}
+    dest: /root/kubeadm-join-command.txt
+    mode: '0600'

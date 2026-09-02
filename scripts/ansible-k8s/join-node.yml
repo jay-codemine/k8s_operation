@@ -1,0 +1,31 @@
+---
+# ============================================================
+# 增量加节点：向已有集群加入新节点
+# 用法：
+#   加 worker：  在 inventory 的 [workers] 组添加节点后执行
+#   加 master：  在 inventory 的 [masters] 组添加节点后执行
+#   ansible-playbook -i inventory/hosts.ini join-node.yml
+# ============================================================
+
+# 1. 新节点：前置 + 运行时 + kubeadm（幂等，老节点重复执行无副作用）
+- name: 初始化新节点（前置/运行时/kubeadm）
+  hosts: k8s_cluster
+  become: true
+  roles:
+    - common
+    - runtime
+    - kubernetes
+
+# 2. worker 加入
+- name: 加入 worker 节点
+  hosts: workers
+  become: true
+  roles:
+    - join-worker
+
+# 3. 额外 master 加入（高可用）
+- name: 加入额外控制平面
+  hosts: masters
+  become: true
+  roles:
+    - { role: join-master, when: inventory_hostname != groups['masters'][0] }

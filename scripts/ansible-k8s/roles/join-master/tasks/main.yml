@@ -1,0 +1,41 @@
+---
+# ============================================================
+# 额外控制平面（master）节点加入集群（高可用）
+# 在 masters 组（除第一台外）执行
+# ============================================================
+
+- name: 从第一台 master 生成加入命令
+  command: kubeadm token create --print-join-command
+  delegate_to: "{{ groups['masters'][0] }}"
+  register: kubeadm_join
+  run_once: true
+  changed_when: false
+
+- name: 从第一台 master 获取证书密钥（certificate key）
+  command: kubeadm init phase upload-certs --upload-certs
+  delegate_to: "{{ groups['masters'][0] }}"
+  register: cert_key_result
+  run_once: true
+  changed_when: false
+
+- name: 加入控制平面节点
+  command: >
+    {{ hostvars[groups['masters'][0]]['kubeadm_join'].stdout }}
+    --control-plane
+    --certificate-key {{ hostvars[groups['masters'][0]]['cert_key_result'].stdout_lines[-1] }}
+    --cri-socket={{ cri_socket }}
+  register: join_master_result
+  changed_when: "'This node has joined the cluster' in join_master_result.stdout"
+
+- name: 创建 .kube 目录
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0755'
+
+- name: 复制 admin.conf（控制面节点可用 kubectl）
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: true
+    mode: '0600'

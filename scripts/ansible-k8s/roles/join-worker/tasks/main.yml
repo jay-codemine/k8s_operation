@@ -1,0 +1,23 @@
+---
+# ============================================================
+# Worker 节点加入集群
+# 在 workers 组执行，token 从第一台 master 获取
+# ============================================================
+
+- name: 从 master 生成 worker 加入命令
+  command: kubeadm token create --print-join-command
+  delegate_to: "{{ groups['masters'][0] }}"
+  register: kubeadm_join
+  run_once: true
+  changed_when: false
+
+- name: 加入 worker 节点
+  command: "{{ hostvars[groups['masters'][0]]['kubeadm_join'].stdout }} --cri-socket={{ cri_socket }}"
+  register: join_result
+  changed_when: "'This node has joined the cluster' in join_result.stdout"
+
+- name: 标记 worker 角色
+  command: kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker=
+  delegate_to: "{{ groups['masters'][0] }}"
+  changed_when: false
+  ignore_errors: true
